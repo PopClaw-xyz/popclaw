@@ -76,18 +76,29 @@ openclaw plugins install --help
 
 Confirm the supported package syntax and capability-consent option. Review
 PopClaw's requested permissions and include `--accept-capabilities` when the
-help advertises it. Do not omit available consent or use `--force` to bypass
-warnings or policy. This first-install guide does not assume `--force` is needed.
+help advertises it. Review source and install-policy warnings before accepting
+them. Confirmation flags do not override policy blocks or failures.
 
 ### Installing a release tarball
 
-Use the exact package supplied for this candidate. The following is a command
-shape: replace the path with the verified tarball, and add the capability-consent
-option advertised by the selected CLI after reviewing the permissions.
+Use the exact supplied PopClaw tarball and verify its checksum. On OpenClaw
+2026.9.4, a local archive outside ClawHub also requires source confirmation,
+even when the extension is absent. After reviewing and accepting that package's
+source, declared capabilities and install-policy warnings, use this command
+shape with the verified path:
 
 ```text
-openclaw plugins install /absolute/path/popclaw-plugin-<build>.tgz
+openclaw plugins install /absolute/path/popclaw-plugin-<build>.tgz \
+  --accept-capabilities --acknowledge-install-policy-warning --force
 ```
+
+`--force` confirms the non-ClawHub source and can also overwrite an installed
+extension. Use this first-install example only when the selected PopClaw
+extension and data are absent. `--acknowledge-install-policy-warning` accepts
+warnings without an interactive prompt; policy blocks and failures remain
+terminal. These flags are not blanket approval for arbitrary packages or a
+registry recipe. For another OpenClaw version, follow its actual help and
+warning behavior.
 
 This is OpenClaw's native plugin installer. A matching PopClaw source checkout
 and `scripts/install-popclaw.sh` are not needed for this path.
