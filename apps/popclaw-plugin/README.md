@@ -15,22 +15,21 @@ Requires OpenClaw `>=2026.9.4` and Node `>=24.16.0 <25 || >=26.1.0`.
 These are the declared package requirements, not a claim that every matching version has been tested.
 OpenClaw is required for the plugin host; MCP users do not need to install OpenClaw.
 
-Follow [INSTALL.md](./INSTALL.md) to select the OpenClaw instance and choose
-first installation or maintenance. For a tarball, use the official
-`scripts/install-popclaw.sh` from the matching reviewed source checkout.
-Its one-argument form requires no existing PopClaw root or extension. Existing
-instances require explicit maintenance selections and verified external evidence.
-The script completes native installation and the conversation-hook declaration,
-then leaves startup deferred. It does not prove that the plugin has loaded.
+Follow [INSTALL.md](./INSTALL.md) to install PopClaw with OpenClaw's standard
+native plugin commands. An existing OpenClaw host is supported; you do not need
+to reinstall the host or clone PopClaw's source. Before publication, use the
+exact supplied tarball. After publication, use a verified, fixed registry
+release. Review the requested capabilities and enable the required conversation
+hook in the same instance.
 
-Use the original selected launcher for the separate startup, then verify the
-loaded build and identity before onboarding. Native commands can still have
-bootstrap or reload effects; no explicit gateway restart is not a zero-effect
-guarantee. The guide also describes registry installation and its limits.
+Start or restart that instance through its normal launcher, then verify the
+loaded build, registration and full identity before first use. Keep its other
+configuration and data. PopClaw 0.1.0 is the first public release; this guide does
+not promise upgrades from unpublished development versions.
 
 Zero config: on first boot the plugin generates `config/plugin.json` pointing at the public lore-house (`https://house.popclaw.me`). Edit that file (or set `POPCLAW_LORE_HOUSE_URL`) to point elsewhere. An existing config file is never rewritten.
 
-Full instructions — prerequisites, verification, troubleshooting, upgrading, uninstalling — live in **[INSTALL.md](./INSTALL.md)**.
+Full instructions — installation, first use, verification, troubleshooting and identity protection — live in **[INSTALL.md](./INSTALL.md)**.
 
 ## First check and identity preservation
 

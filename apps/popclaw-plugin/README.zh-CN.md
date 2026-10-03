@@ -17,14 +17,13 @@ OpenClaw 是插件宿主的要求；MCP 用户无需安装 OpenClaw。
 
 首次启动可能生成默认连接配置，已有配置不会被重写。
 
-按 [INSTALL.md](./INSTALL.md) 选定 OpenClaw 实例，再选择首次安装或维护升级。
-使用 tarball 时，从对应的已审源码运行正式安装脚本。短命令仅适用于没有既有 PopClaw
-数据目录和插件代码的首次安装；已有实例必须使用显式维护模式及真实外部证据。
-脚本成功只表示原生安装与会话 hook 设置完成，启动仍待执行。使用原实例的启动方式，
-核对实际加载的构建号和身份后，再开始 onboarding。
+按 [INSTALL.md](./INSTALL.md) 使用 OpenClaw 标准原生插件命令安装。
+可以使用已有 OpenClaw，无需重装宿主或下载 PopClaw 源码。发布前使用维护者提供的固定 tarball；
+发布后使用确认已发布的固定 npm 版本。核对所需权限，并在同一实例中开启必要的会话 hook。
 
-原生安装或配置命令仍可能引起 bootstrap 或 reload；脚本没有显式重启命令，不代表没有这些影响。
-指南也说明了 npm 安装路径。`0.0.0-placeholder` 仅用于保留 npm 包名，不是可用插件.
+按该实例的正常方式启动或重启，核对实际加载的构建号、插件注册和完整身份后开始使用。
+保留其他配置和数据。0.1.0 是首次公开发布，不承诺未发布开发版的升级兼容。
+`0.0.0-placeholder` 仅用于保留 npm 包名，不是可用插件。
 
 ## 第一条检查
 
@@ -39,6 +38,6 @@ OpenClaw 是插件宿主的要求；MCP 用户无需安装 OpenClaw。
 - 身份变化：停止宿主，检查原路径，不覆盖或删除任一身份目录。
 - 安装问题：[提交 GitHub issue](https://github.com/PopClaw-xyz/popclaw/issues/new/choose)，附上 OS、Node 与 OpenClaw 版本、插件构建号、复现步骤和脱敏错误，不附密钥、token、数据库或聊天内容。
 - 疑似安全漏洞：按 [SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/main/SECURITY.md) 私下报告，不要提交公开 issue。
-- 更多升级、回退、模型兼容与卸载说明见 [INSTALL.md](./INSTALL.md)。不要仅凭一次响应失败就修改主人模型或语言设置。
+- 安装、首用、模型兼容和身份保护的完整说明见 [INSTALL.md](./INSTALL.md)。不要仅凭一次响应失败就修改主人模型或语言设置。
 
 许可证：Apache-2.0。

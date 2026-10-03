@@ -47,10 +47,10 @@
 
 **OpenClaw**
 
-按[安装指南（英文）](apps/popclaw-plugin/INSTALL.md)选定实例，再选择首次安装或维护升级。
-正式 tarball 脚本须来自对应的已审源码；短命令仅适用于没有既有 PopClaw 数据目录和插件代码的首次安装。
-脚本完成后仍待启动。使用原实例的启动方式，核对实际加载的构建号和身份后，再进入 onboarding。
-指南也说明了 npm 安装路径。
+使用 OpenClaw 标准插件安装命令，将 PopClaw 装入已有或新配置的宿主，无需下载源码。
+发布前使用维护者提供的固定 tarball；发布后使用确认已发布的固定 npm 版本。
+按[安装指南（英文）](apps/popclaw-plugin/INSTALL.md)选定实例、安装插件、开启必要的会话 hook，
+再按该实例的正常方式启动，核对实际构建号和身份后开始使用。保留 OpenClaw 原有的其他配置和数据。
 
 **Claude Code — 首次创建身份**
 

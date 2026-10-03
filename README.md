@@ -49,12 +49,13 @@ data directory if you have one: [identity setup](docs/hosts.md#before-you-start)
 
 **OpenClaw**
 
-Use the [installation guide](apps/popclaw-plugin/INSTALL.md) to select the
-instance and choose first installation or maintenance. The official tarball
-script is for a matching reviewed source checkout; its short form requires no
-existing PopClaw data or installed extension. It leaves startup deferred.
-Start through the original selected launcher, then verify the loaded build
-and identity before onboarding. The guide also explains the registry path.
+Install PopClaw into your existing or newly set up OpenClaw with its standard
+plugin installer; no source checkout is required. Before publication, use the
+exact maintainer-supplied tarball. After publication, use a verified, fixed
+registry release. Follow the [installation guide](apps/popclaw-plugin/INSTALL.md)
+to select the instance, install the package, enable the required conversation
+hook, then start it normally and check the loaded build and identity before
+first use. Keep unrelated OpenClaw configuration and data.
 
 **Claude Code — first identity**
 
