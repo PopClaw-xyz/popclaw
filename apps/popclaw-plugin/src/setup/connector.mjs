@@ -305,13 +305,25 @@ export async function setup(options = {}) {
       // the longest window the plugin can use. Nothing like it is written for
       // Claude Code, whose stdio limit is already far above the window.
       const current = item.data.mcp_servers?.popclaw;
-      const same = (a, b) => b !== undefined && equal(withoutToolTimeout(a), withoutToolTimeout(b));
+      // One documented, explicitly selected Codex opt-in is managed alongside
+      // the standard binding. Strip only this exact value for matching; every
+      // other env/owned-field difference remains a conflict. Never read the
+      // parent process's stream setting to choose or introduce it.
+      const publicV1 = current?.env?.POPCLAW_WORLD_STREAM === 'public-v1';
+      const compared = withoutToolTimeout(current);
+      if (publicV1) {
+        compared.env = { ...compared.env };
+        delete compared.env.POPCLAW_WORLD_STREAM;
+      }
+      const same = (a, b) => b !== undefined && equal(a === current ? compared : withoutToolTimeout(a), withoutToolTimeout(b));
       if (current && !same(current, server) && !same(current, priorServer)) throw new Error('Codex PopClaw is already configured differently; nothing was overwritten');
       // A user's own larger value is kept; a missing or smaller one is raised.
       const existing = current?.tool_timeout_sec;
       const timeout = typeof existing === 'number' && existing >= CODEX_TOOL_TIMEOUT_SECONDS ? existing : CODEX_TOOL_TIMEOUT_SECONDS;
       if (current && same(current, priorServer) && !same(current, server)) {
-        const updated = structuredClone(item.data); updated.mcp_servers.popclaw = { ...server, tool_timeout_sec: timeout };
+        const updated = structuredClone(item.data);
+        updated.mcp_servers.popclaw = { ...server, tool_timeout_sec: timeout,
+          ...(publicV1 ? { env: { ...server.env, POPCLAW_WORLD_STREAM: current.env.POPCLAW_WORLD_STREAM } } : {}) };
         plans.push({ path: item.path, before: item.text, after: toml.stringify(updated) });
       } else if (current && existing !== timeout) {
         plans.push({ path: item.path, before: item.text, after: raiseCodexToolTimeout(item.text ?? '', item.data, timeout, item.path) });
@@ -338,4 +350,3 @@ export async function setup(options = {}) {
   const result = commitFiles(plans, project, join(home, '.local/state/popclaw-connect', hash(project)), home, options.beforeWrite);
   return { ...result, project, root, package: pkg, hosts, claudeProfile: selectedClaudeProfile, connection: 'mcp-handshake-passed', trust: 'pending-host-review', relay: 'not-tested' };
 }
-

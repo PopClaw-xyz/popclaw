@@ -591,21 +591,24 @@ describe('gateway root — drift rows pinned as current behaviour', () => {
     expect(refreshMs).toBe(6 * 60 * 60 * 1000);
   }, 30_000);
 
-  it('#7 closing fired before the builder\'s first microtask: houses are not started, but DM recovery is still scheduled', async () => {
+  it('#7 closing before the builder\'s first microtask cancels startup without resources or DM recovery', async () => {
     // start() then stop() in the same tick: the lazy runtime aborts before its
     // builder has run at all (createLazyRuntime defers build to a microtask).
     offline();
     const root = registerAt(newState());
-    const booting = root.start();
+    const booting = root.start().then(() => 'booted', (error: Error) => error.message);
     const stopping = root.stop();
-    await booting.catch(() => undefined);
+    const boot = await booting;
     await stopping;
-    const booted = probe.events.slice(0, probe.events.indexOf('worldOwnerApproval.stop'));
     expect({
+      boot,
       configured: probe.resourceConfigs.length,
-      housesStarted: booted.includes('houses.start'),
+      housesStarted: probe.events.includes('houses.start'),
       recoveryScheduled: probe.events.includes('dm.recover'),
-    }).toEqual({ configured: 1, housesStarted: false, recoveryScheduled: true });
+      events: probe.events,
+      memo: MEMO_KEY in globalThis,
+    }).toEqual({ boot: 'HOST_RUNTIME_STOPPED', configured: 0, housesStarted: false,
+      recoveryScheduled: false, events: [], memo: false });
   }, 30_000);
 
   it('#7 closing fired mid-boot (root held on its openRelationReception await): the build is not cancelled, houses are not started, DM recovery is still scheduled, then the normal shutdown runs', async () => {

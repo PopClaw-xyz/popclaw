@@ -113,6 +113,8 @@ function startRelayingHouse() {
   let minted: MintedHouse | undefined;
   let ownerPopclawId = '';
   const listAsks: string[] = [];
+  let refuseList!: () => void;
+  const listRefused = new Promise<void>(resolve => { refuseList = resolve; });
   const streams: ServerResponse[] = [];
 
   const server = createServer((req, res) => {
@@ -130,6 +132,7 @@ function startRelayingHouse() {
       // Never answered. A root that announced someone did not learn it here.
       listAsks.push(list[1]!);
       res.writeHead(503).end('unavailable');
+      refuseList();
       return;
     }
     const inbox = /^\/inbox\/([^/]+)\/stream$/.exec(path);
@@ -145,6 +148,7 @@ function startRelayingHouse() {
 
   return {
     listAsks,
+    listRefused,
     get ownerPopclawId() { return ownerPopclawId; },
     get houseKey() { return minted?.houseKey ?? ''; },
     async listen() {
@@ -244,6 +248,11 @@ describe('an MCP-only citizen is told about a follow that arrived on the relatio
 
     // The announcement came from the stream, in this root's own words.
     expect(mcp.stderr).toContain('from the relation stream');
+
+    // The stream may announce before the independent poll's trust-retry
+    // timer fires. Wait for the real 503 control event, not an assumed order
+    // between the notification and that timer; no extra poll is dispatched.
+    await house.listRefused;
 
     const db = new LocalHostDb(join(dataRoot, 'vault', 'social', 'my-social-assets.db'));
     try {

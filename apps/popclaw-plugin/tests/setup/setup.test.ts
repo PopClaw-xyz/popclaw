@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { identity } from '../../src/setup/identity.js';
 import { setup } from '../../src/setup/setup.js';
 import { runtimePlan, copyRuntime, stableRuntimeRoot, stableNode } from '../../src/setup/runtime.js';
+import toml from '../../src/setup/vendor/smol-toml.cjs';
 const temp = () => mkdtempSync(join(realpathSync(tmpdir()), 'popclaw-setup-test-'));
 function fixture() {
   const base = temp(); const home = join(base, 'home'); const project = join(base, 'project'); const pkg = join(base, 'package');
@@ -37,3 +38,64 @@ test('adopting key-only root records existing-key origin; another project reuses
 test('damaged or missing project receipt and lost bound key cannot become first-install creation',async()=>{for(const variant of ['null-receipt','missing-actor','invalid-actor','missing-receipt','missing-key','missing-key-and-credential']){const f=fixture();try{await setup({...f,createIdentity:true});const receipt=join(f.project,'.popclaw/setup.json');const key=join(f.root,'vault/social/identity/master.key');const marker=join(f.root,'.popclaw-setup-root.json');const config=join(f.project,'.mcp.json');const configBefore=readFileSync(config);const versions=join(f.home,'.local/share/popclaw/versions');const versionsBefore=readdirSync(versions);if(variant==='null-receipt')writeFileSync(receipt,'null');if(variant==='missing-actor'||variant==='invalid-actor'){const data=JSON.parse(readFileSync(receipt,'utf8'));if(variant==='missing-actor')delete data.popclawId;else data.popclawId='not a public key';writeFileSync(receipt,JSON.stringify(data));}if(variant==='missing-receipt')rmSync(receipt);if(variant.startsWith('missing-key'))rmSync(key);if(variant==='missing-key-and-credential')rmSync(marker);const receiptBefore=existsSync(receipt)?readFileSync(receipt):undefined;writeFileSync(join(f.package,'package.json'),'{"version":"9.9.9","type":"module"}');await assert.rejects(setup({...f,createIdentity:true}),/record|receipt|binding mismatch|history without master.key/);assert.deepEqual(readFileSync(config),configBefore);assert.deepEqual(existsSync(receipt)?readFileSync(receipt):undefined,receiptBefore);assert.deepEqual(readdirSync(versions),versionsBefore);if(variant.startsWith('missing-key'))assert.equal(existsSync(key),false);}finally{rmSync(f.base,{recursive:true});}}});
 test('stable target refuses cache components but accepts npx source and ordinary lookalike names',async()=>{const f=fixture();try{for(const path of [join(f.home,'.npm/_npx/pkg'),join(f.home,'.npm/_cacache/tmp/pkg'),join(f.home,'.npm/_tmp/pkg'),join(f.home,'node_modules/popclaw')]){await assert.rejects(setup({...f,appRoot:path,createIdentity:true}),/Stable runtime target/);assert.equal(existsSync(f.root),false);assert.equal(existsSync(join(f.project,'.mcp.json')),false);}const source=join(f.home,'.npm/_npx/fixed-package');mkdirSync(join(f.home,'.npm/_npx'),{recursive:true});cpSync(f.package,source,{recursive:true});assert.ok(runtimePlan(source,join(f.home,'stable-app')).target);assert.equal(stableRuntimeRoot(join(f.home,'my_npx-copy/node_modules-backup')),join(f.home,'my_npx-copy/node_modules-backup'));symlinkSync(join(f.home,'.npm/_npx'),join(f.home,'cache-alias'));assert.throws(()=>stableRuntimeRoot(join(f.home,'cache-alias/target')),/Symlink|cache/);}finally{rmSync(f.base,{recursive:true});}});
 test('Node realpath rejects temporary npx/cache executables without banning stable node_modules installs',()=>{const base=temp();try{for(const relative of ['.npm/_npx/node/bin/node','.npm/_cacache/tmp/node']){const path=join(base,relative);mkdirSync(join(path,'..'),{recursive:true});writeFileSync(path,'fixture');assert.throws(()=>stableNode(path),/Node executable/);}symlinkSync(join(base,'.npm/_npx/node/bin/node'),join(base,'node-link'));assert.throws(()=>stableNode(join(base,'node-link')),/Node executable/);const stable=join(base,'node_modules/node/bin/node');mkdirSync(join(stable,'..'),{recursive:true});writeFileSync(stable,'fixture');assert.equal(stableNode(stable),stable);assert.equal(stableNode(process.execPath),realpathSync(process.execPath));}finally{rmSync(base,{recursive:true});}});
+
+type CodexFixtureConfig = { mcp_servers: { popclaw: {
+  env: Record<string, string>; args: string[]; tool_timeout_sec: number;
+} } };
+type AppliedFixtureSetup = { package: string; changed: unknown[]; identity: { popclawId: string } };
+const codexConfig = (path: string) => toml.parse(readFileSync(path, 'utf8')) as CodexFixtureConfig;
+
+test('managed Codex public-v1 rerun and internal package replacement preserve the explicit choice and identity', async () => {
+  const f = fixture();
+  try {
+    const first = await setup({ ...f, host: 'codex', createIdentity: true }) as AppliedFixtureSetup;
+    const config = join(f.project, '.codex/config.toml');
+    const key = join(f.root, 'vault/social/identity/master.key');
+    const beforeKey = readFileSync(key);
+    const data = codexConfig(config);
+    data.mcp_servers.popclaw.env.POPCLAW_WORLD_STREAM = 'public-v1';
+    data.mcp_servers.popclaw.tool_timeout_sec = 1800;
+    writeFileSync(config, toml.stringify(data));
+    const beforeConfig = readFileSync(config);
+    const repeat = await setup({ ...f, host: 'codex' }) as AppliedFixtureSetup;
+    assert.deepEqual(repeat.changed, []);
+    assert.deepEqual(readFileSync(config), beforeConfig);
+    // Same public version; this fixture only changes an unpublished payload.
+    writeFileSync(join(f.package, 'dist/bundled/mcp-hook.js'), '// next candidate\n');
+    const next = await setup({ ...f, host: 'codex' }) as AppliedFixtureSetup;
+    assert.notEqual(next.package, first.package);
+    const updated = codexConfig(config).mcp_servers.popclaw;
+    assert.equal(updated.env.POPCLAW_WORLD_STREAM, 'public-v1');
+    assert.equal(updated.tool_timeout_sec, 1800);
+    assert.equal(updated.args[0], join(next.package, 'dist/bundled/mcp.js'));
+    assert.deepEqual(readFileSync(key), beforeKey);
+    assert.equal(next.identity!.popclawId, first.identity!.popclawId);
+    assert.deepEqual((await setup({ ...f, host: 'codex' }) as AppliedFixtureSetup).changed, []);
+  } finally { rmSync(f.base, { recursive: true }); }
+});
+
+test('documented Codex opt-in cannot bypass missing receipt or identity mismatch', async () => {
+  for (const change of ['receipt', 'identity']) {
+    const f = fixture();
+    try {
+      await setup({ ...f, host: 'codex', createIdentity: true });
+      const config = join(f.project, '.codex/config.toml');
+      const receipt = join(f.project, '.popclaw/setup.json');
+      const data = codexConfig(config);
+      data.mcp_servers.popclaw.env.POPCLAW_WORLD_STREAM = 'public-v1';
+      writeFileSync(config, toml.stringify(data));
+      if (change === 'receipt') rmSync(receipt);
+      else {
+        const other = join(f.base, 'other-identity');
+        await identity(other, true);
+        cpSync(join(other, 'vault/social/identity/master.key'), join(f.root, 'vault/social/identity/master.key'));
+      }
+      const beforeConfig = readFileSync(config);
+      const beforeReceipt = existsSync(receipt) ? readFileSync(receipt) : undefined;
+      await assert.rejects(setup({ ...f, host: 'codex' }),
+        change === 'receipt' ? /receipt/ : /Root credential identity mismatch/);
+      assert.deepEqual(readFileSync(config), beforeConfig);
+      assert.deepEqual(existsSync(receipt) ? readFileSync(receipt) : undefined, beforeReceipt);
+    } finally { rmSync(f.base, { recursive: true }); }
+  }
+});

@@ -209,3 +209,88 @@ describe('the previousPackage upgrade path', () => {
     } finally { rmSync(f.base, { recursive: true }); }
   });
 });
+
+describe('Codex explicit documented public-v1 selection', () => {
+  type Binding = { command: string; args: string[]; env: Record<string, string>; tool_timeout_sec?: number };
+  const read = (text: string) => toml.parse(text) as { mcp_servers: { popclaw: Binding } };
+  const write = (f: ReturnType<typeof fixture>, data: ReturnType<typeof read>) =>
+    writeFileSync(join(f.project, '.codex/config.toml'), toml.stringify(data));
+  const bound = async (f: ReturnType<typeof fixture>) => {
+    const data = read(await boundText(f));
+    data.mcp_servers.popclaw.env.POPCLAW_WORLD_STREAM = 'public-v1';
+    return data;
+  };
+  const upgrade = (f: ReturnType<typeof fixture>) => f.plan('codex', { package: f.next, previousPackage: f.pkg });
+
+  test('same package rerun preserves the opt-in and is idempotent', async () => {
+    const f = fixture();
+    try { write(f, await bound(f)); assert.equal(configOf((await f.plan()).plans), undefined); }
+    finally { rmSync(f.base, { recursive: true }); }
+  });
+
+  for (const previousPackage of [false, true]) for (const timeout of [undefined, 120, 1800]) {
+    test(`opt-in survives timeout handling: prior=${previousPackage}, timeout=${timeout}`, async () => {
+      const f = fixture();
+      try {
+        const data = await bound(f);
+        const original = structuredClone(data.mcp_servers.popclaw.env);
+        if (timeout === undefined) delete data.mcp_servers.popclaw.tool_timeout_sec;
+        else data.mcp_servers.popclaw.tool_timeout_sec = timeout;
+        write(f, data);
+        const plans = (await (previousPackage ? upgrade(f) : f.plan())).plans;
+        const plan = configOf(plans);
+        const result = plan ? read(plan.after).mcp_servers.popclaw : data.mcp_servers.popclaw;
+        assert.deepEqual(result.env, original);
+        assert.equal(result.tool_timeout_sec, timeout === 1800 ? 1800 : DERIVED);
+        assert.equal(result.args[0], join(previousPackage ? f.next : f.pkg, 'dist/bundled/mcp.js'));
+        if (plan) writeFileSync(join(f.project, '.codex/config.toml'), plan.after);
+        assert.equal(configOf((await (previousPackage ? upgrade(f) : f.plan())).plans), undefined);
+      } finally { rmSync(f.base, { recursive: true }); }
+    });
+  }
+
+  test('fresh install never inherits the opt-in from the parent environment', async () => {
+    const f = fixture();
+    try {
+      const plan = configOf((await f.plan('codex', { env: { PATH: '', POPCLAW_WORLD_STREAM: 'public-v1' } })).plans)!;
+      assert.equal(read(plan.after).mcp_servers.popclaw.env.POPCLAW_WORLD_STREAM, undefined);
+    } finally { rmSync(f.base, { recursive: true }); }
+  });
+
+  for (const change of ['extra-env', 'command', 'args', 'root', 'consumer', 'receive', 'other-field',
+    'empty-stream', 'legacy-stream', 'wrong-stream', 'uppercase-stream', 'missing-receipt']) {
+    test(`opt-in cannot mask ${change} drift`, async () => {
+      const f = fixture();
+      try {
+        const data = await bound(f); const server = data.mcp_servers.popclaw;
+        if (change === 'extra-env') server.env.CUSTOM = 'x';
+        if (change === 'command') server.command = '/another/node';
+        if (change === 'args') server.args.push('--another');
+        if (change === 'root') server.env.POPCLAW_DATA_ROOT += '-other';
+        if (change === 'consumer') server.env.POPCLAW_NOTIFICATION_CONSUMER += '-other';
+        if (change === 'receive') server.env.POPCLAW_RECEIVE_ON_START = '0';
+        if (change === 'other-field') Object.assign(server, { enabled: true });
+        const stream = { 'empty-stream': '', 'legacy-stream': '1', 'wrong-stream': 'private', 'uppercase-stream': 'PUBLIC-V1' }[change];
+        if (stream !== undefined) server.env.POPCLAW_WORLD_STREAM = stream;
+        write(f, data);
+        const path = join(f.project, '.codex/config.toml'); const before = readFileSync(path, 'utf8');
+        await assert.rejects(f.plan('codex', { package: f.next, previousPackage: f.pkg,
+          requireNewBinding: change === 'missing-receipt' }), change === 'root'
+          ? /missing or invalid existing identity/ : /configured differently|receipt/);
+        assert.equal(readFileSync(path, 'utf8'), before);
+      } finally { rmSync(f.base, { recursive: true }); }
+    });
+  }
+
+  test('the opt-in does not claim an existing global server as a project binding', async () => {
+    const f = fixture();
+    try {
+      const data = await bound(f);
+      writeFileSync(join(f.project, '.codex/config.toml'), USER);
+      const home = join(f.base, 'home');
+      mkdirSync(join(home, '.codex'), { recursive: true });
+      writeFileSync(join(home, '.codex/config.toml'), toml.stringify(data));
+      await assert.rejects(f.plan(), /existing global\/local-scoped PopClaw server/);
+    } finally { rmSync(f.base, { recursive: true }); }
+  });
+});
