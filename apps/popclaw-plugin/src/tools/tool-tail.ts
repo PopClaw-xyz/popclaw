@@ -1,0 +1,184 @@
+/**
+ * The tail every tool result goes through: the unread-pings line, or else at
+ * most one settling nudge. `withTail` wraps an api so each registered tool's
+ * result gets it appended.
+ */
+
+import { ownerLang } from '../lexicon/owner-language.js';
+import { renderCopy } from '../lexicon/index.js';
+import { fileLastRun } from '../runtime/last-run.js';
+import type { MountedHouse } from '../onboarding/orchestrator.js';
+import { isDreamStale } from '../commands/status.js';
+import type { PopclawPaths } from '../host/popclaw-paths.js';
+import type { HostAdapter } from '../host/host-adapter.js';
+import { listGaps, readBailedAt, tasteSeededOf } from '../onboarding/settling-gaps.js';
+import { readNameSource } from '../onboarding/identity-writer.js';
+import {
+  composeTail,
+  isExcludedFromNudge,
+  pickNudge,
+  readNudgeLedger,
+  recordNudgeSent,
+  type NudgeCtx,
+} from '../onboarding/nudge.js';
+import type { RegisterToolsDeps } from './tools-context.js';
+
+/** The minimal surface the tail computation needs from runtime — consistent shape across both hosts (OpenClaw / MCP) is enough. */
+interface TailRuntime {
+  readonly host: HostAdapter;
+  readonly boot: { popclawId: string };
+  readonly replyPings?: { unreadCount(): number };
+  readonly onboardingState?: {
+    get(id: string): { stage: string; completed_at: number | null } | null;
+  };
+  readonly socialGraph?: { following(): readonly unknown[] };
+  readonly tasteLoader?: { enabledSources(): Promise<Array<{ path: string; content: string }>> };
+  readonly paths?: PopclawPaths;
+  readonly houses?: () => readonly MountedHouse[];
+  readonly houseStarted?: (slug: string) => boolean;
+}
+
+/**
+ * The unread-pings line (spec §7): `📬 N pending replies`. **Does not mark as read** —
+ * read-state only advances when `popclaw_show_pings` actually fetches that
+ * batch (guards against "the data says delivered, but the owner never actually heard it").
+ */
+async function unreadTailLine(runtime: RegisterToolsDeps['runtime']): Promise<string | null> {
+  try {
+    const rt = (await runtime()) as Pick<TailRuntime, 'replyPings'> | undefined;
+    const n = rt?.replyPings?.unreadCount() ?? 0;
+    return n > 0 ? renderCopy(ownerLang(), 'pings.tailLine', { n: String(n) }) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Nudge candidate (R1 spec §4): assemble the local facts `listGaps` needs
+ * (config / DB counts / file timestamps, zero network, zero LLM), then let
+ * `pickNudge` choose one. If any input is missing (test stubs often supply
+ * only a minimal runtime) → silently degrades to "no nudge", never breaks the tool itself.
+ *
+ * `no_verify` needs a live query to the lore-house `/v1/profile` (the path
+ * status.ts uses), which conflicts with the "zero network" bar here — the
+ * nudge path **does not detect this gap** (`loreHouseReachable: false` keeps
+ * it permanently off), and `/popclaw status` still does the network-path
+ * detection through its existing route.
+ */
+async function pickNudgeFor(
+  runtime: RegisterToolsDeps['runtime'],
+  nowSec: number,
+): Promise<{ key: string; line: string } | null> {
+  try {
+    const rt = (await runtime()) as TailRuntime | undefined;
+    if (!rt) return null;
+    const row = rt.onboardingState?.get(rt.boot.popclawId) ?? null;
+    const ctx: NudgeCtx = { stage: row?.stage ?? null, graduatedAt: row?.completed_at ?? null };
+    const [bailedAt, tasteSeeded, nameSource, ledger] = await Promise.all([
+      readBailedAt(rt.host),
+      tasteSeededOf(rt.tasteLoader),
+      readNameSource(rt.host).catch(() => null),
+      readNudgeLedger(rt.host),
+    ]);
+    const dreamStale = rt.paths ? isDreamStale(fileLastRun(rt.paths.dreamerStateFile()).get(), nowSec) : false;
+    const gaps = listGaps({
+      bailedAt,
+      followingCount: rt.socialGraph?.following().length ?? 0,
+      tasteSeeded,
+      loreHouseReachable: false, // The nudge path is zero-network (see above): no_verify never fires.
+      externalVerifiedCount: 0,
+      pendingInvitesCount: 0,
+      dreamStale,
+      nameSource,
+      houses: rt.houses?.(),
+      houseStarted: rt.houseStarted,
+    });
+    return pickNudge(gaps, ledger, nowSec, ctx);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The single exit point for the tail (spec §4/§7): unread pings take priority,
+ * the nudge only fires when no unread pings surfaced and gates ⑤⑥ both pass.
+ * At most one tail per turn. Wraps all tools in one place, instead of writing
+ * this out in each of the 36 execute functions. Any failure in the tail itself
+ * is always swallowed: the prompt must never break the real work. Only a nudge
+ * that's actually emitted gets recorded (`recordNudgeSent`) — a candidate that
+ * was picked but never made it into the returned text doesn't count.
+ *
+ * Handles BOTH registration shapes. The object form is what most tools use; the
+ * factory form `(toolCtx) => toolDef` is what the newspaper pair uses (they read
+ * `toolCtx.sessionKey` to tell the dedicated workshop session from the owner's
+ * chat, 2026-09-03 cut 1). A factory is resolved here and each tool it yields
+ * gets the same tail wrapping — switching a tool to the factory form must never
+ * silently cost it the unread-pings line.
+ */
+export function withTail(
+  api: RegisterToolsDeps['api'],
+  runtime: RegisterToolsDeps['runtime'],
+  runCommand?: RegisterToolsDeps['runCommand'],
+): RegisterToolsDeps['api'] {
+  /** One tool object with its execute tail-wrapped (non-tools pass through). */
+  const wrapToolObject = (tool: unknown): unknown => {
+    const t = tool as { name?: unknown; execute?: unknown; captureParameters?: unknown };
+    if (typeof t?.execute !== 'function') return tool;
+    const inner = t.execute as (...args: unknown[]) => Promise<unknown>;
+    const toolName = typeof t.name === 'string' ? t.name : '';
+    // Internal opt-in capture runs before an asynchronous command wrapper or
+    // lazy runtime getter. Do not expose this function in the host registration.
+    const { captureParameters, ...registration } = t;
+    return {
+      ...registration,
+      execute: async (...args: unknown[]): Promise<unknown> => {
+        const capturedArgs = typeof captureParameters === 'function'
+          ? [args[0], captureParameters(args[1]), ...args.slice(2)] : args;
+        const invoke = async (): Promise<unknown> => {
+        const result = await inner(...capturedArgs);
+        const text = (result as { text?: unknown } | null)?.text;
+        if (typeof text !== 'string') return result;
+        try {
+          const unreadLine = await unreadTailLine(runtime);
+          const nowSec = Math.floor(Date.now() / 1000);
+          const pick =
+            !unreadLine && !isExcludedFromNudge(toolName) ? await pickNudgeFor(runtime, nowSec) : null;
+          const tail = composeTail({
+            unreadLine,
+            toolName,
+            toolOk: true, // See nudge.ts: composeTail is only called when inner() didn't throw.
+            nudgeLine: pick?.line ?? null,
+          });
+          if (tail && pick && tail === pick.line) {
+            const rt = (await runtime()) as TailRuntime | undefined;
+            if (rt) await recordNudgeSent(rt.host, pick.key, nowSec);
+          }
+          return tail ? { ...(result as object), text: `${text}\n\n${tail}` } : result;
+        } catch {
+          return result;
+        }
+        };
+        // Control commands must remain able to enable or disable a house.
+        if (toolName === 'popclaw_house_login' || toolName === 'popclaw_house_logout') return invoke();
+        return runCommand ? runCommand(invoke) : invoke();
+      },
+    };
+  };
+  return {
+    ...api,
+    registerTool: (tool: unknown, opts?: unknown) => {
+      if (typeof tool !== 'function') {
+        api.registerTool(wrapToolObject(tool), opts);
+        return;
+      }
+      const factory = tool as (ctx: unknown) => unknown;
+      api.registerTool(
+        (ctx: unknown): unknown => {
+          const resolved = factory(ctx);
+          return Array.isArray(resolved) ? resolved.map(wrapToolObject) : wrapToolObject(resolved);
+        },
+        opts,
+      );
+    },
+  };
+}

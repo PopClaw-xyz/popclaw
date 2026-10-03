@@ -1,0 +1,451 @@
+{
+  "$comment": "Machine-checkable state sequences implementing state-transitions.md §8 rows T1–T14 on the train-world descriptor (fixtures/participation/train-window-w42.json). validate.mjs executes ops left-to-right and asserts each expect block (deltas per row). Gate order per invocation: manual control → group takeover → local grant → opportunity validity (current window) → capability revision → kind-in-group → budget availability → dedupe reservation; a turn is charged only when at least one invocation passes all gates; pre-gate failures charge nothing. Budget arithmetic in this file is deliberately tight so the referee proves resource separation (turn vs message). Descriptor replacements are inline and complete — no implicit construction conventions. 'SUBMITTED' = persisted signed request sent once.",
+  "world": "train",
+  "descriptor_ref": "../participation/train-window-w42.json",
+  "rows": [
+    {
+      "t": "T1",
+      "ops": [
+        { "op": "time", "at": "2026-09-08T14:00:00Z" },
+        { "op": "turn", "invocations": [ { "kind": "train.vote", "opportunity": "o_decision" } ] }
+      ],
+      "expect": {
+        "turns_used": 0, "messages_used": 0,
+        "outcomes": [ { "kind": "train.vote", "code": "GRANT_MISSING" } ]
+      }
+    },
+    {
+      "t": "T2",
+      "ops": [
+        { "op": "grant" },
+        { "op": "source", "event_id": "805497c0b4246dcc87d9f5199b6e0fe714eadf6dccf3f96bbdf432604495a5e0" },
+        { "op": "turn", "invocations": [ { "kind": "train.act", "opportunity": "o_scene" } ] }
+      ],
+      "expect": {
+        "turns_used": 1, "messages_used": 0,
+        "outcomes": [ { "kind": "train.act", "code": "SUBMITTED" } ]
+      }
+    },
+    {
+      "t": "T3",
+      "ops": [
+        { "op": "takeover", "scope": "group", "group": "g_decision" },
+        { "op": "turn", "invocations": [ { "kind": "train.vote", "opportunity": "o_decision" } ] },
+        { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_statement" } ] }
+      ],
+      "expect": {
+        "turns_used": 1, "messages_used": 1,
+        "outcomes": [
+          { "kind": "train.vote", "code": "GROUP_TAKEOVER_ACTIVE" },
+          { "kind": "train.say", "code": "SUBMITTED" }
+        ]
+      }
+    },
+    {
+      "t": "T4",
+      "ops": [
+        { "op": "turn", "invocations": [ { "kind": "train.vote", "opportunity": "o_statement" } ] }
+      ],
+      "expect": {
+        "turns_used": 0, "messages_used": 0,
+        "outcomes": [ { "kind": "train.vote", "code": "KIND_NOT_IN_GROUP" } ],
+        "note": "Speech-triggered turn cannot authorize a decision: o_statement belongs to g_expression, which does not contain train.vote."
+      }
+    },
+    {
+      "t": "T5",
+      "ops": [
+        { "op": "resume", "scope": "group", "group": "g_decision", "note": "owner resumes the w_42 decision group so the batch can exercise both classes; window-scoped takeover of (g_decision, w_42) ends here" },
+        { "op": "source", "event_id": "f9ae31f8ed418d32e00e1fbaa454e0c9b2bf12d5cc7ec0a324547c34e6a7f2ca" },
+        { "op": "turn", "invocations": [
+          { "kind": "train.vote", "opportunity": "o_decision" },
+          { "kind": "train.say", "opportunity": "o_result_response" }
+        ] }
+      ],
+      "expect": {
+        "turns_used": 1, "messages_used": 1,
+        "outcomes": [
+          { "kind": "train.vote", "code": "SUBMITTED" },
+          { "kind": "train.say", "code": "SUBMITTED" }
+        ],
+        "state_after": { "window": "w_42", "turns_used_total": 3, "messages_used_total": 2 },
+        "note": "One turn charge for the batch; the decision consumes zero message units; the message consumes its own budget at its own attempt. w_42 is now 3/3 turns (T2, T3, T5)."
+      }
+    }
+  ],
+  "rows_after_restart": {
+    "$comment": "T6–T14 continue from the post-T5 state plus a restart, exercising persistence, control, window rollover and budget separation. w_43 limits 3/3; w_44 local policy limits turn 2 / message 3 (suggested limits are local policy, not core constants).",
+    "rows": [
+      {
+        "t": "T6",
+        "ops": [
+          { "op": "restart" },
+          { "op": "takeover", "scope": "participation" },
+          { "op": "turn", "invocations": [ { "kind": "train.act", "opportunity": "o_scene" } ] }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [ { "kind": "train.act", "code": "PARTICIPATION_MANUAL" } ]
+        }
+      },
+      {
+        "t": "T6b",
+        "ops": [ { "op": "resume", "scope": "participation" } ],
+        "expect": { "autonomous": true }
+      },
+      {
+        "t": "T7",
+        "ops": [
+          { "op": "descriptor", "document": { "revision": "13", "same_window": true } },
+          { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_statement" } ] }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [ { "kind": "train.say", "code": "DEDUPE_KEY_RESERVED" } ],
+          "note": "Higher revision, same window: no reset of budget/dedupe/takeover state. g_expression was never taken over, so gates reach the consumed dedupe key w_42/statement."
+        }
+      },
+      {
+        "t": "T8",
+        "ops": [
+          { "op": "takeover", "scope": "group", "group": "g_inventory" },
+          { "op": "descriptor", "document": {
+            "revision": "14",
+            "window": { "id": "w_43", "opens_at": "2026-09-09T13:00:00Z", "closes_at": "2026-09-10T13:00:00Z" },
+            "budgets": [
+              { "id": "b_turn", "window_id": "w_43", "resource": "agent_turn", "suggested_limit": 3 },
+              { "id": "b_message", "window_id": "w_43", "resource": "outbound_message", "suggested_limit": 3 }
+            ],
+            "opportunities": [
+              { "id": "o_decision_w43", "action_group_id": "g_decision", "budget_group_id": "b_turn", "budget_window_id": "w_43", "not_before": "2026-09-09T13:00:01Z", "expires_at": "2026-09-10T13:00:00Z", "dedupe_key": "w_43/initial-decision" },
+              { "id": "o_statement_w43", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_43", "not_before": "2026-09-09T13:00:01Z", "expires_at": "2026-09-10T13:00:00Z", "dedupe_key": "w_43/statement" },
+              { "id": "o_item_17_w43", "action_group_id": "g_inventory", "budget_group_id": "b_turn", "budget_window_id": "w_43", "not_before": "2026-09-09T13:00:01Z", "expires_at": "2026-09-10T13:00:00Z", "dedupe_key": "w_43/item_17/decision" }
+            ]
+          } },
+          { "op": "time", "at": "2026-09-09T13:30:00Z" },
+          { "op": "turn", "invocations": [ { "kind": "train.item", "opportunity": "o_item_17_w43" } ] },
+          { "op": "turn", "invocations": [ { "kind": "train.vote", "opportunity": "o_decision_w43" } ] }
+        ],
+        "expect": {
+          "turns_used": 1, "messages_used": 0,
+          "outcomes": [
+            { "kind": "train.item", "code": "GROUP_TAKEOVER_ACTIVE" },
+            { "kind": "train.vote", "code": "SUBMITTED" }
+          ],
+          "note": "g_inventory takeover is explicit → persists into w_43; g_decision's w_42 window takeover does NOT constrain the genuinely new window."
+        }
+      },
+      {
+        "t": "T9",
+        "ops": [
+          { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_statement_w43" } ], "outcome_unknown": true },
+          { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_statement_w43" } ] },
+          { "op": "replay", "event_id": "f9ae31f8ed418d32e00e1fbaa454e0c9b2bf12d5cc7ec0a324547c34e6a7f2ca" }
+        ],
+        "expect": {
+          "turns_used": 1, "messages_used": 1,
+          "outcomes": [
+            { "kind": "train.say", "code": "SUBMITTED" },
+            { "kind": "train.say", "code": "DEDUPE_KEY_RESERVED" }
+          ],
+          "note": "Unknown send keeps its reservation (no refund, no duplicate); replay of the source event never re-dispatches."
+        }
+      },
+      {
+        "t": "T10",
+        "ops": [
+          { "op": "time", "at": "2026-09-10T13:00:01Z" },
+          { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_statement_w43" } ] }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [ { "kind": "train.say", "code": "OPPORTUNITY_EXPIRED" } ]
+        }
+      },
+      {
+        "t": "T11",
+        "ops": [
+          { "op": "descriptor", "document": {
+            "revision": "15",
+            "window": { "id": "w_44", "opens_at": "2026-09-10T13:00:00Z", "closes_at": "2026-09-11T13:00:00Z" },
+            "budgets": [
+              { "id": "b_turn", "window_id": "w_44", "resource": "agent_turn", "suggested_limit": 2 },
+              { "id": "b_message", "window_id": "w_44", "resource": "outbound_message", "suggested_limit": 3 }
+            ],
+            "opportunities": [
+              { "id": "o_decision_w44", "action_group_id": "g_decision", "budget_group_id": "b_turn", "budget_window_id": "w_44", "not_before": "2026-09-10T13:00:01Z", "expires_at": "2026-09-11T13:00:00Z", "dedupe_key": "w_44/initial-decision" },
+              { "id": "o_statement_w44", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_44", "not_before": "2026-09-10T13:00:01Z", "expires_at": "2026-09-11T13:00:00Z", "dedupe_key": "w_44/statement" },
+              { "id": "o_reply_w44", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_44", "not_before": "2026-09-10T13:00:01Z", "expires_at": "2026-09-11T13:00:00Z", "dedupe_key": "w_44/reply" },
+              { "id": "o_result_response_w44", "source_event_id": "f9ae31f8ed418d32e00e1fbaa454e0c9b2bf12d5cc7ec0a324547c34e6a7f2ca", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_44", "not_before": "2026-09-10T13:00:01Z", "expires_at": "2026-09-11T13:00:00Z", "dedupe_key": "result_41/response" },
+              { "id": "o_scene_w44", "source_event_id": "805497c0b4246dcc87d9f5199b6e0fe714eadf6dccf3f96bbdf432604495a5e0", "action_group_id": "g_scene", "budget_group_id": "b_turn", "budget_window_id": "w_44", "not_before": "2026-09-10T13:00:01Z", "expires_at": "2026-09-11T13:00:00Z", "dedupe_key": "w_44/scene_44/action" }
+            ]
+          } },
+          { "op": "time", "at": "2026-09-10T14:00:00Z" },
+          { "op": "owner_message", "count": 1 },
+          { "op": "turn", "invocations": [ { "kind": "train.vote", "opportunity": "o_decision_w44" } ] }
+        ],
+        "expect": {
+          "turns_used": 1, "messages_used": 0, "owner_messages_used": 1,
+          "outcomes": [ { "kind": "train.vote", "code": "SUBMITTED" } ],
+          "note": "New window opens fresh budgets (local policy 2 turns / 3 messages here); owner message shares the message pool; the decision still consumes zero message units."
+        }
+      },
+      {
+        "t": "T14",
+        "ops": [
+          { "op": "takeover", "scope": "group", "group": "g_decision" },
+          { "op": "turn", "invocations": [
+            { "kind": "train.say", "opportunity": "o_statement_w44" },
+            { "kind": "train.vote", "opportunity": "o_decision_w44" }
+          ] }
+        ],
+        "expect": {
+          "turns_used": 1, "messages_used": 1,
+          "outcomes": [
+            { "kind": "train.say", "code": "SUBMITTED" },
+            { "kind": "train.vote", "code": "GROUP_TAKEOVER_ACTIVE" }
+          ],
+          "note": "Owner locked the decision group but speech wakes the host: speech proceeds under its own group; the vote is refused under the decision-group gate. (Row placed before T12 to keep the turn arithmetic exact; semantics identical.)"
+        }
+      },
+      {
+        "t": "T12",
+        "ops": [
+          { "op": "resume", "scope": "group", "group": "g_inventory", "note": "owner resumes the explicit group so this row isolates budget exhaustion" },
+          { "op": "turn", "invocations": [
+            { "kind": "train.act", "opportunity": "o_scene_w44" },
+            { "kind": "train.say", "opportunity": "o_reply_w44" }
+          ] },
+          { "op": "source", "event_id": "805497c0b4246dcc87d9f5199b6e0fe714eadf6dccf3f96bbdf432604495a5e0", "adds_opportunity": { "id": "o_item_18_w44", "action_group_id": "g_inventory", "budget_group_id": "b_turn", "budget_window_id": "w_44", "not_before": "2026-09-10T13:00:01Z", "expires_at": "2026-09-11T13:00:00Z", "dedupe_key": "w_44/item_18/decision" } },
+          { "op": "turn", "invocations": [ { "kind": "train.item", "opportunity": "o_item_18_w44" } ] }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [
+            { "kind": "train.act", "code": "BUDGET_EXHAUSTED" },
+            { "kind": "train.say", "code": "BUDGET_EXHAUSTED" },
+            { "kind": "train.item", "code": "BUDGET_EXHAUSTED" }
+          ],
+          "stored_opportunities": 1,
+          "state_assert": { "resource": "agent_turn", "window": "w_44", "remaining": 0 },
+          "note": "Turn budget 2/2 used (T11, T14) while MESSAGE budget still has 1 left: the say passes its own message gate but the batch has no turn — it fails on turns, not messages (resource separation). The new item opportunity is stored as fact; no turn is minted; the owner can still act explicitly."
+        }
+      },
+      {
+        "t": "T13",
+        "ops": [
+          { "op": "descriptor", "document": { "revision": "16", "reemit_source": "f9ae31f8ed418d32e00e1fbaa454e0c9b2bf12d5cc7ec0a324547c34e6a7f2ca" } }
+        ],
+        "expect": {
+          "new_opportunities": 0,
+          "note": "The same result re-emitted under a new descriptor revision and transport id: the stable consumed key result_41/response is preserved; nothing reruns."
+        }
+      },
+      {
+        "t": "T15",
+        "ops": [
+          { "op": "set_policy", "max_agent_turns_total": 7, "note": "owner sets the aggregate (rolling/global) turn ceiling at exactly the 7 turns already used across w_42..w_44" },
+          { "op": "descriptor", "document": {
+            "revision": "17",
+            "window": { "id": "w_45", "opens_at": "2026-09-11T13:00:00Z", "closes_at": "2026-09-12T13:00:00Z" },
+            "budgets": [
+              { "id": "b_turn", "window_id": "w_45", "resource": "agent_turn", "suggested_limit": 3 },
+              { "id": "b_message", "window_id": "w_45", "resource": "outbound_message", "suggested_limit": 3 }
+            ],
+            "opportunities": [
+              { "id": "o_decision_w45", "action_group_id": "g_decision", "budget_group_id": "b_turn", "budget_window_id": "w_45", "not_before": "2026-09-11T13:00:01Z", "expires_at": "2026-09-12T13:00:00Z", "dedupe_key": "w_45/initial-decision" },
+              { "id": "o_statement_w45", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_45", "not_before": "2026-09-11T13:00:01Z", "expires_at": "2026-09-12T13:00:00Z", "dedupe_key": "w_45/statement" }
+            ]
+          } },
+          { "op": "time", "at": "2026-09-11T14:00:00Z" },
+          { "op": "turn", "invocations": [ { "kind": "train.vote", "opportunity": "o_decision_w45" } ] }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [ { "kind": "train.vote", "code": "BUDGET_EXHAUSTED" } ],
+          "state_assert": { "resource": "agent_turn", "window": "w_45", "remaining": 3 },
+          "aggregate_turns_used": 7,
+          "note": "Fresh window budget (3/3 untouched) but the owner's AGGREGATE ceiling is already spent: a malicious world cannot mint window IDs to escape it. The owner can still act manually."
+        }
+      },
+      {
+        "t": "T16",
+        "ops": [
+          { "op": "revoke" },
+          { "op": "grant", "kinds": ["train.say"], "expires_at": "2026-09-11T15:00:00Z" },
+          { "op": "turn", "invocations": [ { "kind": "train.vote", "opportunity": "o_decision_w45" } ] },
+          { "op": "time", "at": "2026-09-11T15:30:00Z" },
+          { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_statement_w45" } ] }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [
+            { "kind": "train.vote", "code": "GRANT_MISSING" },
+            { "kind": "train.say", "code": "GRANT_MISSING" }
+          ],
+          "note": "Kind-scoped local grant (say only) blocks the vote; after the grant's expiry even the granted kind is refused. Descriptor suggestions never authorize."
+        }
+      },
+      {
+        "t": "T17",
+        "ops": [
+          { "op": "grant" },
+          { "op": "descriptor", "document": {
+            "revision": "18", "same_window_w45": true,
+            "add_group": { "id": "g_fresh", "intent_kinds": ["train.act"], "control_reset": "window" },
+            "add_opportunity": { "id": "o_fresh", "action_group_id": "g_fresh", "budget_group_id": "b_turn", "budget_window_id": "w_45", "not_before": "2026-09-11T13:00:01Z", "expires_at": "2026-09-12T13:00:00Z", "dedupe_key": "w_45/fresh" }
+          } },
+          { "op": "turn", "invocations": [ { "kind": "train.act", "opportunity": "o_fresh" } ] }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [ { "kind": "train.act", "code": "BUDGET_EXHAUSTED" } ],
+          "state_assert": { "resource": "agent_turn", "window": "w_45", "remaining": 3 },
+          "aggregate_turns_used": 7,
+          "note": "A brand-new group id, fresh opportunity and valid grant cannot reset the owner's aggregate ceiling either."
+        }
+      },
+      {
+        "t": "T18",
+        "ops": [
+          { "op": "set_policy", "max_agent_turns_total": 10, "note": "owner raises the aggregate ceiling (owner may change own policy)" },
+          { "op": "descriptor", "document": {
+            "revision": "19",
+            "window": { "id": "w_46", "opens_at": "2026-09-12T13:00:00Z", "closes_at": "2026-09-13T13:00:00Z" },
+            "budgets": [
+              { "id": "b_turn", "window_id": "w_46", "resource": "agent_turn", "suggested_limit": 2 },
+              { "id": "b_message", "window_id": "w_46", "resource": "outbound_message", "suggested_limit": 2 }
+            ],
+            "opportunities": [
+              { "id": "o_s1", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_46", "not_before": "2026-09-12T13:00:01Z", "expires_at": "2026-09-13T13:00:00Z", "dedupe_key": "w_46/s1" },
+              { "id": "o_s2", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_46", "not_before": "2026-09-12T13:00:01Z", "expires_at": "2026-09-13T13:00:00Z", "dedupe_key": "w_46/s2" },
+              { "id": "o_s3", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_46", "not_before": "2026-09-12T13:00:01Z", "expires_at": "2026-09-13T13:00:00Z", "dedupe_key": "w_46/s3" }
+            ]
+          } },
+          { "op": "time", "at": "2026-09-12T14:00:00Z" },
+          { "op": "turn", "invocations": [
+            { "kind": "train.say", "opportunity": "o_s1" },
+            { "kind": "train.say", "opportunity": "o_s1" }
+          ] }
+        ],
+        "expect": {
+          "turns_used": 1, "messages_used": 1,
+          "outcomes": [
+            { "kind": "train.say", "code": "SUBMITTED" },
+            { "kind": "train.say", "code": "DEDUPE_KEY_RESERVED" }
+        ],
+          "note": "ATOMIC BATCH (audit follow-up 4): the first accepted invocation reserves o_s1's dedupe key immediately, so the SAME opportunity cannot submit twice inside one batch."
+        }
+      },
+      {
+        "t": "T19",
+        "ops": [
+          { "op": "turn", "invocations": [
+            { "kind": "train.say", "opportunity": "o_s2" },
+            { "kind": "train.say", "opportunity": "o_s3" }
+          ] }
+        ],
+        "expect": {
+          "turns_used": 1, "messages_used": 1,
+          "outcomes": [
+            { "kind": "train.say", "code": "SUBMITTED" },
+            { "kind": "train.say", "code": "BUDGET_EXHAUSTED" }
+          ],
+          "state_assert": { "resource": "outbound_message", "window": "w_46", "remaining": 0 },
+          "note": "SHARED LAST SLOT (audit follow-up 4): only one message unit remained; the second distinct invocation of the same batch sees the immediately-charged state and is refused — the slot can never be overspent."
+        }
+      },
+      {
+        "t": "T20 (C2: DM via an intent-only statement opportunity refused at the egress gate)",
+        "ops": [
+          { "op": "set_policy", "max_agent_turns_total": 20 },
+          { "op": "descriptor", "document": {
+            "revision": "20",
+            "window": { "id": "w_47", "opens_at": "2026-09-13T13:00:00Z", "closes_at": "2026-09-14T13:00:00Z" },
+            "budgets": [
+              { "id": "b_turn", "window_id": "w_47", "resource": "agent_turn", "suggested_limit": 2 },
+              { "id": "b_message", "window_id": "w_47", "resource": "outbound_message", "suggested_limit": 2 }
+            ],
+            "opportunities": [
+              { "id": "o_stmt_w47", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_47", "not_before": "2026-09-13T13:00:01Z", "expires_at": "2026-09-14T13:00:00Z", "dedupe_key": "w_47/stmt" },
+              { "id": "o_reply_w47", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_47", "not_before": "2026-09-13T13:00:01Z", "expires_at": "2026-09-14T13:00:00Z", "dedupe_key": "w_47/reply", "channels": ["intent", "direct_message"] }
+            ],
+            "dm_response_slot_key": "w_47/reply"
+          } },
+          { "op": "time", "at": "2026-09-13T14:00:00Z" },
+          { "op": "dm", "opportunity": "o_stmt_w47" }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [ { "kind": "direct_message", "code": "CHANNEL_NOT_IN_GROUP" } ],
+          "note": "C2: the statement opportunity does not qualify for direct_message (per-opportunity channels absent = intent-only) — DM through it is refused without interpreting opaque ids or prose; budgets untouched."
+        }
+      },
+      {
+        "t": "T21 (C2 declared slot: say(reply) then DM(reply) contend on one slot)",
+        "ops": [
+          { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_reply_w47" } ] },
+          { "op": "dm", "opportunity": "o_reply_w47" }
+        ],
+        "expect": {
+          "turns_used": 1, "messages_used": 1,
+          "outcomes": [
+            { "kind": "train.say", "code": "SUBMITTED" },
+            { "kind": "direct_message", "code": "DEDUPE_KEY_RESERVED" }
+          ],
+          "note": "The intent reply consumes the declared one-use slot w_47/reply; the DM through the same opportunity cannot mint a second use."
+        }
+      },
+      {
+        "t": "T22 (C2 declared slot: DM(reply) then say(reply), reverse order)",
+        "ops": [
+          { "op": "descriptor", "document": {
+            "revision": "21",
+            "window": { "id": "w_48", "opens_at": "2026-09-14T13:00:00Z", "closes_at": "2026-09-15T13:00:00Z" },
+            "budgets": [
+              { "id": "b_turn", "window_id": "w_48", "resource": "agent_turn", "suggested_limit": 2 },
+              { "id": "b_message", "window_id": "w_48", "resource": "outbound_message", "suggested_limit": 2 }
+            ],
+            "opportunities": [
+              { "id": "o_reply_w48", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_48", "not_before": "2026-09-14T13:00:01Z", "expires_at": "2026-09-15T13:00:00Z", "dedupe_key": "w_48/reply", "channels": ["intent", "direct_message"] }
+            ],
+            "dm_response_slot_key": "w_48/reply"
+          } },
+          { "op": "time", "at": "2026-09-14T14:00:00Z" },
+          { "op": "dm", "opportunity": "o_reply_w48" },
+          { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_reply_w48" } ] }
+        ],
+        "expect": {
+          "turns_used": 1, "messages_used": 1,
+          "outcomes": [
+            { "kind": "direct_message", "code": "SUBMITTED" },
+            { "kind": "train.say", "code": "DEDUPE_KEY_RESERVED" }
+          ],
+          "note": "Reverse order: the DM consumes the slot; the intent reply cannot replace or reset it."
+        }
+      },
+      {
+        "t": "T23 (C2 declared slot immutability: replace / remove / new-ID bypass all refused; consumed slot persists)",
+        "ops": [
+          { "op": "descriptor", "document": { "revision": "22", "same_window_w48": true, "dm_response_slot_key": "w_48/reply2", "note": "replacement attempt under a higher revision" } },
+          { "op": "descriptor", "document": { "revision": "23", "same_window_w48": true, "remove_slot": true, "note": "removal attempt" } },
+          { "op": "source", "event_id": "805497c0b4246dcc87d9f5199b6e0fe714eadf6dccf3f96bbdf432604495a5e0", "adds_opportunity": { "id": "o_evil_w48", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_48", "not_before": "2026-09-14T13:00:01Z", "expires_at": "2026-09-15T13:00:00Z", "dedupe_key": "w_48/evil", "channels": ["intent", "direct_message"] } },
+          { "op": "dm", "opportunity": "o_reply_w48" },
+          { "op": "turn", "invocations": [ { "kind": "train.say", "opportunity": "o_reply_w48" } ] }
+        ],
+        "expect": {
+          "turns_used": 0, "messages_used": 0,
+          "outcomes": [
+            { "kind": "descriptor", "code": "RESPONSE_SLOT_IMMUTABLE" },
+            { "kind": "descriptor", "code": "RESPONSE_SLOT_IMMUTABLE" },
+            { "kind": "source_add", "code": "RESPONSE_SLOT_IMMUTABLE" },
+            { "kind": "direct_message", "code": "DEDUPE_KEY_RESERVED" },
+            { "kind": "train.say", "code": "DEDUPE_KEY_RESERVED" }
+          ],
+          "stored_opportunities": 0,
+          "note": "Slot replacement under higher revision, removal, and a source-added DM-qualified opportunity with a different key are ALL refused without installing; the slot consumed in T22 stays consumed for both egress kinds."
+        }
+      }
+    ]
+  }
+}

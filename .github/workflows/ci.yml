@@ -1,0 +1,153 @@
+# Contributor CI.
+#
+# This workflow runs exactly the four commands CONTRIBUTING.md tells a
+# contributor to run, in the same order, with no CI-only shortcuts. If it
+# passes here and fails on your machine (or the reverse), one of the two is
+# lying and that is a bug worth reporting.
+#
+# Third-party actions are pinned by commit SHA; the tag next to each is the
+# release that SHA belongs to. Nothing here needs a secret, and the token is
+# read-only.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per branch/PR; a new push cancels the run it superseded.
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The floor of the OLDEST Node line popclaw supports. This exact line is read
+  # by apps/popclaw-plugin/tests/unit/runtime/node-support.test.ts, which fails
+  # unless it equals the first entry of SUPPORTED_NODE_LINES in
+  # apps/popclaw-plugin/src/runtime/node-support.ts, which in turn must equal
+  # `engines.node`. Testing the oldest version we promise is the point of the
+  # pin, so the matrix below resolves its `floor` leg from this one line rather
+  # than repeating the number.
+  NODE_VERSION: "24.16.0"
+
+jobs:
+  bundle:
+    # Cheap and first: if the pinned protocol bundle was touched, say so in a
+    # minute instead of after a full install/build/test.
+    name: protocol bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Verify the pinned protocol bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The trusted digest lives in exactly one place in this repo — the
+          # `digest` constant the plugin's build passes to verify-bundle.py.
+          # Read it from there rather than keeping a second copy in CI: a
+          # second copy is a second thing to forget when the bundle is bumped.
+          pin=$(node -e '
+            const src = require("fs").readFileSync(
+              "apps/popclaw-plugin/scripts/build-public-envelope.mjs", "utf8");
+            const m = /const digest = .([0-9a-f]{64})./.exec(src);
+            if (!m) { console.error("no bundle digest pin found in build-public-envelope.mjs"); process.exit(1); }
+            process.stdout.write(m[1]);
+          ')
+          echo "trusted pin: $pin"
+          python3 protocol/scripts/verify-bundle.py --expected "$pin"
+
+  mcp-shell:
+    # `just pack-mcp-shell` refuses to produce a `popclaw-mcp` tarball that has
+    # drifted from `popclaw`. A guard nobody has watched refuse is a guard
+    # nobody has tested, so CI watches it refuse three ways and then succeed.
+    # Its own job, not a fifth step in `check`: that job's contract is the four
+    # commands CONTRIBUTING.md names, and this is not one of them. No install
+    # either — packing the shell needs pnpm and node, nothing else, so this
+    # answers in under a minute.
+    name: pack-mcp-shell refuses to drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: "1.49.0"
+      - run: scripts/selfcheck-pack-mcp-shell.sh
+
+  check:
+    # `just install && just build && just test && just lint` — the contributor
+    # contract from CONTRIBUTING.md, on both lines of the support contract
+    # ">=24.16.0 <25 || >=26.1.0".
+    name: just install/build/test/lint (node ${{ matrix.node }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - "floor" # resolves to NODE_VERSION above — the oldest line we promise
+          - "26.1.0" # floor of the newest supported line
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # pnpm first, with no `version` input: the action then takes the version
+      # from the root package.json `packageManager` field, so CI cannot drift
+      # from what the repo declares.
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node == 'floor' && env.NODE_VERSION || matrix.node }}
+          cache: pnpm
+          # `just install` installs two workspaces: this repo and the pinned
+          # protocol bundle. Both lockfiles belong in the cache key.
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            protocol/pnpm-lock.yaml
+
+      # `just` from its upstream release (casey/just), not from a repackager.
+      # The alternatives were worse: `cargo install just` needs a Rust
+      # toolchain and a two-minute compile on every run; the `rust-just` npm
+      # package is a third-party repackage (gnpaone/rust-just), not the
+      # project's own distribution; a raw download means carrying a checksum
+      # by hand in this file.
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: "1.49.0"
+
+      - run: just install
+      - run: just build
+      - run: just test
+      - run: just lint
+
+# Not run here: the protocol bundle's own cross-language conformance suite
+# (Rust + Python + TS test vectors). Its workflow travels inside the bundle at
+# protocol/.github/workflows/protocol-candidate.yml, where GitHub does not
+# execute it — it is data covered by the manifest hash, not CI. Reproducing it
+# per pull request would cost a pinned rustup toolchain, a separately
+# downloaded protoc, and a Python venv, ~20 minutes, to re-prove something the
+# `bundle` job proves in one: that not one byte under protocol/ has changed.
+# Bundle changes do not arrive through pull requests here; they arrive as a new
+# pinned version, and that is where the conformance suite belongs.

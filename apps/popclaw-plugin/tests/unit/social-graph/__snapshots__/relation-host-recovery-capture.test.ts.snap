@@ -1,0 +1,154 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`relation host snapshot authority capture > completes only with the captured authority after generation 1`] = `
+{
+  "capturedGeneration": 1,
+  "currentGeneration": 2,
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+      "incarnation": "1",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "resume": null,
+  "trace": [
+    "popclaw: cursor reset at capture (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "snapshot:requested",
+    "popclaw: relation gap for GmaDrppB… still open — the participation or pin moved before completion — nothing claimed",
+  ],
+}
+`;
+
+exports[`relation host snapshot authority capture > completes only with the captured authority after newer-gap 1`] = `
+{
+  "capturedGeneration": 1,
+  "currentGeneration": 1,
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+      "incarnation": "1",
+      "log_generation": "3",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "resume": null,
+  "trace": [
+    "popclaw: cursor reset at capture (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "snapshot:requested",
+    "popclaw: cursor reset at capture (retention; log generation 3, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "popclaw: relation gap for GmaDrppB… still open — a newer reset superseded this checkpoint — nothing claimed",
+  ],
+}
+`;
+
+exports[`relation host snapshot authority capture > completes only with the captured authority after pin-block 1`] = `
+{
+  "capturedGeneration": 1,
+  "currentGeneration": 1,
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+      "incarnation": "1",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "resume": null,
+  "trace": [
+    "popclaw: cursor reset at capture (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "snapshot:requested",
+    "popclaw: relation gap for GmaDrppB… still open — the participation or pin moved before completion — nothing claimed",
+  ],
+}
+`;
+
+exports[`relation host snapshot authority capture > completes only with the captured authority after pin-incarnation 1`] = `
+{
+  "capturedGeneration": 1,
+  "currentGeneration": 1,
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+      "incarnation": "1",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "resume": null,
+  "trace": [
+    "popclaw: cursor reset at capture (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "snapshot:requested",
+    "popclaw: relation gap for GmaDrppB… still open — the participation or pin moved before completion — nothing claimed",
+  ],
+}
+`;
+
+exports[`relation host snapshot authority capture > completes only with the captured authority after pin-key 1`] = `
+{
+  "capturedGeneration": 1,
+  "currentGeneration": 1,
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+      "incarnation": "1",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "resume": null,
+  "trace": [
+    "popclaw: cursor reset at capture (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "snapshot:requested",
+    "popclaw: relation gap for GmaDrppB… still open — the participation or pin moved before completion — nothing claimed",
+  ],
+}
+`;
+
+exports[`relation host snapshot authority capture > completes only with the captured authority after stop 1`] = `
+{
+  "capturedGeneration": 1,
+  "currentGeneration": 1,
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB",
+      "incarnation": "1",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "resume": null,
+  "trace": [
+    "popclaw: cursor reset at capture (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "snapshot:requested",
+    "popclaw: relation gap for GmaDrppB… still open — the round died before completion — nothing claimed",
+  ],
+}
+`;
+
+exports[`relation host snapshot authority capture > completes only with the captured authority after unchanged 1`] = `
+{
+  "capturedGeneration": 1,
+  "currentGeneration": 1,
+  "gaps": [],
+  "resume": "2.20",
+  "trace": [
+    "popclaw: cursor reset at capture (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "snapshot:requested",
+    "popclaw: relation snapshot reconciled for GmaDrppB… (cursor 2.20, 0 originals verified)",
+  ],
+}
+`;

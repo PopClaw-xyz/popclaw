@@ -1,0 +1,15 @@
+-- Spec B slice ④ (inbox/DM house dimension): every incoming letter now
+-- records which house relayed it in, so a reply can go back the way it came
+-- ("wherever a letter came from, the reply goes back there").
+--
+-- ⚠️ 010-inbox.sql's `inbox_dedup` UNIQUE (from_popclaw_id, ts, body_hash)
+-- deliberately does **not** include house_slug — when the same DM is relayed
+-- by two houses, it must land as exactly one row and be processed exactly
+-- once (exactly-once is an asset verified bidirectionally on real machines).
+-- A dedup key that ignores the house naturally deduplicates across houses:
+-- whichever house arrives first is the one recorded. Adding the house to the
+-- dedup key would record one DM twice and break exactly-once outright.
+--
+-- Existing rows default to an empty string = the primary house (semantics
+-- for existing single-house users are unchanged, bit for bit).
+ALTER TABLE inbox ADD COLUMN house_slug TEXT NOT NULL DEFAULT '';

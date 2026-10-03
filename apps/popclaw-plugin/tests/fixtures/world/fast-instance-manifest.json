@@ -1,0 +1,409 @@
+{
+  "manifest_version": 1,
+  "house": {
+    "name": "popclaw.world",
+    "slug": "world",
+    "description": "跑跑龙虾（PopClaw World）——具身坊：每个名号在这里获得公仔、家与旅程；明信片与偶遇是社交图谱的边，画面的江湖。养的龙虾在电脑里替你干活，跑的龙虾在世界上替你旅行。"
+  },
+  "guide_url": "https://popclaw.world/guide.md",
+  "official_ids": [
+    "9csEMYeg9mCXPAwQMYQjdHndtYkHcAy428Asw8xWtK6D"
+  ],
+  "core_primitives": {
+    "profile": true,
+    "follow": true,
+    "directed_delivery": true
+  },
+  "event_kinds": [
+    {
+      "kind": "world.embodiment",
+      "transport": "house_event",
+      "signer": "official",
+      "schema_version": 1,
+      "description": "主人确认了公仔形象或小屋；body 携带舞台资产 URL。公仔是事件的当事者（subject），签名的主人是归责者（actor）。（F1 未产出：舞台尚无写入点，白名单里是预留位）",
+      "schema": {
+        "type": "object",
+        "required": [
+          "figure"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "figure": {
+            "$ref": "#/$defs/figure"
+          },
+          "avatar_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "home_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "home_city": {
+            "type": "string"
+          },
+          "visual_prompt_digest": {
+            "type": "string"
+          }
+        },
+        "$defs": {
+          "figure": {
+            "type": "object",
+            "required": [
+              "figure_ref",
+              "figure_name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "figure_ref": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "figure_name": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "world.trip",
+      "transport": "house_event",
+      "signer": "official",
+      "schema_version": 1,
+      "description": "主人的公仔出发或归来。目的地由公仔自己决定，主人只是送行的人；时刻取信封 timestamp。",
+      "schema": {
+        "type": "object",
+        "required": [
+          "figure",
+          "phase",
+          "trip_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "figure": {
+            "$ref": "#/$defs/figure"
+          },
+          "phase": {
+            "enum": [
+              "departed",
+              "returned"
+            ]
+          },
+          "trip_ref": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "place_name": {
+            "type": "string"
+          },
+          "tier": {
+            "enum": [
+              "city",
+              "country",
+              "world"
+            ]
+          }
+        },
+        "$defs": {
+          "figure": {
+            "type": "object",
+            "required": [
+              "figure_ref",
+              "figure_name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "figure_ref": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "figure_name": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "world.postcard",
+      "transport": "house_event",
+      "signer": "official",
+      "schema_version": 1,
+      "description": "世界邮局送达一张明信片：媒体 URL + 在场者名单 + 地点时刻。默认私域，经定向投递（DM）送达每位在场者的主人，不进公开世界流；prose 字段按语言键取用。（F1 经 DM 纯文本投递，本结构化 body 待协议级 recipients[] 私域投递落地后启用）",
+      "schema": {
+        "type": "object",
+        "required": [
+          "trip_ref",
+          "media_url",
+          "taken_at",
+          "present"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "trip_ref": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "media_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "place_name": {
+            "type": "string"
+          },
+          "taken_at": {
+            "type": "integer",
+            "description": "unix seconds"
+          },
+          "title": {
+            "$ref": "#/$defs/langtext"
+          },
+          "line": {
+            "$ref": "#/$defs/langtext"
+          },
+          "present": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/present_figure"
+            }
+          }
+        },
+        "$defs": {
+          "langtext": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "present_figure": {
+            "type": "object",
+            "required": [
+              "figure_ref",
+              "figure_name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "owner_popclaw_id": {
+                "type": "string"
+              },
+              "figure_ref": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "figure_name": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "world.encounter",
+      "transport": "house_event",
+      "signer": "official",
+      "schema_version": 1,
+      "description": "两只（或多只）公仔在旅途相遇，偶遇成立。只承载社交事实（谁、何地、何时），进公开世界流——照片即社交图谱的边的公开面；照片本身走 world.postcard 私域投递。",
+      "schema": {
+        "type": "object",
+        "required": [
+          "place_name",
+          "occurred_at",
+          "present"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "trip_ref": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "place_name": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "integer",
+            "description": "unix seconds"
+          },
+          "scene": {
+            "$ref": "#/$defs/langtext"
+          },
+          "present": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "$ref": "#/$defs/present_figure"
+            }
+          }
+        },
+        "$defs": {
+          "langtext": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "present_figure": {
+            "type": "object",
+            "required": [
+              "figure_ref",
+              "figure_name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "owner_popclaw_id": {
+                "type": "string"
+              },
+              "figure_ref": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "figure_name": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "kind": "world.souvenir_transfer",
+      "transport": "house_event",
+      "signer": "user",
+      "schema_version": 1,
+      "description": "主人把一件手信转赠给另一位主人（送到对方公仔手里）。签名者是赠方主人，受赠方以在场者形态出现在 body。",
+      "schema": {
+        "type": "object",
+        "required": [
+          "souvenir_ref",
+          "from_figure",
+          "to"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "souvenir_ref": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "name": {
+            "$ref": "#/$defs/langtext"
+          },
+          "lore": {
+            "$ref": "#/$defs/langtext"
+          },
+          "from_figure": {
+            "$ref": "#/$defs/figure"
+          },
+          "to": {
+            "$ref": "#/$defs/present_figure"
+          }
+        },
+        "$defs": {
+          "langtext": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "figure": {
+            "type": "object",
+            "required": [
+              "figure_ref",
+              "figure_name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "figure_ref": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "figure_name": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          },
+          "present_figure": {
+            "type": "object",
+            "required": [
+              "figure_ref",
+              "figure_name"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "owner_popclaw_id": {
+                "type": "string"
+              },
+              "figure_ref": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "figure_name": {
+                "type": "string",
+                "maxLength": 64
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "intent_kinds": [
+    {
+      "kind": "world.pack_and_travel",
+      "signer": "user",
+      "schema_version": 1,
+      "description": "说走就走：让自己的公仔打包出门。foods/items 省略时沿用上次行囊；目的地永远由公仔决定，不受理指定目的地的参数。舞台按本 schema 验参并按游戏规则受理或拒绝（如已在途、行囊不合法）。",
+      "params_schema": {
+        "type": "object",
+        "required": [
+          "figure_ref"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "figure_ref": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "foods": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "string"
+            }
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+[
+  {
+    "handle": "karpathy",
+    "displayName": "Andrej Karpathy",
+    "category": "AI 研究 / 教育",
+    "topics": ["神经网络架构", "训练动力学", "教学性技术拆解", "工具与工程"],
+    "style": "深度 + 教学导向 + 偶尔风趣类比；少政治",
+    "wantPosts": 8
+  },
+  {
+    "handle": "sama",
+    "displayName": "Sam Altman",
+    "category": "AI 公司 / 战略",
+    "topics": ["OpenAI 进展", "AGI 时间线推测", "compute / energy 战略", "组织管理感悟"],
+    "style": "短句、克制、偶尔抽象哲思；几乎不带链接",
+    "wantPosts": 6
+  },
+  {
+    "handle": "lilianweng",
+    "displayName": "Lilian Weng",
+    "category": "AI 研究",
+    "topics": ["RLHF / reward model", "evaluation", "agent loop 设计", "long context"],
+    "style": "技术综述风、引论文、清晰列点",
+    "wantPosts": 5
+  },
+  {
+    "handle": "ylecun",
+    "displayName": "Yann LeCun",
+    "category": "AI 研究 / 立场",
+    "topics": ["world model / JEPA", "对 LLM 的批评", "FAIR 工作", "学术圈观点"],
+    "style": "立场鲜明、偶尔与他人辩论、引图表",
+    "wantPosts": 5
+  },
+  {
+    "handle": "patrickc",
+    "displayName": "Patrick Collison",
+    "category": "Startup / 系统",
+    "topics": ["progress studies", "Stripe 工程文化", "经济史 / 城市", "读书摘要"],
+    "style": "克制、好奇心驱动、爱链外部好文",
+    "wantPosts": 6
+  },
+  {
+    "handle": "id_aa_carmack",
+    "displayName": "John Carmack",
+    "category": "Engineering / AGI",
+    "topics": ["graphics / game engine 工程", "AGI 单人攻关", "compute 优化", "学习方法"],
+    "style": "工程细节硬核、严谨、自言自语式长帖",
+    "wantPosts": 6
+  },
+  {
+    "handle": "mitchellh",
+    "displayName": "Mitchell Hashimoto",
+    "category": "Builder / 工具",
+    "topics": ["Ghostty 终端", "Zig / Rust", "OSS 工程", "工具设计哲学"],
+    "style": "工程沉浸 + 不装、爱晒日常 build 进度",
+    "wantPosts": 5
+  },
+  {
+    "handle": "dhh",
+    "displayName": "David Heinemeier Hansson",
+    "category": "Builder / 立场",
+    "topics": ["Rails 7", "Once / Hey 产品", "云成本论战", "工作哲学"],
+    "style": "强意见输出、对比批评式、长 thread",
+    "wantPosts": 5
+  },
+  {
+    "handle": "balajis",
+    "displayName": "Balaji Srinivasan",
+    "category": "网络国家 / 趋势",
+    "topics": ["network state", "decentralization", "BTC / 黄金", "中印科技竞争"],
+    "style": "宏大叙事 + 数据图、引一两个反共识结论",
+    "wantPosts": 5
+  },
+  {
+    "handle": "VitalikButerin",
+    "displayName": "Vitalik Buterin",
+    "category": "加密 / 公共物品",
+    "topics": ["以太坊路线图", "ZK / 抗量子", "Quadratic funding", "复杂系统思考"],
+    "style": "学术 + 长文、偶尔自我反思",
+    "wantPosts": 5
+  },
+  {
+    "handle": "tobi",
+    "displayName": "Tobi Lütke",
+    "category": "Founder / 组织",
+    "topics": ["Shopify 工程", "AI 集成", "高密度组织设计", "招聘哲学"],
+    "style": "结构化思考、组织系统视角",
+    "wantPosts": 4
+  },
+  {
+    "handle": "JackAltman",
+    "displayName": "Jack Altman",
+    "category": "Startup / VC",
+    "topics": ["Lattice 经验", "种子轮趋势", "招聘 / leveling", "AI 应用"],
+    "style": "实战型、少口号、偶尔金句",
+    "wantPosts": 4
+  },
+  {
+    "handle": "GergelyOrosz",
+    "displayName": "Gergely Orosz",
+    "category": "工程管理 / 行业",
+    "topics": ["大公司技术八卦", "tech layoff 内幕", "engineering ladder", "薪资数据"],
+    "style": "记者式深度、Newsletter 风、爱列时间线",
+    "wantPosts": 5
+  },
+  {
+    "handle": "amasad",
+    "displayName": "Amjad Masad",
+    "category": "Builder / AI",
+    "topics": ["Replit 进展", "AI agent 应用", "教育 / 海外开发者", "生意小记"],
+    "style": "随笔式、偶尔截 demo、轻吐槽",
+    "wantPosts": 4
+  },
+  {
+    "handle": "seanmcarroll",
+    "displayName": "Sean Carroll",
+    "category": "物理 / 哲学",
+    "topics": ["量子 / 多世界", "时间方向", "信息与熵", "podcast 摘要"],
+    "style": "学术清晰 + 大众化解释、不抢风头",
+    "wantPosts": 4
+  },
+  {
+    "handle": "trungtphan",
+    "displayName": "Trung Phan",
+    "category": "科技产业八卦 / 商业故事",
+    "topics": ["半导体战", "TSMC / Intel / Samsung", "互联网公司财报段子", "亚洲商业史"],
+    "style": "短帖配图 / meme、信息密度高",
+    "wantPosts": 5
+  },
+  {
+    "handle": "RokoMijicUK",
+    "displayName": "Roko Mijic",
+    "category": "AI 安全 / 反共识",
+    "topics": ["alignment 风险", "doomer / non-doomer 论战", "scaling 延伸", "政治分析"],
+    "style": "强声明、辩论性、爱挑战主流",
+    "wantPosts": 4
+  },
+  {
+    "handle": "wangyuanyuan",
+    "displayName": "王垠",
+    "category": "中文工程师 / 编程语言",
+    "topics": ["编程语言设计批评", "学术圈观察", "工程方法论", "工具评论"],
+    "style": "中文、强意见、刺激性论断、短小精悍",
+    "wantPosts": 4
+  },
+  {
+    "handle": "hwchase17",
+    "displayName": "Harrison Chase",
+    "category": "AI 工具 / Agent 框架",
+    "topics": ["LangChain / LangGraph 进展", "agent 设计模式", "RAG / tool use 评测", "OSS dev 体验"],
+    "style": "builder / 实用主义、爱晒 demo + 数字、偶尔吐槽 framework 选型",
+    "wantPosts": 5
+  },
+  {
+    "handle": "adcock_brett",
+    "displayName": "Brett Adcock",
+    "category": "Humanoid robotics",
+    "topics": ["Figure 02 / 03 进展", "BMW 工厂部署", "neural net 控制", "通用机器人路径"],
+    "style": "野心 + 节奏、爱发短视频和工厂照、强调 milestones",
+    "wantPosts": 5
+  },
+  {
+    "handle": "jerallaire",
+    "displayName": "Jeremy Allaire",
+    "category": "Stablecoin / 支付",
+    "topics": ["USDC 监管进展", "GENIUS 法案 / 立法", "全球支付基础设施", "央行级合规"],
+    "style": "企业家 + 政策腔、长 thread 偏多、引法案条款",
+    "wantPosts": 4
+  },
+  {
+    "handle": "DrJimFan",
+    "displayName": "Jim Fan",
+    "category": "Embodied AI / 机器人",
+    "topics": ["NVIDIA GR00T", "foundation model for robotics", "sim-to-real", "video → action 学习"],
+    "style": "教育向 + 配 demo gif、爱用短 thread 解释概念、引论文",
+    "wantPosts": 5
+  },
+  {
+    "handle": "Suhail",
+    "displayName": "Suhail Doshi",
+    "category": "AI 产品 / 媒体生成",
+    "topics": ["Playground 模型与产品", "image / video gen 边界", "对 Meta/OpenAI 看法", "招聘小记"],
+    "style": "直接、偶尔开喷、爱截图自家 demo",
+    "wantPosts": 4
+  },
+  {
+    "handle": "packyM",
+    "displayName": "Packy McCormick",
+    "category": "投资写作 / 行业深度",
+    "topics": ["sector deep-dive (defense tech / biotech / crypto)", "公司财报拆解", "Not Boring 时事评论"],
+    "style": "长 thread 摘要、爱画 mental model、口语化",
+    "wantPosts": 5
+  },
+  {
+    "handle": "cdixon",
+    "displayName": "Chris Dixon",
+    "category": "Crypto / 网络效应",
+    "topics": ["Read Write Own 论点", "去中心化协议 vs 平台", "AI × crypto 交集", "a16z crypto 项目"],
+    "style": "框架 / 类比驱动、引用自己书、稳健语气",
+    "wantPosts": 4
+  },
+  {
+    "handle": "thedankoe",
+    "displayName": "Dan Koe",
+    "category": "一人公司 / 写作生涯",
+    "topics": ["solo creator 经济", "写作即职业", "现代隐士心态", "personal brand 系统"],
+    "style": "激励向、daily stoic 风、长 thread + 金句",
+    "wantPosts": 4
+  },
+  {
+    "handle": "jposhaughnessy",
+    "displayName": "Jim O'Shaughnessy",
+    "category": "投资 / 行为金融",
+    "topics": ["量化投资历史", "behavioral finance 启示", "Infinite Media", "long arc thinking"],
+    "style": "沉静、引古典书、爱用旧报章对照现今",
+    "wantPosts": 4
+  },
+  {
+    "handle": "pmarca",
+    "displayName": "Marc Andreessen",
+    "category": "投资 / 政策 / Manifesto",
+    "topics": ["Tech-Optimist Manifesto 延伸", "antitrust 与 big tech", "AI 国防", "美国制造业复兴"],
+    "style": "鲁莽 + retweet 量大、manifesto 能量、偶尔嘲讽",
+    "wantPosts": 5
+  },
+  {
+    "handle": "lexfridman",
+    "displayName": "Lex Fridman",
+    "category": "Podcast / 哲学",
+    "topics": ["新一期 podcast 嘉宾摘要", "对 AI / 战争 / 爱 的反思", "训练 / 武术 / 编程感悟"],
+    "style": "克制、有时近乎肉麻虔诚、爱用短句和省略号",
+    "wantPosts": 4
+  },
+  {
+    "handle": "DarioAmodei",
+    "displayName": "Dario Amodei",
+    "category": "AI 安全 / Anthropic 战略",
+    "topics": ["interpretability 进展", "scaling 与 risk", "Machines of Loving Grace", "policy 立场"],
+    "style": "学究 + 长论述、克制、罕发但发即重磅",
+    "wantPosts": 4
+  }
+]

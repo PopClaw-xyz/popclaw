@@ -1,0 +1,21 @@
+-- Where a refused frame arrived, kept beside what it was.
+--
+-- A refusal is allowed to move the transport's resume position past the frame
+-- it refused — the connection did deliver something, and asking for the same
+-- inadmissible bytes for ever helps nobody. It is allowed that ONLY because
+-- the frame is retained as evidence, and evidence that cannot say where on the
+-- stream it arrived does not answer the question the advance raises: which
+-- position was skipped, and on whose word. The house key, incarnation, owner
+-- generation and stream were already recorded here; the position was the one
+-- part of the connection's own account that was thrown away.
+--
+-- Nullable, because a transport need not have one: DM frames carry no
+-- position, and nothing may invent one for them. NULL on an existing row is
+-- the honest answer too — those refusals were recorded before this column
+-- existed and their position was never kept, so it is absent rather than
+-- guessed.
+--
+-- `position` is opaque here, exactly as it is in `stream_cursors`: this table
+-- records what arrived, and what may be ADOPTED as a resume point is the
+-- commit boundary's question, answered by the transport's own ordering.
+ALTER TABLE inbound_quarantine ADD COLUMN position TEXT;

@@ -1,0 +1,31 @@
+{
+  "name": "popclaw-mcp",
+  "version": "0.1.0",
+  "description": "The popclaw MCP server under its own command name — two bin aliases for the MCP entry points of the popclaw package.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PopClaw-xyz/popclaw.git",
+    "directory": "packages/popclaw-mcp"
+  },
+  "homepage": "https://github.com/PopClaw-xyz/popclaw/tree/main/packages/popclaw-mcp#readme",
+  "bugs": "https://github.com/PopClaw-xyz/popclaw/issues",
+  "type": "module",
+  "bin": {
+    "popclaw-mcp": "bin/popclaw-mcp.js",
+    "popclaw-mcp-hook": "bin/popclaw-mcp-hook.js"
+  },
+  "files": [
+    "bin/popclaw-mcp.js",
+    "bin/popclaw-mcp-hook.js",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=24.16.0 <25 || >=26.1.0"
+  },
+  "dependencies": {
+    "popclaw": "0.1.0"
+  }
+}

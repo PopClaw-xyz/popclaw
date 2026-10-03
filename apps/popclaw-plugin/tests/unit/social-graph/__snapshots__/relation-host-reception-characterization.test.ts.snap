@@ -1,0 +1,1207 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`relation host reception characterization > captures the confirmed owner generation and refuses an interleaved replacement 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      null,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 2,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [],
+}
+`;
+
+exports[`relation host reception characterization > direct attach preserves the old failure streak and not-before after explicit leave 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      null,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 0,
+      "house_key": "key-a",
+      "owner_generation": 2,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "warn:popclaw: relation frame deferred at a (event 1): no trusted, live session yet — not acknowledged, held until one attaches",
+    "confirm:https://a.test",
+    "warn:popclaw: relation session at a still not attachable — HOUSE_NOT_TRUSTED",
+    "confirm:https://a.test",
+    "info:popclaw: relation frame processed after deferral at a (event 1)",
+    "warn:popclaw: relation frame deferred at a (event 2): no trusted, live session yet — not acknowledged, held until one attaches",
+    "catchup:a:-",
+    "confirm:https://a.test",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "warn:popclaw: relation session at a still not attachable — HOUSE_NOT_TRUSTED",
+    "catchup:a:-",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "catchup:a:-",
+    "confirm:https://a.test",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > explicit departure notifies the captured listener list and retains aliases for reattach 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      3,
+      true,
+    ],
+    [
+      "b",
+      1,
+      true,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 3,
+      "updated_at": 100,
+    },
+    {
+      "active": 1,
+      "house_key": "key-b",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "confirm:https://b.test",
+    "stream:stop:a",
+    "departed:a",
+    "catchup:a:b",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "stream:start:b",
+    "confirm:https://a.test",
+    "receive:a:3:7:1.7",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > external departure leaves the durable generation alone and stops before later maintenance when its callback stops host 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      null,
+      false,
+    ],
+    [
+      "b",
+      1,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 0,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+    {
+      "active": 0,
+      "house_key": "key-b",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "confirm:https://b.test",
+    "catchup:a:b",
+    "stream:stop:a",
+    "info:popclaw: session at a ended elsewhere (or its trust moved) — stopped reading",
+    "departed:a",
+    "stream:stop:a",
+    "stream:stop:b",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > orders maintenance, global drain, DM, resend, announcement, then one captured snapshot per tick 1`] = `
+{
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "key-a",
+      "incarnation": "inc",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+    {
+      "floor": "7",
+      "house_key": "key-b",
+      "incarnation": "inc",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      1,
+      true,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+    {
+      "active": 1,
+      "house_key": "key-b",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "confirm:https://b.test",
+    "warn:popclaw: cursor reset at a (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "warn:popclaw: cursor reset at b (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+    "catchup:a:b",
+    "trust:key-a",
+    "trust:key-b",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "announcement:notify",
+    "trust:key-a",
+    "authority:https://a.test",
+    "snapshot:https://a.test:{"ownerGeneration":1,"houseKeyOfPin":"key-a","incarnationOfPin":"inc"}:true",
+    "stream:start:a",
+    "stream:start:b",
+    "stream:stop:a",
+    "stream:stop:b",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > pending attach cannot resurrect a stopped host and stop prevents later start 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      null,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [],
+}
+`;
+
+exports[`relation host reception characterization > preserves held FIFO over a new handle, thrown head, returned refusal and two-house isolation 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      1,
+      true,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+    {
+      "active": 1,
+      "house_key": "key-b",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      "1.9",
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "warn:popclaw: relation frame deferred at a (event 1): no trusted, live session yet — not acknowledged, held until one attaches",
+    "confirm:https://a.test",
+    "warn:popclaw: relation frame deferred at a (event 2): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation session at a still not attachable — HOUSE_NOT_TRUSTED",
+    "confirm:https://b.test",
+    "receive:b:1:8:1.8",
+    "confirm:https://a.test",
+    "receive:a:1:1:1.1",
+    "warn:popclaw: relation frame held at a (event 1) could not be committed — Error: commit unavailable",
+    "warn:popclaw: relation frame deferred at a (event 3): no trusted, live session yet — not acknowledged, held until one attaches",
+    "catchup:a:b",
+    "receive:a:1:1:1.1",
+    "info:popclaw: relation frame processed after deferral at a (event 1)",
+    "receive:a:1:2:1.2",
+    "info:popclaw: relation frame processed after deferral at a (event 2)",
+    "receive:a:1:3:1.3",
+    "info:popclaw: relation frame processed after deferral at a (event 3)",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset rechecks block inside the same transaction as the gap write 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "tx:begin",
+    "tx:gap-count:0",
+    "warn:popclaw: cursor reset at a (retention) under a stale session — not marked; the tick will detach it",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset rechecks generation inside the same transaction as the gap write 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 2,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "tx:begin",
+    "tx:gap-count:0",
+    "warn:popclaw: cursor reset at a (retention) under a stale session — not marked; the tick will detach it",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset rechecks inactive inside the same transaction as the gap write 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 0,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "tx:begin",
+    "tx:gap-count:0",
+    "warn:popclaw: cursor reset at a (retention) under a stale session — not marked; the tick will detach it",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset rechecks pin-incarnation inside the same transaction as the gap write 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "tx:begin",
+    "tx:gap-count:0",
+    "warn:popclaw: cursor reset at a (retention) under a stale session — not marked; the tick will detach it",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset rechecks pin-key inside the same transaction as the gap write 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "tx:begin",
+    "tx:gap-count:0",
+    "warn:popclaw: cursor reset at a (retention) under a stale session — not marked; the tick will detach it",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset rechecks rollback inside the same transaction as the gap write 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "tx:begin",
+    "tx:gap-count:1",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset serial case absent preserves the durable gap and resume behavior 1`] = `
+{
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "key-a",
+      "incarnation": "inc",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "warn:popclaw: cursor reset at a (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset serial case current preserves the durable gap and resume behavior 1`] = `
+{
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "key-a",
+      "incarnation": "inc",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "warn:popclaw: cursor reset at a (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset serial case owned-current preserves the durable gap and resume behavior 1`] = `
+{
+  "gaps": [
+    {
+      "floor": "7",
+      "house_key": "key-a",
+      "incarnation": "inc",
+      "log_generation": "2",
+      "marked_at": 100,
+      "reason": "retention",
+    },
+  ],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      1,
+      true,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+    {
+      "active": 1,
+      "house_key": "key-b",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "confirm:https://b.test",
+    "warn:popclaw: cursor reset at a (retention; log generation 2, floor 7) — relation projection may be missing edges; reconciliation required, resume position suppressed until it completes",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset serial case owned-replaced preserves the durable gap and resume behavior 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      1,
+      true,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+    {
+      "active": 1,
+      "house_key": "key-b",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "confirm:https://b.test",
+    "warn:popclaw: cursor reset at a arrived on a replaced connection — ignored as stale",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset serial case replaced preserves the durable gap and resume behavior 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "warn:popclaw: cursor reset at a arrived on a replaced connection — ignored as stale",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > reset serial case supplied-undefined preserves the durable gap and resume behavior 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      "1.9",
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "warn:popclaw: cursor reset at a arrived on a replaced connection — ignored as stale",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > retains exactly 100 frames and throws the next into the transport replay boundary 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      null,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "warn:popclaw: relation frame deferred at a (event 1): no trusted, live session yet — not acknowledged, held until one attaches",
+    "confirm:https://a.test",
+    "warn:popclaw: relation frame deferred at a (event 2): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 3): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 4): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 5): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 6): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 7): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 8): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 9): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 10): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 11): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 12): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 13): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 14): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 15): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 16): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 17): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 18): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 19): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 20): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 21): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 22): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 23): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 24): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 25): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 26): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 27): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 28): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 29): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 30): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 31): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 32): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 33): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 34): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 35): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 36): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 37): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 38): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 39): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 40): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 41): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 42): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 43): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 44): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 45): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 46): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 47): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 48): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 49): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 50): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 51): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 52): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 53): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 54): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 55): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 56): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 57): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 58): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 59): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 60): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 61): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 62): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 63): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 64): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 65): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 66): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 67): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 68): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 69): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 70): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 71): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 72): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 73): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 74): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 75): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 76): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 77): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 78): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 79): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 80): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 81): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 82): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 83): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 84): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 85): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 86): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 87): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 88): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 89): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 90): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 91): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 92): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 93): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 94): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 95): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 96): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 97): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 98): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 99): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation frame deferred at a (event 100): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation session at a still not attachable — HOUSE_NOT_TRUSTED",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > retains optional duty-lease acquire/loss and sweep validity without reviving terminal stop 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      1,
+      true,
+    ],
+    [
+      "b",
+      1,
+      true,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 1,
+      "house_key": "key-a",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+    {
+      "active": 1,
+      "house_key": "key-b",
+      "owner_generation": 1,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "confirm:https://b.test",
+    "catchup:a:b",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "stream:start:a",
+    "stream:start:b",
+    "stream:stop:a",
+    "stream:stop:b",
+    "catchup:a:b",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "stream:start:a",
+    "stream:start:b",
+    "stream:stop:a",
+    "stream:stop:b",
+    "lease:remove",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > retries single-flight per house, backs off and clears the retry-success streak 1`] = `
+{
+  "gaps": [],
+  "handles": [
+    [
+      "a",
+      null,
+      false,
+    ],
+    [
+      "b",
+      null,
+      false,
+    ],
+  ],
+  "participation": [
+    {
+      "active": 0,
+      "house_key": "key-a",
+      "owner_generation": 2,
+      "updated_at": 100,
+    },
+  ],
+  "resume": [
+    [
+      "a",
+      null,
+    ],
+    [
+      "b",
+      null,
+    ],
+  ],
+  "trace": [
+    "confirm:https://a.test",
+    "warn:popclaw: relation frame deferred at a (event 1): no trusted, live session yet — not acknowledged, held until one attaches",
+    "confirm:https://a.test",
+    "warn:popclaw: relation frame deferred at a (event 2): no trusted, live session yet — not acknowledged, held until one attaches",
+    "warn:popclaw: relation session at a still not attachable — HOUSE_NOT_TRUSTED",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "confirm:https://a.test",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "confirm:https://a.test",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "info:popclaw: relation session attached at a after 2 deferred frame(s)",
+    "info:popclaw: relation frame processed after deferral at a (event 1)",
+    "info:popclaw: relation frame processed after deferral at a (event 2)",
+    "warn:popclaw: relation frame deferred at a (event 3): no trusted, live session yet — not acknowledged, held until one attaches",
+    "confirm:https://a.test",
+    "warn:popclaw: relation session at a still not attachable — HOUSE_NOT_TRUSTED",
+    "catchup:a:-",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+    "catchup:a:-",
+    "confirm:https://a.test",
+    "drain",
+    "dm",
+    "resend:true",
+    "announcement:read",
+  ],
+}
+`;
+
+exports[`relation host reception characterization > runs an empty-configuration initial tick before returning its opening promise 1`] = `
+[
+  "dm",
+]
+`;

@@ -1,0 +1,40 @@
+-- Which followers this client WITNESSED declaring the follow, as opposed to
+-- the ones it only ever read off a house's follower list.
+--
+-- Both facts already lived in this table and nothing could tell them apart,
+-- and two questions turn on telling them apart:
+--
+--   * `unannounced()` joins `known_followers_baseline`, and the poll's first
+--     successful pass is the only writer of that table. A follow that arrives
+--     on the personal stream before that pass is therefore held silently --
+--     on a fresh install, for up to a whole poll interval -- even though this
+--     client already holds the signed original that declares it.
+--   * `markBaseline` settles everyone the house's list named. A follower whose
+--     declaration this client witnessed BEFORE that first pass is in that list
+--     too, so the baseline files them as history and neither path ever
+--     announces them. That one is not a delay; it is a permanent loss.
+--
+-- NULL means "learned from a follower list": the poll's reconcile, or the
+-- catch-up that reads the already-adjudicated projection and is explicitly not
+-- allowed to introduce anyone. A timestamp means this client took delivery of
+-- the signed original itself and verified it — the follow is a fact this
+-- client checked rather than a name a house handed it.
+--
+-- What it does NOT mean is "this happened while we were watching". A cold
+-- personal stream replays from the house's retention floor, and this client
+-- verifies every one of those declarations too, so an old follow replayed on
+-- a brand-new data root is witnessed in exactly the same sense as one made a
+-- second ago. Nothing in this column can tell the two apart, and the client
+-- deliberately does not guess from a signed timestamp: a follower's clock is
+-- the follower's, and one running fast would file a genuinely new follow as
+-- history and leave it unmentioned for ever, which is the defect this column
+-- exists to remove. The consequence is documented rather than papered over
+-- (docs/known-limitations.md): on a brand-new data root for an identity that
+-- already has followers at a relation-relaying house, those followers are
+-- introduced once. Separating them needs the HOUSE'S published order, and
+-- that is a later piece of work.
+--
+-- Additive, and every existing row gets NULL -- the truthful answer for a row
+-- written before this column existed, whichever path wrote it. Those rows keep
+-- exactly the behaviour they have today: they wait for the baseline.
+ALTER TABLE known_followers ADD COLUMN verified_at INTEGER;

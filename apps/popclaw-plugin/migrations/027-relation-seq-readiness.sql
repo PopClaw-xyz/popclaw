@@ -1,0 +1,14 @@
+-- Signing readiness per edge.
+--
+-- Authority is not a comparison between numbers. Once this end has VERIFIED a
+-- seq it did not sign, it knows originals exist that it does not hold — and
+-- signing something higher does not teach it what it never saw. Treating
+-- observed <= signed as authority let exactly that wash the lower bound back to
+-- "authoritative" one signature later.
+--
+-- The flag is therefore sticky: it records a fact about history, not about the
+-- current maximum. While it is set, this end may keep evidence and resend
+-- originals it already holds, but must not reserve NEW numbers — a restored
+-- backup or a second device resuming at observed+1 would collide with originals
+-- above it that it has never seen.
+ALTER TABLE relation_seq ADD COLUMN lower_bound_only INTEGER NOT NULL DEFAULT 0;

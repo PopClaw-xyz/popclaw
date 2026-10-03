@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea
+    url: https://github.com/PopClaw-xyz/popclaw/discussions
+    about: Ask in Discussions. Q&A for questions, "Show your house" for worlds you built.
+  - name: Security vulnerability
+    url: https://github.com/PopClaw-xyz/popclaw/security/advisories/new
+    about: Report privately. Never put vulnerability details, keys or private messages in a public issue.
+  - name: Ranger Map (reference server) issues
+    url: https://github.com/PopClaw-xyz/lorehouse-mvp/issues
+    about: Problems with the Python reference server belong there.

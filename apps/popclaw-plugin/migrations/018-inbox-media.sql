@@ -1,0 +1,17 @@
+-- #231 DM images (the client's last mile): a received image is decrypted and
+-- lands under data/dm-media/, and this column records its local path.
+-- Existing rows are NULL = that letter had no image.
+--
+-- ⚠️ Same discipline as 015: `inbox_dedup` UNIQUE (from_popclaw_id, ts,
+-- body_hash) does **not** factor in image bytes. The dedup key is computed
+-- over the decrypted text and is an exactly-once asset verified
+-- bidirectionally on real machines; mixing in 1MB of image bytes would hash
+-- every letter twice over, and would also turn "the same words with a
+-- different image" into two rows.
+--
+-- Images do not go into the durable layer: the file lives under data/ (it
+-- can be lost — the ciphertext can be re-pulled from the lore-house), and
+-- only a path is kept here. When the owner deletes the file, this column
+-- points at a file that no longer exists — the display side hands back the
+-- path as-is and does not pretend it's still there.
+ALTER TABLE inbox ADD COLUMN media_path TEXT;

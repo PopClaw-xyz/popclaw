@@ -1,0 +1,56 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "outDir": "dist",
+    "rootDir": "../..",
+    "declaration": true,
+    "declarationMap": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@popclaw/algorithms": [
+        "../../protocol/packages/contracts/ts/algorithms/src/index.ts"
+      ],
+      "@popclaw/contracts": [
+        "../../protocol/packages/contracts/ts/contracts/src/index.ts"
+      ],
+      "@popclaw/contracts/world-interaction/first-release-candidate/interpreted-event-kind.schema.json": [
+        "../../protocol/packages/contracts/protocol/public-envelope-01/interpreted-event-kind.schema.json"
+      ],
+      "@popclaw/contracts/world-interaction/first-release-candidate/action-kind.schema.json": [
+        "../../protocol/packages/contracts/protocol/public-envelope-01/action-kind.schema.json"
+      ],
+      "@popclaw/contracts/world-interaction/first-release-candidate/board.schema.json": [
+        "../../protocol/packages/contracts/protocol/public-envelope-01/board.schema.json"
+      ],
+      "@popclaw/contracts/world-interaction/manifest.schema.json": [
+        "./src/protocol/retained/manifest.schema.json"
+      ],
+      "@popclaw/contracts/world-interaction/participation.schema.json": [
+        "../../protocol/packages/contracts/protocol/retained/participation.schema.json"
+      ],
+      "@popclaw/contracts/world-interaction/schema-profile.schema.json": [
+        "../../protocol/packages/contracts/protocol/retained/schema-profile.schema.json"
+      ],
+      "@popclaw/contracts/world-interaction/private-message.schema.json": [
+        "../../protocol/packages/contracts/protocol/retained/private-message.schema.json"
+      ],
+      "@popclaw/contracts/descriptor": [
+        "../../protocol/packages/contracts/ts/contracts/src/generated/descriptor.js"
+      ]
+    }
+  },
+  "include": [
+    "src/**/*",
+    "tests/**/*"
+  ],
+  "exclude": [
+    "src/protocol/public-envelope-generated.js"
+  ]
+}

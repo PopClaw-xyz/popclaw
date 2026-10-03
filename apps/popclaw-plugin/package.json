@@ -1,0 +1,95 @@
+{
+  "name": "popclaw",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PopClaw-xyz/popclaw.git"
+  },
+  "type": "module",
+  "main": "dist/bundled/index.js",
+  "bin": {
+    "popclaw": "dist/bundled/cli.js"
+  },
+  "exports": {
+    ".": "./dist/bundled/index.js",
+    "./mcp": "./dist/bundled/mcp.js",
+    "./mcp-hook": "./dist/bundled/mcp-hook.js"
+  },
+  "files": [
+    "NOTICE",
+    "dist/bundled",
+    "dist/native-deps",
+    "migrations",
+    "openclaw.plugin.json",
+    "skills",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "INSTALL.md",
+    "README.zh-CN.md"
+  ],
+  "scripts": {
+    "build": "pnpm run build:protocol && tsc -p tsconfig.json",
+    "build:bundle": "pnpm run build:protocol && tsc -p tsconfig.json && node scripts/prepare-native-deps.mjs && node scripts/bundle.mjs",
+    "prepack": "pnpm run build:bundle && node scripts/prepack.mjs",
+    "postpack": "node scripts/postpack.mjs",
+    "test": "vitest run && pnpm run test:setup-connector",
+    "test:setup-connector": "node --import tsx --test tests/setup/connector-codex-timeout.test.ts tests/setup/probe-tool-surface.test.ts",
+    "lint": "node scripts/check-deprecated-imports.mjs && eslint src tests",
+    "dev": "tsx src/main.ts",
+    "mcp": "tsx src/mcp.ts",
+    "setup:protocol": "pnpm --dir ../../protocol install --frozen-lockfile --ignore-scripts",
+    "build:protocol": "node scripts/build-public-envelope.mjs",
+    "check:protocol": "node scripts/build-public-envelope.mjs --check"
+  },
+  "engines": {
+    "node": ">=24.16.0 <25 || >=26.1.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.9.4"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/bundled/index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.9.4"
+    },
+    "build": {
+      "openclawVersion": "2026.9.4"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^12.11.1",
+    "bs58": "^6.0.0",
+    "ed2curve": "^0.3.0",
+    "eventsource": "^2.0.2",
+    "pino": "^9.0.0",
+    "tweetnacl": "^1.0.3",
+    "typebox": "^1.1.38",
+    "undici": "^6.20.0",
+    "zod": "^3.23.0",
+    "ajv": "^8.18.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/ed2curve": "^0.2.4",
+    "@types/eventsource": "^1.1.15",
+    "@types/node": "^24.13.6",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.14.0",
+    "openclaw": "2026.9.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.15.0",
+    "vitest": "^2.1.0"
+  }
+}

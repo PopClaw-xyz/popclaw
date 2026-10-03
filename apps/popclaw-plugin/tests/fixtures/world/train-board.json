@@ -1,0 +1,207 @@
+{
+  "$comment": "VALID. Train-world world_interaction board plus the six manifest intent entries and two HouseEvent vocabulary entries (manifest.schema.json root validates the board; #/$defs/intent_kind_entry validates each intent_kinds[] row; #/$defs/event_kind_entry validates each transport=house event row). All schemas stay inside the pinned profile and are processed by the unified activation pipeline. All schemas are ILLUSTRATIVE example vocabulary for the demo world; the contract itself is vocabulary-free.",
+  "event_kinds": [
+    {
+      "kind": "train.message",
+      "schema_version": 1,
+      "transport": "house",
+      "signer": "official",
+      "description": "Official relay of an accepted in-world statement.",
+      "body_schema": {
+        "type": "object",
+        "properties": {
+          "channel": { "enum": ["car", "row"] },
+          "text": { "type": "string", "minLength": 1, "maxLength": 600 }
+        },
+        "required": ["channel", "text"],
+        "additionalProperties": false,
+        "maxProperties": 2
+      },
+      "public_scope_declaration": "manifest_scopes_only"
+    },
+    {
+      "kind": "train.progress",
+      "schema_version": 1,
+      "transport": "house",
+      "signer": "official",
+      "description": "Daily progress digest; may use dynamically registered car scopes.",
+      "body_schema": {
+        "type": "object",
+        "properties": {
+          "summary": { "type": "string", "maxLength": 600 }
+        },
+        "required": ["summary"],
+        "additionalProperties": false,
+        "maxProperties": 1
+      },
+      "public_scope_declaration": "dynamic_registered_scopes"
+    }
+  ],
+  "valid": true,
+  "world_interaction": {
+    "version": 1,
+    "endpoints": {
+      "actions_status": "/v1/world-actions/status",
+      "closure_status": "/v1/world-actions/closure-status",
+      "world_stream": "/v1/world-stream"
+    },
+    "features": {
+      "world_actions": 1,
+      "scoped_stream": 1,
+      "structured_private_messages": 1,
+      "execution_closure": 1
+    },
+    "result_authority_pubkey": "2ods2p4oRJaL3oqVV99nzGcKYzixqwMzLUJqLWmSvDWE",
+    "initial_public_scopes": ["sc_global", "sc_car_1"],
+    "guide": {
+      "path": "/v1/guide.md",
+      "sha256": "21e9fe376f3e6839773ccf8844ec6e89e8db722fc05d0fbd419349d45527d697",
+      "revision": "guide-demo-1"
+    },
+    "private_message_version": 1
+  },
+  "intent_kinds": [
+    {
+      "kind": "train.join",
+      "schema_version": 1,
+      "transport": "house",
+      "signer": "user",
+      "description": "Join the world; idempotently find or assign the caller's role.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "accept_gifts": { "type": "boolean" },
+          "language_pref": { "type": "string", "maxLength": 8, "pattern": "^[a-z]{2}(-[A-Z]{2})?$" }
+        },
+        "additionalProperties": false,
+        "maxProperties": 2
+      },
+      "result_schema": {
+        "type": "object",
+        "properties": { "summary": { "type": "string", "maxLength": 280 } },
+        "additionalProperties": false,
+        "maxProperties": 1
+      },
+      "purpose": "join"
+    },
+    {
+      "kind": "train.status",
+      "schema_version": 1,
+      "transport": "house",
+      "signer": "user",
+      "description": "Read the caller's current verified state and public digest.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "last_state_revision": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$", "maxLength": 20 }
+        },
+        "additionalProperties": false,
+        "maxProperties": 1
+      },
+      "result_schema": {
+        "type": "object",
+        "properties": { "summary": { "type": "string", "maxLength": 280 } },
+        "additionalProperties": false,
+        "maxProperties": 1
+      },
+      "purpose": "snapshot"
+    },
+    {
+      "kind": "train.say",
+      "schema_version": 1,
+      "transport": "house",
+      "signer": "user",
+      "description": "Publish a bounded in-world statement on a visible channel.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "channel": { "enum": ["car", "row"] },
+          "text": { "type": "string", "minLength": 1, "maxLength": 600 },
+          "reply_to": { "type": "string", "pattern": "^[A-Za-z0-9_./:-]{1,128}$" }
+        },
+        "required": ["channel", "text"],
+        "additionalProperties": false,
+        "maxProperties": 3
+      },
+      "result_schema": {
+        "type": "object",
+        "properties": { "summary": { "type": "string", "maxLength": 280 } },
+        "additionalProperties": false,
+        "maxProperties": 1
+      }
+    },
+    {
+      "kind": "train.vote",
+      "schema_version": 1,
+      "transport": "house",
+      "signer": "user",
+      "description": "Cast or revise the caller's direction vote for the named window (CAS by expected_revision).",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "window_id": { "type": "string", "pattern": "^[A-Za-z0-9_./:-]{1,128}$" },
+          "choice": { "enum": ["go", "stay", "abstain"] },
+          "expected_revision": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$", "maxLength": 20 }
+        },
+        "required": ["window_id", "choice", "expected_revision"],
+        "additionalProperties": false,
+        "maxProperties": 3
+      },
+      "result_schema": {
+        "type": "object",
+        "properties": { "summary": { "type": "string", "maxLength": 280 } },
+        "additionalProperties": false,
+        "maxProperties": 1
+      }
+    },
+    {
+      "kind": "train.act",
+      "schema_version": 1,
+      "transport": "house",
+      "signer": "user",
+      "description": "Take the once-per-window scene action.",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "window_id": { "type": "string", "pattern": "^[A-Za-z0-9_./:-]{1,128}$" },
+          "scene_id": { "type": "string", "pattern": "^[A-Za-z0-9_./:-]{1,128}$" },
+          "choice": { "enum": ["salvage", "observe", "shelter"] },
+          "item_preference": { "enum": ["suppressant", "mutagen"] }
+        },
+        "required": ["window_id", "scene_id", "choice"],
+        "additionalProperties": false,
+        "maxProperties": 4
+      },
+      "result_schema": {
+        "type": "object",
+        "properties": { "summary": { "type": "string", "maxLength": 280 } },
+        "additionalProperties": false,
+        "maxProperties": 1
+      }
+    },
+    {
+      "kind": "train.item",
+      "schema_version": 1,
+      "transport": "house",
+      "signer": "user",
+      "description": "Use an owned item or give it to another participant (give never equals using).",
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "operation": { "enum": ["use", "give"] },
+          "item_id": { "type": "string", "pattern": "^[A-Za-z0-9_./:-]{1,128}$" },
+          "target_actor": { "type": "string", "pattern": "^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{32,44}$" }
+        },
+        "required": ["operation", "item_id"],
+        "additionalProperties": false,
+        "maxProperties": 3
+      },
+      "result_schema": {
+        "type": "object",
+        "properties": { "summary": { "type": "string", "maxLength": 280 } },
+        "additionalProperties": false,
+        "maxProperties": 1
+      }
+    }
+  ]
+}

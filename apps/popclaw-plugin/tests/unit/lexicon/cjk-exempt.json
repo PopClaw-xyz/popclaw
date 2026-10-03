@@ -1,0 +1,12 @@
+[
+  "src/commands/popclaw-taste.ts",
+  "src/commands/status.ts",
+  "src/dreamer/dream-cron.ts",
+  "src/identity/follow-resolution.ts",
+  "src/identity/passport-renderer.ts",
+  "src/newspaper/newspaper-files.ts",
+  "src/onboarding/answer-keywords.ts",
+  "src/routing/lexicon.ts",
+  "src/routing/native-world-routing.ts",
+  "src/world/summary-format.ts"
+]

@@ -1,0 +1,36 @@
+# Node
+node_modules
+.pnpm-store
+.pnpm-debug.log*
+*.tsbuildinfo
+
+# Env & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Data root for runtime
+/.data
+/tmp
+*.db
+*.db-shm
+*.db-wal
+
+# Build artifacts — match at any depth (each TS workspace pkg has its own dist/)
+dist
+
+# npm/pnpm pack output (popclaw plugin tarballs, popclaw-mcp tarballs, ...) —
+# reinstall locally, never committed. Matches at any depth, like `dist` above.
+*.tgz
+
+# Rust scratch builds (the protocol crates build under protocol/)
+/target
+**/target
+Cargo.lock
+
+# The pinned protocol bundle tracks its own Cargo.lock (part of the 269-file pin).
+!protocol/Cargo.lock
+
+# macOS Finder metadata
+.DS_Store

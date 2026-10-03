@@ -1,0 +1,137 @@
+{
+  "$schema": "https://popclaw.example/world-interaction/schema-profile/v1",
+  "title": "Manifest world_interaction board v1 + world intent_kinds entry",
+  "description": "How to use this document: (1) validate manifest.world_interaction against the ROOT schema here; (2) when world_interaction is present, validate every manifest.intent_kinds[] entry against #/$defs/intent_kind_entry; (3) validate every event_kinds[] row whose transport is 'house' against #/$defs/event_kind_entry (typed rows keep the legacy shape untouched). Everything else in the house manifest (house, official_ids, core_primitives, the G0-owned house_session board) keeps its existing vocabulary; this contract only adds the board and the two entry extensions. Manifest proof transport: the served manifest body bytes ARE the digest basis (capability_revision); the detached ManifestProof travels in the response header 'X-Popclaw-Manifest-Proof' as base64 of the proto bytes — the body is never wrapped or altered, keeping ADR-0048-era byte semantics intact. Endpoint rules: the control endpoints are FIXED same-origin relative paths (const values). A client resolving them MUST reject protocol-relative URLs, backslashes, query strings, and any cross-origin or ambiguous-path form (G0 600f0273 endpoint hardening precedent), and MUST reject cross-origin redirects at HTTP time. Board version 2 or higher from a newer contract: old clients disable world features for that house only (never unrelated houses) and continue without them. Activation-time steps that this JSON layer cannot express and that reject the capability rather than being skipped: every params_schema/result_schema/body_schema is meta-validated against schema-profile.schema.json; handler registration binds (kind, schema_version, capability_revision, worker_id) and an absent handler must not be advertised as executable.",
+  "type": "object",
+  "properties": {
+    "version": { "const": 1 },
+    "endpoints": {
+      "type": "object",
+      "properties": {
+        "actions_status": { "const": "/v1/world-actions/status" },
+        "closure_status": {
+          "const": "/v1/world-actions/closure-status",
+          "$comment": "Non-public restricted exit-control endpoint (ClosureQueryRequest/Response). Houses declaring execution_closure MUST serve it; the value is a fixed same-origin path."
+        },
+        "world_stream": { "const": "/v1/world-stream" }
+      },
+      "required": ["actions_status", "world_stream"],
+      "additionalProperties": false
+    },
+    "features": {
+      "type": "object",
+      "properties": {
+        "world_actions": { "const": 1 },
+        "scoped_stream": { "const": 1 },
+        "structured_private_messages": { "const": 1 },
+        "execution_closure": {
+          "const": 1,
+          "$comment": "Opt-in stronger G3 capability. Advertising it asserts every new Intent admission path already enforces the permit/closure protocol of world_interaction.proto §6-§7. Houses without it keep G0 semantics; clients report remote=unsupported, never conflate with temporary unavailability."
+        }
+      },
+      "required": ["world_actions"],
+      "additionalProperties": false
+    },
+    "result_authority_pubkey": {
+      "$comment": "Base58 Ed25519 public key of the pinned house result authority; signs every ActionResult over domain POPCLAW_WORLD_ACTION_RESULT_V1. Separate from the G0 session authority (manifest.house_session.ack_pubkey, G0-owned), which signs closure observations.",
+      "type": "string",
+      "pattern": "^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{43,44}$"
+    },
+    "initial_public_scopes": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 4,
+        "maxLength": 64,
+        "pattern": "^[A-Za-z0-9_-]{4,64}$",
+        "$comment": "Public, anonymous-subscribable scope labels listed by the manifest. Actor-bound scopes are added later only through authenticated SubscriptionDescriptor; selection labels, never secrets."
+      }
+    },
+    "guide": {
+      "type": "object",
+      "properties": {
+        "path": { "const": "/v1/guide.md" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "$comment": "Digest of the exact guide bytes this manifest revision is written for. The client hash-checks fetched guide bytes against this value before activating the matching capability context — a new schema can never be silently combined with old guide text. ETag remains a cache aid only."
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_./:-]{1,128}$",
+          "$comment": "Opaque house guide revision label, for humans and logs."
+        }
+      },
+      "required": ["path", "sha256", "revision"],
+      "additionalProperties": false
+    },
+    "private_message_version": { "const": 1 }
+  },
+  "required": ["version", "endpoints", "features", "result_authority_pubkey", "initial_public_scopes", "guide", "private_message_version"],
+  "additionalProperties": false,
+  "$defs": {
+    "intent_kind_entry": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{1,24}(\\.[a-z0-9_]{1,24}){1,2}$",
+          "maxLength": 64
+        },
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "$comment": "The ONE declared params/result schema version of this kind. IntentContext.schema_version must equal it; requests naming anything else get SCHEMA_VERSION_UNSUPPORTED. A kind may evolve only by shipping a new manifest revision with a higher schema_version (additive within the schema itself per ADR-0003)."
+        },
+        "transport": { "enum": ["typed", "house"] },
+        "signer": { "enum": ["user", "official"] },
+        "description": { "type": "string", "maxLength": 2048 },
+        "params_schema": { "$ref": "#/$defs/profile_schema" },
+        "result_schema": { "$ref": "#/$defs/profile_schema" },
+        "purpose": {
+          "enum": ["join", "snapshot"],
+          "$comment": "Descriptive routing hint only — NEVER authorization. A snapshot-purpose handler must register read-only for world state; join-purpose marks the entry action. Absent = ordinary action."
+        }
+      },
+      "required": ["kind", "schema_version", "transport", "signer", "description", "params_schema", "result_schema"],
+      "additionalProperties": false
+    },
+    "event_kind_entry": {
+      "$comment": "Additive seam for manifest.event_kinds[] rows of a world-capable house (parent review item 2): existing typed rows (transport 'typed' with a proto name) keep their legacy shape unchanged; rows for HouseEvent-vocabulary events gain exactly these fields. Downlink body schemas use the same pinned profile as params.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{1,24}(\\.[a-z0-9_]{1,24}){1,2}$",
+          "maxLength": 64
+        },
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "$comment": "HouseEvent.schema_version the row declares; downlink readers validate bodies against body_schema at this version."
+        },
+        "transport": { "const": "house" },
+        "signer": { "enum": ["official", "user"] },
+        "description": { "type": "string", "maxLength": 2048 },
+        "body_schema": { "$ref": "#/$defs/profile_schema" },
+        "public_scope_declaration": {
+          "enum": ["manifest_scopes_only", "dynamic_registered_scopes"],
+          "$comment": "manifest_scopes_only: events of this kind may only carry public_scopes listed in initial_public_scopes. dynamic_registered_scopes: the configured worker may additionally idempotently register new scopes through the internal registration call; admission still rejects unregistered scopes before fact acceptance."
+        }
+      },
+      "required": ["kind", "schema_version", "transport", "signer", "description", "body_schema", "public_scope_declaration"],
+      "additionalProperties": false
+    },
+    "profile_schema": {
+      "type": "object",
+      "$comment": "Placeholder node: the actual value must be a JSON Schema document that itself meta-validates against schema-profile.schema.json (checked at activation; out of scope for structural JSON Schema recursion). Size-bounded by the protocol limits table (32 KiB per schema)."
+    }
+  }
+}
+

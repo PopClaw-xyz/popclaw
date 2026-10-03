@@ -1,0 +1,435 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`preserves complete L1 delivery effects (content-error) 1`] = `
+{
+  "outcome": {
+    "error": "body unavailable",
+  },
+  "row": {
+    "deliveredAt": null,
+    "id": 1,
+    "lease": false,
+    "leaseUntil": null,
+    "payload": {
+      "body": "message from A",
+      "fromPopclawId": "alice",
+      "houseSlug": "A",
+      "messageId": 1,
+    },
+  },
+  "trace": [
+    "resolve",
+    [
+      "claim",
+      "L1",
+    ],
+    "authorize",
+    "cancel",
+  ],
+}
+`;
+
+exports[`preserves complete L1 delivery effects (drop) 1`] = `
+{
+  "outcome": {
+    "value": "queued",
+  },
+  "row": {
+    "deliveredAt": 1000,
+    "id": 1,
+    "lease": false,
+    "leaseUntil": null,
+    "payload": {
+      "attempts": 2,
+      "body": "message from A",
+      "fromPopclawId": "alice",
+      "houseSlug": "A",
+    },
+  },
+  "trace": [
+    "resolve",
+    [
+      "claim",
+      "L1",
+    ],
+    "authorize",
+    [
+      "stage",
+      "/local/photo.png",
+    ],
+    "target.enter",
+    "target.return",
+    "authorize",
+    [
+      "host",
+      {
+        "accountId": undefined,
+        "bestEffort": true,
+        "cfg": {},
+        "channel": "synthetic",
+        "payloads": [
+          {
+            "mediaUrls": [
+              "/staged/photo.png",
+            ],
+            "text": "💬 #5fc0djbz 回了你的发言：message from A
+　 想看全部回复，跟我说一声",
+          },
+        ],
+        "skipQueue": true,
+        "threadId": null,
+        "to": "owner",
+      },
+    ],
+    [
+      "warn",
+      "popclaw: L1 send to synthetic failed: ",
+    ],
+    [
+      "failure.set",
+      {
+        "at": 1000,
+        "reason": "channel rejected",
+      },
+    ],
+    [
+      "warn",
+      "popclaw: notify DROPPED after 3 attempts kind=reply — 💬 #5fc0djbz replied to you: message from A",
+    ],
+    [
+      "discardDelivery",
+      [
+        1,
+      ],
+    ],
+    [
+      "warn",
+      "popclaw: notify level=queued reason=delivery-failed (channel rejected) — 0 item(s) requeued",
+    ],
+  ],
+}
+`;
+
+exports[`preserves complete L1 delivery effects (early-inactive) 1`] = `
+{
+  "outcome": {
+    "value": "inactive",
+  },
+  "row": {
+    "deliveredAt": null,
+    "id": 1,
+    "lease": false,
+    "leaseUntil": null,
+    "payload": {
+      "body": "message from A",
+      "fromPopclawId": "alice",
+      "houseSlug": "A",
+      "messageId": 1,
+    },
+  },
+  "trace": [
+    "resolve",
+    [
+      "claim",
+      "L1",
+    ],
+    "authorize",
+    "cancel",
+  ],
+}
+`;
+
+exports[`preserves complete L1 delivery effects (failed) 1`] = `
+{
+  "outcome": {
+    "value": "queued",
+  },
+  "row": {
+    "deliveredAt": null,
+    "id": 1,
+    "lease": false,
+    "leaseUntil": null,
+    "payload": {
+      "attempts": 1,
+      "body": "message from A",
+      "fromPopclawId": "alice",
+      "houseSlug": "A",
+      "mediaPath": "/local/photo.png",
+      "messageId": 1,
+      "retryAfter": 1030,
+    },
+  },
+  "trace": [
+    "resolve",
+    [
+      "claim",
+      "L1",
+    ],
+    "authorize",
+    [
+      "stage",
+      "/local/photo.png",
+    ],
+    "target.enter",
+    "target.return",
+    "authorize",
+    [
+      "host",
+      {
+        "accountId": undefined,
+        "bestEffort": true,
+        "cfg": {},
+        "channel": "synthetic",
+        "payloads": [
+          {
+            "mediaUrls": [
+              "/staged/photo.png",
+            ],
+            "text": "📨 #5fc0djbz 给你发了私信（#1）：message from A　📎 附图",
+          },
+        ],
+        "skipQueue": true,
+        "threadId": null,
+        "to": "owner",
+      },
+    ],
+    [
+      "warn",
+      "popclaw: L1 send to synthetic failed: ",
+    ],
+    [
+      "failure.set",
+      {
+        "at": 1000,
+        "reason": "channel rejected",
+      },
+    ],
+    [
+      "retryDelivery",
+      1,
+      {
+        "attempts": 1,
+        "body": "message from A",
+        "fromPopclawId": "alice",
+        "houseSlug": "A",
+        "mediaPath": "/local/photo.png",
+        "messageId": 1,
+        "retryAfter": 1030,
+      },
+    ],
+    [
+      "warn",
+      "popclaw: notify level=queued reason=delivery-failed (channel rejected) — 1 item(s) requeued",
+    ],
+  ],
+}
+`;
+
+exports[`preserves complete L1 delivery effects (late-inactive) 1`] = `
+{
+  "outcome": {
+    "value": "inactive",
+  },
+  "row": {
+    "deliveredAt": null,
+    "id": 1,
+    "lease": false,
+    "leaseUntil": null,
+    "payload": {
+      "body": "message from A",
+      "fromPopclawId": "alice",
+      "houseSlug": "A",
+      "messageId": 1,
+    },
+  },
+  "trace": [
+    "resolve",
+    [
+      "claim",
+      "L1",
+    ],
+    "authorize",
+    [
+      "stage",
+      "/local/photo.png",
+    ],
+    "target.enter",
+    "target.return",
+    "authorize",
+    "cancel",
+  ],
+}
+`;
+
+exports[`preserves complete L1 delivery effects (partial_failed) 1`] = `
+{
+  "outcome": {
+    "value": "channel",
+  },
+  "row": {
+    "deliveredAt": 1000,
+    "id": 1,
+    "lease": false,
+    "leaseUntil": null,
+    "payload": {
+      "body": "message from A",
+      "fromPopclawId": "alice",
+      "houseSlug": "A",
+      "messageId": 1,
+    },
+  },
+  "trace": [
+    "resolve",
+    [
+      "claim",
+      "L1",
+    ],
+    "authorize",
+    [
+      "stage",
+      "/local/photo.png",
+    ],
+    "target.enter",
+    "target.return",
+    "authorize",
+    [
+      "host",
+      {
+        "accountId": undefined,
+        "bestEffort": true,
+        "cfg": {},
+        "channel": "synthetic",
+        "payloads": [
+          {
+            "mediaUrls": [
+              "/staged/photo.png",
+            ],
+            "text": "📨 #5fc0djbz 给你发了私信（#1）：message from A　📎 附图",
+          },
+        ],
+        "skipQueue": true,
+        "threadId": null,
+        "to": "owner",
+      },
+    ],
+    [
+      "warn",
+      "popclaw: L1 partial_failed to synthetic — already went out, not requeuing: ",
+    ],
+    [
+      "confirmDelivery",
+      [
+        1,
+      ],
+    ],
+    [
+      "info",
+      "popclaw: notify level=channel — delivered (n=1)",
+    ],
+    "failure.clear",
+  ],
+}
+`;
+
+exports[`preserves complete L1 delivery effects (sent) 1`] = `
+{
+  "outcome": {
+    "value": "channel",
+  },
+  "row": {
+    "deliveredAt": 1000,
+    "id": 1,
+    "lease": false,
+    "leaseUntil": null,
+    "payload": {
+      "body": "message from A",
+      "fromPopclawId": "alice",
+      "houseSlug": "A",
+      "messageId": 1,
+    },
+  },
+  "trace": [
+    "resolve",
+    [
+      "claim",
+      "L1",
+    ],
+    "authorize",
+    [
+      "stage",
+      "/local/photo.png",
+    ],
+    "target.enter",
+    "target.return",
+    "authorize",
+    [
+      "host",
+      {
+        "accountId": undefined,
+        "bestEffort": true,
+        "cfg": {},
+        "channel": "synthetic",
+        "payloads": [
+          {
+            "mediaUrls": [
+              "/staged/photo.png",
+            ],
+            "text": "📨 #5fc0djbz 给你发了私信（#1）：message from A　📎 附图",
+          },
+        ],
+        "skipQueue": true,
+        "threadId": null,
+        "to": "owner",
+      },
+    ],
+    [
+      "info",
+      "popclaw: L1 delivered to synthetic (sent)",
+    ],
+    [
+      "confirmDelivery",
+      [
+        1,
+      ],
+    ],
+    [
+      "info",
+      "popclaw: notify level=channel — delivered (n=1)",
+    ],
+    "failure.clear",
+  ],
+}
+`;
+
+exports[`preserves complete L1 delivery effects (staging-error) 1`] = `
+{
+  "outcome": {
+    "error": "staging unavailable",
+  },
+  "row": {
+    "deliveredAt": null,
+    "id": 1,
+    "lease": false,
+    "leaseUntil": null,
+    "payload": {
+      "body": "message from A",
+      "fromPopclawId": "alice",
+      "houseSlug": "A",
+      "messageId": 1,
+    },
+  },
+  "trace": [
+    "resolve",
+    [
+      "claim",
+      "L1",
+    ],
+    "authorize",
+    [
+      "stage",
+      "/local/photo.png",
+    ],
+    "cancel",
+  ],
+}
+`;

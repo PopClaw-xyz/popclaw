@@ -1,0 +1,573 @@
+# Publish the `popclaw` and `popclaw-mcp` packages to npm, with provenance,
+# from CI. Two artefacts, one workflow, one fixed order.
+#
+# THE FILENAME OF THIS FILE IS LOAD-BEARING, TWICE. npm's trusted publisher is
+# registered PER PACKAGE as (organisation or user, repository, workflow
+# filename), and both `popclaw` and `popclaw-mcp` name `release.yml`. Renaming
+# or moving this file breaks publishing for both until both bindings on
+# npmjs.com are changed to match. See docs/releasing.md.
+#
+# There is no NPM_TOKEN here and there must never be one: authentication is
+# OIDC (trusted publishing), which is why the publish job — and only the
+# publish job — asks for `id-token: write`.
+#
+# npm requires npm CLI >= 11.5.1 and Node >= 22.14.0 for trusted publishing
+# (docs.npmjs.com/trusted-publishers), so the CLI is pinned explicitly below
+# rather than inherited from whatever Node ships.
+#
+# ORDER, and why it is not negotiable (docs/research 2026-09-20 ruling §4):
+# `popclaw-mcp` is a shell whose only dependency is `popclaw` at an exact
+# version. Publishing the shell first would put a package on the registry that
+# cannot install. So: build and test once, pack both, publish `popclaw`, prove
+# on the registry that the published bytes are the bytes that were tested, and
+# only then publish the shell. npm has no cross-package transaction; if the
+# second publish fails the first one stays published, which is why this
+# workflow retains both artefacts and has a resume path instead of a rollback.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish, e.g. v0.1.0"
+        required: true
+        type: string
+      dry_run:
+        description: "Build and test everything, then stop at npm publish --dry-run"
+        required: true
+        type: boolean
+        default: true
+      only:
+        description: "Which packages to publish. `shell` is only valid when resuming."
+        required: false
+        type: choice
+        default: all
+        options: [all, shell]
+      resume_from_run_id:
+        description: "Resume a half-finished release: the run ID whose retained artefacts to publish from. Requires only=shell. Nothing is rebuilt."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel a release mid-flight; a second one simply waits. Keyed by tag,
+  # so a resume run for v0.1.0 queues behind the original v0.1.0 run instead of
+  # racing it to the same version number.
+  group: release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Kept in step with .github/workflows/ci.yml on purpose: we ship what we
+  # test, and what we test is the floor of the oldest supported Node line.
+  NODE_VERSION: "24.16.0"
+  # Trusted publishing needs >= 11.5.1 (docs.npmjs.com/trusted-publishers).
+  # Pinned so a release is reproducible; may move up, never below 11.5.1.
+  NPM_VERSION: "11.19.1"
+  # Long enough that a half-finished release can still be resumed after the
+  # owner has had days to decide, and 90 is also the maximum GitHub allows for
+  # a public repository — so this is "as long as we are permitted to keep it".
+  # The bundle embeds a build timestamp, so a rebuild of the same commit is NOT
+  # the same tarball: these retained bytes are the only way to finish a release
+  # with the artefacts that were actually tested.
+  ARTEFACT_RETENTION_DAYS: "90"
+
+jobs:
+  publish:
+    name: build, verify and publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # An empty GitHub Environment today; it exists so the owner can attach a
+    # required reviewer to it later, which turns an accidental `git push --tags`
+    # into a request that waits for a human. Create it in the repository
+    # settings (Settings → Environments → New environment → `npm-release`);
+    # this workflow does not create it. Both packages' trusted publishers name
+    # this environment, so both publishes must happen inside this job.
+    environment: npm-release
+    permissions:
+      contents: read
+      id-token: write # OIDC token for npm trusted publishing
+      actions: read # read a previous run's retained artefacts, for resume
+    steps:
+      - name: Resolve what to build
+        id: target
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+          INPUT_ONLY: ${{ github.event.inputs.only }}
+          INPUT_RESUME: ${{ github.event.inputs.resume_from_run_id }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            tag="${INPUT_TAG}"
+            dry_run="${INPUT_DRY_RUN}"
+            only="${INPUT_ONLY:-all}"
+            resume="${INPUT_RESUME:-}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            # A tag push is the real thing. The environment gate above is what
+            # stands between an accidental tag and a burned version number.
+            dry_run="false"
+            only="all"
+            resume=""
+          fi
+          # Strict, because these values reach later steps and a shell. A
+          # workflow_dispatch input is only settable by someone with write
+          # access, which is not a reason to hand them a shell.
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::refusing to build '$tag': a release tag looks like v0.1.0"
+            exit 1
+          fi
+          if [ "$dry_run" != "true" ] && [ "$dry_run" != "false" ]; then
+            echo "::error::dry_run must be true or false, got '$dry_run'"
+            exit 1
+          fi
+          if [ -n "$resume" ] && [[ ! "$resume" =~ ^[0-9]+$ ]]; then
+            echo "::error::resume_from_run_id must be a numeric workflow run ID, got '$resume'"
+            exit 1
+          fi
+          # The two inputs only make sense together. `only=shell` without a run
+          # ID would mean "publish a shell built from a fresh, untested build";
+          # a run ID with `only=all` would mean "republish popclaw", which the
+          # registry forbids and which this workflow must never attempt.
+          if [ -n "$resume" ] && [ "$only" != "shell" ]; then
+            echo "::error::resuming from run ${resume} requires only=shell: popclaw is already published and a version can never be republished"
+            exit 1
+          fi
+          if [ -z "$resume" ] && [ "$only" != "all" ]; then
+            echo "::error::only=${only} is a resume-only mode; it needs resume_from_run_id so the shell is published from the artefacts that were tested, not from a fresh build"
+            exit 1
+          fi
+          mode="fresh"
+          [ -n "$resume" ] && mode="resume"
+          {
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+            echo "dry_run=$dry_run"
+            echo "mode=$mode"
+            echo "resume_run_id=$resume"
+          } >> "$GITHUB_OUTPUT"
+          echo "building $tag (mode=$mode, dry_run=$dry_run)"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.target.outputs.tag }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: "https://registry.npmjs.org"
+          # npm's own guidance: never cache in a release build.
+          package-manager-cache: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: steps.target.outputs.mode == 'fresh'
+        with:
+          python-version: "3.12"
+
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        if: steps.target.outputs.mode == 'fresh'
+        with:
+          just-version: "1.49.0"
+
+      - name: Pin the npm CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global "npm@${NPM_VERSION}"
+          npm --version
+          node --version
+
+      # ---- gates that must fail in the first two minutes, not the fortieth ----
+
+      - name: Tag matches both package versions
+        if: steps.target.outputs.mode == 'fresh'
+        shell: bash
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          EXPECTED_VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          for manifest in ./apps/popclaw-plugin/package.json ./packages/popclaw-mcp/package.json; do
+            version=$(node -p "require('${manifest}').version")
+            if [ "$version" != "$EXPECTED_VERSION" ]; then
+              echo "::error::tag ${TAG} says version ${EXPECTED_VERSION}, but ${manifest} says ${version}. Bump one of them; do not publish the mismatch. The two packages publish in lock step."
+              exit 1
+            fi
+          done
+          echo "version ${EXPECTED_VERSION} confirmed in both manifests"
+
+      - name: Both package.json files declare this repository
+        if: steps.target.outputs.mode == 'fresh'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # npm provenance rejects a package whose `repository.url` is not the
+          # repository the workflow ran in (docs.npmjs.com/trusted-publishers,
+          # Troubleshooting). See docs/releasing.md for the exact edit. Fail
+          # here, loudly, rather than discover it after the build. The packed
+          # manifests are checked again after packing — that check is the
+          # authoritative one, this one is just early.
+          expected="https://github.com/${GITHUB_REPOSITORY}"
+          for manifest in ./apps/popclaw-plugin/package.json ./packages/popclaw-mcp/package.json; do
+            url=$(MANIFEST="$manifest" node -p '
+              const r = require(process.env.MANIFEST).repository;
+              (typeof r === "string" ? r : (r && r.url) || "")
+            ')
+            if [ -z "$url" ]; then
+              echo "::error::${manifest} has no \"repository\" field. npm provenance requires it and it must name ${expected} exactly. docs/releasing.md has the change (for the plugin it is two lines: package.json AND scripts/prepack.mjs, which strips every field it does not list)."
+              exit 1
+            fi
+            normalised=${url#git+}
+            normalised=${normalised%.git}
+            normalised=${normalised%/}
+            if [ "$normalised" != "$expected" ]; then
+              echo "::error::${manifest} says repository ${url} (normalised ${normalised}); this workflow is running in ${expected}. npm will reject the provenance attestation for that mismatch."
+              exit 1
+            fi
+          done
+          echo "repository ${expected} confirmed in both manifests"
+
+      # ---- the same verification a contributor runs, on the tagged tree ----
+
+      - run: just install
+        if: steps.target.outputs.mode == 'fresh'
+      - run: just build
+        if: steps.target.outputs.mode == 'fresh'
+      - run: just test
+        if: steps.target.outputs.mode == 'fresh'
+      - run: just lint
+        if: steps.target.outputs.mode == 'fresh'
+
+      - name: Verify the pinned protocol bundle
+        if: steps.target.outputs.mode == 'fresh'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pin=$(node -e '
+            const src = require("fs").readFileSync(
+              "apps/popclaw-plugin/scripts/build-public-envelope.mjs", "utf8");
+            const m = /const digest = .([0-9a-f]{64})./.exec(src);
+            if (!m) { console.error("no bundle digest pin found in build-public-envelope.mjs"); process.exit(1); }
+            process.stdout.write(m[1]);
+          ')
+          python3 protocol/scripts/verify-bundle.py --expected "$pin"
+
+      # ---- build the artefacts, then publish those exact files ----
+
+      - name: Working tree is clean before packing
+        if: steps.target.outputs.mode == 'fresh'
+        shell: bash
+        run: |
+          set -euo pipefail
+          dirty=$(git status --porcelain)
+          if [ -n "$dirty" ]; then
+            echo "$dirty"
+            echo "::error::the build modified tracked files; a release must be packed from a clean checkout"
+            exit 1
+          fi
+
+      - name: Pack both packages
+        id: pack
+        if: steps.target.outputs.mode == 'fresh'
+        shell: bash
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          DRY_RUN: ${{ steps.target.outputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # Reuse the project's own recipes rather than calling `pnpm pack`
+          # directly. `just pack-plugin` is what produces every tarball anyone
+          # has ever installed, and it carries a guard `pnpm pack` does not — it
+          # counts the prebuilt native bindings and aborts below 11, the failure
+          # that otherwise installs fine on the packer's machine and dies on
+          # everyone else's. `just pack-mcp-shell` carries the opposite guard:
+          # version lock step, an exact dependency, and a tarball that contains
+          # no copy of the runtime.
+          just pack-plugin
+          just pack-mcp-shell
+          shopt -s nullglob
+          main_files=(/tmp/popclaw/popclaw-plugin-*.tgz)
+          if [ "${#main_files[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one packed popclaw tarball in /tmp/popclaw, found ${#main_files[@]}"
+            exit 1
+          fi
+          main_tgz="${main_files[0]}"
+          shell_tgz="/tmp/popclaw/popclaw-mcp-${TAG#v}.tgz"
+          if [ ! -f "$shell_tgz" ]; then
+            echo "::error::expected the shell tarball at ${shell_tgz}; just pack-mcp-shell produced something else"
+            exit 1
+          fi
+
+          # One manifest, two lines, the format `sha256sum --check` reads back.
+          # This file is what a resume run verifies the retained bytes against.
+          staged="${RUNNER_TEMP}/artefacts"
+          mkdir -p "$staged"
+          cp "$main_tgz" "$shell_tgz" "$staged/"
+          (cd "$staged" && sha256sum ./*.tgz > SHA256SUMS.txt)
+          cat "$staged/SHA256SUMS.txt"
+
+          # What a resume run checks this set against, BY VALUE. The artefact's
+          # name also carries the tag, but a name is a label anyone can reuse,
+          # and a tag can be moved to another commit after a release fails.
+          TAG="$TAG" COMMIT="$(git rev-parse HEAD)" \
+            MAIN="$(basename "$main_tgz")" SHELL_NAME="$(basename "$shell_tgz")" \
+            node -e '
+              const meta = {
+                tag: process.env.TAG,
+                commit: process.env.COMMIT,
+                version: process.env.TAG.replace(/^v/, ""),
+                main: process.env.MAIN,
+                shell: process.env.SHELL_NAME,
+              };
+              require("node:fs").writeFileSync(process.argv[1], JSON.stringify(meta, null, 2) + "\n");
+              console.log(JSON.stringify(meta));
+            ' "$staged/release-metadata.json"
+
+          main_sha=$(sha256sum "$main_tgz" | cut -d' ' -f1)
+          shell_sha=$(sha256sum "$shell_tgz" | cut -d' ' -f1)
+          {
+            echo "MAIN_TGZ=$main_tgz"
+            echo "SHELL_TGZ=$shell_tgz"
+          } >> "$GITHUB_ENV"
+          {
+            echo "main_sha256=$main_sha"
+            echo "shell_sha256=$shell_sha"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Release artefacts"
+            echo
+            echo "| package | tarball | sha256 |"
+            echo "|---|---|---|"
+            echo "| popclaw | \`$(basename "$main_tgz")\` | \`$main_sha\` |"
+            echo "| popclaw-mcp | \`$(basename "$shell_tgz")\` | \`$shell_sha\` |"
+            echo
+            echo "tag \`${TAG}\`, dry run \`${DRY_RUN}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Both packed manifests are publishable
+        if: steps.target.outputs.mode == 'fresh'
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          # prepack rewrites the plugin's package.json down to an allowlist of
+          # fields before pack and restores it after, so the manifest npm
+          # actually reads is the one inside the tarball — not the one checked
+          # before the build. The shell has no prepack, and is checked here for
+          # the same reason: the tarball is the artefact, the working tree is not.
+          for spec in "popclaw:${MAIN_TGZ}" "popclaw-mcp:${SHELL_TGZ}"; do
+            name="${spec%%:*}"
+            tgz="${spec#*:}"
+            tar -xzOf "$tgz" package/package.json > "${RUNNER_TEMP}/packed-${name}.json"
+            PACKED="${RUNNER_TEMP}/packed-${name}.json" EXPECTED_NAME="$name" node -e '
+              const pkg = require(process.env.PACKED);
+              const expected = "https://github.com/" + process.env.GITHUB_REPOSITORY;
+              const fail = (m) => { console.error("::error::" + m); process.exit(1); };
+              if (pkg.name !== process.env.EXPECTED_NAME) fail(`packed manifest name is ${pkg.name}, expected ${process.env.EXPECTED_NAME}`);
+              if (pkg.version !== process.env.EXPECTED_VERSION) fail(`packed manifest version is ${pkg.version}, expected ${process.env.EXPECTED_VERSION}`);
+              const r = pkg.repository;
+              const url = typeof r === "string" ? r : (r && r.url) || "";
+              if (!url) fail(`the packed ${pkg.name} manifest has no repository field — for the plugin, apps/popclaw-plugin/scripts/prepack.mjs keeps only the fields it lists. See docs/releasing.md.`);
+              const n = url.replace(/^git\+/, "").replace(/\.git$/, "").replace(/\/$/, "");
+              if (n !== expected) fail(`packed ${pkg.name} manifest repository is ${url} (normalised ${n}), expected ${expected}`);
+              if (pkg.name === "popclaw-mcp") {
+                const deps = JSON.stringify(pkg.dependencies);
+                const wanted = JSON.stringify({ popclaw: process.env.EXPECTED_VERSION });
+                if (deps !== wanted) fail(`packed popclaw-mcp depends on ${deps}, expected exactly ${wanted}`);
+              }
+              console.log("packed manifest ok:", pkg.name, pkg.version, n);
+            '
+          done
+
+      - name: Retain both artefacts
+        id: retain
+        if: steps.target.outputs.mode == 'fresh'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-artefacts-${{ steps.target.outputs.tag }}
+          path: ${{ runner.temp }}/artefacts
+          if-no-files-found: error
+          retention-days: ${{ env.ARTEFACT_RETENTION_DAYS }}
+
+      # ---- resume: no rebuild, publish the bytes an earlier run tested ----
+
+      - name: Fetch the retained artefacts
+        if: steps.target.outputs.mode == 'resume'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-artefacts-${{ steps.target.outputs.tag }}
+          path: ${{ runner.temp }}/artefacts
+          run-id: ${{ steps.target.outputs.resume_run_id }}
+          # Reading another run's artefacts needs `actions: read`, which the job
+          # already has. No secret, no PAT: this is the run's own token.
+          github-token: ${{ github.token }}
+
+      - name: Retained artefacts belong to this tag and this commit
+        if: steps.target.outputs.mode == 'resume'
+        shell: bash
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          EXPECTED_VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Checksums against the manifest that run wrote, and the tag AND the
+          # commit that tag points at right now, compared by value. The checkout
+          # above used `ref: <tag>`, so HEAD is that commit.
+          scripts/verify-retained-artefacts.sh \
+            "${RUNNER_TEMP}/artefacts" "$TAG" "$(git rev-parse HEAD)" "$EXPECTED_VERSION" \
+            | tee "${RUNNER_TEMP}/retained.env"
+          grep -E '^(MAIN|SHELL)_TGZ=' "${RUNNER_TEMP}/retained.env" >> "$GITHUB_ENV"
+
+      - name: The registry already holds exactly this popclaw
+        id: verify_retained_main
+        if: steps.target.outputs.mode == 'resume'
+        shell: bash
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Resume exists because popclaw is already live. Prove that before
+          # publishing a shell that pins it: same version, same bytes, same
+          # attestation. If this fails, the retained artefacts belong to a
+          # different publish and the shell must not point at them.
+          scripts/verify-published-package.sh popclaw "$VERSION" "$MAIN_TGZ"
+
+      # ---- publish ----
+
+      - name: Publish (dry run)
+        if: steps.target.outputs.dry_run == 'true'
+        shell: bash
+        env:
+          MODE: ${{ steps.target.outputs.mode }}
+        run: |
+          set -euo pipefail
+          # A dry run exercises everything above and the publish request shape,
+          # but it produces NO provenance attestation and does NOT touch the
+          # trusted-publisher binding: the attestation is created by the
+          # registry as part of a real publish, and the binding is only
+          # exercised by a real, authenticated publish. A green dry run proves
+          # the build. The first real publish of each package is the first test
+          # of that package's binding.
+          if [ "$MODE" = "fresh" ]; then
+            npm publish "$MAIN_TGZ" --dry-run --access public
+          fi
+          npm publish "$SHELL_TGZ" --dry-run --access public
+          echo "dry run only — nothing was published, no attestation exists, no binding was verified"
+
+      - name: Publish popclaw with provenance
+        id: publish_main
+        if: steps.target.outputs.mode == 'fresh' && steps.target.outputs.dry_run != 'true'
+        shell: bash
+        run: npm publish "$MAIN_TGZ" --provenance --access public
+
+      - name: The published popclaw is the tarball that was tested
+        id: verify_main
+        if: steps.target.outputs.mode == 'fresh' && steps.target.outputs.dry_run != 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          scripts/verify-published-package.sh popclaw "$VERSION" "$MAIN_TGZ"
+
+      - name: Publish popclaw-mcp with provenance
+        id: publish_shell
+        # Gated on the MAIN VERIFICATION, not on the main publish: the shell
+        # pins `popclaw` at an exact version, so it must not reach the registry
+        # until that exact version is provably there, attested, and byte-for-byte
+        # what this run tested. In resume mode the gate is the same proof,
+        # taken against the retained tarball instead of a fresh publish.
+        if: >-
+          steps.target.outputs.dry_run != 'true' &&
+          (steps.verify_main.outcome == 'success' || steps.verify_retained_main.outcome == 'success')
+        shell: bash
+        run: npm publish "$SHELL_TGZ" --provenance --access public
+
+      - name: The published popclaw-mcp is the tarball that was tested
+        id: verify_shell
+        if: steps.target.outputs.dry_run != 'true' && steps.publish_shell.outcome == 'success'
+        shell: bash
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          scripts/verify-published-package.sh popclaw-mcp "$VERSION" "$SHELL_TGZ"
+          {
+            echo
+            echo "Published \`popclaw@${VERSION}\` and \`popclaw-mcp@${VERSION}\`, both with provenance attestations."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---- half success: say exactly what is on the registry, change nothing ----
+
+      - name: What is on the registry right now
+        if: failure() && steps.target.outputs.dry_run != 'true'
+        shell: bash
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          VERSION: ${{ steps.target.outputs.version }}
+          MODE: ${{ steps.target.outputs.mode }}
+          RESUME_RUN_ID: ${{ steps.target.outputs.resume_run_id }}
+          PUBLISH_MAIN: ${{ steps.publish_main.outcome }}
+          VERIFY_MAIN: ${{ steps.verify_main.outcome }}
+          VERIFY_RETAINED_MAIN: ${{ steps.verify_retained_main.outcome }}
+          PUBLISH_SHELL: ${{ steps.publish_shell.outcome }}
+          VERIFY_SHELL: ${{ steps.verify_shell.outcome }}
+        run: |
+          # Never fail here: this step's only job is to leave a true account.
+          set -uo pipefail
+          on_registry() {
+            if npm view "$1@${VERSION}" version >/dev/null 2>&1; then
+              echo "PUBLISHED (cannot be republished or overwritten, ever)"
+            else
+              echo "not on the registry"
+            fi
+          }
+          {
+            echo "### Release ${TAG} did not finish"
+            echo
+            echo "Registry, asked just now:"
+            echo ""
+            echo "- \`popclaw@${VERSION}\`: $(on_registry popclaw)"
+            echo "- \`popclaw-mcp@${VERSION}\`: $(on_registry popclaw-mcp)"
+            echo ""
+            echo "Steps (success / failure / skipped):"
+            echo ""
+            echo "- publish popclaw: \`${PUBLISH_MAIN}\`"
+            echo "- verify popclaw: \`${VERIFY_MAIN}\` (resume mode: \`${VERIFY_RETAINED_MAIN}\`)"
+            echo "- publish popclaw-mcp: \`${PUBLISH_SHELL}\`"
+            echo "- verify popclaw-mcp: \`${VERIFY_SHELL}\`"
+            echo ""
+            echo "Do not announce this version. Do not unpublish and do not republish:"
+            echo "a published version can never be replaced, and a changed artefact"
+            echo "needs a new version number."
+            echo ""
+            if [ "${MODE}" = "fresh" ]; then
+              echo "If popclaw is published and verified and only the shell is missing,"
+              echo "resume with workflow_dispatch: tag=\`${TAG}\`, dry_run=\`false\`,"
+              echo "only=\`shell\`, resume_from_run_id=\`${GITHUB_RUN_ID}\`."
+              echo "Nothing is rebuilt; the retained artefacts of this run are published."
+            else
+              echo "This was already a resume run (from run ${RESUME_RUN_ID})."
+              echo "Read docs/releasing.md, section \"When half of it is published\","
+              echo "before dispatching anything else."
+            fi
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::error::release ${TAG} did not finish — see the job summary for what is and is not on the registry"
+
+# Deliberately not here: creating the GitHub Release and uploading the tarballs.
+# That would need `contents: write` in a workflow whose whole point is to hold
+# one dangerous permission and no others, to save a step the release runbook
+# already has a human doing. Both tarball names and their sha256 sums are in the
+# job summary and in the retained `release-artefacts-<tag>` artefact; the
+# Release is cut by hand from those, after both publishes have been verified on
+# a clean machine.

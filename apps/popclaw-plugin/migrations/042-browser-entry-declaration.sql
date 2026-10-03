@@ -1,0 +1,26 @@
+-- The browser entrance a house declares, alongside the reads it declares.
+--
+-- A column on the existing projection rather than a table of its own, on
+-- purpose. `house_read_declaration` already answers exactly the question this
+-- fact belongs to: "what did the house whose key we pinned say, in the
+-- manifest bytes we verified, in the transaction that committed that pin". A
+-- second table would need its own copy of the house_key check, its own write
+-- inside the same transaction, and its own reason for existing -- and the two
+-- rows could then disagree about which key's word they hold, which is the one
+-- failure this projection was built to make impossible.
+--
+-- Additive: an existing row keeps its declaration and gets NULL here, which
+-- reads as "this house has not declared a browser entrance" -- the correct
+-- answer for every house mounted before this column existed. The next
+-- verified manifest from that house rewrites the row either way.
+--
+-- NULL is a house that said nothing. A present-but-useless block is stored as
+-- the JSON it was, because "said something naming nothing" is a different
+-- thing to tell the owner than silence -- the same distinction `schemes`
+-- already keeps between NULL and `[]`.
+--
+-- Stored verbatim, NOT pre-validated: whether the declared URLs are usable is
+-- decided when a link is actually about to be minted, against the rules in
+-- force then. A row that had been filtered at write time would silently keep
+-- granting under an older, looser reading of those rules.
+ALTER TABLE house_read_declaration ADD COLUMN browser_entry TEXT;

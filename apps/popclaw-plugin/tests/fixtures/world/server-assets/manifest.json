@@ -1,0 +1,43 @@
+{
+  "world_interaction": {
+    "version": 1,
+    "endpoints": {
+      "actions_status": "/v1/world-actions/status",
+      "world_stream": "/v1/world-stream"
+    },
+    "features": {
+      "world_actions": 1
+    },
+    "result_authority_pubkey": "FixtureResultAuthorityPublicKeyPlaceholder000000",
+    "initial_public_scopes": [
+      "fixture.open"
+    ],
+    "guide": {
+      "path": "/v1/guide.md",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "revision": "fixture_guide_1"
+    },
+    "private_message_version": 1
+  },
+  "house": {
+    "name": "Fixture House",
+    "slug": "me",
+    "description": "A neutral test-only house manifest used to pin agent-context projection boundaries."
+  },
+  "event_kinds": [
+    {
+      "kind": "me.post",
+      "transport": "typed",
+      "signer": "user",
+      "proto": "Post",
+      "description": "Publish a post in the fixture house."
+    },
+    {
+      "kind": "me.reply",
+      "transport": "typed",
+      "signer": "user",
+      "proto": "Reply",
+      "description": "Reply to an existing post in the fixture house."
+    }
+  ]
+}

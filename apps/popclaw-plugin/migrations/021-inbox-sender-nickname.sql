@@ -1,0 +1,27 @@
+-- #281 DMs showed only a bare sigil: when the first real user feedback
+-- letter arrived on a real machine, the notification read
+-- `#n3tzfhnt sent you a DM` — the recipient had no way to know who wrote it.
+--
+-- The name was in the letter all along: `envelope.actor.nickname` is the
+-- name the sender self-reports, and the SSE client already had it when it
+-- decoded the envelope — it just dropped `actor` once it extracted
+-- `directMessage`. This column catches it, so the `/popclaw inbox` list can
+-- also show the name — the notification path is fine reading it in memory,
+-- but the list isn't, since it's read back from the database afterward.
+--
+-- Existing rows are NULL = that letter arrived before we caught the name
+-- (old data / a degraded frame with no envelope). The display side falls
+-- back to a bare sigil as before, and does not pretend to know.
+--
+-- ⚠️ Same discipline as 015/018/019: `inbox_dedup` (from_popclaw_id, ts,
+-- body_hash) does **not** factor in this column. A sender changing their
+-- name should not turn the same letter into two rows.
+--
+-- 🔒 This string is **self-reported by the sender** and is not trusted:
+-- anyone can sign an envelope claiming any name. It is safe to accept
+-- because every owner-visible surface renders as `name#sigil`, and the
+-- sigil is derived from the public key (ADR-0015) — a name can be borrowed,
+-- a sigil cannot. It also ranks below the bond book in the name chain: for
+-- someone the owner actually knows, the name used is always the one the
+-- owner themself gave.
+ALTER TABLE inbox ADD COLUMN sender_nickname TEXT;

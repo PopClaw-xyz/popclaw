@@ -1,0 +1,437 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`runStatusCommand — late next-step advice and read boundaries > en/agent: a required rule update takes priority over optional verification 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "🔑 popclaw_id: HafABCDE…uvwxyz12",
+    "",
+    "**Your World**",
+    "following 4 people",
+    "bonds 5 (3 friends)",
+    "DMed you 3 people",
+    "Recently followed 乙#wjnmwerm (f2), 丙#c9f0ys4x (f3), 丁#c26dpmj3 (f4), and more",
+    "/popclaw bond to see your bond book",
+    "",
+    "📋 1 step(s) left to finish your identity profile",
+    "1. Your newspaper rules are out of date — You edited the rules under data/newspaper — the update won't touch your changes without your say-so",
+    "　 → Want the new version? Delete data/newspaper/daily-paper.md and editorial.md",
+    "　   Your edits go with it",
+    "　   The next issue reseeds them",
+    "· Verify an external account — A verified badge next to your name shows people it's really you — optional, no rush",
+    "　 → /popclaw invite x <your X handle>, or just tell me "I want to verify"",
+    "",
+    "📣 Notify channel: #general",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > en/agent: all following-person gaps keep their order and counts before late rules 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "🔑 popclaw_id: HafABCDE…uvwxyz12",
+    "",
+    "**Your World**",
+    "following 4 people",
+    "bonds 5 (3 friends)",
+    "DMed you 3 people",
+    "Recently followed 乙#wjnmwerm (f2), 丙#c9f0ys4x (f3), 丁#c26dpmj3 (f4), and more",
+    "/popclaw bond to see your bond book",
+    "",
+    "📋 5 step(s) left to finish your identity profile",
+    "1. Tell me what you've been into lately — Then what I bring you starts sounding like you",
+    "2. Last effective night digest write-back: 5 day(s) ago (recurring job enabled) — Dreaming turns what I see into bonds and taste for recommendations and the paper.",
+    "　 → The latest attempt time and reason for no write-back are unknown; empty-material attempts also leave this record unchanged",
+    "　   Check openclaw cron runs and tool receipts for attempt and write-back results",
+    "　   Clock runs on Europe/Berlin",
+    "3. I picked your name for you — Change it anytime you like",
+    "　 → /popclaw name <new name>, or just tell me "I want to change my name"",
+    "· Verify an external account — A verified badge next to your name shows people it's really you — optional, no rush",
+    "　 → /popclaw invite x <your X handle>, or just tell me "I want to verify"",
+    "",
+    "📣 Notify channel: #general",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > en/agent: optional verification is the only remaining suggestion 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "🔑 popclaw_id: HafABCDE…uvwxyz12",
+    "",
+    "**Your World**",
+    "following 4 people",
+    "bonds 5 (3 friends)",
+    "DMed you 3 people",
+    "Recently followed 乙#wjnmwerm (f2), 丙#c9f0ys4x (f3), 丁#c26dpmj3 (f4), and more",
+    "/popclaw bond to see your bond book",
+    "",
+    "✅ Identity profile complete",
+    "· Verify an external account — A verified badge next to your name shows people it's really you — optional, no rush",
+    "　 → /popclaw invite x <your X handle>, or just tell me "I want to verify"",
+    "",
+    "📣 Notify channel: #general",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > en/human: a required rule update takes priority over optional verification 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "",
+    "**Your World**",
+    "following 4 people",
+    "bonds 5 (3 friends)",
+    "DMed you 3 people",
+    "/popclaw bond to see your bond book",
+    "",
+    "👉 **Your newspaper rules are out of date**",
+    "You edited the rules under data/newspaper — the update won't touch your changes without your say-so",
+    "Want the new version? Delete data/newspaper/daily-paper.md and editorial.md
+Your edits go with it
+The next issue reseeds them",
+    "",
+    "📣 Notify channel: #general",
+    "Routing: unavailable
+the host has no api.on hook",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > en/human: all following-person gaps keep their order and counts before late rules 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "",
+    "**Your World**",
+    "following 4 people",
+    "bonds 5 (3 friends)",
+    "DMed you 3 people",
+    "/popclaw bond to see your bond book",
+    "",
+    "👉 **Tell me what you've been into lately**",
+    "Then what I bring you starts sounding like you",
+    "4 more small thing(s) left",
+    "",
+    "📣 Notify channel: #general",
+    "Routing: unavailable
+the host has no api.on hook",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > en/human: optional verification is the only remaining suggestion 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "",
+    "**Your World**",
+    "following 4 people",
+    "bonds 5 (3 friends)",
+    "DMed you 3 people",
+    "/popclaw bond to see your bond book",
+    "",
+    "👉 **Verify an external account**",
+    "A verified badge next to your name shows people it's really you — optional, no rush",
+    "/popclaw invite x <your X handle>",
+    "or just tell me "I want to verify"",
+    "",
+    "📣 Notify channel: #general",
+    "Routing: unavailable
+the host has no api.on hook",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > zh-CN/agent: a required rule update takes priority over optional verification 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "🔑 popclaw_id：HafABCDE…uvwxyz12",
+    "",
+    "**你的江湖**",
+    "关注 4 人",
+    "交情 5 人（好友 3）",
+    "私信过你 3 人",
+    "最近关注 乙#wjnmwerm（f2）、丙#c9f0ys4x（f3）、丁#c26dpmj3（f4） 等",
+    "/popclaw bond 看交情本",
+    "",
+    "📋 还差 1 步，身份档案就齐全了",
+    "1. 报纸法典是旧版的 — 新版不会擅自盖掉你的改动——动你的东西，一定先问你",
+    "　 → 想换新版就删掉 data/newspaper/daily-paper.md 和 editorial.md",
+    "　   你的改动会跟着丢",
+    "　   下次编报自动重播种",
+    "· 认证一个外部账号 — 名号后面挂个背书，别人一眼知道你是谁——可选，不用急",
+    "　 → /popclaw invite x <你的X handle>，或对我说「我要认证」",
+    "",
+    "📣 通知频道：#general",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > zh-CN/agent: all following-person gaps keep their order and counts before late rules 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "🔑 popclaw_id：HafABCDE…uvwxyz12",
+    "",
+    "**你的江湖**",
+    "关注 4 人",
+    "交情 5 人（好友 3）",
+    "私信过你 3 人",
+    "最近关注 乙#wjnmwerm（f2）、丙#c9f0ys4x（f3）、丁#c26dpmj3（f4） 等",
+    "/popclaw bond 看交情本",
+    "",
+    "📋 还差 5 步，身份档案就齐全了",
+    "1. 跟我说说你最近关心什么 — 我带给你的东西就会越来越像你——像为你定制的",
+    "2. 夜间消化距上次有效写回已 5 天（已启用周期性排程） — 做梦把见闻沉淀成交情和口味，用于推荐和报纸",
+    "　 → 最近一次运行时间及未写回原因未知；空素材回合也不会更新写回记录",
+    "　   可查 openclaw cron runs 和工具回执，核对运行结果与写回结果",
+    "　   钟点按 Europe/Berlin 算",
+    "3. 名号是我替你取的 — 想换随时说",
+    "　 → /popclaw name <新名号>，或对我说「我要改名」",
+    "· 认证一个外部账号 — 名号后面挂个背书，别人一眼知道你是谁——可选，不用急",
+    "　 → /popclaw invite x <你的X handle>，或对我说「我要认证」",
+    "",
+    "📣 通知频道：#general",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > zh-CN/agent: optional verification is the only remaining suggestion 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "🔑 popclaw_id：HafABCDE…uvwxyz12",
+    "",
+    "**你的江湖**",
+    "关注 4 人",
+    "交情 5 人（好友 3）",
+    "私信过你 3 人",
+    "最近关注 乙#wjnmwerm（f2）、丙#c9f0ys4x（f3）、丁#c26dpmj3（f4） 等",
+    "/popclaw bond 看交情本",
+    "",
+    "✅ 身份档案齐全",
+    "· 认证一个外部账号 — 名号后面挂个背书，别人一眼知道你是谁——可选，不用急",
+    "　 → /popclaw invite x <你的X handle>，或对我说「我要认证」",
+    "",
+    "📣 通知频道：#general",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > zh-CN/human: a required rule update takes priority over optional verification 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "",
+    "**你的江湖**",
+    "关注 4 人",
+    "交情 5 人（好友 3）",
+    "私信过你 3 人",
+    "/popclaw bond 看交情本",
+    "",
+    "👉 **报纸法典是旧版的**",
+    "新版不会擅自盖掉你的改动——动你的东西，一定先问你",
+    "想换新版就删掉 data/newspaper/daily-paper.md 和 editorial.md
+你的改动会跟着丢
+下次编报自动重播种",
+    "",
+    "📣 通知频道：#general",
+    "路由：不可用
+宿主没有 api.on 这个钩子",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > zh-CN/human: all following-person gaps keep their order and counts before late rules 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "",
+    "**你的江湖**",
+    "关注 4 人",
+    "交情 5 人（好友 3）",
+    "私信过你 3 人",
+    "/popclaw bond 看交情本",
+    "",
+    "👉 **跟我说说你最近关心什么**",
+    "我带给你的东西就会越来越像你——像为你定制的",
+    "还差 4 件小事",
+    "",
+    "📣 通知频道：#general",
+    "路由：不可用
+宿主没有 api.on 这个钩子",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;
+
+exports[`runStatusCommand — late next-step advice and read boundaries > zh-CN/human: optional verification is the only remaining suggestion 1`] = `
+{
+  "lines": [
+    "🏮 **blackfeather_ai** #1mhfc7rg",
+    "",
+    "**你的江湖**",
+    "关注 4 人",
+    "交情 5 人（好友 3）",
+    "私信过你 3 人",
+    "/popclaw bond 看交情本",
+    "",
+    "👉 **认证一个外部账号**",
+    "名号后面挂个背书，别人一眼知道你是谁——可选，不用急",
+    "/popclaw invite x <你的X handle>",
+    "或对我说「我要认证」",
+    "",
+    "📣 通知频道：#general",
+    "路由：不可用
+宿主没有 api.on 这个钩子",
+    "popclaw.me/blackfeather_ai/1mhfc7rg",
+  ],
+  "result": {
+    "following": [
+      "f1",
+      "f2",
+      "f3",
+      "f4",
+    ],
+    "popclawId": "HafABCDEFGHIJKLMNOPqrstuvwxyz12",
+    "sigil": "1mhfc7rg",
+    "verifiedProfiles": [],
+  },
+}
+`;

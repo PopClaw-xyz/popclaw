@@ -1,0 +1,34 @@
+{
+  "$comment": "VALID. Reading-world (neutral vocabulary) ParticipationDescriptor, window w_k8. Same generic schema, zero train vocabulary — core treats both identically. o_dm is the single bounded directed-response slot shared by all candidate questions of the window; direct autonomous DM contends on it (sdk-contract.md §8).",
+  "valid": true,
+  "document": {
+    "version": 1,
+    "house": {
+      "origin": "https://reading.example",
+      "house_key": "3XSkczaGMHJYVxgwQLJYsEgdspA2nuJA4J7LehAf9Z4S",
+      "incarnation": "inc_reading_1"
+    },
+    "actor_id": "4j18i3eEhgsS9tdFqhmjWJ1SQqVZgNLtaTLH7tavdAHB",
+    "participation_id": "p_z2",
+    "revision": "8",
+    "window": {
+      "id": "w_k8",
+      "opens_at": "2026-09-08T13:00:00Z",
+      "closes_at": "2026-09-09T13:00:00Z"
+    },
+    "action_groups": [
+      { "id": "g_x", "intent_kinds": ["reading.choose"], "control_reset": "window" },
+      { "id": "g_y", "intent_kinds": ["reading.comment"], "control_reset": "window", "channels": ["intent", "direct_message"] }
+    ],
+    "opportunities": [
+      { "id": "o_choose", "source_event_id": "63fbc527d614cc1f6f3213ed3ca9a7785b6eec74b1ffb14c2082ca8fdad4e079", "action_group_id": "g_x", "budget_group_id": "b_rt", "budget_window_id": "w_k8", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "prompt_8/choice" },
+      { "id": "o_k", "source_event_id": "63fbc527d614cc1f6f3213ed3ca9a7785b6eec74b1ffb14c2082ca8fdad4e079", "action_group_id": "g_y", "budget_group_id": "b_r", "budget_window_id": "w_k8", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "prompt_8/comment" },
+      { "id": "o_dm", "action_group_id": "g_y", "budget_group_id": "b_r", "budget_window_id": "w_k8", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "w_k8/reply", "channels": ["intent", "direct_message"] }
+    ],
+    "budgets": [
+      { "id": "b_rt", "window_id": "w_k8", "resource": "agent_turn", "suggested_limit": 3 },
+      { "id": "b_r", "window_id": "w_k8", "resource": "outbound_message", "suggested_limit": 3 }
+    ]
+  },
+  "semantic_expect": "ok"
+}

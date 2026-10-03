@@ -1,0 +1,1203 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`dev CLI retains its separate synchronous profile polling protocol > approved 1`] = `
+{
+  "result": {
+    "verified": true,
+  },
+  "trace": [
+    [
+      "initiate",
+      {
+        "handle": "@blackfeather",
+        "mirrorOptin": true,
+        "nickname": "Owner",
+        "platform": "x",
+        "proofUrl": undefined,
+      },
+    ],
+    [
+      "info",
+      "invite submitted. event_id=event-1",
+    ],
+    [
+      "info",
+      "step 1 (yours): post "@blackfeather#abcdef" on x — a new post or a self-reply, never the bio. step 2: rangers verify within ~a minute. step 3: you get told either way. Valid 48h; the sigil never changes; expiring costs you nothing. If REJECTED (new/small accounts are often invisible to search), retry immediately with --proof=<post url> — only a still-pending task is throttled (24h)",
+    ],
+    [
+      "info",
+      "polling /v1/profile for verification (Ctrl-C to stop; check again later with \`popclaw status\`)",
+    ],
+    [
+      "sleep",
+      10,
+    ],
+    [
+      "profile-fetch",
+      "https://house.test/v1/profile/OWNER",
+    ],
+    [
+      "info",
+      "✓ invite APPROVED — you are now verified as x:@blackfeather",
+    ],
+  ],
+}
+`;
+
+exports[`dev CLI retains its separate synchronous profile polling protocol > proof 1`] = `
+{
+  "result": {
+    "verified": true,
+  },
+  "trace": [
+    [
+      "initiate",
+      {
+        "handle": "@blackfeather",
+        "mirrorOptin": true,
+        "nickname": "Owner",
+        "platform": "x",
+        "proofUrl": "https://x.com/blackfeather/status/1234567890",
+      },
+    ],
+    [
+      "info",
+      "invite submitted. event_id=event-1",
+    ],
+    [
+      "info",
+      "verifying against https://x.com/blackfeather/status/1234567890 — it must be your own post and contain "@blackfeather#abcdef"",
+    ],
+    [
+      "info",
+      "polling /v1/profile for verification (Ctrl-C to stop; check again later with \`popclaw status\`)",
+    ],
+    [
+      "sleep",
+      10,
+    ],
+    [
+      "profile-fetch",
+      "https://house.test/v1/profile/OWNER",
+    ],
+    [
+      "info",
+      "✓ invite APPROVED — you are now verified as x:@blackfeather",
+    ],
+  ],
+}
+`;
+
+exports[`dev CLI retains its separate synchronous profile polling protocol > rejected 1`] = `
+{
+  "result": {
+    "verified": false,
+  },
+  "trace": [
+    [
+      "initiate",
+      {
+        "handle": "@blackfeather",
+        "mirrorOptin": true,
+        "nickname": "Owner",
+        "platform": "x",
+        "proofUrl": undefined,
+      },
+    ],
+    [
+      "warn",
+      "invite push rejected (HTTP 429); cannot proceed",
+    ],
+  ],
+}
+`;
+
+exports[`dev CLI retains its separate synchronous profile polling protocol > timeout 1`] = `
+{
+  "result": {
+    "verified": false,
+  },
+  "trace": [
+    [
+      "initiate",
+      {
+        "handle": "@blackfeather",
+        "mirrorOptin": true,
+        "nickname": "Owner",
+        "platform": "x",
+        "proofUrl": undefined,
+      },
+    ],
+    [
+      "info",
+      "invite submitted. event_id=event-1",
+    ],
+    [
+      "info",
+      "step 1 (yours): post "@blackfeather#abcdef" on x — a new post or a self-reply, never the bio. step 2: rangers verify within ~a minute. step 3: you get told either way. Valid 48h; the sigil never changes; expiring costs you nothing. If REJECTED (new/small accounts are often invisible to search), retry immediately with --proof=<post url> — only a still-pending task is throttled (24h)",
+    ],
+    [
+      "info",
+      "polling /v1/profile for verification (Ctrl-C to stop; check again later with \`popclaw status\`)",
+    ],
+    [
+      "sleep",
+      10,
+    ],
+    [
+      "profile-fetch",
+      "https://house.test/v1/profile/OWNER",
+    ],
+    [
+      "info",
+      "(polling timeout reached; check status later via \`popclaw status\`)",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > Chinese receipt still uses the same shared rendering boundary 1`] = `
+{
+  "receipt": {
+    "text": "✓ 认证已发起：x:blackfeather（event_id event-1）
+
+接下来只有三步，第一步是你的：
+1️⃣ 去 x 发一条帖——新帖、或在自己帖子下回一条都行。话术随你改，但 blackfeather#abcdef 和链接两样都要在：
+
+  我在 popclaw 江湖 · blackfeather#abcdef · 来玩 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef —— 游侠靠这个「名字+印信」绑定串核验（只发印信、或放进 bio／简介都不算）
+· 链接 —— 别人点了就能上 popclaw.me 先参与，没装 openclaw 也行
+
+2️⃣ 发完就不用管了：几十秒内江湖游侠会上门核验。
+3️⃣ 结果我主动告诉你——通过或没通过，都会第一时间来找你，不必反复查。
+
+安心三句：这次申请 48 小时内有效；你的印信永远是同一枚，旧文案照用；过期也没有任何惩罚，重新发起即可。
+· 后续同步：**没开**（默认就是不开）—— 认证带进来的是你的身份与背书，不是帖子。想让我以后把你的新帖也同步过来，重发一次时加上 --sync。
+· 存档说明：认证之后你随时可以删掉那条帖，✓ 不会掉；游侠核验当时看到的那条帖，灯坊会留一份记录作为存档。
+
+· 新号/小号提示：搜索有时看不见你的帖。若核验被拒，立刻带上帖子链接重试即可（游侠会直接读那条帖）；若一直没结果，24 小时后再试：
+  /popclaw invite x blackfeather --proof <帖子链接>
+
+想自己看一眼进度：/popclaw status。",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > concurrent confirms consume before awaiting runtime, then refuse reuse 1`] = `
+{
+  "receipts": [
+    "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+    "unknown or expired confirm_token: invite-TOKEN
+A confirm_token is single-use, belongs to popclaw_invite alone, and expires after 30 minutes. Call popclaw_invite again with platform and handle to get a fresh preview.",
+  ],
+  "reused": "unknown or expired confirm_token: invite-TOKEN
+A confirm_token is single-use, belongs to popclaw_invite alone, and expires after 30 minutes. Call popclaw_invite again with platform and handle to get a fresh preview.",
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > expired confirmation does not boot runtime 1`] = `
+{
+  "receipt": "unknown or expired confirm_token: invite-TOKEN
+A confirm_token is single-use, belongs to popclaw_invite alone, and expires after 30 minutes. Call popclaw_invite again with platform and handle to get a fresh preview.",
+  "trace": [],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > preflight outputs and zero runtime on both entries 1`] = `
+{
+  "output": [
+    {
+      "text": "usage: /popclaw invite <platform> <handle> [--nickname=X] [--replace] [--proof <post link>] [--sync]",
+    },
+    {
+      "text": "⚠️ That --proof link isn't valid: it must be a post link of the form https://x.com/<username>/status/<digits> (got: )",
+    },
+    {
+      "text": "To start a verification I need both halves: which platform, and the handle on it (e.g. platform "x", handle "blackfeather"). Ask the owner for the missing one.",
+      "type": "text",
+    },
+    {
+      "text": "⚠️ That --proof link isn't valid: it must be a post link of the form https://x.com/<username>/status/<digits> (got: )",
+      "type": "text",
+    },
+  ],
+  "trace": [
+    "runtime",
+    "runtime",
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: accepted proof, sync and replacement 1`] = `
+{
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+Post evidence attached: https://x.com/blackfeather/status/1234567890
+The ranger will check that post directly: it must belong to blackfeather, and the body must contain blackfeather#abcdef.
+Results land in seconds to minutes. Pass or fail, I'll come tell you — no need to keep checking. (Want to peek? /popclaw status.)",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": true,
+        "nickname": "Kaito",
+        "platform": "x",
+        "proofUrl": "https://x.com/blackfeather/status/1234567890",
+        "replace": true,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": "https://x.com/blackfeather/status/1234567890",
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: accepted, explicit sync false 1`] = `
+{
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: accepted, sync off 1`] = `
+{
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: already verified 1`] = `
+{
+  "receipt": {
+    "text": "⚠️ You already have a verified account on x (already verified as @old).
+Only one account per platform. To switch to blackfeather, rerun with --replace:
+  /popclaw invite x blackfeather --replace
+
+Once the switch succeeds, go post this one (both the name+sigil and the link, neither is optional):
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+Once the ranger verifies it, the new account replaces the old one. If it fails, the old one stays put.",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: ledger throws 1`] = `
+{
+  "receipt": {
+    "text": "⚠️ invite failed: Error: ledger failed",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: old house without task id 1`] = `
+{
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: push throws 1`] = `
+{
+  "receipt": {
+    "text": "⚠️ invite failed: Error: push failed",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: rate limited 1`] = `
+{
+  "receipt": {
+    "text": "⚠️ invite push rejected (HTTP 429): pending invite; lore-house reachable but refused the payload",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > slash: watch failure 1`] = `
+{
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+  },
+  "trace": [
+    "runtime",
+    "runtime",
+    [
+      "nickname",
+      "Owner at preview",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at preview",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+    [
+      "warn",
+      "popclaw: invite poll failed — Error: watch failed",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: accepted proof, sync and replacement 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: Kaito
+  proof post: https://x.com/blackfeather/status/1234567890
+  mirror this account into popclaw: yes — the owner said so
+  ⚠️ replace: the account already verified on this platform will be swapped out for this one
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+Post evidence attached: https://x.com/blackfeather/status/1234567890
+The ranger will check that post directly: it must belong to blackfeather, and the body must contain blackfeather#abcdef.
+Results land in seconds to minutes. Pass or fail, I'll come tell you — no need to keep checking. (Want to peek? /popclaw status.)",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": true,
+        "nickname": "Kaito",
+        "platform": "x",
+        "proofUrl": "https://x.com/blackfeather/status/1234567890",
+        "replace": true,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": "https://x.com/blackfeather/status/1234567890",
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: accepted, explicit sync false 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: the owner's own name (default — none given)
+  proof post: none
+  mirror this account into popclaw: no
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at confirm",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at confirm",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: accepted, sync off 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: the owner's own name (default — none given)
+  proof post: none
+  mirror this account into popclaw: no
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at confirm",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at confirm",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: already verified 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: the owner's own name (default — none given)
+  proof post: none
+  mirror this account into popclaw: no
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "⚠️ You already have a verified account on x (already verified as @old).
+Only one account per platform. To switch to blackfeather, rerun with --replace:
+  /popclaw invite x blackfeather --replace
+
+Once the switch succeeds, go post this one (both the name+sigil and the link, neither is optional):
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+Once the ranger verifies it, the new account replaces the old one. If it fails, the old one stays put.",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at confirm",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at confirm",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: ledger throws 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: the owner's own name (default — none given)
+  proof post: none
+  mirror this account into popclaw: no
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "⚠️ popclaw_invite failed: Error: ledger failed
+That confirm_token is spent — it is consumed the moment it is used, whether or not the submission landed. Nothing was verified. Call popclaw_invite again with platform and handle for a fresh preview.",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at confirm",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at confirm",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: old house without task id 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: the owner's own name (default — none given)
+  proof post: none
+  mirror this account into popclaw: no
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at confirm",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at confirm",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: push throws 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: the owner's own name (default — none given)
+  proof post: none
+  mirror this account into popclaw: no
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "⚠️ popclaw_invite failed: Error: push failed
+That confirm_token is spent — it is consumed the moment it is used, whether or not the submission landed. Nothing was verified. Call popclaw_invite again with platform and handle for a fresh preview.",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at confirm",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at confirm",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: rate limited 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: the owner's own name (default — none given)
+  proof post: none
+  mirror this account into popclaw: no
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "⚠️ invite push rejected (HTTP 429): pending invite; lore-house reachable but refused the payload",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at confirm",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at confirm",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+  ],
+}
+`;
+
+exports[`invite entry behavior before submission extraction > tool: watch failure 1`] = `
+{
+  "preview": "📝 Verification request — NOT submitted yet:
+  platform: x
+  handle: blackfeather
+  nickname: the owner's own name (default — none given)
+  proof post: none
+  mirror this account into popclaw: no
+
+confirm_token: invite-TOKEN
+Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.",
+  "receipt": {
+    "text": "✓ Verification kicked off: x:blackfeather (event_id event-1)
+
+Three steps from here, and the first one is yours:
+1️⃣ Post on x — a new post, or a reply under one of your own, either works. Word it however you like, just keep both blackfeather#abcdef and the link in it:
+
+  I’m on popclaw — blackfeather#abcdef — come join 👉 https://popclaw.me/invite/abcdef?name=blackfeather
+
+· blackfeather#abcdef — the ranger verifies by matching this "name+sigil" binding (the sigil on its own, or in your bio, doesn't count)
+· Link — anyone who clicks can join in on popclaw.me right away, no openclaw install required
+
+2️⃣ Once it's posted you're done — a ranger verifies it within seconds to minutes.
+3️⃣ I'll bring you the result myself — pass or fail, I come find you right away. No need to keep checking.
+
+Three things to put your mind at rest: the request is good for 48 hours; your sigil never changes, so old wording still works; and letting it expire costs nothing — just start again.
+· Ongoing sync: **off** (the default) — verification brings your identity and standing across, not your posts. Want new ones to follow you here? Run it again with --sync.
+· For the record: you can delete that post any time afterwards and the ✓ stands. What the ranger saw is kept at the lore-house as the record of the check.
+
+· If your account is new or small, search sometimes can't see your post. Rejected? Retry right away with the post link and the ranger reads that post directly. Nothing coming back at all? Try again after 24 hours:
+  /popclaw invite x blackfeather --proof <post link>
+
+Peek at progress yourself: /popclaw status.",
+    "type": "text",
+  },
+  "trace": [
+    "runtime",
+    [
+      "nickname",
+      "Owner at confirm",
+    ],
+    [
+      "initiate",
+      {
+        "handle": "blackfeather",
+        "mirrorOptin": false,
+        "nickname": "Owner at confirm",
+        "platform": "x",
+        "proofUrl": undefined,
+        "replace": false,
+      },
+    ],
+    [
+      "pending",
+      {
+        "handle": "blackfeather",
+        "platform": "x",
+        "proofUrl": undefined,
+        "sigil": "abcdef",
+        "taskId": "task-1",
+      },
+    ],
+    [
+      "watch",
+      "task-1",
+    ],
+    [
+      "info",
+      "popclaw: invite poll failed — Error: watch failed",
+    ],
+  ],
+}
+`;

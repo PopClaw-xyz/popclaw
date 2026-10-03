@@ -1,0 +1,759 @@
+{
+  "$comment": "Same generic referee, neutral reading-club vocabulary (fixtures/participation/reading-window-wk8.json): identical control behavior with zero train words proves no per-world branching. Covers the core control/budget/dedupe transitions.",
+  "world": "reading",
+  "descriptor_ref": "../participation/reading-window-wk8.json",
+  "rows": [
+    {
+      "t": "R1 (=T1)",
+      "ops": [
+        {
+          "op": "time",
+          "at": "2026-09-08T14:00:00Z"
+        },
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.choose",
+              "opportunity": "o_choose"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 0,
+        "messages_used": 0,
+        "outcomes": [
+          {
+            "kind": "reading.choose",
+            "code": "GRANT_MISSING"
+          }
+        ]
+      }
+    },
+    {
+      "t": "R2 (=T2, source-arrival form)",
+      "ops": [
+        {
+          "op": "grant"
+        },
+        {
+          "op": "source",
+          "event_id": "63fbc527d614cc1f6f3213ed3ca9a7785b6eec74b1ffb14c2082ca8fdad4e079"
+        },
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.choose",
+              "opportunity": "o_choose"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 1,
+        "messages_used": 0,
+        "outcomes": [
+          {
+            "kind": "reading.choose",
+            "code": "SUBMITTED"
+          }
+        ]
+      }
+    },
+    {
+      "t": "R3 (=T4 speech cannot authorize decision)",
+      "ops": [
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.choose",
+              "opportunity": "o_k"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 0,
+        "messages_used": 0,
+        "outcomes": [
+          {
+            "kind": "reading.choose",
+            "code": "KIND_NOT_IN_GROUP"
+          }
+        ]
+      }
+    },
+    {
+      "t": "R4 (=T5 batch: decision zero message units)",
+      "ops": [
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.choose",
+              "opportunity": "o_choose"
+            },
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_k"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 1,
+        "messages_used": 1,
+        "outcomes": [
+          {
+            "kind": "reading.choose",
+            "code": "DEDUPE_KEY_RESERVED"
+          },
+          {
+            "kind": "reading.comment",
+            "code": "SUBMITTED"
+          }
+        ],
+        "note": "o_choose was consumed in R2 and a higher-revision-free same window does not reset it; the comment still goes through — one turn charge for the batch attempt."
+      }
+    },
+    {
+      "t": "R5 (=T3 group takeover isolation)",
+      "ops": [
+        {
+          "op": "takeover",
+          "scope": "group",
+          "group": "g_x"
+        },
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.choose",
+              "opportunity": "o_choose"
+            }
+          ]
+        },
+        {
+          "op": "dm",
+          "opportunity": "o_dm",
+          "note": "g_y declares channels [intent, direct_message]; o_dm is a reserved g_y response-slot opportunity"
+        }
+      ],
+      "expect": {
+        "turns_used": 1,
+        "messages_used": 1,
+        "outcomes": [
+          {
+            "kind": "reading.choose",
+            "code": "GROUP_TAKEOVER_ACTIVE"
+          },
+          {
+            "kind": "direct_message",
+            "code": "SUBMITTED"
+          }
+        ],
+        "note": "Taking over the choose group leaves comment/DM expression under its own gate; the autonomous DM spends one turn charge plus the shared outbound budget and the same response slot — no second budget channel."
+      }
+    },
+    {
+      "t": "R6 (DM without channel opt-in)",
+      "ops": [
+        {
+          "op": "dm",
+          "opportunity": "o_choose",
+          "note": "g_x did NOT declare direct_message in channels"
+        }
+      ],
+      "expect": {
+        "turns_used": 0,
+        "messages_used": 0,
+        "outcomes": [
+          {
+            "kind": "direct_message",
+            "code": "CHANNEL_NOT_IN_GROUP"
+          }
+        ]
+      }
+    },
+    {
+      "t": "R7 (=T9 restart/replay)",
+      "ops": [
+        {
+          "op": "restart"
+        },
+        {
+          "op": "replay",
+          "event_id": "63fbc527d614cc1f6f3213ed3ca9a7785b6eec74b1ffb14c2082ca8fdad4e079"
+        },
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_k"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 0,
+        "messages_used": 0,
+        "outcomes": [
+          {
+            "kind": "reading.comment",
+            "code": "DEDUPE_KEY_RESERVED"
+          }
+        ],
+        "note": "Restart and replay recover state; the consumed key is not refundable and replay dispatches nothing."
+      }
+    },
+    {
+      "t": "R8 (aggregate ceiling zero blocks say AND dm; audit follow-up 5)",
+      "ops": [
+        {
+          "op": "descriptor",
+          "document": {
+            "revision": "9",
+            "window": {
+              "id": "w_k9",
+              "opens_at": "2026-09-09T13:00:00Z",
+              "closes_at": "2026-09-10T13:00:00Z"
+            },
+            "budgets": [
+              {
+                "id": "b_rt",
+                "window_id": "w_k9",
+                "resource": "agent_turn",
+                "suggested_limit": 2
+              },
+              {
+                "id": "b_r",
+                "window_id": "w_k9",
+                "resource": "outbound_message",
+                "suggested_limit": 2
+              }
+            ],
+            "opportunities": [
+              {
+                "id": "o_c1",
+                "action_group_id": "g_y",
+                "budget_group_id": "b_r",
+                "budget_window_id": "w_k9",
+                "not_before": "2026-09-09T13:00:01Z",
+                "expires_at": "2026-09-10T13:00:00Z",
+                "dedupe_key": "w_k9/c1"
+              },
+              {
+                "id": "o_c2",
+                "action_group_id": "g_y",
+                "budget_group_id": "b_r",
+                "budget_window_id": "w_k9",
+                "not_before": "2026-09-09T13:00:01Z",
+                "expires_at": "2026-09-10T13:00:00Z",
+                "dedupe_key": "w_k9/c2"
+              },
+              {
+                "id": "o_c3",
+                "action_group_id": "g_y",
+                "budget_group_id": "b_r",
+                "budget_window_id": "w_k9",
+                "not_before": "2026-09-09T13:00:01Z",
+                "expires_at": "2026-09-10T13:00:00Z",
+                "dedupe_key": "w_k9/c3"
+              },
+              {
+                "id": "o_dm2",
+                "action_group_id": "g_y",
+                "budget_group_id": "b_r",
+                "budget_window_id": "w_k9",
+                "not_before": "2026-09-09T13:00:01Z",
+                "expires_at": "2026-09-10T13:00:00Z",
+                "dedupe_key": "w_k9/reply",
+                "channels": [
+                  "intent",
+                  "direct_message"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "op": "time",
+          "at": "2026-09-09T14:00:00Z"
+        },
+        {
+          "op": "set_policy",
+          "max_agent_turns_total": 0
+        },
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_c1"
+            }
+          ]
+        },
+        {
+          "op": "dm",
+          "opportunity": "o_dm2"
+        }
+      ],
+      "expect": {
+        "turns_used": 0,
+        "messages_used": 0,
+        "outcomes": [
+          {
+            "kind": "reading.comment",
+            "code": "BUDGET_EXHAUSTED"
+          },
+          {
+            "kind": "direct_message",
+            "code": "BUDGET_EXHAUSTED"
+          }
+        ],
+        "state_assert": {
+          "resource": "agent_turn",
+          "window": "w_k9",
+          "remaining": 2
+        },
+        "note": "Aggregate turn ceiling 0 blocks the host turn itself — NEITHER a say batch NOR a direct DM dispatches, while the fresh window budget stays untouched (proving it was the aggregate gate, not the window gate)."
+      }
+    },
+    {
+      "t": "R9 (duplicate opportunity in one batch; audit follow-up 4)",
+      "ops": [
+        {
+          "op": "set_policy",
+          "max_agent_turns_total": 5,
+          "note": "owner raises the aggregate ceiling (3 turns used so far)"
+        },
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_c1"
+            },
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_c1"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 1,
+        "messages_used": 1,
+        "outcomes": [
+          {
+            "kind": "reading.comment",
+            "code": "SUBMITTED"
+          },
+          {
+            "kind": "reading.comment",
+            "code": "DEDUPE_KEY_RESERVED"
+          }
+        ],
+        "note": "Immediate in-batch reservation: the same opportunity cannot submit twice."
+      }
+    },
+    {
+      "t": "R10 (shared last message slot; audit follow-up 4)",
+      "ops": [
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_c2"
+            },
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_c3"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 1,
+        "messages_used": 1,
+        "outcomes": [
+          {
+            "kind": "reading.comment",
+            "code": "SUBMITTED"
+          },
+          {
+            "kind": "reading.comment",
+            "code": "BUDGET_EXHAUSTED"
+          }
+        ],
+        "state_assert": {
+          "resource": "outbound_message",
+          "window": "w_k9",
+          "remaining": 0
+        },
+        "note": "One message unit remained; the second distinct invocation sees the immediately-charged state — no overspend."
+      }
+    },
+    {
+      "t": "R11 (message-first batch with window turn budget 1; repair verification)",
+      "ops": [
+        {
+          "op": "set_policy",
+          "max_agent_turns_total": 6
+        },
+        {
+          "op": "descriptor",
+          "document": {
+            "revision": "10",
+            "window": {
+              "id": "w_k10",
+              "opens_at": "2026-09-10T13:00:00Z",
+              "closes_at": "2026-09-11T13:00:00Z"
+            },
+            "budgets": [
+              {
+                "id": "b_rt",
+                "window_id": "w_k10",
+                "resource": "agent_turn",
+                "suggested_limit": 1
+              },
+              {
+                "id": "b_r",
+                "window_id": "w_k10",
+                "resource": "outbound_message",
+                "suggested_limit": 2
+              }
+            ],
+            "opportunities": [
+              {
+                "id": "o_cm",
+                "action_group_id": "g_y",
+                "budget_group_id": "b_r",
+                "budget_window_id": "w_k10",
+                "not_before": "2026-09-10T13:00:01Z",
+                "expires_at": "2026-09-11T13:00:00Z",
+                "dedupe_key": "w_k10/cm"
+              },
+              {
+                "id": "o_ch",
+                "action_group_id": "g_x",
+                "budget_group_id": "b_rt",
+                "budget_window_id": "w_k10",
+                "not_before": "2026-09-10T13:00:01Z",
+                "expires_at": "2026-09-11T13:00:00Z",
+                "dedupe_key": "w_k10/ch"
+              }
+            ]
+          }
+        },
+        {
+          "op": "time",
+          "at": "2026-09-10T14:00:00Z"
+        },
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_cm"
+            },
+            {
+              "kind": "reading.choose",
+              "opportunity": "o_ch"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 1,
+        "messages_used": 1,
+        "outcomes": [
+          {
+            "kind": "reading.comment",
+            "code": "SUBMITTED"
+          },
+          {
+            "kind": "reading.choose",
+            "code": "SUBMITTED"
+          }
+        ],
+        "state_assert": {
+          "resource": "agent_turn",
+          "window": "w_k10",
+          "remaining": 0
+        },
+        "note": "The comment reserves the batch's ONLY window turn; the later decision rides that same reserved turn — order must not matter (repair verification B4)."
+      }
+    },
+    {
+      "t": "R12 (decision-first batch, same window turn budget 1; repair verification)",
+      "ops": [
+        {
+          "op": "set_policy",
+          "max_agent_turns_total": 7
+        },
+        {
+          "op": "descriptor",
+          "document": {
+            "revision": "11",
+            "window": {
+              "id": "w_k11",
+              "opens_at": "2026-09-11T13:00:00Z",
+              "closes_at": "2026-09-12T13:00:00Z"
+            },
+            "budgets": [
+              {
+                "id": "b_rt",
+                "window_id": "w_k11",
+                "resource": "agent_turn",
+                "suggested_limit": 1
+              },
+              {
+                "id": "b_r",
+                "window_id": "w_k11",
+                "resource": "outbound_message",
+                "suggested_limit": 1
+              }
+            ],
+            "opportunities": [
+              {
+                "id": "o_ch2",
+                "action_group_id": "g_x",
+                "budget_group_id": "b_rt",
+                "budget_window_id": "w_k11",
+                "not_before": "2026-09-11T13:00:01Z",
+                "expires_at": "2026-09-12T13:00:00Z",
+                "dedupe_key": "w_k11/ch"
+              },
+              {
+                "id": "o_cm2",
+                "action_group_id": "g_y",
+                "budget_group_id": "b_r",
+                "budget_window_id": "w_k11",
+                "not_before": "2026-09-11T13:00:01Z",
+                "expires_at": "2026-09-12T13:00:00Z",
+                "dedupe_key": "w_k11/cm"
+              }
+            ]
+          }
+        },
+        {
+          "op": "time",
+          "at": "2026-09-11T14:00:00Z"
+        },
+        {
+          "op": "turn",
+          "invocations": [
+            {
+              "kind": "reading.choose",
+              "opportunity": "o_ch2"
+            },
+            {
+              "kind": "reading.comment",
+              "opportunity": "o_cm2"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "turns_used": 1,
+        "messages_used": 1,
+        "outcomes": [
+          {
+            "kind": "reading.choose",
+            "code": "SUBMITTED"
+          },
+          {
+            "kind": "reading.comment",
+            "code": "SUBMITTED"
+          }
+        ],
+        "note": "Reverse order, same single window turn: both submit; the decision consumes zero message units."
+      }
+    }
+  ],
+  "rows_no_declared_slot": {
+    "$comment": "C2 source-corrected neutral mode: WITHOUT dm_response_slot_key, two distinctly-qualified DM opportunities may use their own dedupe keys, bounded only by the shared outbound budget (and turn/aggregate ceilings). R13 budget 2 → both; R14 budget 1 → first only.",
+    "rows": [
+      {
+        "t": "R13 (undeclared slot: two distinct DM threads, budget 2)",
+        "ops": [
+          {
+            "op": "set_policy",
+            "max_agent_turns_total": 12
+          },
+          {
+            "op": "descriptor",
+            "document": {
+              "revision": "12",
+              "window": {
+                "id": "w_k12",
+                "opens_at": "2026-09-12T13:00:00Z",
+                "closes_at": "2026-09-13T13:00:00Z"
+              },
+              "budgets": [
+                {
+                  "id": "b_rt",
+                  "window_id": "w_k12",
+                  "resource": "agent_turn",
+                  "suggested_limit": 2
+                },
+                {
+                  "id": "b_r",
+                  "window_id": "w_k12",
+                  "resource": "outbound_message",
+                  "suggested_limit": 2
+                }
+              ],
+              "opportunities": [
+                {
+                  "id": "o_dm4",
+                  "action_group_id": "g_y",
+                  "budget_group_id": "b_r",
+                  "budget_window_id": "w_k12",
+                  "not_before": "2026-09-12T13:00:01Z",
+                  "expires_at": "2026-09-13T13:00:00Z",
+                  "dedupe_key": "w_k12/thread-a",
+                  "channels": [
+                    "intent",
+                    "direct_message"
+                  ]
+                },
+                {
+                  "id": "o_dm5",
+                  "action_group_id": "g_y",
+                  "budget_group_id": "b_r",
+                  "budget_window_id": "w_k12",
+                  "not_before": "2026-09-12T13:00:01Z",
+                  "expires_at": "2026-09-13T13:00:00Z",
+                  "dedupe_key": "w_k12/thread-b",
+                  "channels": [
+                    "intent",
+                    "direct_message"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "time",
+            "at": "2026-09-12T14:00:00Z"
+          },
+          {
+            "op": "dm",
+            "opportunity": "o_dm4"
+          },
+          {
+            "op": "dm",
+            "opportunity": "o_dm5"
+          }
+        ],
+        "expect": {
+          "turns_used": 2,
+          "messages_used": 2,
+          "outcomes": [
+            {
+              "kind": "direct_message",
+              "code": "SUBMITTED"
+            },
+            {
+              "kind": "direct_message",
+              "code": "SUBMITTED"
+            }
+          ],
+          "note": "No declared slot: distinct keys, distinct threads — the shared outbound budget is the only expression bound."
+        }
+      },
+      {
+        "t": "R14 (undeclared slot: shared budget 1 blocks the second thread)",
+        "ops": [
+          {
+            "op": "descriptor",
+            "document": {
+              "revision": "13",
+              "window": {
+                "id": "w_k13",
+                "opens_at": "2026-09-13T13:00:00Z",
+                "closes_at": "2026-09-14T13:00:00Z"
+              },
+              "budgets": [
+                {
+                  "id": "b_rt",
+                  "window_id": "w_k13",
+                  "resource": "agent_turn",
+                  "suggested_limit": 2
+                },
+                {
+                  "id": "b_r",
+                  "window_id": "w_k13",
+                  "resource": "outbound_message",
+                  "suggested_limit": 1
+                }
+              ],
+              "opportunities": [
+                {
+                  "id": "o_dm6",
+                  "action_group_id": "g_y",
+                  "budget_group_id": "b_r",
+                  "budget_window_id": "w_k13",
+                  "not_before": "2026-09-13T13:00:01Z",
+                  "expires_at": "2026-09-14T13:00:00Z",
+                  "dedupe_key": "w_k13/thread-a",
+                  "channels": [
+                    "intent",
+                    "direct_message"
+                  ]
+                },
+                {
+                  "id": "o_dm7",
+                  "action_group_id": "g_y",
+                  "budget_group_id": "b_r",
+                  "budget_window_id": "w_k13",
+                  "not_before": "2026-09-13T13:00:01Z",
+                  "expires_at": "2026-09-14T13:00:00Z",
+                  "dedupe_key": "w_k13/thread-b",
+                  "channels": [
+                    "intent",
+                    "direct_message"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "op": "time",
+            "at": "2026-09-13T14:00:00Z"
+          },
+          {
+            "op": "dm",
+            "opportunity": "o_dm6"
+          },
+          {
+            "op": "dm",
+            "opportunity": "o_dm7"
+          }
+        ],
+        "expect": {
+          "turns_used": 1,
+          "messages_used": 1,
+          "outcomes": [
+            {
+              "kind": "direct_message",
+              "code": "SUBMITTED"
+            },
+            {
+              "kind": "direct_message",
+              "code": "BUDGET_EXHAUSTED"
+            }
+          ],
+          "note": "The failed second DM charges no turn: the window/aggregate message gate refuses before dispatch."
+        }
+      }
+    ]
+  }
+}

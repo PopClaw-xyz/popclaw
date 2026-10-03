@@ -1,0 +1,120 @@
+{
+  "$comment": "Negative ParticipationDescriptor cases. Each case names WHICH layer must reject it: schema (participation.schema.json) or semantic (state-transitions.md §4-§5 invariants enforced by validate.mjs). Base documents are minimized variants of train-window-w42.json; only the named delta matters.",
+  "cases": [
+    {
+      "name": "revision-as-json-number-unsafe-integer",
+      "layer": "schema",
+      "reason": "uint64 must be a decimal string; a JSON number is rejected outright — 9007199254740993 (2^53+1) is already unsafe in JS Number.",
+      "delta": { "revision": 9007199254740993 }
+    },
+    {
+      "name": "revision-uint64-overflow",
+      "layer": "semantic",
+      "reason": "18446744073709551616 = 2^64 passes the 20-digit shape pattern but exceeds the uint64 bound; the runtime range layer rejects it (two-layer rule).",
+      "delta": { "revision": "18446744073709551616" }
+    },
+    {
+      "name": "revision-leading-zero",
+      "layer": "schema",
+      "reason": "Non-canonical decimal string.",
+      "delta": { "revision": "012" }
+    },
+    {
+      "name": "opportunity-unknown-group-ref",
+      "layer": "semantic",
+      "reason": "o_decision.action_group_id references a group the descriptor does not declare.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["opportunities", 0, "action_group_id"], "value": "g_ghost" }
+    },
+    {
+      "name": "opportunity-unknown-budget-ref",
+      "layer": "semantic",
+      "reason": "budget_group_id references an undeclared budget.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["opportunities", 0, "budget_group_id"], "value": "b_ghost" }
+    },
+    {
+      "name": "opportunity-beyond-window",
+      "layer": "semantic",
+      "reason": "expires_at after window.closes_at violates 'within the named current window'.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["opportunities", 0, "expires_at"], "value": "2026-09-10T13:00:00Z" }
+    },
+    {
+      "name": "opportunity-not-before-after-expiry",
+      "layer": "semantic",
+      "reason": "not_before must be strictly before expires_at.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["opportunities", 0, "not_before"], "value": "2026-09-09T13:00:00Z" }
+    },
+    {
+      "name": "duplicate-budget-id",
+      "layer": "semantic",
+      "reason": "Budget ids unique within descriptor.",
+      "delta_kind": "push_document",
+      "push": { "array_path": ["budgets"], "item": { "id": "b_turn", "window_id": "w_42", "resource": "owner_notice", "suggested_limit": 1 } }
+    },
+    {
+      "name": "duplicate-dedupe-key",
+      "layer": "semantic",
+      "reason": "Two opportunities sharing one dedupe key would alias one consumption record.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["opportunities", 1, "dedupe_key"], "value": "w_42/initial-decision" }
+    },
+    {
+      "name": "budget-window-mismatch",
+      "layer": "semantic",
+      "reason": "budget.window_id must be the current window id.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["budgets", 0, "window_id"], "value": "w_41" }
+    },
+    {
+      "name": "unknown-resource-enum",
+      "layer": "schema",
+      "reason": "resource must be one of the three named resources.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["budgets", 0, "resource"], "value": "token" }
+    },
+    {
+      "name": "unknown-extra-field",
+      "layer": "schema",
+      "reason": "additionalProperties false — 'hint' (a disguised instruction field) must not sneak in.",
+      "delta": { "hint": "vote go now" }
+    },
+    {
+      "name": "action-groups-over-limit",
+      "layer": "schema",
+      "reason": "17 groups > L_ACTION_GROUPS_MAX (16).",
+      "delta_kind": "custom",
+      "custom": "groups_over_limit"
+    },
+    {
+      "name": "timestamp-with-offset",
+      "layer": "schema",
+      "reason": "RFC 3339 must be UTC Z form; +00:00 is rejected so there is exactly one encoding per instant.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["window", "opens_at"], "value": "2026-09-08T13:00:00+00:00" }
+    },
+    {
+      "name": "control-reset-value-invalid",
+      "layer": "schema",
+      "reason": "control_reset vocabulary.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["action_groups", 0, "control_reset"], "value": "manual" }
+    },
+    {
+      "name": "channels-unknown-value",
+      "layer": "schema",
+      "reason": "channels vocabulary is closed: intent | direct_message.",
+      "delta_kind": "mutate_document",
+      "mutate": { "path": ["action_groups", 3, "channels"], "value": ["intent", "carrier_pigeon"] }
+    },
+    {
+      "name": "declared-slot-key-mismatch",
+      "layer": "semantic",
+      "reason": "C2: the window declares dm_response_slot_key w_42/reply, but the DM-qualified opportunity o_reply carries a different dedupe key — every DM-qualified opportunity of a declared window must carry exactly the slot key.",
+      "delta_kind": "custom",
+      "custom": "declared_slot_key_mismatch"
+    }
+  ]
+}

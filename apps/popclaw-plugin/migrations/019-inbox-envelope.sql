@@ -1,0 +1,25 @@
+-- P0-A DM envelope (the client's last mile): lands the full signed
+-- EventEnvelope bytes from the sender into the durable layer. Only once we
+-- have this (v0.2) can the client reconstruct the canonical envelope and
+-- verify "this letter was really signed by the person named" — a bare
+-- 64-byte signature alone cannot reconstruct the canonical form (it's
+-- missing envelope-layer fields like actor/timestamp/target), so the whole
+-- envelope must be stored (same pattern as the world-feed's
+-- world-feed-cache storing envelope, ADR-0029).
+--
+-- This slice does no signature verification, it only gets the bytes
+-- flowing, stored, and decodable. The historical gap cannot be backfilled:
+-- every DM that arrived without an envelope before this shipped is
+-- permanently unverifiable, so we start catching the whole envelope now.
+--
+-- Existing rows are NULL = that letter arrived with no envelope bytes (old
+-- data / the transition window / a synthetic degraded frame the lore-house
+-- produces when it has no events row — those never had a signature to begin
+-- with). Neither display nor dedup looks at this column, so its absence
+-- doesn't affect any existing path.
+--
+-- ⚠️ Same discipline as 015/018: `inbox_dedup` (from_popclaw_id, ts,
+-- body_hash) does **not** factor in envelope bytes. The dedup key is
+-- computed over the decrypted text and is an exactly-once asset verified
+-- bidirectionally on real machines.
+ALTER TABLE inbox ADD COLUMN envelope BLOB;

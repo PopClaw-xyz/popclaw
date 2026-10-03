@@ -1,0 +1,40 @@
+{
+  "$comment": "VALID. Train-world ParticipationDescriptor, window w_42. Grounded in mud_contract_alignment.md §Example descriptor skeleton plus the plan §3.4 source-arrival opportunity. All identities are deterministic W0 test keys (seed = SHA-256(label), see RECEIPT); no real credentials. source_event_id values are SHA-256 of fixture literals.",
+  "valid": true,
+  "document": {
+    "version": 1,
+    "house": {
+      "origin": "https://demo.loreshow.com",
+      "house_key": "8N84tgheLwG2mVU47YsDfNPqR2ci5Q3t52u9xec45iWN",
+      "incarnation": "inc_demo_1"
+    },
+    "actor_id": "Hsbv6KCEqR1VKbxsH7PRCw64RXWTT2Piyao1tJ1a1nP7",
+    "participation_id": "p_a7",
+    "revision": "12",
+    "window": {
+      "id": "w_42",
+      "opens_at": "2026-09-08T13:00:00Z",
+      "closes_at": "2026-09-09T13:00:00Z"
+    },
+    "action_groups": [
+      { "id": "g_decision", "intent_kinds": ["train.vote"], "control_reset": "window" },
+      { "id": "g_scene", "intent_kinds": ["train.act"], "control_reset": "window" },
+      { "id": "g_inventory", "intent_kinds": ["train.item"], "control_reset": "explicit" },
+      { "id": "g_expression", "intent_kinds": ["train.say"], "control_reset": "window", "channels": ["intent", "direct_message"] }
+    ],
+    "opportunities": [
+      { "id": "o_decision", "action_group_id": "g_decision", "budget_group_id": "b_turn", "budget_window_id": "w_42", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "w_42/initial-decision" },
+      { "id": "o_scene", "source_event_id": "805497c0b4246dcc87d9f5199b6e0fe714eadf6dccf3f96bbdf432604495a5e0", "action_group_id": "g_scene", "budget_group_id": "b_turn", "budget_window_id": "w_42", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "w_42/scene_42/action" },
+      { "id": "o_item_17", "action_group_id": "g_inventory", "budget_group_id": "b_turn", "budget_window_id": "w_42", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "w_42/item_17/decision" },
+      { "id": "o_statement", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_42", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "w_42/statement" },
+      { "id": "o_result_response", "source_event_id": "f9ae31f8ed418d32e00e1fbaa454e0c9b2bf12d5cc7ec0a324547c34e6a7f2ca", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_42", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "result_41/response" },
+      { "id": "o_reply", "action_group_id": "g_expression", "budget_group_id": "b_message", "budget_window_id": "w_42", "not_before": "2026-09-08T13:00:01Z", "expires_at": "2026-09-09T13:00:00Z", "dedupe_key": "w_42/reply", "channels": ["intent", "direct_message"] }
+    ],
+    "budgets": [
+      { "id": "b_turn", "window_id": "w_42", "resource": "agent_turn", "suggested_limit": 3 },
+      { "id": "b_message", "window_id": "w_42", "resource": "outbound_message", "suggested_limit": 3 }
+    ],
+    "dm_response_slot_key": "w_42/reply"
+  },
+  "semantic_expect": "ok"
+}
