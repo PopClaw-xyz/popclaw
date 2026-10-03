@@ -102,6 +102,9 @@ export type ApprovalSubject = string;
  */
 export type ApprovalSubjectResult =
   | { readonly kind: 'ask'; readonly title: string; readonly description: readonly string[];
+      /** Read-only validity of THIS description's captured source, rechecked
+       * after each asynchronous preparation boundary. Never grants authority. */
+      readonly beforeAsk?: () => string | null;
       /**
        * THE SAME SUBJECT, LAID OUT A SECOND TIME FOR A HOST THAT FOLDS.
        *
@@ -459,6 +462,7 @@ interface ApprovalRecord {
   readonly callRef: string;
   readonly subject: ApprovalSubject;
   readonly at: number;
+  readonly beforeAsk?: () => string | null;
   /** A descriptor that refused names itself here, so the tool body learns WHY
    *  it was never asked rather than inferring it from silence. Mutable only so
    *  the seam can record a backend's `unreadable` answer as the refusal it is;
@@ -757,6 +761,15 @@ export async function ownerApprovalBeforeToolCall(
   if (callRef === null) return undefined;
   const prepared = await prepare(event.toolName, event.params, callRef, NATIVE_APPROVAL_PROFILE);
   if (!prepared) return undefined;
+  // prepare's await is another scheduling boundary. A shutdown or replaced
+  // memo must not turn its formerly valid description into a native prompt.
+  const finalRefusal = capturedRefusal(prepared.beforeAsk);
+  if (finalRefusal !== null || !surfacePresent || records.get(recordKey(event.toolName, callRef)) !== prepared.record) {
+    if (records.get(recordKey(event.toolName, callRef)) === prepared.record) {
+      prepared.record.refused = finalRefusal ?? 'APPROVAL_SURFACE_UNAVAILABLE';
+    }
+    return undefined;
+  }
   return {
     requireApproval: {
       title: prepared.prompt.title, description: prepared.prompt.description, severity: 'critical',
@@ -1001,7 +1014,14 @@ export const APPROVAL_PROMPT_UNREADABLE_ON_HOST = 'APPROVAL_PROMPT_UNREADABLE_ON
  */
 export const FOLDED_ALTERNATIVE_UNPRESENTABLE = 'FOLDED_ALTERNATIVE_UNPRESENTABLE';
 
-interface PreparedPrompt { readonly record: ApprovalRecord; readonly prompt: OwnerApprovalPrompt }
+interface PreparedPrompt {
+  readonly record: ApprovalRecord;
+  readonly prompt: OwnerApprovalPrompt;
+  readonly beforeAsk?: () => string | null;
+}
+function capturedRefusal(check: (() => string | null) | undefined): string | null {
+  try { return check?.() ?? null; } catch { return BEFORE_ASK_THREW; }
+}
 /**
  * Everything both backends must do identically, in one place: look the subject
  * up, canonicalize, describe, screen, and write the record. Returns the prompt
@@ -1027,10 +1047,13 @@ async function prepare(toolName: string, params: unknown, callRef: string,
   let described: ApprovalSubjectResult;
   try { described = await descriptor.describe(params, profile); }
   catch { described = { kind: 'refuse', reason: refusalOf() }; }
+  // Never resurrect records after reset/shutdown while describe was pending.
+  if (!surfacePresent || subjects.get(toolName) !== descriptor) return null;
   // Over-budget or unpresentable is a refusal like any other, and it is the
   // descriptor's own `refuse` reason the tool body will read back.
   const refused = described.kind === 'refuse' ? described.reason
-    : presentable(described, budget) ?? labelRefusal(described.confirmLabel) ?? beforeAskRefusal(descriptor, params);
+    : presentable(described, budget) ?? labelRefusal(described.confirmLabel)
+      ?? beforeAskRefusal(descriptor, params) ?? capturedRefusal(described.beforeAsk);
   // The alternative layout goes through the SAME screen, and a failing one is
   // dropped rather than refusing the prompt: a defect in the shorter spelling
   // must not take away a dialog the primary layout could have rendered. The
@@ -1044,6 +1067,7 @@ async function prepare(toolName: string, params: unknown, callRef: string,
   sweep(now);
   const record: ApprovalRecord = {
     toolName, callRef: call, subject, at: now, refused, decision: null, failed: null,
+    ...(described.kind === 'ask' && described.beforeAsk ? { beforeAsk: described.beforeAsk } : {}),
     foldedDropped: alternative !== null && alternative.unpresentable !== null,
   };
   records.set(recordKey(toolName, call), record);
@@ -1051,7 +1075,7 @@ async function prepare(toolName: string, params: unknown, callRef: string,
   const folded = alternative && alternative.unpresentable === null
     ? { title: alternative.offered.title, lines: alternative.offered.description }
     : null;
-  return { record, prompt: {
+  return { record, beforeAsk: described.beforeAsk, prompt: {
     title: described.title,
     // The ONLY place rows become one string, and only after every row has been
     // screened. Nothing outside this module re-joins or re-splits it.
@@ -1124,6 +1148,10 @@ export function consumeOwnerApproval(toolName: string, params: unknown, callRef:
   // nothing to mark as spent: saying so again is the correct outcome.
   if (record.refused !== null) return { decision: 'unavailable', reason: 'SUBJECT_REFUSED', detail: record.refused };
   consumed.add(key);
+  // Preserve "actually asked" and single-use bookkeeping, but an answer for
+  // the captured old runtime cannot become a grant in its replacement.
+  const captured = capturedRefusal(record.beforeAsk);
+  if (captured !== null) return { decision: 'unavailable', reason: 'SUBJECT_REFUSED', detail: captured };
   // CONSENT IS EXACTLY `allow-once`, CHECKED AT RUNTIME.
   //
   // `allow-always` is absent from the offered set and absent from the backend
@@ -1208,6 +1236,21 @@ export function ownerApprovalOriginRefusalNote(
   const call = callIdentity(callRef);
   if (call === null) return null;
   return originRefusals.get(recordKey(toolName, call))?.reason ?? null;
+}
+
+/**
+ * Same-call subject refusal, without consuming, sweeping or writing a record.
+ * Only names explicitly admitted by the caller may leave this seam: a custom
+ * descriptor's reason can contain private text and otherwise stays generic.
+ */
+export function ownerApprovalSubjectRefusalNote(
+  toolName: string, callRef: unknown, safeNames: readonly string[],
+): string | null {
+  const call = callIdentity(callRef);
+  if (call === null) return null;
+  const refused = records.get(recordKey(toolName, call))?.refused;
+  if (refused == null) return null;
+  return safeNames.includes(refused) ? `SUBJECT_REFUSED: ${refused}` : 'SUBJECT_REFUSED';
 }
 
 /**

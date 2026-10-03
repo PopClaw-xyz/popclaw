@@ -48,7 +48,9 @@ import { mountedHouseGuides } from './world/house-handshake.js';
 import {
   hostInboundMediaDir,
 } from './notifier/media-staging.js';
-import { adoptOrRebootRuntime } from './runtime/stale-runtime-memo.js';
+import { adoptOrRebootRuntime, peekCurrentRuntime, runtimeMemoCurrent, isClosedRuntime } from './runtime/stale-runtime-memo.js';
+import { peekPerProcess } from './runtime/once.js';
+import { CapturedWorldActionParameters } from './world/world-approval-subject.js';
 import { buildLLMClient } from './recommend/llm-factory.js';
 import { runtimeCompletionText, type LLMClient } from './recommend/llm-client.js';
 import { timeContext } from './time/time-context.js';
@@ -264,8 +266,9 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
      * uses it." Still the same single instance within a process (P-006 §3,
      * singular resources, unchanged).
      */
-    const lifecycle = createLazyRuntime((closing) =>
-      adoptOrRebootRuntime(
+    const lifecycle = createLazyRuntime((closing) => {
+      if (closing.aborted) return Promise.reject(new Error('HOST_RUNTIME_STOPPED'));
+      return adoptOrRebootRuntime(
         'runtime',
         () => {
           const pending = bootRuntime(closing);
@@ -275,7 +278,9 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
         // Upgrading from a build whose shutdown did NOT clear the memo: what
         // is parked on globalThis is a corpse, not a runtime (issue #582).
         () => api.logger.info('popclaw: stale runtime memo from a previous registration detected — booting again'),
-      ));
+        closing,
+      );
+    });
     const runtime = () => lifecycle.get();
 
 
@@ -825,18 +830,21 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       fetchImage: fetchImageOverHttp,
       getOrchestrator: () => runtime().then((rt) => rt.orchestrator),
       getWorldCommandContext: async () => (await runtime()).worldRuntime,
-      // What the owner's dialog may draw a row for. `liveRuntime` is the
-      // handle the onboarding gate already uses: it holds a runtime only once
-      // the gateway STARTED one and never boots one itself, so a
-      // `before_tool_call` hook stays cheap (ADR-0035). Stated rather than
-      // discovered: a process that only registered, and a root with no
-      // verified view of that house, cannot know which keys are declared and
-      // therefore draws no dialog at all. Such a call falls through to the
-      // configured policy lane exactly as it did before this seam existed —
-      // and that lane refuses the same undeclared key by the same name.
-      declaredWorldActionParameters: (house, kind) => {
-        const rt = liveRuntime;
-        return rt ? worldDeclaredActionParameters(rt.worldRuntime, rt.boot.popclawId)(house, kind) : null;
+      // Discovery re-registers the shared subject without starting its local
+      // services. Read the process memo, never the onboarding closure and
+      // never runtime(): a hook must not boot anything (ADR-0035). Missing or
+      // stopped runtime and unverified house evidence still refuse the schema.
+      declaredWorldActionParameters: async (house, kind) => {
+        const memo = peekPerProcess<Promise<OpenClawPluginRuntime>>('runtime');
+        const rt = await peekCurrentRuntime<OpenClawPluginRuntime>('runtime');
+        const beforeAsk = (): string | null => {
+          if (!rt || !runtimeMemoCurrent('runtime', memo) || isClosedRuntime(rt)) return 'WORLD_ACTION_SCHEMA_UNAVAILABLE';
+          try { rt.worldOwnerApproval.assertActive(); } catch { return 'WORLD_ACTION_SCHEMA_UNAVAILABLE'; }
+          return null;
+        };
+        if (beforeAsk() !== null || !rt) return null;
+        return new CapturedWorldActionParameters(
+          worldDeclaredActionParameters(rt.worldRuntime, rt.boot.popclawId)(house, kind), beforeAsk);
       },
       bindNativeWorldInvoke: hostContext => {
         let bound: ReturnType<ReturnType<typeof createOpenClawWorldExecution>['bindFactory']> | undefined;

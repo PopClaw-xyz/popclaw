@@ -14,7 +14,42 @@
  * `Database.open` flips to false in `close()`, and LocalHostDb keeps its own
  * `closed` — both have been there far longer than this bug.
  */
-import { clearPerProcess, getOrCreatePerProcess } from './once.js';
+import { clearPerProcess, getOrCreatePerProcess, peekPerProcess } from './once.js';
+
+const revokedKey = (key: string) => `${key}:revoked-readers`;
+function revoked(key: string, memo: object): boolean {
+  return peekPerProcess<WeakSet<object>>(revokedKey(key))?.has(memo) === true;
+}
+
+/** Revoke readers at shutdown entry, before asynchronous resource draining. */
+function revokeRuntimePeek(key: string, memo: Promise<unknown>): void {
+  getOrCreatePerProcess(revokedKey(key), () => new WeakSet<object>()).add(memo);
+}
+
+function observeShutdown(key: string, memo: Promise<unknown>, closing?: AbortSignal): void {
+  if (!closing) return;
+  if (closing.aborted) revokeRuntimePeek(key, memo);
+  else closing.addEventListener('abort', () => revokeRuntimePeek(key, memo), { once: true });
+}
+
+/** Re-check synchronously after an awaiting reader resumes, before it uses the runtime. */
+export function runtimeMemoCurrent(key: string, memo: Promise<unknown> | undefined): boolean {
+  return memo !== undefined && peekPerProcess(key) === memo && !revoked(key, memo);
+}
+
+/**
+ * Read only the runtime already requested by this process. Awaiting that
+ * promise never calls a factory. A failed, replaced, closed or stopping memo
+ * supplies no declaration; readers cannot revive it or clear it.
+ */
+export async function peekCurrentRuntime<T>(key: string): Promise<T | null> {
+  const memo = peekPerProcess<Promise<T>>(key);
+  if (!memo || revoked(key, memo)) return null;
+  try {
+    const runtime = await memo;
+    return runtimeMemoCurrent(key, memo) && !isClosedRuntime(runtime) ? runtime : null;
+  } catch { return null; }
+}
 
 /** The shapes the host db handle can take, read defensively (never constructed). */
 type MaybeClosed = { open?: unknown; closed?: unknown; handle?: { open?: unknown } };
@@ -44,10 +79,16 @@ export async function adoptOrRebootRuntime<T>(
   key: string,
   factory: () => Promise<T>,
   onStaleMemo: () => void,
+  closing?: AbortSignal,
 ): Promise<T> {
-  const adopted = await getOrCreatePerProcess(key, factory);
+  const memo = getOrCreatePerProcess(key, factory);
+  // Bind shutdown to THIS promise, never whatever a later registration parks.
+  observeShutdown(key, memo, closing);
+  const adopted = await memo;
   if (!isClosedRuntime(adopted)) return adopted;
   onStaleMemo();
   clearPerProcess(key);
-  return getOrCreatePerProcess(key, factory);
+  const fresh = getOrCreatePerProcess(key, factory);
+  observeShutdown(key, fresh, closing);
+  return fresh;
 }

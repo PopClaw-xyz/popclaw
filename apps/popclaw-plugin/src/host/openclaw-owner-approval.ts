@@ -35,9 +35,12 @@
  */
 import { canonicalActionJson } from '../world/action-receipt-journal.js';
 import { captureWorldCommandInput } from '../commands/popclaw-world.js';
-import { WORLD_INVOKE_TOOL, worldApprovalReference } from '../world/world-approval-subject.js';
+import { WORLD_INVOKE_TOOL, WORLD_SUBJECT_UNCAPTURABLE, WORLD_SUBJECT_UNPRINTABLE,
+  worldApprovalReference } from '../world/world-approval-subject.js';
+import { WORLD_ACTION_PARAM_UNDECLARED, WORLD_ACTION_SCHEMA_UNAVAILABLE } from '../world/action-declared-parameters.js';
 import {
-  consumeOwnerApproval, ownerApprovalOriginRefusalNote, ownerApprovalRecorded, ownerApprovalSurfacePresent,
+  consumeOwnerApproval, ownerApprovalOriginRefusalNote, ownerApprovalSubjectRefusalNote,
+  ownerApprovalRecorded, ownerApprovalSurfacePresent,
 } from './owner-approval.js';
 import type { WorldInvokeInput } from '../world/action-client.js';
 
@@ -271,7 +274,11 @@ export async function nativeWorldInvoke<T>(callId: string, lanes: NativeWorldInv
   try {
     return await lanes.policy(() => { started = true; });
   } catch (error) {
-    const refusal = started ? null : ownerApprovalOriginRefusalNote(WORLD_INVOKE_TOOL, callId);
+    const refusal = started ? null : ownerApprovalOriginRefusalNote(WORLD_INVOKE_TOOL, callId)
+      ?? ownerApprovalSubjectRefusalNote(WORLD_INVOKE_TOOL, callId, [
+        WORLD_ACTION_SCHEMA_UNAVAILABLE, WORLD_ACTION_PARAM_UNDECLARED,
+        WORLD_SUBJECT_UNCAPTURABLE, WORLD_SUBJECT_UNPRINTABLE,
+      ]);
     if (refusal === null) throw error;
     const said = error instanceof Error ? error.message : String(error);
     throw new Error(`${said} (${WORLD_OWNER_APPROVAL_REASONS.unavailable}: ${refusal})`, { cause: error });

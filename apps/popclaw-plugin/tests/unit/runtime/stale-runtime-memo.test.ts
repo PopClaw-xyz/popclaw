@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearPerProcess, getOrCreatePerProcess } from '../../../src/runtime/once.js';
-import { adoptOrRebootRuntime, isClosedRuntime } from '../../../src/runtime/stale-runtime-memo.js';
+import { clearPerProcess, getOrCreatePerProcess, peekPerProcess } from '../../../src/runtime/once.js';
+import { adoptOrRebootRuntime, isClosedRuntime, peekCurrentRuntime } from '../../../src/runtime/stale-runtime-memo.js';
 
 /**
  * Upgrade gap (issue #582, second half): the memo is only cleared on shutdown
@@ -64,5 +64,61 @@ describe('adoptOrRebootRuntime', () => {
     expect(await adoptOrRebootRuntime(KEY, factory, onStale)).toBe(fresh);
     expect(factory).toHaveBeenCalledTimes(1);
     expect(onStale).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('read-only runtime declaration lookup', () => {
+  it('does not create a missing memo and suppresses a failed or closed memo without clearing it', async () => {
+    expect(await peekCurrentRuntime(KEY)).toBeNull();
+    expect(peekPerProcess(KEY)).toBeUndefined();
+    const failed = Promise.reject(new Error('BOOT_FAILED'));
+    failed.catch(() => {});
+    getOrCreatePerProcess(KEY, () => failed);
+    expect(await peekCurrentRuntime(KEY)).toBeNull();
+    expect(peekPerProcess(KEY)).toBe(failed);
+    clearPerProcess(KEY);
+    const closed = Promise.resolve({ host: { db: { closed: true } } });
+    getOrCreatePerProcess(KEY, () => closed);
+    expect(await peekCurrentRuntime(KEY)).toBeNull();
+    expect(peekPerProcess(KEY)).toBe(closed);
+  });
+
+  it('awaits only the existing pending promise and refuses one replaced during the read', async () => {
+    let resolve!: (value: object) => void;
+    const pending = new Promise<object>(r => { resolve = r; });
+    getOrCreatePerProcess(KEY, () => pending);
+    const reading = peekCurrentRuntime(KEY);
+    clearPerProcess(KEY);
+    const replacement = Promise.resolve({ fresh: true });
+    getOrCreatePerProcess(KEY, () => replacement);
+    resolve({ old: true });
+    expect(await reading).toBeNull();
+    expect(await peekCurrentRuntime(KEY)).toEqual({ fresh: true });
+  });
+
+  it('revokes a pending memo at shutdown entry, but still returns it to the lifecycle for draining', async () => {
+    const closing = new AbortController();
+    let resolve!: (value: object) => void;
+    const factory = vi.fn(() => new Promise<object>(r => { resolve = r; }));
+    const opening = adoptOrRebootRuntime(KEY, factory, vi.fn(), closing.signal);
+    const reading = peekCurrentRuntime(KEY);
+    closing.abort();
+    expect(await peekCurrentRuntime(KEY)).toBeNull();
+    const rt = { host: { db: { open: true } } };
+    resolve(rt);
+    expect(await opening).toBe(rt);
+    expect(await reading).toBeNull();
+    expect(await peekCurrentRuntime(KEY)).toBeNull();
+    expect(factory).toHaveBeenCalledOnce();
+  });
+
+  it('an old lifecycle abort cannot revoke the replacement memo', async () => {
+    const closing = new AbortController();
+    await adoptOrRebootRuntime(KEY, async () => ({ old: true }), vi.fn(), closing.signal);
+    clearPerProcess(KEY);
+    const fresh = { fresh: true };
+    getOrCreatePerProcess(KEY, () => Promise.resolve(fresh));
+    closing.abort();
+    expect(await peekCurrentRuntime(KEY)).toBe(fresh);
   });
 });

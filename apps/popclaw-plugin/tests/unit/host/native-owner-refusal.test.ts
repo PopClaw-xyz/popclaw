@@ -36,8 +36,9 @@ import { createOpenClawWorldExecution } from '../../../src/host/openclaw-world-e
 import { nativeWorldInvoke } from '../../../src/host/openclaw-owner-approval.js';
 import {
   ownerApprovalBeforeToolCall, ownerApprovalRecorded, resetOwnerApprovals, setOwnerApprovalSurface,
+  consumeOwnerApproval, ownerApprovalSubjectRefusalNote, registerOwnerApprovalSubject,
 } from '../../../src/host/owner-approval.js';
-import { WORLD_INVOKE_TOOL } from '../../../src/world/world-approval-subject.js';
+import { WORLD_INVOKE_TOOL, createWorldInvokeApprovalSubject } from '../../../src/world/world-approval-subject.js';
 import type { OwnerApprovalRouteReaders } from '../../../src/host/owner-approval-route.js';
 import type { WorldCommandContext } from '../../../src/commands/popclaw-world.js';
 
@@ -199,5 +200,52 @@ describe('the explanation is attached to a refusal, never to a failed action', (
       policy: async () => { throw original; },
     }).catch((error: unknown) => error);
     expect((thrown as { cause?: unknown }).cause).toBe(original);
+  });
+});
+
+describe('same-call subject refusal diagnostics', () => {
+  const missing = 'WORLD_ACTION_SCHEMA_UNAVAILABLE';
+  async function refuseSubject(reason?: string) {
+    setOwnerApprovalSurface(true);
+    const descriptor = createWorldInvokeApprovalSubject(() => null);
+    registerOwnerApprovalSubject(WORLD_INVOKE_TOOL, reason
+      ? { ...descriptor, describe: () => ({ kind: 'refuse', reason }) } : descriptor);
+    expect(await ownerApprovalBeforeToolCall({ toolName: WORLD_INVOKE_TOOL, params: input, toolCallId: CALL },
+      { toolCallId: CALL, requester: { channel: 'tui', senderIsOwner: true } })).toBeUndefined();
+  }
+  function run(callId = CALL, started = false) {
+    return nativeWorldInvoke(callId, {
+      asked: () => ownerApprovalRecorded(WORLD_INVOKE_TOOL, callId),
+      owner: async () => { throw new Error('OWNER_LANE_TAKEN'); },
+      policy: async running => { if (started) running(); throw new Error('NATIVE_POLICY_REQUIRED'); },
+    });
+  }
+  it('reports the fixed schema refusal twice without consuming, changing asked or altering its outcome', async () => {
+    await refuseSubject();
+    expect(ownerApprovalRecorded(WORLD_INVOKE_TOOL, CALL)).toBe(false);
+    await expect(run()).rejects.toThrow(`OWNER_APPROVAL_UNAVAILABLE: SUBJECT_REFUSED: ${missing}`);
+    await expect(run()).rejects.toThrow(`OWNER_APPROVAL_UNAVAILABLE: SUBJECT_REFUSED: ${missing}`);
+    expect(ownerApprovalRecorded(WORLD_INVOKE_TOOL, CALL)).toBe(false);
+    expect(consumeOwnerApproval(WORLD_INVOKE_TOOL, input, CALL)).toEqual({
+      decision: 'unavailable', reason: 'SUBJECT_REFUSED', detail: missing });
+  });
+  it('never borrows a note from another call or writes one on a missing call', async () => {
+    await refuseSubject();
+    await expect(run('other-call')).rejects.toThrow(/^NATIVE_POLICY_REQUIRED$/);
+    expect(ownerApprovalSubjectRefusalNote(WORLD_INVOKE_TOOL, 'other-call', [missing])).toBeNull();
+    expect(ownerApprovalSubjectRefusalNote('another-tool', CALL, [missing])).toBeNull();
+    expect(ownerApprovalSubjectRefusalNote(WORLD_INVOKE_TOOL, '', [missing])).toBeNull();
+    expect(ownerApprovalRecorded(WORLD_INVOKE_TOOL, 'other-call')).toBe(false);
+  });
+  it('does not attach a subject note after policy execution starts', async () => {
+    await refuseSubject();
+    await expect(run(CALL, true)).rejects.toThrow(/^NATIVE_POLICY_REQUIRED$/);
+  });
+  it('never prints a custom refusal message or private parameter content', async () => {
+    await refuseSubject('PRIVATE_TOKEN_IN_CUSTOM_DESCRIPTOR');
+    const error = await run().catch((thrown: unknown) => thrown) as Error;
+    expect(error.message).toBe('NATIVE_POLICY_REQUIRED (OWNER_APPROVAL_UNAVAILABLE: SUBJECT_REFUSED)');
+    expect(error.message).not.toContain('PRIVATE_TOKEN');
+    expect(error.message).not.toContain(input.params.place);
   });
 });

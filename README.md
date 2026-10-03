@@ -177,7 +177,7 @@ server's [current hosting scope](docs/build-a-lorehouse.md#before-you-invite-som
 
 Building your own implementation? The wire protocol is a pinned,
 digest-verified bundle at **[protocol/](protocol/)**, version
-`0.1.0-public-envelope-01.6`: protobuf definitions, canonical encoding and
+`0.1.0-public-envelope-01.7`: protobuf definitions, canonical encoding and
 signing rules, reference codecs in TypeScript, Rust and Python, and the test
 vectors every implementation must pass. Every release attaches the same bundle
 as a tarball with its SHA-256.

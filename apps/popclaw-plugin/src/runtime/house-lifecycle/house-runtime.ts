@@ -8,6 +8,7 @@ import { hostDbSlug } from '../../ingress/host-slug.js';
 import { MultiHouseEgress } from '../../egress/multi-house-egress.js';
 import { ServerPushEgress } from '../../egress/server-push-egress.js';
 import { INBOX_TOKEN_HEADER } from '../../identity/read-credential.js';
+import type { InboxReadCredential } from '../../messaging/inbox-stream-client.js';
 import type { ReadAuthority, ReadCredentialOutcome } from '../../identity/read-authority.js';
 import type { ConfiguredHousePinningStrategy } from './configured-first-pin.js';
 import { HouseLifecycleManager, type HouseGate, type ManagerOptions } from './manager.js';
@@ -25,7 +26,8 @@ import { captureHousePushEffect, type HousePushEffectReference, type HousePushEf
 import { makeWorldManifestPreparer, revokeHouseCapabilityView } from '../../world/world-capabilities.js';
 import { houseKeyFromAckHex } from '../../world/house-binding.js';
 import { makeRelationBindingPreparer } from '../../social-graph/relation-binding.js';
-import { sessionReadSelected } from '../../world/house-read-declaration.js';
+import { declarationFingerprint, readVerifiedDeclaration, sessionReadSelected } from '../../world/house-read-declaration.js';
+import { pinnedBinding } from '../../world/house-binding-pin.js';
 import { isLoopbackOrigin } from '../../social-graph/relation-host.js';
 import { isPrivateAddressHost, isPrivateAddressOrigin } from './private-address.js';
 import type { PublicDisplayCapture } from '../../ingress/public-feed-display.js';
@@ -121,11 +123,12 @@ type ResourceConfiguration = Omit<HouseResourceOptions, 'signer' | 'storeFor' | 
  * Both lanes are selected POSITIVELY, from something the house said and this
  * machine verified. Neither is reached by a failure.
  *
- *  - the identity lane, when the resolver granted a credential;
- *  - the house-issued session lane, when the house's VERIFIED manifest carried
+ *  - first, the house-issued session lane, when the house's VERIFIED manifest carried
  *    a `house_session` board (`sessionLaneDeclared`) and there is a live
  *    session with a token. The reference Ranger Map reads DMs this way and
- *    goes on doing so.
+ *    goes on doing so, even when it also declares identity reads;
+ *  - only when no session lane was selected, the identity lane, when the
+ *    resolver granted a credential.
  *
  * What a refusal may never do is pick the other lane. `READ_AUTH_NOT_DECLARED`,
  * `READ_AUTH_SCHEME_UNSUPPORTED` and a missing or blocked pin are each this
@@ -146,12 +149,16 @@ export function chooseInboxReadToken(
   credential: ReadCredentialOutcome,
   sessionLaneDeclared: boolean,
 ): string {
-  if (credential.ok) return credential.headers[INBOX_TOKEN_HEADER]!;
   if (sessionLaneDeclared && row.session_id) {
-    if (!row.inbox_read_token) throw new Error('HOUSE_SESSION_READ_TOKEN_MISSING');
-    return row.inbox_read_token;
+    return sessionInboxReadToken(row);
   }
+  if (credential.ok) return credential.headers[INBOX_TOKEN_HEADER]!;
   throw new Error(`${credential.refusal}: ${credential.message}`);
+}
+
+function sessionInboxReadToken(row: { readonly inbox_read_token: string }): string {
+  if (!row.inbox_read_token) throw new Error('HOUSE_SESSION_READ_TOKEN_MISSING');
+  return row.inbox_read_token;
 }
 
 export class HouseRuntime {
@@ -941,17 +948,38 @@ export class HouseRuntime {
   }
 
   /** The lane decision, applied under this house's live gate. */
-  private async readToken(gate: HouseGate): Promise<string> {
+  private async readToken(gate: HouseGate): Promise<InboxReadCredential> {
     assertActionActive(gate);
     const row = readParticipation(this.opts.db, gate.origin);
     if (!row) throw new Error('HOUSE_DISABLED');
+    const pin = pinnedBinding(this.opts.db, gate.origin);
+    if (!pin || pin.blockedReason !== undefined) throw new Error('READ_AUTH_HOUSE_NOT_TRUSTED');
+    const declaration = declarationFingerprint(readVerifiedDeclaration(this.opts.db, pin));
+    const sessionLane = !!row.session_id && sessionReadSelected(this.opts.db, gate.origin);
+    const assertCurrent = (): void => {
+      assertActionActive(gate);
+      const current = readParticipation(this.opts.db, gate.origin);
+      const after = pinnedBinding(this.opts.db, gate.origin);
+      if (!current || current.op_seq !== row.op_seq || current.session_id !== row.session_id ||
+        !after || after.blockedReason !== undefined || after.houseKey !== pin.houseKey || after.revision !== pin.revision ||
+        declarationFingerprint(readVerifiedDeclaration(this.opts.db, after)) !== declaration ||
+        (!!current.session_id && sessionReadSelected(this.opts.db, gate.origin)) !== sessionLane ||
+        (sessionLane && current.inbox_read_token !== row.inbox_read_token)) {
+        throw new Error('READ_AUTH_HOUSE_NOT_TRUSTED');
+      }
+    };
+    // Positive selection happens BEFORE any identity signing. This ACK token
+    // belongs to the current gate's session; failure never selects identity.
+    if (sessionLane) {
+      assertCurrent();
+      return { token: sessionInboxReadToken(row), assertCurrent };
+    }
     const credential = await this.opts.readAuthorityFor(gate.origin)('inbox-stream');
     // Re-checked after the await: signing is not instant, and a logout that
     // landed while it ran must not get one more connection out of the door.
-    assertActionActive(gate);
-    // Read AFTER the await too, for the same reason: the lane is a fact about
-    // the house as it stands now, not as it stood when the request started.
-    return chooseInboxReadToken(row, credential, sessionReadSelected(this.opts.db, gate.origin));
+    assertCurrent();
+    // The identity selection cannot turn into a different lane after an await.
+    return { token: chooseInboxReadToken(row, credential, false), assertCurrent };
   }
 
   /** Reader commands share the root's existing house DB handle. Only a known

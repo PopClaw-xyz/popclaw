@@ -56,10 +56,8 @@ const DECLARED = true;
 const UNDECLARED = false;
 
 describe('choosing the inbox stream credential', () => {
-  it('sends the identity credential even when a session token is remembered', () => {
-    // The discriminating case. A rule that checks `session_id` first passes
-    // every other test in this file and fails exactly here.
-    expect(chooseInboxReadToken(withSession, granted, DECLARED)).toBe('v2.identity.1700000000.signature');
+  it('prefers a positively declared session but never infers one from a remembered session alone', () => {
+    expect(chooseInboxReadToken(withSession, granted, DECLARED)).toBe('house-issued-session-token');
     expect(chooseInboxReadToken(withSession, granted, UNDECLARED)).toBe('v2.identity.1700000000.signature');
   });
 
@@ -99,6 +97,9 @@ describe('choosing the inbox stream credential', () => {
     // revoked session goes on reading.
     expect(() =>
       chooseInboxReadToken({ session_id: 'session-1', inbox_read_token: '' }, notDeclared, DECLARED),
+    ).toThrow('HOUSE_SESSION_READ_TOKEN_MISSING');
+    expect(() =>
+      chooseInboxReadToken({ session_id: 'session-1', inbox_read_token: '' }, granted, DECLARED),
     ).toThrow('HOUSE_SESSION_READ_TOKEN_MISSING');
   });
 });

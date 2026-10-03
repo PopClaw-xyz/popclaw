@@ -76,6 +76,10 @@ const REAUTH_ALERT_AFTER = 3;
 
 export type EventSourceInit = { readonly headers?: Record<string, string> };
 
+/** Resident selection is bound to the synchronous send boundary. Independent
+ * identity assemblies can supply their existing plain credential string. */
+export type InboxReadCredential = string | { readonly token: string; readonly assertCurrent: () => void };
+
 export interface InboxStreamOptions {
   readonly baseUrl: string;
   readonly recipientPopclawId: string;
@@ -100,7 +104,7 @@ export interface InboxStreamOptions {
    * least often is the one that stays wrong the longest. Rejecting means the
    * connection is not opened at all.
    */
-  readonly readToken: () => Promise<string>;
+  readonly readToken: () => Promise<InboxReadCredential>;
   readonly gate?: Pick<HouseGate, 'isActive' | 'signal'>;
   /**
    * Every VERIFIED envelope on this stream that is not a DM.
@@ -221,8 +225,9 @@ export class InboxStreamClient {
     this.connecting = true;
     const token = Promise.resolve().then(() => this.active() ? this.opts.readToken() : '');
     const task = token
-      .then((token) => {
+      .then((credential) => {
         if (!this.active()) return;
+        const token = typeof credential === 'string' ? credential : credential.token;
         // An empty credential opens nothing, and used to say nothing either.
         // Silent AND final is the worst of both: climb the ladder instead.
         if (!token) { this.retryUnopened(); return; }
@@ -233,7 +238,7 @@ export class InboxStreamClient {
         this.open({
           [INBOX_TOKEN_HEADER]: token,
           ...(resume !== undefined ? { 'Last-Event-ID': resume } : {}),
-        });
+        }, typeof credential === 'string' ? undefined : credential.assertCurrent);
       })
       .catch((err) => { this.opts.onError?.(err); this.retryUnopened(); })
       .finally(() => {
@@ -282,12 +287,14 @@ export class InboxStreamClient {
     this.enqueueDurable(conn, () => this.opts.onFrame?.(bytes, position));
   }
 
-  private open(headers: Record<string, string>): void {
+  private open(headers: Record<string, string>, assertCurrent?: () => void): void {
     if (!this.active()) return;
     const url = `${this.opts.baseUrl}/inbox/${encodeURIComponent(this.opts.recipientPopclawId)}/stream`;
     const Ctor =
       this.opts.eventSourceCtor ??
       (EventSource as unknown as new (url: string, init?: EventSourceInit) => AnyEventSource);
+    // No await between validating this captured lane and sending.
+    assertCurrent?.();
     const es = new Ctor(url, { headers });
     // All retries are application-controlled, so each request checks the gate
     // and obtains a fresh token instead of replaying EventSource's old headers.

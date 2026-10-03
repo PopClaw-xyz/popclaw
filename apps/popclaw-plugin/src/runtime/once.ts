@@ -48,6 +48,11 @@ export function getOrCreatePerProcess<T>(key: string, factory: () => T): T {
   return GV[k] as T;
 }
 
+/** Read an existing value without creating or clearing anything. */
+export function peekPerProcess<T>(key: string): T | undefined {
+  return GV[valueKey(key)] as T | undefined;
+}
+
 /**
  * Drop the cached value for `key` so the next `getOrCreatePerProcess` builds a
  * fresh one.

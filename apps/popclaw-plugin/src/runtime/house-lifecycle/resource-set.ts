@@ -10,7 +10,7 @@ import { PublicWorldStreamClient } from '../../ingress/public-world-stream-clien
 import { WorldFeedStreamClient, worldFeedResume } from '../../ingress/world-feed-stream-client.js';
 import { SseIngress } from '../../ingress/sse-ingress.js';
 import { describeSseError } from '../../ingress/sse-error.js';
-import { InboxStreamClient, type InboxCursorReset } from '../../messaging/inbox-stream-client.js';
+import { InboxStreamClient, type InboxCursorReset, type InboxReadCredential } from '../../messaging/inbox-stream-client.js';
 import type { HouseGate, HouseStatus } from './manager.js';
 import type { PerHouseStreams, StreamFactory } from './coordinator.js';
 import { withAction, withResourceAction } from './action-context.js';
@@ -55,12 +55,10 @@ export interface HouseResourceOptions {
   storeFor(origin: string): Promise<HouseStore>;
   /**
    * The read credential this house's personal stream opens with, decided
-   * under the live gate: the runtime asks its read authority for an
-   * `inbox-stream` credential and, when that is refused, falls back to the
-   * session row's own verified token — a house that has neither is refused
-   * rather than connected anonymously.
+   * under the live gate. A selected session lane never falls back to identity;
+   * the per-connection capture is checked by the transport before send.
    */
-  readToken(gate: HouseGate): Promise<string>;
+  readToken(gate: HouseGate): Promise<InboxReadCredential>;
   isOfficialActor(house: HouseStore, actorId: string): boolean;
   onContent?(house: HouseStore, item: popclaw.event.IWorldFeedItem): void;
   onInbox?(house: HouseStore, gate: HouseGate, dm: popclaw.event.IDirectMessage,

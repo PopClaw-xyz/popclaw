@@ -6,9 +6,9 @@ The authoritative protocol source in this repository is the pinned,
 cryptographically verified bundle at the repository root:
 
 - **Location:** [`protocol/`](../../protocol)
-- **Version:** `0.1.0-public-envelope-01.6` (baseline `public-envelope-01`)
-- **Integrity:** 271 source files, bundle SHA-256
-  `d01bd7a060cdaa2bb35937b67e5fb4dc64a350a646b30cf2fe5dd919701ea54b`
+- **Version:** `0.1.0-public-envelope-01.7` (baseline `public-envelope-01`)
+- **Integrity:** 273 source files, bundle SHA-256
+  `f7993f282db354476efe2ef5bf9eb6fb07282934df2b5fc884465bb2cbd3fcec`
   (see `CONTRACT-MANIFEST.json` inside the bundle; every client protocol
   build re-verifies it via `scripts/verify-bundle.py`)
 

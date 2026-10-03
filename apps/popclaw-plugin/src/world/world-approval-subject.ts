@@ -59,6 +59,11 @@ export const WORLD_SUBJECT_UNPRINTABLE = 'WORLD_ACTION_VALUE_UNPRINTABLE';
  * pinned to exactly that.
  */
 export type DeclaredActionParameters = (house: string, kind: string) => unknown | Promise<unknown>;
+/** Internal trusted lookup capture, not a wire schema or model-supplied object.
+ * Each description owns its check; concurrent calls never share a last lookup. */
+export class CapturedWorldActionParameters {
+  constructor(readonly schema: unknown, readonly beforeAsk: () => string | null) {}
+}
 /**
  * THE ONE THING A PARAMETER ROW CARRIES THAT A FRAME ROW NEVER DOES.
  *
@@ -173,6 +178,8 @@ export function createWorldInvokeApprovalSubject(
     let schema: unknown;
     try { schema = await declaredParameters(input.house, input.kind); }
     catch { schema = null; }
+    const captured = schema instanceof CapturedWorldActionParameters ? schema : null;
+    if (captured) schema = captured.schema;
     const undeclared = actionParameterRefusal(schema, input.params);
     if (undeclared) return { kind: 'refuse', reason: undeclared };
     const reference = worldApprovalReference(canonicalActionJson(input));
@@ -185,6 +192,7 @@ export function createWorldInvokeApprovalSubject(
     if (values.some(hasInvisibleCharacter)) return { kind: 'refuse', reason: WORLD_SUBJECT_UNPRINTABLE };
     return {
       kind: 'ask',
+      ...(captured ? { beforeAsk: captured.beforeAsk } : {}),
       title: `PopClaw world action: ${input.kind}`,
       // ONE ROW PER ARRAY ELEMENT. The seam joins them and screens each one;
       // never pre-join here, and never put a separator inside an element.

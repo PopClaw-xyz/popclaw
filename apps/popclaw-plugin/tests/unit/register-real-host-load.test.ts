@@ -54,7 +54,7 @@ type Service = { id: string; start(): Promise<void>; stop?(): Promise<void> };
  * A DECLARED SOURCE FOR THE REAL ARTIFACT.
  *
  * The bundle's own declaration source reads the runtime the gateway STARTED
- * (`src/index.ts`, `liveRuntime`), and never boots one — so a process that has
+ * (`src/index.ts`, the process runtime memo), and never boots one — so a process that has
  * only registered can say nothing about any house and draws no dialog. That
  * is correct behaviour, but "no dialog" is also what a broken build produces,
  * so asserting only the refusal would pass on a bundle that does nothing at
@@ -340,14 +340,15 @@ describe('register() against the real host hook contract (#306 + #374)', () => {
       globals[RUNTIME_MEMO] = Promise.resolve({
         boot: { popclawId: ACTOR },
         worldRuntime: { readCapabilities: (house: string) => (house === HOUSE ? verifiedHouseView() : null) },
+        worldOwnerApproval: { assertActive: () => {} },
         orchestrator: { start: async () => {}, stop: async () => {} },
         shutdown: async () => {},
       });
       try {
-        // `liveRuntime` is set by THIS service starting, and by nothing else —
-        // which is exactly the cold-start window the release notes record.
+        // Start only the full registration's service. Discovery declares its
+        // own service but must read the existing process runtime without it.
         const orchestrator = services.get('onboarding-orchestrator');
-        expect(orchestrator, 'the root registers the service that sets liveRuntime').toBeTruthy();
+        expect(orchestrator, 'the root registers its full service').toBeTruthy();
         await orchestrator!.start();
         const declared = {
           house: HOUSE, kind: 'reading.annotate',
@@ -367,6 +368,16 @@ describe('register() against the real host hook contract (#306 + #374)', () => {
         expect(shown.description).toContain('> text: The annotation the owner reads before approving');
         // `allow-always` is never on the table.
         expect(shown.allowedDecisions).toEqual(['allow-once', 'deny']);
+        const discoveryServices: Service[] = [];
+        mod.default.register({ ...api, registrationMode: 'discovery',
+          registerService: (service: Service) => discoveryServices.push(service), on() {} });
+        expect(discoveryServices.some(service => service.id === 'onboarding-orchestrator')).toBe(true);
+        // None of those services starts: the same artifact's original hook
+        // must still obtain the existing runtime after the subject is replaced.
+        expect(await handler!(
+          { toolName: 'popclaw_world_invoke', params: declared, toolCallId: 'smoke-after-discovery' },
+          { toolCallId: 'smoke-after-discovery', requester: { channel: 'tui', senderIsOwner: true } },
+        )).toHaveProperty('requireApproval');
         // A key the house did not declare is still refused, by the real
         // artifact, even now that it can read the schema.
         expect(await handler!(
