@@ -130,18 +130,18 @@ describe('PluginConfig loader', () => {
     await expect(loadPluginConfig(host)).rejects.toThrow();
   });
 
-  it('defaults to both public lore-houses when config file is absent (zero-config first boot)', async () => {
+  it('defaults to me only when config file is absent (zero-config first boot)', async () => {
     const host = new InMemoryHostAdapter();
     const cfg = await loadPluginConfig(host);
-    // [0] = home house (plan C spec §5: FALLBACK first, world house second).
-    expect(cfg.lore_houses).toEqual(['https://house.popclaw.me', 'https://house.popclaw.world']);
+    // World is an optional normal join.
+    expect(cfg.lore_houses).toEqual(['https://house.popclaw.me']);
   });
 
   it('persists the generated default so the owner can find and edit it', async () => {
     const host = new InMemoryHostAdapter();
     await loadPluginConfig(host);
     expect(await host.config.loadJson('plugin')).toEqual({
-      lore_houses: ['https://house.popclaw.me', 'https://house.popclaw.world'],
+      lore_houses: ['https://house.popclaw.me'],
     });
   });
 

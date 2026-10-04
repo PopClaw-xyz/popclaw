@@ -123,14 +123,15 @@ async function prepared(f: ReturnType<typeof fixture>, origin = ORIGIN, db = f.d
 }
 
 it.each(['delete', 'replace'] as const)('old in-flight action and queued sessionless push stay stale after pin %s', async change => {
-  const f = fixture(), old = f.resident.captureGate(ORIGIN), release = deferred(), delivered = vi.fn();
+  const f = fixture(); await f.pin();
+  const old = f.resident.captureGate(ORIGIN), release = deferred(), delivered = vi.fn();
   const inflight = withAction(old, async () => { await release.promise; assertActionActive(); delivered(); });
   const rejection = expect(inflight).rejects.toBeInstanceOf(ActionInactiveError);
   const queued = await f.reader.push(ORIGIN, new Uint8Array([1, 2, 3]));
   expect(queued.state).toBe('pending');
   expect(f.db.queryOne('SELECT baseline_seq,session_id FROM house_lifecycle_commands WHERE request_id=?', [queued.operationId]))
-    .toEqual({ baseline_seq: 0, session_id: '' });
-  expect((await f.pin())[0]?.outcome).toBe('pinned');
+    .toEqual({ baseline_seq: 1, session_id: '' });
+  expect((await f.pin())[0]?.outcome).toBe('already-decided');
   if (change === 'delete') f.peer.execute('DELETE FROM house_binding_pin WHERE origin=?', [ORIGIN]);
   else f.peer.execute('UPDATE house_binding_pin SET revision=revision+1, house_key=? WHERE origin=?',
     [mintHouse({ origin: ORIGIN, seed: 85 }).houseKey, ORIGIN]);
@@ -241,9 +242,9 @@ it('a nonresident writer can exit before notification and existing owner polling
   vi.useFakeTimers(); const f = fixture(), old = f.resident.captureGate(ORIGIN);
   expect((await f.pin(f.house.fetch as typeof fetch, () => {}, f.writer))[0]?.outcome).toBe('pinned');
   f.writer.stopHost(); await f.writer.waitForQuiet();
-  expect(old.isActive()).toBe(false); expect(f.events).toEqual(['open']);
+  expect(old.isActive()).toBe(false); expect(f.events).toEqual([]);
   await vi.advanceTimersByTimeAsync(2_000);
-  expect(f.events).toEqual(['open', 'stop', 'open']);
+  expect(f.events).toEqual(['open']);
   expect(old.isActive()).toBe(false); expect(f.resident.captureGate(ORIGIN).isActive()).toBe(true);
 });
 it('ownership takeover restores committed first pin without notification and kills old owner captures', async () => {
@@ -344,28 +345,23 @@ function click(): FollowIntentRow {
   return { owner_popclaw_id: 'owner', followee_popclaw_id: FOLLOWEE, followee_label: 'Synthetic',
     first_ts: Date.now() - 1_000, latest_ts: Date.now() - 1_000, click_count: 1 };
 }
-it('lost winner notification recovers a new doorbell round through the EXISTING resident poll', async () => {
-  vi.useFakeTimers(); const f = fixture(), entered = deferred(), release = deferred(), old = f.resident.captureGate(ORIGIN);
+it('lost first-pin notification wakes a blocked doorbell through the EXISTING resident poll', async () => {
+  vi.useFakeTimers(); const f = fixture(), old = f.resident.captureGate(ORIGIN);
   const cursors: number[] = [], enqueue = vi.fn(), store = new PendingFollowStore(f.db);
   const loop = startFollowDoorbell({ db: f.db, ownerPopclawId: 'owner', canvasBaseUrl: 'https://canvas.invalid',
     signer: f.signer, followsIn: () => false, notifier: { enqueue }, store,
     runCommand: work => work(), captureGate: origin => f.resident.captureGate(origin), houseOrigin: ORIGIN,
-    observeParticipation: f.observe, pull: async (_owner, after) => {
-      cursors.push(after); if (cursors.length === 1) { entered.resolve(); await release.promise; }
-      return [click()];
-    } }); cleanup.push(() => loop.stop()); cleanup.push(() => release.resolve());
-  await entered.promise;
+    observeParticipation: f.observe, pull: async (_owner, after) => { cursors.push(after); return [click()]; }
+  }); cleanup.push(() => loop.stop());
+  await loop.firstTick;
+  expect(cursors).toEqual([]); expect(store.listPending()).toEqual([]);
   expect((await f.pin(f.house.fetch as typeof fetch, () => {}, f.writer))[0]?.outcome).toBe('pinned');
   f.writer.stopHost(); await f.writer.waitForQuiet();
-  release.resolve(); await loop.firstTick;
-  expect(store.listPending()).toEqual([]); expect(enqueue).not.toHaveBeenCalled(); expect(old.isActive()).toBe(false);
-  await vi.advanceTimersByTimeAsync(2_000);
-  // Sinon defers a zero-delay timer created inside a timer by one fake ms.
-  await vi.advanceTimersByTimeAsync(1);
-  expect(cursors).toEqual([0, 0]); expect(store.listPending()).toHaveLength(1); expect(enqueue).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(4_000); expect(cursors).toHaveLength(2);
-  loop.stop(); const unchanged = cursors.length;
-  await vi.advanceTimersByTimeAsync(2_000); expect(cursors).toHaveLength(unchanged);
+  expect(old.isActive()).toBe(false);
+  await vi.advanceTimersByTimeAsync(2_001);
+  expect(cursors).toEqual([0]); expect(store.listPending()).toHaveLength(1); expect(enqueue).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(4_000); expect(cursors).toHaveLength(1);
+  loop.stop(); await vi.advanceTimersByTimeAsync(2_000); expect(cursors).toHaveLength(1);
 });
 it('owner acquisition recovers a blocked startup doorbell after another writer committed without a hint', async () => {
   vi.useFakeTimers(); const f = fixture(), old = f.resident.captureGate(ORIGIN);

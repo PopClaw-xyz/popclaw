@@ -9,12 +9,14 @@ import { selfWriteRefusal } from '../identity/person-resolver.js';
 
 export interface UnfollowDeps {
   socialGraph: SocialGraph;
+  /** Revoke only this owner-selected house; the producer validates its scope. */
+  house?: string;
   /** Social-log collection point `follow_removed` (spec 2026-07-26 §4). If not injected, not recorded. */
   socialLog?: SocialLogRecorder;
   /**
-   * The symmetric counterpart of "record on first contact": after a successful unfollow, writes
-   * bonds.followed=false back (mirrors follow.ts's setFollowed(true)). If not injected, skipped
-   * (legacy call sites are unaffected).
+   * After an accepted per-house revoke, projects the remaining person-level follow
+   * union to the bond. If the union is uncertain, retains its previous state.
+   * If not injected, skipped.
    */
   bondsStore?: {
     setFollowed(id: string, v: boolean): unknown;
@@ -51,6 +53,8 @@ export interface UnfollowReply {
   text: string;
   house?: string;
   outcome: UnfollowOutcome;
+  remainingFollowing?: boolean;
+  remainingFollowingUnknown?: true;
 }
 
 export async function runPopclawUnfollowCommand(
@@ -62,22 +66,21 @@ export async function runPopclawUnfollowCommand(
   // to tell the owner they had asked to unfollow themselves.
   const refusal = selfWriteRefusal(target, deps.ownPopclawId);
   if (refusal) return { text: refusal, outcome: { kind: 'refused', reason: 'self' } };
-  const isFollowing = deps.socialGraph.following().some((f) => f.popclawId === target);
-  if (!isFollowing) {
-    return {
-      text: `⚠️ ${renderCopy(ownerLang(), 'relation.notFollowing', { who: target })}`,
-      outcome: { kind: 'refused', reason: 'notFollowing' },
-    };
-  }
   // Set only once this layer has seen the house accept the revoke.
   let transportAccepted = false;
   try {
-    const outcome = await deps.socialGraph.revokeFollowWithOutcome(target);
+    const outcome = deps.house === undefined
+      ? await deps.socialGraph.revokeFollowWithOutcome(target)
+      : await deps.socialGraph.revokeFollowWithOutcome(target, { house: deps.house });
     if (outcome.mode === 'none') {
+      if (outcome.reason === 'RELATION_NOT_FOLLOWING') {
+        return { text: `⚠️ ${renderCopy(ownerLang(), 'relation.notFollowing', { who: target })}`,
+          outcome: { kind: 'refused', reason: 'notFollowing' } };
+      }
       // Same split as follow: a house that offers no relation operations is
       // not this build failing to have wired them up.
       return {
-        text: `⚠️ ${renderCopy(ownerLang(), relationRefusalCopyKey(outcome.reason))}`,
+        text: `⚠️ ${renderCopy(ownerLang(), relationRefusalCopyKey(outcome.reason), { who: target })}`,
         outcome: { kind: 'refused', reason: 'house' },
       };
     }
@@ -93,8 +96,11 @@ export async function runPopclawUnfollowCommand(
     }
     transportAccepted = true;
     const houseSlug = outcome.houseSlug;
-    // bonds projection: followed=false (the symmetric counterpart of follow.ts's setFollowed(true)).
-    deps.bondsStore?.setFollowed(target, false);
+    // A house-scoped revoke must not erase a follow retained at another house.
+    const active = await deps.socialGraph.activeFollowHouses(target);
+    const remainingFollowing = active.houses.length > 0;
+    const remainingFollowingUnknown = !remainingFollowing && !!active.uncertain;
+    if (!remainingFollowingUnknown) deps.bondsStore?.setFollowed(target, remainingFollowing);
     // Social log: the revoke was signed and pushed successfully. "Wasn't following in the first
     // place" already returned above -- that's a call where no action happened.
     // house = the one originally declared to (revokeFollow looks it up from the local ledger;
@@ -118,7 +124,12 @@ export async function runPopclawUnfollowCommand(
     const house = houseSlug ? deps.houseDisplayName?.(houseSlug) : undefined;
     const receiptKey = house ? 'relation.unfollowReceived' : 'relation.unfollowReceivedNoHouse';
     const vars: Record<string, string> = { who: target, ...(house ? { house } : {}) };
-    return { text: `✓ ${renderCopy(ownerLang(), receiptKey, vars)}`, house, outcome: { kind: 'accepted' } };
+    const remaining = remainingFollowingUnknown
+      ? `\n${renderCopy(ownerLang(), 'relation.unfollowRemainingUnknown', { who: target })}`
+      : remainingFollowing ? `\n${renderCopy(ownerLang(), 'relation.unfollowRemaining', { who: target })}` : '';
+    return { text: `✓ ${renderCopy(ownerLang(), receiptKey, vars)}${remaining}`, house,
+      ...(remainingFollowingUnknown ? { remainingFollowingUnknown: true as const } : { remainingFollowing }),
+      outcome: { kind: 'accepted' } };
   } catch (err) {
     if (err instanceof RelationWriteUnavailableError) {
       return {

@@ -62,6 +62,7 @@ export class ResidentLifecycle {
   private readonly intentPollMs: number;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private started = false;
+  private ready: Promise<void> = Promise.resolve();
   private stopped = false;
   private stopTask: Promise<void> | null = null;
   readonly authority: OwnerAuthority;
@@ -142,6 +143,8 @@ export class ResidentLifecycle {
     this.pollTimer.unref?.();
   }
 
+  whenReady(): Promise<void> { return this.ready; }
+
   /** Hint only: durable state supplies all permission. Poll/acquisition also
    * recover this transition if the committing writer exits before this call. */
   participationChanged(): void {
@@ -192,7 +195,7 @@ export class ResidentLifecycle {
     // (2) Re-arm: fresh pause generation; drains the old workers before
     // rescanning the outbox. Async — the gate/seed pass below does not
     // depend on the drain completing.
-    void this.managerRef.resumeAfterOwnership();
+    this.ready = this.managerRef.resumeAfterOwnership();
     // (3) Restore gates for still-valid durable rows (this process may have
     // been a reader when these rows were created) and open sets.
     this.coordinator.seedLegacyHouses(this.allOrigins());

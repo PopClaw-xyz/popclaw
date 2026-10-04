@@ -1,3 +1,4 @@
+import { optionalWorldOffer } from './optional-world.js';
 import {
   OnboardingDiscovery,
   houseBlurb,
@@ -296,7 +297,7 @@ export class OnboardingOrchestrator {
       current = 'arrival';
     }
     const opening = await this.presentStage(current);
-    return { text: `${opening.text}\n\n${answerHint()}` };
+    return { text: `${opening.text}\n\n${answerHint()}\n\n${optionalWorldOffer(ownerLang())}` };
   }
 
   /**

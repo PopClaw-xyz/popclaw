@@ -22,6 +22,7 @@ type LegacyShaped = {
   // each of them carry a cast.
   declareFollow?: (...args: any[]) => any;
   revokeFollow?: (...args: any[]) => any;
+  following?: (...args: any[]) => any;
   [k: string]: unknown;
 };
 
@@ -45,12 +46,17 @@ const accepted = (
 export function withOutcomes<T extends LegacyShaped>(sg: T): T {
   return {
     ...sg,
-    declareFollowWithOutcome: async (followee: string, opts?: { tasteSubscribed?: boolean }) =>
+    activeFollowHouses: async (followee: string) => ({
+      houses: (sg.following?.() ?? []).some((edge: { popclawId: string }) => edge.popclawId === followee)
+        ? ['synthetic-house'] : [],
+    }),
+    declareFollowWithOutcome: async (followee: string, opts?: { tasteSubscribed?: boolean; house?: string }) =>
       // Forward the arguments the caller actually passed. Adding a trailing
       // `undefined` would change what every `toHaveBeenCalledWith` here sees.
       accepted('declare', followee,
         (opts === undefined ? await sg.declareFollow?.(followee) : await sg.declareFollow?.(followee, opts)) ?? undefined),
-    revokeFollowWithOutcome: async (followee: string) =>
-      accepted('revoke', followee, (await sg.revokeFollow?.(followee)) ?? undefined),
+    revokeFollowWithOutcome: async (followee: string, opts?: { house?: string }) =>
+      accepted('revoke', followee,
+        (opts === undefined ? await sg.revokeFollow?.(followee) : await sg.revokeFollow?.(followee, opts)) ?? undefined),
   } as unknown as T;
 }

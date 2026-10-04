@@ -53,6 +53,7 @@ function registerUnfollowTool() {
     boot: { popclawId: 'owner-id', loreHouseUrls: [HOUSE_URL] },
     paths,
     socialGraph: {
+      activeFollowHouses: async () => ({ houses: ['synthetic-house'] }),
       following: () => [{ popclawId: 'id_elon' }],
       revokeFollowWithOutcome: async () => ({ mode: 'ordered', transport: 'accepted', houseSlug: SLUG }),
     },
@@ -75,7 +76,8 @@ function registerUnfollowTool() {
 }
 
 const receipt = (house: string) =>
-  renderCopy('en', 'relation.unfollowReceived', { who: 'Elon Musk#4f68bd', house });
+  renderCopy('en', 'relation.unfollowReceived', { who: 'Elon Musk#4f68bd', house }) + '\n' +
+  renderCopy('en', 'relation.unfollowRemaining', { who: 'Elon Musk#4f68bd' });
 
 describe('popclaw_unfollow tool — house name read at call time (R5-A2)', () => {
   it('a handshake written or changed after registration is what the receipt shows', async () => {

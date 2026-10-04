@@ -17,6 +17,7 @@ export interface HouseCommandContext {
   readonly recovery?: import('../world/house-recovery.js').HouseRecoveryPort;
   /** The host's language lane (roots pass theirs; defaults to zh-CN). */
   readonly lang?: () => Lang;
+  readonly readHouseGuide?: (origin:string) => Promise<import('../world/house-guide-context.js').HouseGuideResult>;
   readonly readAgentContext?: (origin: string, sessionId: string) => WorldAgentContextResult | Promise<WorldAgentContextResult>;
 }
 
@@ -25,9 +26,15 @@ export async function runHouseLoginCommand(ctx: HouseCommandContext, input: stri
   const origin = normalizeHouseOrigin(input);
   const result = await ctx.coordinator().loginHouse(origin);
   const lang = ctx.lang?.() ?? 'zh-CN';
+  if (result.admission === 'configured') {
+    const guide = await ctx.readHouseGuide?.(origin);
+    return renderCopy(lang,'house.login.configured',{origin}) + (guide ? '\n'+JSON.stringify({local_participation:'joined',house_guide:guide}) : '');
+  }
   switch (result.status) {
     case 'connected': {
-      const message = renderCopy(lang, 'house.login.connected', { origin, scope: result.scope, session: result.sessionId.slice(0, 8) });
+      const guide = await ctx.readHouseGuide?.(origin);
+      const message = renderCopy(lang, 'house.login.connected', { origin, scope: result.scope, session: result.sessionId.slice(0, 8) })
+        + (guide ? '\n'+JSON.stringify({local_participation:'joined',house_guide:guide}) : '');
       if (!ctx.readAgentContext) return message;
       let agentContext: WorldAgentContextResult;
       try { agentContext = await ctx.readAgentContext(origin, result.sessionId); }

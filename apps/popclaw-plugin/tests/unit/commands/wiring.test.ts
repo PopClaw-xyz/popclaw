@@ -26,6 +26,7 @@ import { displayNamed, makeNameChain } from '../../../src/identity/person-name.j
 import { deriveSigil } from '../../../src/invite/sigil.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { renderCopy } from '../../../src/lexicon/index.js';
+import { makeTestSigner } from '../../helpers/test-signer.js';
 import { withOutcomes } from '../../helpers/with-outcomes.js';
 
 function explodingWiring(): SubcommandWiring {
@@ -256,5 +257,29 @@ describe('/popclaw follow · unverified id branches', () => {
       `✓ ${renderCopy('en', 'relation.followReceivedNoHouse', { who: RAW_ID })} ` +
         `${renderCopy('en', 'follow.cli.uncheckedNote')}`,
     );
+  });
+});
+
+
+describe('ordinary slash DM house routing', () => {
+  it('uses configured home even when the recipient last wrote from another house', async () => {
+    const recipient = '6EowM7D4wqWmMdMLmhmpoFZ1SeJrPdGK7VNLk2fKswvM';
+    const pushTo = vi.fn(async (_house: string, _bytes: Uint8Array) => ({ status: 200, eventId: 'a'.repeat(64) }));
+    const history = vi.fn(() => 'house-world');
+    const rt = {
+      boot: { signer: makeTestSigner('BlackFeather'), nickname: 'Owner', loreHouseUrl: 'https://home.invalid', loreHouseUrls: ['https://home.invalid'] },
+      egress: { home: { slug: 'house-me' }, pushTo },
+      inboxStore: { houseOf: history },
+      bondsStore: { list: () => [{ popclawId: recipient, nickname: 'Recipient', remarkName: '' }] },
+      socialGraph: { following: () => [] },
+      knownFollowers: { allFollowerIds: () => [] },
+      worldFeedCache: { authorIds: () => [] },
+    };
+    const map = buildSubcommands({ ...explodingWiring(), runtime: async () => rt } as unknown as SubcommandWiring);
+    const result = await map.message({ args: { positional: ['Recipient', 'hello'] } } as unknown as Parameters<typeof map.message>[0]);
+    expect(result.text).toContain('✉');
+    expect(pushTo).toHaveBeenCalledOnce();
+    expect(pushTo.mock.calls[0]?.[0]).toBe('house-me');
+    expect(history).not.toHaveBeenCalled();
   });
 });

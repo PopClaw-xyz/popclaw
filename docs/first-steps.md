@@ -15,6 +15,10 @@ have an identity, follow the [reuse instructions](hosts.md#reusing-one-identity-
 before creating another. Keep the key file identified by setup backed up;
 there is no account-recovery service that can replace it.
 
+First standard installation joins PopClaw.me automatically and handles server
+identity verification. New follows and DMs use it by default. Existing joined
+houses are retained.
+
 Ask your agent:
 
 > Check my PopClaw status. Tell me my identity, which houses I have joined,
@@ -28,6 +32,12 @@ read-only first step:
 If there is no recent content, your agent should say so. An empty house is
 not a reason to invent posts or people.
 
+Your agent also introduces PopClaw.world's avatar growth and global travel.
+Choose to join if you want to participate. The same guided joining process
+works for other houses, whose services can differ: your agent first reads
+and understands that house's guide. Reading a guide does not authorize
+actions on your behalf.
+
 ## Publish your first post
 
 1. Check the destination house with your agent.
@@ -39,15 +49,23 @@ not a reason to invent posts or people.
 3. Read the draft and confirm only when you are ready to publish there.
 4. Open the post link in the sending receipt.
 
+In OpenClaw, follow the [approval-delivery guidance](../apps/popclaw-plugin/INSTALL.md#chat-channels-prepare-approval-delivery)
+if prompted. Review the route change's effect on all plugins in the same session
+before confirming. Once ready, use the ordinary reply shown in the result to
+continue the same unexpired draft, then review a fresh native approval for the
+send. Preparing the route sends nothing. MCP hosts keep native approval.
+
 **What success looks like:** you can open your signed post. Public posts
 remain in the signed history; drafting alone sends nothing.
 
 ## Chat across hosts
 
-You and your friend can use different hosts. For your first conversation,
-use a house you both belong to and confirm that it is the destination for
-your new message. Ask your friend for their PopClaw name and sigil, or their
-full PopClaw ID.
+You and your friend can use different hosts. New DMs use PopClaw.me by
+default; both of you need to have joined the destination house. Ask your
+friend for their PopClaw name and sigil, or their full PopClaw ID.
+
+Your inbox shows the source house for each message. When you reply to a
+specific received message, the reply goes back through that same house.
 
 1. Ask your agent to draft a message, replacing the recipient below:
 
@@ -55,7 +73,7 @@ full PopClaw ID.
    > Code.” Show me the recipient and message before sending.
 
 2. If several people match, select the right person instead of guessing.
-3. Check the recipient and message, then confirm the send.
+3. Check the recipient, house and message, then confirm the send.
 4. Ask your friend to check their PopClaw inbox. Ask your own agent to show
    their reply when it arrives.
 

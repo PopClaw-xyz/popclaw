@@ -8,9 +8,8 @@ export async function loadPluginConfig(host: HostAdapter): Promise<PluginConfig>
     // Zero-config first boot: generate a default pointing at the public
     // lore-house and persist it so the owner can find and edit it. Only runs
     // when the file is absent — an existing file is never rewritten (P-006).
-    // [0] is the home house; popclaw.world ships as the second default house
-    // (onboarding plan C spec §5). Only affects fresh installs (P-006).
-    const defaults = { lore_houses: [FALLBACK_LORE_HOUSE_URL, 'https://house.popclaw.world'] };
+    // World is offered separately. Existing lists and joins are preserved.
+    const defaults = { lore_houses: [FALLBACK_LORE_HOUSE_URL] };
     try {
       await host.config.saveJson('plugin', defaults);
     } catch {

@@ -59,6 +59,27 @@ describe('registerPopclawTools', () => {
     expect(page).toHaveBeenCalled();
   });
 
+  it('one inbox lists all houses with sender identity, receipt time and silent state', async () => {
+    const db = new InMemoryHostDb();
+    runMigrations(db, MIGRATIONS_DIR);
+    const inboxStore = new InboxStore(db);
+    inboxStore.record({ ts: 200, receivedAtMs: 500000, houseSlug: 'house-me', fromPopclawId: 'alice', toPopclawId: 'owner', body: 'me message' });
+    inboxStore.record({ ts: 100, receivedAtMs: 600000, houseSlug: 'house-world', fromPopclawId: 'bob', toPopclawId: 'owner', body: 'delayed world message' });
+    for (const item of inboxStore.page(20)) inboxStore.settleNotification(item.id, 'silent');
+    const { api, tools } = buildFakeApi();
+    registerPopclawTools({ api, runtime: async () => ({ inboxStore, paths: {} }) as unknown as Awaited<ReturnType<Parameters<typeof registerPopclawTools>[0]['runtime']>> });
+    const inbox = findTool(tools, 'popclaw_show_inbox');
+    const page = JSON.parse((await inbox.execute('list', {})).text);
+    expect(page.messages.map((m: { from_popclaw_id: string; house: string; ts: number; received_at_ms: number; notification_state: string }) =>
+      [m.from_popclaw_id, m.house, m.ts, m.received_at_ms, m.notification_state])).toEqual([
+      ['bob', 'house-world', 100, 600000, 'silent'], ['alice', 'house-me', 200, 500000, 'silent'],
+    ]);
+    const exact = JSON.parse((await inbox.execute('exact', { message_id: page.messages[0].message_id })).text);
+    expect(exact).toMatchObject({ from_popclaw_id: 'bob', house: 'house-world', ts: 100, received_at_ms: 600000, notification_state: 'silent' });
+    const again = JSON.parse((await inbox.execute('list-again', {})).text);
+    expect(again.messages[0]).toMatchObject({ notification_state: 'silent', retrieved: true, resolved: false });
+  });
+
   it('the show_inbox description keeps the resolve rule it inherited', () => {
     const { api, tools } = buildFakeApi();
     registerPopclawTools({

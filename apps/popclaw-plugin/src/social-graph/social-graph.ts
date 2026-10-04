@@ -13,6 +13,7 @@
 import { RelationRefusedError, type RelationOutcome, type RelationProducer } from './relation-producer.js';
 import type { Signer } from '../identity/signer.js';
 import type { HostDb } from '../host/host-db.js';
+import { activeRelationHouses, type ActiveRelationHouses } from './relation-active-houses.js';
 import { FollowEventStore } from './follow-event-store.js';
 import {
   projectState,
@@ -117,6 +118,8 @@ export class RelationWriteUnavailableError extends Error {
  * the same defect, unfixed, named rather than papered over.
  */
 export function relationRefusalCopyKey(reason: string | undefined): string {
+  if (reason === 'HOUSE_SELECTION_REQUIRED') return 'relation.houseSelectionRequired';
+  if (reason === 'RELATION_NOT_FOLLOWING') return 'relation.notFollowing';
   return reason === 'HOUSE_ORDERED_RELATIONS_UNSUPPORTED'
     ? 'relation.houseNoFollow'
     : 'relation.writeUnavailable';
@@ -161,6 +164,12 @@ export class SocialGraph {
     const popclawId = await this.opts.signer.popclawId();
     const declared = await this.declaredStore.readAll();
     this.state = projectState(popclawId, this.normalizeHouse(declared));
+  }
+
+  /** Read-only per-house intent including signed tails and this owner's
+   * verified consumer evidence, even when the local ledger is incomplete. */
+  async activeFollowHouses(followee: string): Promise<ActiveRelationHouses> {
+    return activeRelationHouses(this.opts.db, followee, await this.opts.signer.popclawId());
   }
 
   /**
@@ -253,7 +262,7 @@ export class SocialGraph {
    */
   async declareFollowWithOutcome(
     followee: string,
-    opts?: { tasteSubscribed?: boolean },
+    opts?: { tasteSubscribed?: boolean; house?: string },
   ): Promise<RelationOutcome> {
     const producer = this.requireProducer('declare', followee);
     const outcome = await producer.declare(followee, opts ?? {});
@@ -270,9 +279,9 @@ export class SocialGraph {
   }
 
   /** Unfollow, reported honestly. The counterpart of declareFollowWithOutcome. */
-  async revokeFollowWithOutcome(followee: string): Promise<RelationOutcome> {
+  async revokeFollowWithOutcome(followee: string, opts?: { house?: string }): Promise<RelationOutcome> {
     const producer = this.requireProducer('revoke', followee);
-    const outcome = await producer.revoke(followee);
+    const outcome = await producer.revoke(followee, opts);
     await this.refresh();
     return outcome;
   }

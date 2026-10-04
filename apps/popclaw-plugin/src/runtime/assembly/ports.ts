@@ -20,6 +20,7 @@
  *
  * Types only.
  */
+import type { HouseParticipationAdmissionPort } from '../house-lifecycle/participation-admission.js';
 import type { CardPresenter } from '../../onboarding/orchestrator.js';
 import type { HouseRuntime } from '../house-lifecycle/house-runtime.js';
 import type { PopclawPaths } from '../../host/popclaw-paths.js';
@@ -368,6 +369,7 @@ export interface DriftPins {
  * `S`: the owner lane's bag slots; `P`: the push leg's bag slots; `L`: who starts the resident loops.
  */
 export interface RuntimePorts<S extends object, P extends object = Record<never, never>, L extends LoopsMode = 'inline'> {
+  readonly participation?: HouseParticipationAdmissionPort;
   readonly platform: PlatformPort;
   readonly log: LogPort;
   readonly world: WorldPort<S>;

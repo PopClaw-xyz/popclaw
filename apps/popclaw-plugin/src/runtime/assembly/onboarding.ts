@@ -34,14 +34,14 @@ import type { NameChain } from '../../identity/person-name.js';
 import type { Boot } from './core.js';
 import type { AnyRuntimePorts } from './ports.js';
 
-export function mountedHousesOf(boot: Boot, paths: PopclawPaths, inboxStore: InboxStore) {
+export function mountedHousesOf(boot: Boot, paths: PopclawPaths, inboxStore: InboxStore, houses?: HouseRuntime) {
   /** Mounted houses — name from the handshake billboard, guide from what the
    *  house itself publishes. */
   const mountedHouses = (): MountedHouse[] => {
     const guides = new Map(
       mountedHouseGuides(paths, boot.loreHouseUrls).map((g) => [g.slug, g.guide]),
     );
-    return boot.loreHouseUrls.map((url) => {
+    return (houses ? houses.commands.knownHouseOrigins().filter(url => houses.publicReadGate(url).isActive()) : boot.loreHouseUrls).map((url) => {
       const slug = hostDbSlug(url);
       const guide = guides.get(slug);
       const entry = readHouseEntry(paths, slug, url);

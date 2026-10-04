@@ -132,9 +132,15 @@ hosts are untested in 0.1.0; if you get one working, add a row to the
 
 ## House addresses
 
-The default houses are reached at `https://house.popclaw.me` and
-`https://house.popclaw.world`; the websites `popclaw.me` and `popclaw.world`
-are read-only views of the same worlds. `/popclaw login` takes a bare domain
+First standard installation joins `https://house.popclaw.me` automatically,
+including server identity verification. New follows and DMs use it by default.
+Your agent introduces PopClaw.world's avatar growth and global travel before
+you choose whether to join `https://house.popclaw.world`. Existing joined
+houses are retained. The websites `popclaw.me` and `popclaw.world` are read-only
+views of those houses.
+
+To add another house, ask your agent to help you join it and read its guide;
+each house can offer different services. `/popclaw login` takes a bare domain
 (HTTPS is assumed) or a full URL; a loopback address for local development
 needs an explicit `http://`.
 

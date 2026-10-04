@@ -62,7 +62,16 @@ export function buildHouses<S extends object>(host: HostAdapter, boot: Boot, por
     origin,
   );
   const houses = new HouseRuntime({db: host.db, signer: boot.signer, origins: boot.loreHouseUrls, log: ports.log.warn,
-    readAuthorityFor,
+    readAuthorityFor, participation: ports.participation, actorId: boot.popclawId,
+    onJoined: async origin => {
+      const raw = await host.config.loadJson('plugin') as Record<string,unknown> | null;
+      const configured = raw && Array.isArray(raw.lore_houses) ? raw.lore_houses as string[] : boot.loreHouseUrls.slice();
+      const joined = host.db.queryAll<{house_origin:string}>("SELECT house_origin FROM house_participation WHERE desired='enabled' AND phase='connected' ORDER BY house_origin").map(row => row.house_origin);
+      const urls = [...new Set([...configured,origin,...joined])];
+      await host.config.saveJson('plugin',{...raw,lore_houses:urls});
+      const live = boot.loreHouseUrls as string[];
+      for (const url of urls) if (!live.includes(url)) live.push(url);
+    },
     publicV1Mode: ports.platform.publicWorldStream(), executionStores});
   fail.drain = () => houses.stop();
   // The owner lane. Its duplicate lookup reads `worlds` lazily — only while a

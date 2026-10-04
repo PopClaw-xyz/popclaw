@@ -324,7 +324,7 @@ describe('follow_added / follow_removed', () => {
 
   it('本来就没关注 → 什么都没发生，不记', async () => {
     await runPopclawUnfollowCommand('THEM', {
-      socialGraph: withOutcomes({ following: () => [], revokeFollow: async () => {} }),
+      socialGraph: { revokeFollowWithOutcome: async () => ({ mode: 'none', reason: 'RELATION_NOT_FOLLOWING' }) },
       socialLog: log,
     } as never);
     expect(log.entries).toEqual([]);

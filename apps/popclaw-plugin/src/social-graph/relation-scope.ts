@@ -6,8 +6,8 @@
  * Three inputs, deliberately kept apart because collapsing them is how a
  * house gets chosen by whoever answered fastest:
  *
- *   routing      which house this EDGE belongs to. A declare follows where the
- *               person was last seen (falling back to the home house); a
+ *   routing      which house this EDGE belongs to. A new declare uses home unless
+ *               the owner names an exact configured house; a
  *               revoke follows the ledger's declaration — an unfollow goes
  *               back to the house that holds the follow, never to wherever
  *               the person happens to be now.
@@ -65,7 +65,7 @@ export interface RelationScopeResolverDeps {
    * follow.
    */
   readonly houses: readonly RelationScopeHouse[];
-  /** Where the followee was last seen, if the root tracks that. */
+  /** Retained caller input; discovery never authorizes a new follow route. */
   readonly houseOf?: (followee: string) => string | undefined;
   readonly fetch?: typeof globalThis.fetch;
   readonly now?: () => number;
@@ -187,18 +187,43 @@ export function buildStrictSlugMap(houses: readonly RelationScopeHouse[]): Stric
 export function makeRelationScopeResolver(
   deps: RelationScopeResolverDeps,
 ): (req: RelationScopeRequest) => Promise<RelationScope> {
-  const map = buildStrictSlugMap(deps.houses);
-  const homeSlug = map.homeSlug;
-
   return async (req) => {
-    // Routing. A revoke goes back to the house the edge was declared to —
-    // the ledger's answer, carried by the producer; an unfollow that instead
-    // followed the person's current house would send the revoke somewhere
-    // that never held the follow, and the follow would simply stand.
-    const slug =
-      req.action === 'revoke'
-        ? (req.declaredEdge?.houseSlug ?? homeSlug)
-        : (deps.houseOf?.(req.followee) ?? homeSlug);
+    // Snapshot the current list once; this request keeps its selected origin across awaits.
+    const houses = [...deps.houses];
+    const map = buildStrictSlugMap(houses);
+    const homeSlug = map.homeSlug;
+    let explicit: string | undefined;
+    if (req.house !== undefined) {
+      if (typeof req.house !== 'string') return { support: 'unproven', detail: 'explicit house must be a string' };
+      explicit = req.house.trim();
+      if (explicit.includes('://') || explicit.startsWith('//')) {
+        try {
+          const origin = normalizeHouseOrigin(explicit);
+          const suffix = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]+(.*)$/i.exec(explicit)?.[1];
+          if (suffix !== '' && suffix !== '/') throw new Error('house must be an origin');
+          explicit = houses.find(h => normalizeHouseOrigin(h.origin) === origin)?.slug;
+        } catch { explicit = undefined; }
+      }
+      if (explicit === undefined || !map.lookup(explicit)) {
+        return { support: 'unproven', detail: 'explicit house is not an exact configured slug or origin' };
+      }
+    }
+    if (req.activeUncertainty && (explicit === undefined || req.uncertainHouses === undefined ||
+        req.uncertainHouses.some(h => (h ?? homeSlug) === explicit))) {
+      return { support: 'unproven', reason: 'RELATION_SIGNING_NOT_READY', houseSlug: explicit,
+        detail: req.activeUncertainty };
+    }
+    const active = req.activeHouses === undefined ? undefined : [...new Set(req.activeHouses.map(h => h ?? homeSlug))];
+    let slug = explicit;
+    if (slug === undefined) {
+      if (active !== undefined && active.length > 1) {
+        if (req.action === 'declare' && homeSlug !== undefined && active.includes(homeSlug)) slug = homeSlug;
+        else return { support: 'unproven', reason: 'HOUSE_SELECTION_REQUIRED', detail: 'multiple house edges; specify house' };
+      } else slug = active?.[0] ?? req.declaredEdge?.houseSlug ?? homeSlug;
+    }
+    if (req.action === 'revoke' && active !== undefined && !active.includes(slug)) {
+      return { support: 'unproven', reason: 'RELATION_NOT_FOLLOWING', houseSlug: slug, detail: 'no active follow at this house' };
+    }
     if (slug === undefined) {
       return { support: 'unproven', detail: 'no houses are configured' };
     }

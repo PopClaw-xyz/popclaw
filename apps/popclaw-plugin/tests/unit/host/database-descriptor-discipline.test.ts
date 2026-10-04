@@ -41,6 +41,8 @@ interface Allowance { file: string; call: string; arg: string; count?: number; r
  * number, so the list survives edits above it but not a new spelling.
  */
 const ALLOWED: readonly Allowance[] = [
+  { file: 'host/local-participation.ts', call: 'readFileSync', arg: "path,'utf8'",
+    reason: 'the setup receipt JSON, guarded before the read by assertNoLiveDatabaseDescriptor' },
   { file: 'host/local-host-db.ts', call: 'copyFileSync', arg: 'built, cached',
     reason: 'the freshly compiled better-sqlite3 .node binary, cached under its per-ABI name' },
   { file: 'host/local-host-db.ts', call: 'openSync', arg: "filePath, 'wx', 0o600",

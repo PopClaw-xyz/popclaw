@@ -39,8 +39,11 @@ function producerWith(scope: RelationScope) {
   const intents: unknown[] = [];
   const producer = createRelationProducer({
     db,
-    // Any call at all is a failure: the point is that nothing is signed.
-    signer: new Proxy({}, { get: () => (...args: unknown[]) => { sign(...args); throw new Error('SIGNER_TOUCHED'); } }) as never,
+    // Routing may read the public owner id to distinguish outgoing consumer
+    // evidence. Every cryptographic operation still fails before any effect.
+    signer: new Proxy({}, { get: (_, method) => method === 'popclawId'
+      ? async () => 'synthetic-owner'
+      : (...args: unknown[]) => { sign(...args); throw new Error('SIGNER_TOUCHED'); } }) as never,
     resolveScope: () => scope,
     signingReadiness: () => ({ ready: true }) as never,
     push,

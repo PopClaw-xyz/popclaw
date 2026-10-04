@@ -97,6 +97,7 @@ export const InboxReadSchema = Type.Object({
 });
 
 export const DraftMessageSchema = Type.Object({
+  house: Type.Optional(Type.String({ minLength: 1, description: 'Explicit mounted house slug or full origin URL. Omit for a new message through home (normally house.popclaw.me); an exact reply instead uses its source house. Overrides the reply route only when the owner explicitly chooses it.' })),
   recipient: Type.Optional(Type.String({ description: 'recipient: name#sigil / sigil / name / full popclaw_id; omit when replying by message ID' })),
   reply_to_message_id: Type.Optional(Type.Integer({ minimum: 1, description: 'Reply to this exact inbox message; pins its sender and originating house. Read it first with popclaw_show_inbox.' })),
   // On real hardware, 2026-07-29: the owner sending a sticker/meme got
@@ -244,6 +245,7 @@ export const ShowNamecardSchema = Type.Object({
 
 /** popclaw_follow: owner-spoken name (S4.2-T3). */
 export const PopclawFollowSchema = Type.Object({
+  house: Type.Optional(Type.String({ minLength: 1, description: 'Explicit configured house slug or exact origin. Omit for a new follow through home (normally house.popclaw.me); each declaration belongs to one house.' })),
   name: Type.String({
     description: "the name in the owner's own words (a nickname or a handle, the tool resolves it itself)",
   }),
@@ -251,6 +253,7 @@ export const PopclawFollowSchema = Type.Object({
 
 /** popclaw_unfollow: owner-spoken name — symmetric to popclaw_follow. */
 export const PopclawUnfollowSchema = Type.Object({
+  house: Type.Optional(Type.String({ minLength: 1, description: 'Explicit configured house slug or exact origin whose follow to revoke. Without it, a single existing house is selected; an ambiguous multi-house follow requires a choice.' })),
   name: Type.String({
     description:
       "the name in the owner's own words (a nickname or a handle, the tool resolves it itself), naming the person to unfollow",

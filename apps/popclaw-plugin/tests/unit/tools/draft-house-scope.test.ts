@@ -22,10 +22,11 @@ function gate() {
   return { signal: controller.signal, isActive: () => !controller.signal.aborted, retire: () => controller.abort() };
 }
 
-async function setup() {
+async function setup(origin?: string) {
   const recipient = await signer(2).popclawId();
   const post = { handle: 'Author A', textPreview: 'Original post', authorPopclawId: recipient, houseSlug: 'house-a', eventId: 'a'.repeat(64) };
   const source = { fromPopclawId: recipient, houseSlug: 'house-a', eventId: 'b'.repeat(64) };
+  const home = { slug: 'house-home' };
   let messageHouse: string | undefined = 'house-a';
   const pushed: Array<{ house: string | undefined; bytes: Uint8Array }> = [];
   const pushTo = vi.fn(async (house: string | undefined, bytes: Uint8Array) => {
@@ -36,7 +37,7 @@ async function setup() {
   const houseOf = vi.fn(() => messageHouse);
   const runtime = async () => ({
     boot: { signer: signer(1), nickname: 'Owner', webBaseUrl: 'https://example.invalid' },
-    egress: { pushTo, push: (bytes: Uint8Array) => pushTo(undefined, bytes) },
+    egress: { home, capturePlan: () => ({ targets: ['house-home', 'house-a', 'house-b'].map(slug => ({ slug, origin: slug === 'house-a' && origin ? origin : slug })) }), pushTo, push: (bytes: Uint8Array) => pushTo(undefined, bytes) },
     worldFeedCache: { lookup },
     inboxStore: { houseOf, get: () => source },
     bondsStore: { list: () => [{ popclawId: recipient, nickname: 'Recipient', remarkName: '' }] },
@@ -61,17 +62,18 @@ async function setup() {
     expect(token).toBeTruthy();
     return sendDraftApproved((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token!);
   };
-  return { recipient, post, source, pushed, lookup, houseOf, call, confirm, setHouse: (house: string | undefined) => { messageHouse = house; } };
+  return { recipient, post, source, pushed, lookup, houseOf, call, confirm, home, setHouse: (house: string | undefined) => { messageHouse = house; } };
 }
 
 describe('draft destination and action generation', () => {
-  it('keeps the DM destination when a later incoming message changes its house', async () => {
+  it('new DM ignores the recipient history and pins home before approval', async () => {
     const fx = await setup();
     const draft = await fx.call('popclaw_draft_message', { recipient: fx.recipient, body: 'Approved message' });
     fx.setHouse('house-b');
+    fx.home.slug = 'house-b';
     await fx.confirm(draft);
-    expect(fx.pushed.map(p => p.house)).toEqual(['house-a']);
-    expect(fx.houseOf).toHaveBeenCalledOnce();
+    expect(fx.pushed.map(p => p.house)).toEqual(['house-home']);
+    expect(fx.houseOf).not.toHaveBeenCalled();
   });
 
   it('keeps the primary-house fallback when the recipient had no incoming house at draft time', async () => {
@@ -80,7 +82,55 @@ describe('draft destination and action generation', () => {
     const draft = await fx.call('popclaw_draft_message', { recipient: fx.recipient, body: 'Approved message' });
     fx.setHouse('house-b');
     await fx.confirm(draft);
-    expect(fx.pushed.map(p => p.house)).toEqual([undefined]);
+    expect(fx.pushed.map(p => p.house)).toEqual(['house-home']);
+  });
+
+  it('pins an explicit house ahead of a reply source and later parameter mutation', async () => {
+    const fx = await setup();
+    const params = { reply_to_message_id: 1, body: 'Approved reply', house: 'house-b' };
+    const draft = await fx.call('popclaw_draft_message', params);
+    expect(draft.text).toContain('house-b');
+    params.house = 'house-a';
+    await fx.confirm(draft);
+    expect(fx.pushed.map(p => p.house)).toEqual(['house-b']);
+    const signed = popclaw.identity.SignedPayload.decode(fx.pushed[0]!.bytes);
+    expect(popclaw.event.EventEnvelope.decode(signed.payload).prevEventId).toBe(fx.source.eventId);
+  });
+
+  it('selects a full mounted origin exactly', async () => {
+    const fx = await setup('https://house-a');
+    const draft = await fx.call('popclaw_draft_message', { recipient: fx.recipient, body: 'hello', house: 'https://house-a' });
+    await fx.confirm(draft);
+    expect(fx.pushed.map(p => p.house)).toEqual(['house-a']);
+  });
+
+  it.each(['http://house-a', 'https://user:secret@house-a', 'https://house-a/path', 'https://house-a?query=1', '//house-a', 'https://house-a:444'])('does not substitute a mounted origin for %s', async house => {
+    const fx = await setup('https://house-a');
+    await expect(fx.call('popclaw_draft_message', { recipient: fx.recipient, body: 'hello', house })).rejects.toThrow('INVALID_HOUSE');
+    expect(fx.pushed).toEqual([]);
+  });
+
+  it('rejects an unknown explicit house before creating a draft', async () => {
+    const fx = await setup();
+    await expect(fx.call('popclaw_draft_message', { recipient: fx.recipient, body: 'hello', house: 'unknown-house' })).rejects.toThrow('INVALID_HOUSE');
+    expect(fx.pushed).toEqual([]);
+  });
+
+  it('refuses an explicit target that is mounted but outside the active participation', async () => {
+    const fx = await setup();
+    await expect(withHouseActions(new Map([['house-home', gate()]]), () =>
+      fx.call('popclaw_draft_message', { recipient: fx.recipient, body: 'hello', house: 'house-b' }))).rejects.toBeInstanceOf(ActionInactiveError);
+    expect(fx.pushed).toEqual([]);
+  });
+
+  it('does not let an explicit DM reuse a draft after leaving and rejoining its house', async () => {
+    const fx = await setup();
+    const original = gate();
+    const draft = await withHouseActions(new Map([['house-b', original]]), () =>
+      fx.call('popclaw_draft_message', { recipient: fx.recipient, body: 'hello', house: 'house-b' }));
+    original.retire();
+    await expect(withHouseActions(new Map([['house-b', gate()]]), () => fx.confirm(draft))).rejects.toBeInstanceOf(ActionInactiveError);
+    expect(fx.pushed).toEqual([]);
   });
 
   it('pins the reply source house even if the source object changes before confirmation', async () => {

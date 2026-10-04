@@ -38,6 +38,10 @@ export function storageDatabasePathAllowed(db: HostDb, path: RecoveryPath, suppl
   if (!readStorageControl(paths) && db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='storage_control_required_v1'")) return false;
   return storagePathAllowed(paths, path);
 }
+export function storageDatabaseGeneration(db: HostDb): string {
+  const paths = databasePaths.get(db);
+  return JSON.stringify(paths ? {root:paths.rootDir(),control:readStorageControl(paths)} : {unregistered:true});
+}
 export function assertStorageBootstrap(paths: PopclawPaths): void {
   const control = readStorageControl(paths);
   if (control?.mode === 'maintenance' || (!control && existsSync(join(paths.rootDir(), '.restore-reservation')))) throw new Error('STORAGE_MAINTENANCE_PENDING');

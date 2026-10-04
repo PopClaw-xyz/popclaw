@@ -26,6 +26,16 @@ const SCHEMAS: Record<string, Record<string, string>> = {
 const CONTROL_REFUSALS = new Set(['SESSION_FENCED','LEASE_EXPIRED','EXECUTOR_BUSY','AUTH_INVALID','AUDIENCE_MISMATCH','IDEMPOTENCY_CONFLICT']);
 
 export function neverControlSubset(db: HostDb, origin: string, row: ParticipationRow | null | undefined): boolean {
+  return sessionlessControlSubset(db, origin, row, false);
+}
+
+/** Ordinary configured joins keep their own sessionless leave ledger. Known
+ * control facts, unknown schema and unreadable storage still refuse admission. */
+export function configuredControlSubset(db: HostDb, origin: string, row: ParticipationRow | null | undefined): boolean {
+  return sessionlessControlSubset(db, origin, row, true);
+}
+
+function sessionlessControlSubset(db: HostDb, origin: string, row: ParticipationRow | null | undefined, allowLocalLeaves: boolean): boolean {
   try {
     if (!emptyControlState(row) || row.house_origin !== origin || !storageInPlaceHistoryKnown(db)) return false;
     for (const [table, schema] of Object.entries(SCHEMAS)) {
@@ -36,8 +46,12 @@ export function neverControlSubset(db: HostDb, origin: string, row: Participatio
     for (const name of ['034-house-binding-pin.sql','040-house-read-declaration.sql']) {
       if (!db.queryOne('SELECT filename FROM _migrations WHERE filename=?',[name])) return false;
     }
-    // ALL leaves are retained proof, including settled/unsupported rows.
-    if (db.queryOne('SELECT request_id FROM house_lifecycle_outbox WHERE house_origin=? LIMIT 1',[origin])) return false;
+    // Local sessionless leaves are durable participation intent, not evidence
+    // of a control request. A nonempty ACK pin or another installation refuses.
+    if (allowLocalLeaves) {
+      if (db.queryOne(`SELECT request_id FROM house_lifecycle_outbox
+        WHERE house_origin=? AND (ack_key_hex!='' OR installation_id!=?) LIMIT 1`, [origin, row.installation_id])) return false;
+    } else if (db.queryOne('SELECT request_id FROM house_lifecycle_outbox WHERE house_origin=? LIMIT 1',[origin])) return false;
     for (const cmd of db.queryAll<{session_id:unknown;ack_key_hex:unknown;house_revision:unknown;result_json:unknown}>(
       'SELECT session_id,ack_key_hex,house_revision,result_json FROM house_lifecycle_commands WHERE house_origin=?',[origin])) {
       if ((cmd.session_id !== null && cmd.session_id !== '') || (cmd.ack_key_hex !== null && cmd.ack_key_hex !== '')

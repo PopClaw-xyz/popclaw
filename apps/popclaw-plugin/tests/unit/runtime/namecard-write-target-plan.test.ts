@@ -30,8 +30,12 @@ import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { popclaw } from '@popclaw/contracts';
 import { ackSigningInput, canonicalizeEnvelope, cidFromCanonical } from '@popclaw/algorithms';
+import { runMigrations } from '../../../src/host/migrations.js';
+import { fileURLToPath } from 'node:url';
 import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
 import { InMemoryHostAdapter } from '../../../src/host/host-adapter.in-memory.js';
+import {mintHouse} from '../../helpers/signed-manifest.js';
+import {localParticipationPort} from '../../../src/host/local-participation.js';
 import { HouseRuntime } from '../../../src/runtime/house-lifecycle/house-runtime.js';
 import type { HostAdapter } from '../../../src/host/host-adapter.js';
 import type { Signer } from '../../../src/identity/signer.js';
@@ -92,10 +96,8 @@ async function house(opts: { session: boolean; avatar: string; seed: number; hol
     log.push({ at: Date.now(), line: `${req.method} ${path}` });
     const body = async () => { const c: Buffer[] = []; for await (const x of req) c.push(Buffer.from(x)); return Buffer.concat(c); };
     if (path === '/v1/manifest') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ house: { name: 'f', slug: 'f' }, core_primitives: { profile: true },
-        ...(opts.session ? { house_session: { version: 1, endpoint: '/v1/house-session', ack_pubkey: ackHex,
-          operations: ['enter', 'renew', 'leave', 'status'], lease_seconds: 3600, renew_interval_seconds: 1800 } } : {}) }));
+      res.writeHead(200, { 'content-type': 'application/json','X-Popclaw-Manifest-Proof':signedManifest.proofHeader });
+      res.end(Buffer.from(signedManifest.bodyBytes));
       return;
     }
     if (path === '/v1/house-session' && opts.session) {
@@ -135,6 +137,8 @@ async function house(opts: { session: boolean; avatar: string; seed: number; hol
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   cleanup.push(async () => { server.closeAllConnections(); await new Promise<void>(r => server.close(() => r())); });
   const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const signedManifest=mintHouse({origin,seed:opts.seed,manifest:{house:{name:'f',slug:'f'},core_primitives:{profile:true},
+    ...(opts.session?{house_session:{version:1,endpoint:'/v1/house-session',ack_pubkey:ackHex,operations:['enter','renew','leave','status'],lease_seconds:3600,renew_interval_seconds:1800}}:{})}});
   return {
     origin, log, posts,
     lines: (from = 0) => log.slice(from).map(l => l.line),
@@ -178,9 +182,10 @@ function newOrchestrator(host: InMemoryHostAdapter, rt: { egress: HouseRuntime['
 
 async function root(h1: string, opts: { db?: InMemoryHostDb; nickname?: string; commandSigner?: Signer } = {}) {
   const db = opts.db ?? new InMemoryHostDb();
+  runMigrations(db, fileURLToPath(new URL('../../../migrations', import.meta.url)));
   if (!opts.db) cleanup.push(() => db.close());
   const warnings: string[] = [];
-  const houses = new HouseRuntime({ readAuthorityFor: refusingReadAuthorityFor, db, signer, origins: [h1],
+  const houses = new HouseRuntime({ readAuthorityFor: refusingReadAuthorityFor, db, signer, origins: [h1],actorId:POPCLAW_ID,participation:localParticipationPort(()=>undefined),
     commandTimeoutMs: 5000, commandPollMs: 2, log: m => warnings.push(m) });
   houses.configureResources({ stores: [], host: {} as HostAdapter, recipientPopclawId: POPCLAW_ID, worldStreamMode: false,
     openStore: async () => { throw new Error('unused'); }, isOfficialActor: () => false });
@@ -188,6 +193,7 @@ async function root(h1: string, opts: { db?: InMemoryHostDb; nickname?: string; 
   const stop = async () => { if (!stopped) { stopped = true; await houses.stop(); } };
   cleanup.push(stop);
   houses.start();
+  expect(await houses.commands.loginHouse(h1)).toMatchObject({admission:'configured'});
   const host = new InMemoryHostAdapter({ config: { plugin: { lore_houses: [h1],
     ranger_profile: { nickname: opts.nickname ?? 'OldName', name_source: 'owner' } } } });
   const rt: Record<string, unknown> = { host, houseRuntime: houses, egress: houses.egress,

@@ -4,12 +4,14 @@ import { ownerConfirmedWorldInvoke, worldDeclaredActionParameters } from './runt
 import type { createOpenClawWorldExecution } from './host/openclaw-world-execution.js';
 import { nativeWorldInvoke } from './host/openclaw-owner-approval.js';
 import { registerOpenClawOwnerApprovalHooks } from './host/openclaw-owner-approval-hooks.js';
+import { openClawApprovalSetup } from './host/openclaw-approval-setup.js';
 import { getRuntimeConfigSnapshot } from 'openclaw/plugin-sdk/runtime-config-snapshot';
 import { createLazyRuntime } from './runtime/lazy-runtime.js';
 import { createDrainingService } from './runtime/draining-service.js';
 import { notifierForOrigin } from './runtime/house-lifecycle/notification-scope.js';
 import { assertActionActive } from './runtime/house-lifecycle/action-context.js';
 import { assembleRuntime } from './runtime/assembly/index.js';
+import { readNativeSetupEvidence, type LocalSetupEvidence } from './host/local-participation.js';
 import { gatewayRuntimePorts } from './host/openclaw-runtime-ports.js';
 /**
  * OpenClaw composition root. register() attaches host surfaces synchronously;
@@ -216,6 +218,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
      * the prompt-build hook reads, the storage-shutdown flag and the backup
      * tasks the daily-backup service keeps.
      */
+    let initialEvidence: LocalSetupEvidence | undefined;
     const bootRuntime = async (closing: AbortSignal): Promise<OpenClawPluginRuntime> => {
       storageShuttingDown = false;
       api.logger.info(`popclaw: build ${POPCLAW_BUILD}`);
@@ -237,7 +240,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       let releaseStorage!: () => void;
       const host = createOpenClawHostAdapter(api, db => (releaseStorage = registerStorageRuntime(db, storagePaths)));
       return assembleRuntime(host, gatewayRuntimePorts({
-        api, host, build: POPCLAW_BUILD, storagePaths, releaseStorage: () => releaseStorage(), llmComplete,
+        initialEvidence: () => initialEvidence, api, host, build: POPCLAW_BUILD, storagePaths, releaseStorage: () => releaseStorage(), llmComplete,
         favoritesFile: (paths) => join(paths.data(), 'favorites.jsonl'),
         root: {
           l2: {
@@ -300,8 +303,13 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     // in register()'s closure.
     api.registerService({
       id: 'popclaw-runtime',
-      start: async () => {
-        await runtime();
+      start: async (ctx) => {
+        initialEvidence = readNativeSetupEvidence({stateDir:api.runtime.state.resolveStateDir(),serviceStateDir:ctx?.stateDir ?? '',
+          rootDir:api.rootDir ?? '',source:api.source,enabled:ctx?.config?.plugins?.entries?.popclaw?.enabled === true});
+        const rt = await runtime();
+        const result = await rt.houseRuntime.activateInitialMe();
+        if (result) api.logger.info(`popclaw: initial me participation ${JSON.stringify(result)}`);
+        await rt.houseRuntime.readHouseGuide('https://house.popclaw.me');
       },
       stop: () => lifecycle.stop(),
     });
@@ -318,6 +326,11 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     // a load/bypass process must stay cheap).
     let liveRuntime: OpenClawPluginRuntime | null = null;
     let liveOrchestrator: OnboardingOrchestrator | null = null;
+    try {
+      api.on('llm_input', event => { liveRuntime?.houseRuntime.markGuidesInAgentInput(JSON.stringify(event.historyMessages)); });
+    } catch (err) {
+      api.logger.error(`popclaw: guide delivery hook registration failed — ${String(err)}`);
+    }
     // gateway_stop keeps its own handle: `liveRuntime` is already cleared
     // inside the service stop (claim-gate semantics), while closing streams
     // and databases happens later — it must remain closable after the clear.
@@ -385,7 +398,8 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
 
     // The owner-approval seam's OpenClaw backend (before_tool_call asks the
     // owner; after_tool_call only reports) — host/openclaw-owner-approval-hooks.ts.
-    registerOpenClawOwnerApprovalHooks(api);
+    const approvalSetup = openClawApprovalSetup(api);
+    registerOpenClawOwnerApprovalHooks(api, approvalSetup);
 
     // Gateway shutdown: hand back the SSE connections and SQLite handles
     // (`deactivate` is its deprecated alias, removed 2026-08-16 — don't use
@@ -705,6 +719,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     const SUBCOMMANDS = buildSubcommands({
       runtime,
       getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, recovery: rt.houseRuntime.recovery, lang: ownerLang,
+        readHouseGuide: origin => rt.houseRuntime.readHouseGuide(origin),
         readAgentContext: (origin: string, sessionId: string) => rt.houseRuntime.readAgentContext(origin, rt.boot.popclawId, {}, sessionId)}; },
       paths: gatewayPaths,
       picksFile: () => join(gatewayPaths().tasteDir(), 'learned', 'picks.jsonl'),
@@ -733,6 +748,9 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       handler: async (ctx: PluginCommandContext) => {
         const parsed = parseArgs(ctx.args);
         const command = parsed.positional[0];
+        // Native command identity is compared to a previously host-verified
+        // owner turn. Model tool parameters cannot accept this proposal.
+        if (command === 'approvals') return approvalSetup.command(parsed.positional.slice(1), ctx);
         if (!command || command === 'help' || !(command in SUBCOMMANDS) || parsed.flags['help']) {
           return routeSubcommand(SUBCOMMANDS, {args: {positional: parsed.positional, flags: parsed.flags}});
         }
@@ -776,9 +794,14 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
           // A boot failure must not swallow the command (/popclaw help still
           // works); the subcommand itself surfaces the real error.
         }
-        return routeSubcommand(SUBCOMMANDS, {
+        const result = await routeSubcommand(SUBCOMMANDS, {
           args: { positional: parsed.positional, flags: parsed.flags },
         });
+        if (command === 'doctor' || command === 'start') {
+          const approvalStatus = await approvalSetup.command([], ctx);
+          return { ...result, text: `${result.text}\n\n${approvalStatus.text}` };
+        }
+        return result;
       },
     });
 
@@ -802,6 +825,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       runtime,
       runCommand: async work => (await runtime()).houseRuntime.runCommand(work),
       getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, recovery: rt.houseRuntime.recovery, lang: ownerLang,
+        readHouseGuide: origin => rt.houseRuntime.readHouseGuide(origin),
         readAgentContext: (origin: string, sessionId: string) => rt.houseRuntime.readAgentContext(origin, rt.boot.popclawId, {}, sessionId)}; },
       // The host's plugin-runtime subagent surface, which is what lets
       // popclaw_newspaper dispatch the paper into a dedicated workshop session

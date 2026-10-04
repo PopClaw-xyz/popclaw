@@ -4,6 +4,12 @@ import { withOutcomes } from '../../helpers/with-outcomes.js';
 import { setOwnerLang, failureText } from '../../../src/lexicon/owner-language.js';
 import { RelationWriteUnavailableError } from '../../../src/social-graph/social-graph.js';
 
+function withActiveFixture<T extends { following: () => readonly { popclawId: string }[] }>(sg: T) {
+  return { ...sg, activeFollowHouses: async (id: string) => ({
+    houses: sg.following().some(edge => edge.popclawId === id) ? ['synthetic-house'] : [],
+  }) };
+}
+
 const fakeSG = withOutcomes({
   revokeFollow: vi.fn().mockResolvedValue(undefined),
   following: vi.fn().mockReturnValue([{ popclawId: 'BBB' }]),
@@ -21,7 +27,7 @@ describe('runPopclawUnfollowCommand', () => {
   });
 
   it('refuses to unfollow someone we are not following', async () => {
-    fakeSG.following.mockReturnValueOnce([]);
+    vi.spyOn(fakeSG as any, 'revokeFollowWithOutcome').mockResolvedValueOnce({ mode: 'none', reason: 'RELATION_NOT_FOLLOWING' });
     const out = await runPopclawUnfollowCommand('BBB', { socialGraph: fakeSG as any, ownPopclawId: OWNER_ID });
     expect(out.text).toContain('Not currently following');
   });
@@ -36,6 +42,7 @@ describe('runPopclawUnfollowCommand', () => {
   // 卫生债 (spec 2026-07-26): unfollow 必须回写 bonds.followed=false — follow.ts
   // 出手即建档的对称面，之前只在 follow 侧做，unfollow 侧一直没补。
   it('writes bondsStore.setFollowed(id, false) on success', async () => {
+    fakeSG.following.mockReturnValueOnce([]);
     const setFollowed = vi.fn();
     const out = await runPopclawUnfollowCommand('BBB', {
       socialGraph: fakeSG as any,
@@ -47,7 +54,7 @@ describe('runPopclawUnfollowCommand', () => {
   });
 
   it('does not touch bondsStore when not currently following', async () => {
-    fakeSG.following.mockReturnValueOnce([]);
+    vi.spyOn(fakeSG as any, 'revokeFollowWithOutcome').mockResolvedValueOnce({ mode: 'none', reason: 'RELATION_NOT_FOLLOWING' });
     const setFollowed = vi.fn();
     await runPopclawUnfollowCommand('BBB', {
       socialGraph: fakeSG as any,
@@ -93,7 +100,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
       revokeFollowWithOutcome: vi.fn(async () => orderedOutcome({ houseSlug: 'house-popclaw-me' })),
     };
     const out = await runPopclawUnfollowCommand('BBB', {
-      socialGraph: sg as any,
+      socialGraph: withActiveFixture(sg) as any,
       ownPopclawId: OWNER_ID,
       houseDisplayName: (slug) => (slug === 'house-popclaw-me' ? 'popclaw.me' : undefined),
     });
@@ -112,7 +119,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
       revokeFollowWithOutcome: vi.fn(async () => orderedOutcome({ houseSlug: 'house-popclaw-world' })),
     };
     const out = await runPopclawUnfollowCommand('BBB', {
-      socialGraph: sg as any,
+      socialGraph: withActiveFixture(sg) as any,
       ownPopclawId: OWNER_ID,
       houseDisplayName: () => 'Popclaw World',
     });
@@ -126,7 +133,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
       revokeFollowWithOutcome: vi.fn(async () => orderedOutcome({ houseSlug: 'house-popclaw-me' })),
     };
     const out = await runPopclawUnfollowCommand('BBB', {
-      socialGraph: sg as any,
+      socialGraph: withActiveFixture(sg) as any,
       ownPopclawId: OWNER_ID,
       houseDisplayName: () => undefined,
     });
@@ -141,7 +148,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
       following,
       revokeFollowWithOutcome: vi.fn(async () => orderedOutcome({ houseSlug: 'house-popclaw-me' })),
     };
-    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: sg as any, ownPopclawId: OWNER_ID });
+    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: withActiveFixture(sg) as any, ownPopclawId: OWNER_ID });
     expect(out.text).toMatch(/^✓/);
     expect(out.text).not.toContain('has the unfollow declaration');
     expect(out.text).not.toContain('house-popclaw-me');
@@ -153,7 +160,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
       following,
       revokeFollowWithOutcome: vi.fn(async () => orderedOutcome({ transport: 'queued', houseSlug: 'north-house' })),
     };
-    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: sg as any, ownPopclawId: OWNER_ID });
+    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: withActiveFixture(sg) as any, ownPopclawId: OWNER_ID });
     expect(out.text).not.toMatch(/^✓/);
     expect(out.text).not.toContain('north-house');
     expect(out.text).not.toContain('has the unfollow declaration');
@@ -169,7 +176,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
         reason: 'HOUSE_UNREACHABLE',
       })),
     };
-    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: sg as any, ownPopclawId: OWNER_ID });
+    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: withActiveFixture(sg) as any, ownPopclawId: OWNER_ID });
     expect(out.text).toMatch(/^⚠️/);
     expect(out.text).not.toContain('north-house');
     expect(out.house).toBeUndefined();
@@ -180,7 +187,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
       following,
       revokeFollowWithOutcome: vi.fn(async () => orderedOutcome({ houseSlug: undefined })),
     };
-    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: sg as any, ownPopclawId: OWNER_ID });
+    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: withActiveFixture(sg) as any, ownPopclawId: OWNER_ID });
     expect(out.text).toMatch(/^✓/);
     expect(out.text).toContain('Unfollow of BBB sent');
     expect(out.text).not.toContain('has the unfollow declaration');
@@ -200,7 +207,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
         following,
         revokeFollowWithOutcome: vi.fn(async () => orderedOutcome({ transport: 'queued', houseSlug: 'north-house' })),
       };
-      const out = await runPopclawUnfollowCommand('BBB', { socialGraph: sg as any, ownPopclawId: OWNER_ID });
+      const out = await runPopclawUnfollowCommand('BBB', { socialGraph: withActiveFixture(sg) as any, ownPopclawId: OWNER_ID });
       expect(out.text).not.toMatch(/^✓/);
       expect(out.text).not.toContain('north-house');
       expect(out.text).not.toContain('取关声明');
@@ -217,7 +224,7 @@ describe('runPopclawUnfollowCommand — receipt names the house (G1-copy, archit
           reason: 'HOUSE_UNREACHABLE',
         })),
       };
-      const out = await runPopclawUnfollowCommand('BBB', { socialGraph: sg as any, ownPopclawId: OWNER_ID });
+      const out = await runPopclawUnfollowCommand('BBB', { socialGraph: withActiveFixture(sg) as any, ownPopclawId: OWNER_ID });
       expect(out.text).toMatch(/^⚠️/);
       expect(out.text).not.toContain('north-house');
       expect(out.house).toBeUndefined();
@@ -238,6 +245,7 @@ describe('runPopclawUnfollowCommand — branch characterization (R5-A1)', () => 
   /** Runs one branch with every collaborator recording into one ordered `calls` list. */
   async function run(branch: Branch) {
     const calls: string[] = [];
+    let revoked = false;
     const ordered = (over: Record<string, unknown> = {}) => ({
       mode: 'ordered', transport: 'accepted', domain: 'unknown', action: 'revoke', followee: 'BBB',
       houseKey: 'k', eventId: 'e', seq: 1n, anotherEndHasSigned: false, houseSlug: 'north-house', ...over,
@@ -245,10 +253,11 @@ describe('runPopclawUnfollowCommand — branch characterization (R5-A1)', () => 
     const sg = {
       following: () => {
         calls.push('following');
-        return branch === 'notFollowing' ? [] : [{ popclawId: 'BBB' }];
+        return branch === 'notFollowing' || revoked ? [] : [{ popclawId: 'BBB' }];
       },
       revokeFollowWithOutcome: async (id: string) => {
         calls.push(`revoke:${id}`);
+        if (branch === 'notFollowing') return { mode: 'none', reason: 'RELATION_NOT_FOLLOWING' };
         if (branch === 'writeUnavailable') throw new RelationWriteUnavailableError('revoke', id);
         if (branch === 'thrown') throw new Error('boom');
         if (branch === 'queued') return ordered({ transport: 'queued' });
@@ -258,13 +267,14 @@ describe('runPopclawUnfollowCommand — branch characterization (R5-A1)', () => 
             followee: id, houseSlug: 'north-house', reason: 'HOUSE_UNREACHABLE',
           };
         }
+        revoked = true;
         return ordered();
       },
     };
     const out = await runPopclawUnfollowCommand(
       branch === 'usage' ? '' : branch === 'self' ? OWNER_ID : 'BBB',
       {
-        socialGraph: sg as any,
+        socialGraph: withActiveFixture(sg) as any,
         ownPopclawId: OWNER_ID,
         bondsStore: {
           setFollowed: (id, v) => {
@@ -283,7 +293,7 @@ describe('runPopclawUnfollowCommand — branch characterization (R5-A1)', () => 
     return { out, calls };
   }
 
-  const ACCEPTED_CALLS = ['following', 'revoke:BBB', 'setFollowed:BBB:false', 'log:follow_removed:north-house', 'houseName:north-house'];
+  const ACCEPTED_CALLS = ['revoke:BBB', 'following', 'setFollowed:BBB:false', 'log:follow_removed:north-house', 'houseName:north-house'];
 
   it('usage: nothing consulted', async () => {
     const { out, calls } = await run('usage');
@@ -299,7 +309,7 @@ describe('runPopclawUnfollowCommand — branch characterization (R5-A1)', () => 
 
   it('notFollowing: only the following list is read', async () => {
     const { calls } = await run('notFollowing');
-    expect(calls).toEqual(['following']);
+    expect(calls).toEqual(['revoke:BBB']);
   });
 
   it('accepted with a house name: full projection order, house carried', async () => {
@@ -319,14 +329,14 @@ describe('runPopclawUnfollowCommand — branch characterization (R5-A1)', () => 
     '%s: revoked but no bonds / log / house-name projection',
     async (branch) => {
       const { out, calls } = await run(branch);
-      expect(calls).toEqual(['following', 'revoke:BBB']);
+      expect(calls).toEqual(['revoke:BBB']);
       expect(out.house).toBeUndefined();
     },
   );
 
   it('accepted, then bonds projection throws: stops there, reported as failure', async () => {
     const { out, calls } = await run('acceptedThenBondsThrow');
-    expect(calls).toEqual(['following', 'revoke:BBB', 'setFollowed:BBB:false']);
+    expect(calls).toEqual(['revoke:BBB', 'following', 'setFollowed:BBB:false']);
     expect(out.text).toBe(failureText('unfollow', new Error('bonds down')));
   });
 
@@ -336,12 +346,13 @@ describe('runPopclawUnfollowCommand — branch characterization (R5-A1)', () => 
     expect(out.text).toBe(failureText('unfollow', new Error('handshake unreadable')));
   });
 
-  it('the following query sits outside the catch: its throw propagates', async () => {
-    const revoke = vi.fn();
+  it('the post-acceptance aggregate read fails truthfully without hiding the accepted revoke', async () => {
+    const revoke = vi.fn(async () => ({ mode: 'ordered', transport: 'accepted' }));
     const sg = { following: () => { throw new Error('ledger unreadable'); }, revokeFollowWithOutcome: revoke };
-    await expect(runPopclawUnfollowCommand('BBB', { socialGraph: sg as any, ownPopclawId: OWNER_ID }))
-      .rejects.toThrow('ledger unreadable');
-    expect(revoke).not.toHaveBeenCalled();
+    const out = await runPopclawUnfollowCommand('BBB', { socialGraph: withActiveFixture(sg) as any, ownPopclawId: OWNER_ID });
+    expect(out.outcome).toEqual({ kind: 'failed', transport: 'accepted' });
+    expect(out.text).toContain('ledger unreadable');
+    expect(revoke).toHaveBeenCalledOnce();
   });
 
   const BRANCHES: Branch[] = [
@@ -400,7 +411,8 @@ describe('runPopclawUnfollowCommand — typed outcome (R5-A1)', () => {
     houseKey: 'k', eventId: 'e', seq: 1n, anotherEndHasSigned: false, houseSlug: 'north-house', ...over,
   });
   const sgWith = (revoke: () => Promise<unknown>, following = [{ popclawId: 'BBB' }]) =>
-    ({ following: () => following, revokeFollowWithOutcome: vi.fn(revoke) }) as any;
+    ({ following: () => following, revokeFollowWithOutcome: vi.fn(async () => following.length
+      ? await revoke() : { mode: 'none', reason: 'RELATION_NOT_FOLLOWING' }) }) as any;
 
   it.each([
     ['usage', '', sgWith(async () => ordered()), { kind: 'refused', reason: 'usage' }],
@@ -416,14 +428,14 @@ describe('runPopclawUnfollowCommand — typed outcome (R5-A1)', () => {
     ['general throw', 'BBB', sgWith(async () => { throw new Error('boom'); }), { kind: 'failed', transport: 'unknown' }],
   ] as const)('%s', async (_name, target, sg, outcome) => {
     const out = await runPopclawUnfollowCommand(target, {
-      socialGraph: sg, ownPopclawId: OWNER_ID, houseDisplayName: () => 'North House',
+      socialGraph: withActiveFixture(sg), ownPopclawId: OWNER_ID, houseDisplayName: () => 'North House',
     });
     expect(out.outcome).toEqual(outcome);
   });
 
   it('accepted by the house, then a local projection throws: failed with transport accepted, never success', async () => {
     const out = await runPopclawUnfollowCommand('BBB', {
-      socialGraph: sgWith(async () => ordered()),
+      socialGraph: withActiveFixture(sgWith(async () => ordered())),
       ownPopclawId: OWNER_ID,
       bondsStore: { setFollowed: () => { throw new Error('bonds down'); } },
     });

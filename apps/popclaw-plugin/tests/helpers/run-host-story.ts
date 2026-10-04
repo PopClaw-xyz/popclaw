@@ -7,8 +7,8 @@ import { signDirectMessage } from '../../src/messaging/sign-message.js';
 
 const root = process.argv[2]!;
 const relay = await startTestRelay();
-const reporter = seedIdentity(join(root, 'reporter-root'), relay.url, 'QA Reporter');
-const developer = seedIdentity(join(root, 'developer-root'), relay.url, 'QA Developer');
+const reporter = await seedIdentity(join(root, 'reporter-root'), relay.url, 'QA Reporter');
+const developer = await seedIdentity(join(root, 'developer-root'), relay.url, 'QA Developer');
 relay.identities.add(reporter.id); relay.identities.add(developer.id);
 for (const host of ['claude', 'codex']) {
   const project = join(root, `popclaw-mcp-test-${host}`); mkdirSync(project, { recursive: true });

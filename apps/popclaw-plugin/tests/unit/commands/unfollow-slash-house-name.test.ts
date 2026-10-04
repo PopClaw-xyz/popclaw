@@ -41,11 +41,12 @@ afterEach(() => {
 
 describe('slash unfollow — accepted receipt names the house (real command)', () => {
   it('shows the handshake name, not the slug or the URL host', async () => {
-    const revoke = vi.fn(async () => ({ mode: 'ordered', transport: 'accepted', houseSlug: SLUG }));
+    let followed = true;
+    const revoke = vi.fn(async () => { followed = false; return { mode: 'ordered', transport: 'accepted', houseSlug: SLUG }; });
     const runtime = vi.fn(async () => ({
       boot: { popclawId: 'OWNER', loreHouseUrls: [HOUSE_URL] },
       paths,
-      socialGraph: { following: () => [{ popclawId: TARGET }], revokeFollowWithOutcome: revoke },
+      socialGraph: { activeFollowHouses: async () => ({ houses: followed ? ['synthetic-house'] : [] }), following: () => followed ? [{ popclawId: TARGET }] : [], revokeFollowWithOutcome: revoke },
       bondsStore: { setFollowed: vi.fn() },
     }));
     const result = (await routeSubcommand(

@@ -4,7 +4,8 @@
 // module-evaluation stdout write could hit; changing it is the maintenance
 // item the refactor ruling (2026-09-29 §7) hands to DEV, not part of the move.
 import './social-graph/relation-assembly.js';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import './ingress/public-feed-display.js';
 import './host/storage-maintenance.js';
 import './host/execution-store.js';
@@ -43,6 +44,7 @@ import './runtime/house-lifecycle/house-runtime.js';
 // GUARD 1 — MUST stay the first import: it runs before every other module is
 // evaluated, so an import-time stdout write is caught too.
 import { protocolStdout } from './runtime/stdout-to-stderr.js';
+import { readMcpSetupEvidence } from './host/local-participation.js';
 import { buildMcpRuntime, type McpPluginRuntime } from './host/mcp-runtime-ports.js';
 
 import pino from 'pino';
@@ -97,7 +99,7 @@ function mcpRoot(): string {
  */
 async function buildRuntime(logger: ReturnType<typeof pinoHostLogger>, closing: AbortSignal, serverBox: McpServerBox,
   approvalWindowMs: number | undefined): Promise<McpPluginRuntime> {
-  return buildMcpRuntime({ logger, closing, serverBox, approvalWindowMs, dataRoot: mcpRoot(), consumerId: notificationConsumerId });
+  return buildMcpRuntime({ initialEvidence: () => readMcpSetupEvidence(process.env.POPCLAW_SETUP_RECEIPT,mcpRoot(),resolve(dirname(fileURLToPath(import.meta.url)),'../..')), logger, closing, serverBox, approvalWindowMs, dataRoot: mcpRoot(), consumerId: notificationConsumerId });
 }
 
 async function main(): Promise<void> {
@@ -118,6 +120,8 @@ async function main(): Promise<void> {
     logger.error({}, `popclaw: bootstrap failed — ${String(error)}`);
     throw error;
   }));
+  let agentRuntime: McpPluginRuntime | undefined;
+  let initialSetup: Promise<void> = Promise.resolve();
   const runtime = () => lifecycle.get();
   const stop = () => {
     void lifecycle.stop().then(() => process.exit(0), error => {
@@ -135,6 +139,7 @@ async function main(): Promise<void> {
     runtime,
     runCommand: async work => (await runtime()).houseRuntime.runCommand(work),
     getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, recovery: rt.houseRuntime.recovery, lang: ownerLang,
+        readHouseGuide: origin => rt.houseRuntime.readHouseGuide(origin),
         readAgentContext: (origin: string, sessionId: string) => rt.houseRuntime.readAgentContext(origin, rt.boot.popclawId, {}, sessionId)}; },
     // The same host capability the OpenClaw gateway injects (index.ts). Without it
     // the newspaper's avatar deps are never assembled at all, and an MCP-published
@@ -177,6 +182,7 @@ async function main(): Promise<void> {
     // about to resolve the very same runtime a moment later.
     declaredWorldActionParameters: async (house, kind) => {
       const rt = await runtime();
+
       return worldDeclaredActionParameters(rt.worldRuntime, rt.boot.popclawId)(house, kind);
     },
     // The MCP peer of index.ts's `bindNativeWorldInvoke`: one tool call, one
@@ -317,12 +323,14 @@ async function main(): Promise<void> {
   // which is what a host's permission heuristics read before a call.
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map(toMcpToolListing) }));
   server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
+    await initialSetup;
     const tool = byName.get(req.params.name);
     if (!tool) {
       return { content: [{ type: 'text' as const, text: `unknown tool: ${req.params.name}` }], isError: true };
     }
     try {
       const rt = await runtime();
+      agentRuntime = rt;
       // ONE call identity, derived once and used by both halves. The tool body
       // is given its id by `dispatchMcpCall`, which rebuilds it from
       // `requestId`; handing that call the id we already derived is what makes
@@ -374,9 +382,22 @@ async function main(): Promise<void> {
     }
   });
 
-  await server.connect(new StdioServerTransport(process.stdin, protocolStdout));
+  server.oninitialized = () => {
+    if (!readMcpSetupEvidence(process.env.POPCLAW_SETUP_RECEIPT,mcpRoot(),resolve(dirname(fileURLToPath(import.meta.url)),'../..'))) return;
+    initialSetup = runtime().then(async rt => { await rt.houseRuntime.activateInitialMe(); await rt.houseRuntime.readHouseGuide('https://house.popclaw.me'); }).catch(error => logger.warn({}, String(error)));
+  };
+  const transport = new StdioServerTransport(process.stdin, protocolStdout);
+  const send = transport.send.bind(transport);
+  transport.send = async message => {
+    await send(message);
+    if ('result' in message) agentRuntime?.houseRuntime.markGuidesInAgentInput(JSON.stringify(message.result));
+  };
+  await server.connect(transport);
   logger.info({}, 'popclaw-mcp connected on stdio');
+  // Restore existing participation for an explicitly enabled receiver. This
+  // consumer boot grants no initial setup or new House participation.
   if (process.env['POPCLAW_RECEIVE_ON_START'] === '1') void runtime().catch(() => {});
+
 }
 
 // Unconditional: this module IS the `popclaw-mcp` bin's entry point and is never

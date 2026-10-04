@@ -56,8 +56,7 @@ export async function buildSocialGraph(input: {
   const relationProducer = makeRelationProducer({
     db: host.db,
     signer: boot.signer,
-    houses: boot.loreHouseUrls.map((u) => ({ slug: hostDbSlug(u), origin: u })),
-    houseOf: (id) => worldFeedCache.byAuthor(id, 1)[0]?.houseSlug,
+    get houses() { return boot.loreHouseUrls.map((u) => ({ slug: hostDbSlug(u), origin: u })); },
     pushTo: (slug, bytes) => egress.pushTo(slug, bytes),
     logger: {
       info: ports.log.info,

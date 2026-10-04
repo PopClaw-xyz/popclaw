@@ -114,7 +114,7 @@ async function startServer(dataRoot: string, extraEnv: NodeJS.ProcessEnv = {}): 
  * (S1 `DEFAULT_OWNER_LANGUAGE`), which would otherwise fail these for the
  * right reason (no config = no Chinese) rather than a real regression.
  */
-function seedDataRoot(house: string): string {
+async function seedDataRoot(house: string): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), 'popclaw-mcp-'));
   mkdirSync(join(dir, 'config', 'cadence'), { recursive: true });
   writeFileSync(join(dir, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [house] }));
@@ -125,7 +125,7 @@ function seedDataRoot(house: string): string {
   // A modern house this machine already trusts: without a verified binding
   // and a declared read scheme, the inbox stream refuses to open and the
   // consumer-stream assertions below would be measuring the refusal.
-  seedTrustedHouse(dir, house);
+  await seedTrustedHouse(dir, house);
   return dir;
 }
 
@@ -134,7 +134,7 @@ describe('popclaw MCP server over stdio', () => {
   let mcp: McpProcess;
 
   beforeAll(async () => {
-    dataRoot = seedDataRoot(OFFLINE_HOUSE);
+    dataRoot = await seedDataRoot(OFFLINE_HOUSE);
     mcp = await startServer(dataRoot);
   }, 60_000);
 
@@ -256,7 +256,7 @@ describe('MCP unread piggyback + notifications tool', () => {
   const socialDb = () => join(dataRoot, 'vault', 'social', 'my-social-assets.db');
 
   beforeAll(async () => {
-    dataRoot = seedDataRoot(OFFLINE_HOUSE);
+    dataRoot = await seedDataRoot(OFFLINE_HOUSE);
     mcp = await startServer(dataRoot);
     // Boot the runtime so migrations create notification_queue before we seed.
     await mcp.request('tools/call', { name: 'popclaw_check_status', arguments: {} });
@@ -386,7 +386,7 @@ describe('MCP citizen mode does not advertise as a ranger', () => {
   });
 
   const bootAndSettle = async (extraEnv: NodeJS.ProcessEnv): Promise<McpProcess> => {
-    const root = seedDataRoot(houseUrl);
+    const root = await seedDataRoot(houseUrl);
     roots.push(root);
     const mcp = await startServer(root, extraEnv);
     servers.push(mcp);
@@ -398,7 +398,7 @@ describe('MCP citizen mode does not advertise as a ranger', () => {
 
   it('a normally left House summary is an MCP error with readable disabled facts and no read or write egress', async () => {
     for (const lang of ['en', 'zh-CN'] as const) {
-      const root = seedDataRoot(houseUrl);
+      const root = await seedDataRoot(houseUrl);
       roots.push(root);
       writeFileSync(join(root, 'config', 'cadence', 'cadence.json'),
         JSON.stringify({ schemaVersion: 1, delivery: { primaryLanguage: lang } }));

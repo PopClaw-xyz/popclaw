@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clearPerProcess, getOrCreatePerProcess } from '../../../src/runtime/once.js';
+import type { HouseRuntime } from '../../../src/runtime/house-lifecycle/house-runtime.js';
+import { mintHouse } from '../../helpers/signed-manifest.js';
 import { NewspaperDispatchRegistry } from '../../../src/newspaper/dedicated-session.js';
 
 /**
@@ -40,12 +42,17 @@ vi.mock('../../../src/routing/house-lexicon.js', async (orig) => {
   };
 });
 
+vi.mock('../../../src/runtime/house-lifecycle/resource-set.js', () => ({
+  createHouseStreamFactory: () => ({open: () => ({stop:async()=>{}})}),
+}));
+
 import plugin from '../../../src/index.js';
 
 type Service = { id: string; start(ctx?: unknown): Promise<void>; stop?(ctx?: unknown): unknown };
 type Hook = (event?: unknown, ctx?: unknown) => unknown;
 type Out = { prependContext?: string; appendSystemContext?: string } | undefined;
 type Rt = {
+  houseRuntime: HouseRuntime;
   notifier: { enqueue(a: unknown): void; count(l?: string): number };
   pendingFollows: {
     absorb(intents: unknown[], opts: unknown): unknown;
@@ -121,12 +128,19 @@ function registerAt(state: string) {
   };
 }
 
-const offline = () => vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('UNEXPECTED_NETWORK'); }));
+const offline = () => {
+  const house = mintHouse({origin:HOUSE,manifest:{read_auth:{schemes:['popclaw-identity-read-v2']}}});
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+    if(new URL(input instanceof Request?input.url:String(input)).origin!==HOUSE)throw new Error('UNEXPECTED_NETWORK');
+    return house.fetch(input);
+  }));
+};
 
-async function boot(state: string) {
+async function boot(state: string, joinHouse = true) {
   const root = registerAt(state);
   await root.svc('popclaw-runtime').start();
   const rt = await getOrCreatePerProcess<Promise<Rt>>('runtime', () => { throw new Error('runtime should be memoized'); });
+  if (joinHouse) expect(await rt.houseRuntime.commands.loginHouse(HOUSE)).toMatchObject({admission:'configured'});
   return { root, rt };
 }
 
@@ -152,6 +166,19 @@ function addPendingFollow(rt: Rt) {
 const linesWith = (logs: string[], needle: string) => logs.filter(l => l.includes(needle));
 
 describe('before_prompt_build through the real root (characterization)', () => {
+  it('an unjoined configured House cannot render or claim its queued follow intent', async () => {
+    offline();
+    const {root,rt}=await boot(newState(),false);
+    enqueueFollowIntent(rt);
+    const claim=vi.spyOn(rt.pendingFollows,'claimSurface');
+    const out=root.turn(ROUTING_PROMPT,OWNER);
+    expect(out?.prependContext ?? '').not.toContain('[L2]');
+    expect(rt.notifier.count('L2')).toBe(1);
+    expect(claim).not.toHaveBeenCalled();
+    expect(seam.order).toEqual([]);
+    await root.gatewayStop();
+  },30_000);
+
   it('owner turn: prependContext is notice → L2 block → pending-follows block → routing hit, and L2 drains 1→0', async () => {
     offline();
     const state = newState();

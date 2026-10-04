@@ -17,10 +17,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { runMigrations } from '../../../src/host/migrations.js';
+import { fileURLToPath } from 'node:url';
 import { LocalHostDb } from '../../../src/host/local-host-db.js';
 import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
 import { HouseRuntime } from '../../../src/runtime/house-lifecycle/house-runtime.js';
-import type { Signer } from '../../../src/identity/signer.js';
+import {makeTestSigner} from '../../helpers/test-signer.js';
+import {mintHouse} from '../../helpers/signed-manifest.js';
+import {localParticipationPort} from '../../../src/host/local-participation.js';
 import type { HostAdapter } from '../../../src/host/host-adapter.js';
 import { refusingReadAuthorityFor } from '../../helpers/read-authority.js';
 import { INBOX_TOKEN_HEADER } from '../../../src/identity/read-credential.js';
@@ -44,13 +48,16 @@ const MANIFEST = JSON.stringify({
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn(); });
 
-function fixture(routes: Record<string, () => Response> = {
+async function fixture(routes: Record<string, () => Response> = {
   [`${HOUSE}/v1/manifest`]: () => new Response(MANIFEST, { status: 200, headers: { etag: '"m1"' } }),
   [GUIDE_URL]: () => new Response(GUIDE, { status: 200, headers: { etag: '"g1"' } }),
 }, house = HOUSE) {
+  const signed=mintHouse({origin:house,manifest:{house:{name:'popclaw.world',slug:'world'},guide_url:GUIDE_URL}});
+  let joining=true;
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
     const u = url instanceof Request ? url.url : String(url);
+    if(joining)return signed.fetch(u);
     calls.push({ url: u, init });
     const route = routes[u];
     return route ? route() : new Response(null, { status: 404 });
@@ -59,19 +66,23 @@ function fixture(routes: Record<string, () => Response> = {
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
   const paths = new PopclawPaths(dir);
   const db = new LocalHostDb(join(dir, 'host.db'));
+  runMigrations(db, fileURLToPath(new URL('../../../migrations', import.meta.url)));
   cleanup.push(() => db.close());
-  const houses = new HouseRuntime({ readAuthorityFor: refusingReadAuthorityFor, db, origins: [house], signer: {} as Signer,
+  const signer=makeTestSigner('BlackFeather');
+  const houses = new HouseRuntime({ readAuthorityFor: refusingReadAuthorityFor, db, origins: [house], signer,actorId:await signer.popclawId(),participation:localParticipationPort(()=>undefined),
     commandTimeoutMs: 100, commandPollMs: 2, fetch });
   houses.configureResources({ stores: [], host: {} as HostAdapter, recipientPopclawId: 'fixture', worldStreamMode: false,
     openStore: async () => { throw new Error('unused'); }, isOfficialActor: () => false });
   cleanup.push(() => houses.stop());
   houses.start();
+  expect(await houses.commands.loginHouse(house)).toMatchObject({admission:'configured'});
+  joining=false;fetch.mockClear();
   return { houses, paths, calls, fetch, db };
 }
 
 describe('a declared guide on another origin', () => {
   it('is fetched through the document lane and written to disk', async () => {
-    const { houses, paths, calls } = fixture();
+    const { houses, paths, calls } = await fixture();
     const gate = houses.captureGate(HOUSE);
     expect(gate.isActive()).toBe(true);
     const logs: string[] = [];
@@ -98,7 +109,7 @@ describe('a declared guide on another origin', () => {
   });
 
   it('keeps the manifest on the house-bound lane: a cross-origin manifest URL is still refused', async () => {
-    const { houses, fetch } = fixture();
+    const { houses, fetch } = await fixture();
     const gate = houses.captureGate(HOUSE);
     await expect(houses.houseFetch(HOUSE, gate)('https://popclaw.world/v1/manifest')).rejects.toThrow('HOUSE_AUDIENCE_MISMATCH');
     expect(fetch).not.toHaveBeenCalled();
@@ -107,7 +118,7 @@ describe('a declared guide on another origin', () => {
 
 describe('documentFetch keeps every protection except origin equality', () => {
   it('never follows a redirect', async () => {
-    const { houses, calls } = fixture({ [GUIDE_URL]: () => new Response('ok') });
+    const { houses, calls } = await fixture({ [GUIDE_URL]: () => new Response('ok') });
     const doc = houses.documentFetch(HOUSE, houses.captureGate(HOUSE));
     await doc(GUIDE_URL, { redirect: 'follow' });
     expect(calls[0]!.init?.redirect).toBe('error');
@@ -115,13 +126,13 @@ describe('documentFetch keeps every protection except origin equality', () => {
 
   it.each(['ftp://popclaw.world/guide.md', 'file:///etc/passwd', 'https://user:pw@popclaw.world/guide.md', 'https://user@popclaw.world/guide.md'])(
     'refuses %s without calling fetch', async url => {
-      const { houses, fetch } = fixture();
+      const { houses, fetch } = await fixture();
       await expect(houses.documentFetch(HOUSE, houses.captureGate(HOUSE))(url)).rejects.toThrow();
       expect(fetch).not.toHaveBeenCalled();
     });
 
   it('refuses a request carrying a credential header', async () => {
-    const { houses, fetch } = fixture();
+    const { houses, fetch } = await fixture();
     const doc = houses.documentFetch(HOUSE, houses.captureGate(HOUSE));
     for (const name of ['authorization', 'cookie', INBOX_TOKEN_HEADER]) {
       await expect(doc(GUIDE_URL, { headers: { [name]: 'x' } })).rejects.toThrow();
@@ -132,21 +143,21 @@ describe('documentFetch keeps every protection except origin equality', () => {
   });
 
   it('fetches nothing when the captured gate is inactive', async () => {
-    const stopped = fixture();
+    const stopped = await fixture();
     const gate = stopped.houses.captureGate(HOUSE);
     await stopped.houses.stop();
     expect(gate.isActive()).toBe(false);
     await expect(stopped.houses.documentFetch(HOUSE, gate)(GUIDE_URL)).rejects.toThrow('no longer active');
     expect(stopped.fetch).not.toHaveBeenCalled();
 
-    const other = fixture();
+    const other = await fixture();
     const inactive = { origin: HOUSE, generation: 1, signal: new AbortController().signal, isActive: () => false };
     await expect(other.houses.documentFetch(HOUSE, inactive)(GUIDE_URL)).rejects.toThrow('no longer active');
     expect(other.fetch).not.toHaveBeenCalled();
   });
 
   it('fetches nothing once the house is left, even with a gate captured before', async () => {
-    const { houses, fetch, db } = fixture();
+    const { houses, fetch, db } = await fixture();
     const gate = houses.captureGate(HOUSE);
     expect(gate.isActive()).toBe(true);
     db.execute("UPDATE house_participation SET desired='disabled',op_seq=op_seq+1 WHERE house_origin=?", [HOUSE]);
@@ -155,7 +166,7 @@ describe('documentFetch keeps every protection except origin equality', () => {
   });
 
   it('honours the enclosing command: a house outside its scope, or inactive in it, fetches nothing', async () => {
-    const { houses, fetch } = fixture();
+    const { houses, fetch } = await fixture();
     const gate = houses.captureGate(HOUSE);
     const doc = houses.documentFetch(HOUSE, gate);
     // The enclosing command does not hold this house (unmounted from its point of view).
@@ -170,7 +181,7 @@ describe('documentFetch keeps every protection except origin equality', () => {
   });
 
   it('an unreachable guide still leaves the house handshake intact', async () => {
-    const { houses, paths } = fixture({
+    const { houses, paths } = await fixture({
       [`${HOUSE}/v1/manifest`]: () => new Response(MANIFEST, { status: 200 }),
     });
     const gate = houses.captureGate(HOUSE);
@@ -199,13 +210,13 @@ describe('documentFetch refuses private addresses for a public house', () => {
     'http://[fe80::1]/guide.md',
     'http://[fd00::1]/guide.md',
   ])('refuses %s without calling fetch', async url => {
-    const { houses, fetch } = fixture();
+    const { houses, fetch } = await fixture();
     await expect(houses.documentFetch(HOUSE, houses.captureGate(HOUSE))(url)).rejects.toThrow('HOUSE_DOCUMENT_ADDRESS_REFUSED');
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it.each(['https://popclaw.world/guide.md', 'https://172.32.0.1/guide.md', 'https://[2606:4700::1]/guide.md'])('still allows %s', async url => {
-    const { houses, fetch } = fixture({ [url]: () => new Response('ok') });
+    const { houses, fetch } = await fixture({ [url]: () => new Response('ok') });
     expect((await houses.documentFetch(HOUSE, houses.captureGate(HOUSE))(url)).status).toBe(200);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
@@ -213,7 +224,7 @@ describe('documentFetch refuses private addresses for a public house', () => {
   it('exempts a house that is itself on a private address (dev and test houses)', async () => {
     const devHouse = 'http://127.0.0.1:8112';
     const url = 'http://127.0.0.1:18789/guide.md';
-    const { houses, fetch } = fixture({ [url]: () => new Response('ok') }, devHouse);
+    const { houses, fetch } = await fixture({ [url]: () => new Response('ok') }, devHouse);
     expect((await houses.documentFetch(devHouse, houses.captureGate(devHouse))(url)).status).toBe(200);
     expect(fetch).toHaveBeenCalledTimes(1);
   });

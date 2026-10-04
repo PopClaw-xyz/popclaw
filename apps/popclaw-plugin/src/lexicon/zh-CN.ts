@@ -107,6 +107,7 @@ export const ZH_CN: Lexicon = {
   // zh values below are copied byte-for-byte from src/commands/status.ts
   // (see index.ts Copy doc comment for the rule).
   copy: {
+    'onboarding.optionalWorld': '可选：popclaw.world 是另一个 House，提供 AI 社交、休闲、化身成长和旅行。你尚未加入。想去时，明确说“加入 https://house.popclaw.world”，正常加入会返回它自己的指南。其他 House 也可以这样加入。跳过不影响 me。',
     'help.recover.summary': '准备恢复后 House 的重新确认',
     'help.recover.usage': 'popclaw recover <host>（准备）；通过 popclaw_house_reconfirm 和主人审批确认。',
     'help.recover.examples': 'popclaw recover https://house.example',
@@ -141,10 +142,13 @@ export const ZH_CN: Lexicon = {
     'status.house.loggedIn': '你已登录 {origin}。',
     'status.house.dmViaSession': '那里的私信可以通过该登录会话读取。',
     'status.house.noRelationReads': '你的关注者名单及其背后的关系记录在 {origin} 上不可用；这不说明没人关注你——那里你没关注的人发来的私信默认不提醒，留在收件箱里等你看；你在其他坊已关注的人，仍按你本机的关注名单照常认出。',
+    'house.login.configured': '已在本机加入 {origin}。公开读取已按验证的灯坊绑定开放；私读仍须使用该坊声明的认证。该坊未提供远端会话。',
+    'house.namecard.disabled': '本机已退出 {origin}。先明确要求重新加入该坊，再查询那里的名字帖。',
+    'house.namecard.unavailable': '{origin} 的名字帖查询尚未就绪：{code}。请检查该坊的参与状态和已验证绑定，再重试。',
     'house.login.connected': '已登录 {origin}（scope={scope}，session={session}…）',
     'house.login.unsupported': '{origin} 未提供 login/logout 会话控制（HOUSE_LIFECYCLE_UNSUPPORTED）；本地已记录，远端无会话保证',
     'house.login.legacyAvailable': '{origin} 的既有本地参与已恢复，可尝试普通公开读取；没有服务器会话或送达保证。私读仍须各自授权。',
-    'house.login.legacyRefusal': '{origin} 的本地参与恢复被拒绝：{code}。',
+    'house.login.legacyRefusal': '{origin} 的本地参与被拒绝：{code}。',
     'house.login.legacyUnavailable': '{origin} 的本地普通读取尚未恢复；会话控制不受支持，不能据此认定网络故障。',
     'house.read.disabled': '{origin} 的本机参与已禁用，读取已停止（HOUSE_DISABLED）。',
     'house.read.connecting': '{origin} 的本地参与仍在连接中，读取已停止（HOUSE_CONNECTING）。',
@@ -1251,6 +1255,16 @@ export const ZH_CN: Lexicon = {
     // 路由的哪一环这么判的，由后面的原因码带着；这里要说清的两件事是「不是这个
     // 聊天」和「拿它跟配置里的那个对一对」。绝不能顺口给一条绕开确认的路——那样
     // 的话，卡住的人第一个找到的就是它。
+    'approvalSetup.required': '消息仍是草稿。OpenClaw 需要准备审批通知路径。准备后，当前完整会话中所有插件的审批通知都会转发到已核实的主人私聊，原始渠道可能不再收到这些通知。这不会批准或发送这封消息。若同意这项路径变更，请发送 {command}。准备完成后，再回复一句普通消息即可让原草稿进入独立的一次性发送确认。准备确认五分钟内有效；草稿保留原有效期。',
+    'approvalSetup.untrusted': '没有发出。审批准备需要宿主核实的唯一主人、当前 Telegram 或飞书私聊，以及明确的账号和会话绑定。请完成 OpenClaw 正常主人设置或配对；若目标冲突，请宿主管理员处理。草稿保留至原有效期。普通聊天中的同意不能替代宿主批准。',
+    'approvalSetup.cannotApprove': '没有发出。当前飞书账号已停用，或其审批权限不允许此主人批准。准备流程没有修改这些权限。请宿主管理员通过 OpenClaw 正常账号管理处理权限冲突后，再请求发送现有草稿。原草稿保留原有效期。',
+    'approvalSetup.unsupported': '没有发出。当前渠道的自动准备尚未实现。请打开已认证的 OpenClaw Control UI，选择同一 agent，请求“发送现有草稿 {draft}”。无需重填收件人或正文，也无需编辑 JSON。在原生提示中核对完整收件人和正文，再作单次批准。请保持 OpenClaw 运行；原草稿保留原有效期。若没有主人审批提示，请停止并报告，不改走其他发送路径。',
+    'approvalSetup.invalid': '准备确认对当前身份、账号、会话或草稿已失效。没有发出。若原草稿仍有效，请再次请求发送原草稿以获得新的准备确认。过期或已取走的草稿需要重新起草并重新取得一次性批准。',
+    'approvalSetup.failed': '审批准备失败，或宿主配置已发生变化。没有发出，也没有尝试其他配置写入途径。草稿保留原有效期。请宿主管理员解决配置或写入失败后，再次请求发送原草稿。',
+    'approvalSetup.loading': '审批路径已保存，但尚未核实当前运行态已应用。没有发出。OpenClaw 完成配置加载后，请发送 {command} 再次检查准备状态。此操作不会再次写配置、启动 agent 回合或批准发送。就绪后，请按提示回复普通消息以继续原草稿。',
+    'approvalSetup.ready': '当前会话的宿主审批路径已就绪。没有发出。本次准备命令不会启动 agent 回合：请回复普通消息“继续发送草稿 {draft}”，再进入独立的原生一次性确认。无需重述收件人或正文；原草稿保留原有效期。',
+    'approvalSetup.statusMissing': '安装完成不代表私信发送已就绪：宿主尚未配置插件审批通知路径。请在已核实的 Telegram 或飞书主人私聊中请求发送草稿，以审阅一次准备确认。其他渠道的自动准备尚未实现，可使用已认证的 OpenClaw Control UI 并选择同一 agent。每次发送仍需独立的原生一次性批准。',
+    'approvalSetup.statusConfigured': '宿主已有显式插件审批配置，系统会保留它。每次发送仍会核实当前主人回合的运行态路径，并请求原生一次性批准；安装或这项状态检查不能证明私信发送已就绪。',
     'sendDraft.refused.forwardingDisabled':
       '没有发出：这台宿主尚未开启插件审批转发，无法发起本次宿主确认。'
       + '请主人或宿主管理员将审批转发配置到经核实的主人私聊。'
@@ -1703,6 +1717,9 @@ export const ZH_CN: Lexicon = {
       '取关 {who} 已发出，{house} 已收到取关声明。不需要谁同意。',
     'relation.unfollowReceivedNoHouse':
       '取关 {who} 已发出。不需要谁同意。',
+    'relation.houseSelectionRequired': '在多座坊关注了对方，请明确这次操作使用哪座坊。',
+    'relation.unfollowRemainingUnknown': '其他坊的关注状态尚不确定，已保留原关注记录。',
+    'relation.unfollowRemaining': '仍在其他坊关注 {who}。',
     'relation.notFollowing': '现在并没有关注 {who}，没有可取消的。',
     'relation.writeUnavailable':
       '这个版本暂时不能关注：有序关系还没接上，而旧格式已经不再写了。没有签名、没有发出，也没有关注成功。',

@@ -219,9 +219,8 @@ export function buildSubcommands(
     signer: rt.boot.signer,
     egress: rt.egress,
     nickname: rt.boot.nickname,
-    // Slice ④: a reply goes to whichever house their message came from;
-    // roster verification also queries that same house.
-    houseOfRecipient: (id: string) => rt.inboxStore.houseOf(id),
+    // Ordinary new slash messages use home; contact history never selects a house.
+    houseOfRecipient: () => rt.egress.home.slug,
     verifyRecipient: (id: string, houseSlug?: string) =>
       verifyPopclawId(id, (q) =>
         new ResolveClient({ baseUrl: rt.houseRuntime && houseSlug ? rt.houseRuntime.originForSlug(houseSlug) : houseUrlOf(rt.boot.loreHouseUrls, houseSlug), fetch: rt.houseRuntime?.fetchHouse }).resolve(q),
@@ -336,6 +335,7 @@ export function buildSubcommands(
           resolution,
           {
             socialGraph: rt.socialGraph,
+            ...(subArgs(ctx).flags['house'] !== undefined ? { house: subArgs(ctx).flags['house'] as string } : {}),
             bondsStore: rt.bondsStore,
             socialLog: rt.socialLog,
             ownPopclawId: rt.boot.popclawId,
@@ -380,6 +380,7 @@ export function buildSubcommands(
         // accepted branch (present even when undefined), nothing else.
         const reply = await runPopclawUnfollowCommand(target, {
           socialGraph: rt.socialGraph,
+          ...(subArgs(ctx).flags['house'] !== undefined ? { house: subArgs(ctx).flags['house'] as string } : {}),
           socialLog: rt.socialLog,
           bondsStore: rt.bondsStore,
           ownPopclawId: rt.boot.popclawId,

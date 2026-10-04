@@ -44,6 +44,7 @@ export interface PushExecutionContext {
   isActive(): boolean;
   authorizeSend(): void;
 }
+import type { HouseParticipationSource } from './participation-admission.js';
 interface CommandRow {
   request_id: string;
   kind: 'login' | 'status' | 'push' | 'recovery';
@@ -62,6 +63,8 @@ interface CommandRow {
 }
 export interface HouseCommandBusOptions {
   db: HostDb;
+  whenReady?: () => Promise<void>;
+  captureLogin?: (origin: string) => HouseParticipationSource | undefined;
   coordinator: HouseCommandPort;
   authority: OwnerAuthority;
   executePush?: (origin: string, bytes: Uint8Array, context: PushExecutionContext) => Promise<PushResult>;
@@ -104,17 +107,18 @@ export class HouseCommandBus implements HouseCommandPort {
     this.timer.unref?.();
   }
 
-  loginHouse(input: string): Promise<LoginResult> {
-    return this.trackCaller(this.loginHouseInner(input));
+  loginHouse(input: string, authority?: import('./manager.js').LoginAuthority): Promise<LoginResult> {
+    const source = authority?.participationSource ?? this.opts.captureLogin?.(normalizeHouseOrigin(input));
+    return this.trackCaller(this.loginHouseInner(input, source));
   }
 
-  private async loginHouseInner(input: string): Promise<LoginResult> {
+  private async loginHouseInner(input: string, source?: HouseParticipationSource): Promise<LoginResult> {
     if (!storageDatabasePathAllowed(this.opts.db, 'execution')) throw new Error('STORAGE_RECOVERY_HELD');
     const origin = normalizeHouseOrigin(input);
     const requestId = newRequestId();
     const pending: LoginResult = { scope: 'local_installation', origin, status: 'connecting', sessionId: '', operationId: requestId };
     if (this.stoppedSignal.signal.aborted) return pending;
-    this.enqueue(requestId, 'login', origin);
+    this.enqueue(requestId, 'login', origin, source);
     return await this.wait<LoginResult>(requestId) ?? pending;
   }
 
@@ -236,13 +240,13 @@ export class HouseCommandBus implements HouseCommandPort {
     await Promise.allSettled([...this.executions.values(), ...this.callers]);
   }
 
-  private enqueue(requestId: string, kind: CommandRow['kind'], origin: string): void {
+  private enqueue(requestId: string, kind: CommandRow['kind'], origin: string, source?: HouseParticipationSource): void {
     this.opts.db.transaction(tx => {
       const baseline = readParticipation(tx, origin)?.op_seq ?? 0;
       const expectedEpoch = kind === 'recovery' ? tx.queryOne<{generation:number;holder:string}>('SELECT generation,holder FROM house_lifecycle_owner WHERE id=1') : null;
       tx.execute(`INSERT INTO house_lifecycle_commands
-        (request_id, kind, house_origin, baseline_seq, created_at, running_epoch) VALUES (?,?,?,?,?,?)`,
-      [requestId, kind, origin, baseline, Date.now(), expectedEpoch?.holder ? expectedEpoch.generation : null]);
+        (request_id, kind, house_origin, baseline_seq, created_at, running_epoch, effect_json) VALUES (?,?,?,?,?,?,?)`,
+      [requestId, kind, origin, baseline, Date.now(), expectedEpoch?.holder ? expectedEpoch.generation : null, source ? JSON.stringify({participationSource:source}) : null]);
     });
     this.pump();
   }
@@ -340,6 +344,7 @@ export class HouseCommandBus implements HouseCommandPort {
   }
 
   private async execute(row: CommandRow, epoch: number): Promise<void> {
+    if (this.opts.whenReady) await this.opts.whenReady();
     if (row.kind === 'push') { await this.executePush(row, epoch); return; }
     let result: LoginResult | HouseStatus | { error: string };
     try {
@@ -357,7 +362,7 @@ export class HouseCommandBus implements HouseCommandPort {
         // re-checked against the live participation, so it says this command
         // still describes the world — which is the whole of what the
         // authority asserts.
-        result = valid ? await this.opts.coordinator.loginHouse(row.house_origin, { requestId: row.request_id }) : {
+        result = valid ? await this.opts.coordinator.loginHouse(row.house_origin, { requestId: row.request_id, ...(row.effect_json ? JSON.parse(row.effect_json) as {participationSource?:HouseParticipationSource} : {}) }) : {
           scope: 'local_installation', origin: row.house_origin, status: 'connecting', sessionId: '', errorCode: 'STALE_OPERATION',
         };
       } else result = await this.opts.coordinator.getHouseStatus(row.house_origin);

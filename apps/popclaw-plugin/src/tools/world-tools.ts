@@ -414,7 +414,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
       name: 'popclaw_follow',
       description:
         'Call when the owner says "follow X", gives a sigil (#4f68bd), a name#sigil (Blackfeather#4f68bd) or a full popclaw_id; ' +
-        "pass the owner's own words as name. Following is lightweight and reversible — on an exact match, execute directly without confirmation. " +
+        "pass the owner's own words as name. An exact match records a reversible follow at the selected House and returns its outcome. " +
         'Lore-house resolution: a sigil/id that matches exactly one person is followed straight away; for a bare name, or when sigils collide, ' +
         'read the candidate list back to the owner to pick from, then call this tool again with "name#sigil" for an exact match. ' +
         // Follow doorbell carve-out (spec §6.5): the one exception to the
@@ -423,7 +423,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         'When confirming names from the injected pending-follow list, batches of 6+ or ambiguous picks require echoing the full list back for a Y/N first.',
       parameters: PopclawFollowSchema,
       execute: async (_callId: string, params: unknown) => {
-        const p = params as { name: string };
+        const p = params as { name: string; house?: string };
         const lang = ownerLang();
         if (!p.name?.trim()) {
           return { type: 'text' as const, text: renderCopy(lang, 'follow.askWho') };
@@ -461,6 +461,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
             resolution,
             {
               socialGraph: rt.socialGraph,
+              ...(p.house !== undefined ? { house: p.house } : {}),
               bondsStore: rt.bondsStore,
               ownPopclawId: await ownerPopclawId(deps),
               socialLog: rt.socialLog,
@@ -496,11 +497,11 @@ export function registerWorldTools(ctx: ToolsCtx): void {
       name: 'popclaw_unfollow',
       description:
         'Call when the owner says "unfollow X" / "stop following X"; pass the owner\'s own words as name. ' +
-        'Unfollowing is lightweight and reversible — on an exact match, execute directly without confirmation. ' +
+        'An exact match revokes the follow at the selected House and returns its outcome. ' +
         'Local resolution: the bond book ∪ the follow list are checked first; for someone never followed it answers honestly right away, without asking the lore-house.',
       parameters: PopclawUnfollowSchema,
       execute: async (_callId: string, params: unknown) => {
-        const p = params as { name: string };
+        const p = params as { name: string; house?: string };
         const lang = ownerLang();
         if (!p.name?.trim()) {
           return { type: 'text' as const, text: renderCopy(lang, 'unfollow.askWho') };
@@ -534,6 +535,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
             resolution.popclawId,
             {
               socialGraph: rt.socialGraph,
+              ...(p.house !== undefined ? { house: p.house } : {}),
               bondsStore: rt.bondsStore,
               ownPopclawId: await ownerPopclawId(deps),
               socialLog: rt.socialLog,
@@ -558,7 +560,9 @@ export function registerWorldTools(ctx: ToolsCtx): void {
               lang,
               house ? 'relation.unfollowReceived' : 'relation.unfollowReceivedNoHouse',
               house ? { who, house } : { who },
-            ),
+            ) + (reply.remainingFollowingUnknown
+              ? `\n${renderCopy(lang, 'relation.unfollowRemainingUnknown', { who })}`
+              : reply.remainingFollowing ? `\n${renderCopy(lang, 'relation.unfollowRemaining', { who })}` : ''),
           };
         } catch (err) {
           return { type: 'text' as const, text: failureText('unfollow', err) };

@@ -15,6 +15,7 @@
  * and so is the register-scope state the root keeps (the L2 slots, the
  * storage-shutdown flag, the backup tasks).
  */
+import { localParticipationPort, type LocalSetupEvidence } from './local-participation.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { getRuntimeConfigSnapshot } from 'openclaw/plugin-sdk/runtime-config-snapshot';
 import { sendDurableMessageBatch } from 'openclaw/plugin-sdk/channel-outbound';
@@ -84,6 +85,7 @@ export interface GatewayRootState {
 }
 
 export function gatewayRuntimePorts(input: {
+  initialEvidence?: () => LocalSetupEvidence | undefined;
   /** The register-scope api, logger already swapped to the visible one. */
   api: OpenClawPluginApi;
   host: HostAdapter;
@@ -115,6 +117,7 @@ export function gatewayRuntimePorts(input: {
     },
   };
   return {
+    participation:localParticipationPort(input.initialEvidence ?? (() => undefined)),
     platform: {
       storagePaths: input.storagePaths,
       // Single source of truth for every on-disk path: one root, one PopclawPaths.

@@ -61,6 +61,7 @@ import {
   NATIVE_APPROVAL_PROFILE, approvalTextSize,
   type ApprovalDisplayBudget, type ApprovalDialogProfile,
 } from './approval-presentation.js';
+import { verifiedFeishuApprovalTarget } from './owner-direct-binding.js';
 export {
   APPROVAL_DESCRIPTION_CODE_POINTS, APPROVAL_TITLE_CODE_POINTS,
   APPROVAL_DESCRIPTION_BUDGET, APPROVAL_TITLE_BUDGET, APPROVAL_DESCRIPTION_MAX_LINES,
@@ -641,10 +642,14 @@ export async function ownerApprovalOriginRefusal(
       ? OWNER_ALLOWLIST_UNCONFIGURED : 'ORIGIN_NOT_OWNER_DIRECT';
   }
   if (OWNER_DIRECT_CHANNELS.has(channel)) return null;
+  // Feishu exposes a native chat ID separately from its user reply target.
+  // Only a fresh, SDK-verified direct owner binding may resolve that difference.
+  const verifiedTarget = channel === 'feishu' && ctx.channelId !== ctx.turnSourceTo
+    ? await verifiedFeishuApprovalTarget(ctx) : null;
   const route = await resolveOwnerApprovalRoute({
     channel: ctx.requester.channel ?? null,
     accountId: ctx.requester.accountId ?? null,
-    to: ctx.channelId ?? null, turnSourceTo: ctx.turnSourceTo ?? null,
+    to: verifiedTarget ?? ctx.channelId ?? null, turnSourceTo: ctx.turnSourceTo ?? null,
     agentId: ctx.agentId ?? null, sessionKey: ctx.sessionKey ?? null,
   }, readers);
   return route.pinned ? null : route.reason;

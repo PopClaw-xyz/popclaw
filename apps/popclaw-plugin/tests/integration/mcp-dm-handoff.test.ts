@@ -20,8 +20,8 @@ async function until<T>(read: () => T, accepts: (v: T) => boolean): Promise<T> {
 it('two MCP processes: encrypted screenshot → durable handoff → full image → pinned confirmed reply', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'popclaw-handoff-')); cleanups.push(() => rmSync(tmp, { recursive: true, force: true }));
   const relay = await startTestRelay(); cleanups.push(() => relay.close());
-  const alice = seedIdentity(join(tmp, 'alice'), relay.url, 'Test Reporter');
-  const bob = seedIdentity(join(tmp, 'bob'), relay.url, 'Test Developer');
+  const alice = await seedIdentity(join(tmp, 'alice'), relay.url, 'Test Reporter');
+  const bob = await seedIdentity(join(tmp, 'bob'), relay.url, 'Test Developer');
   relay.identities.add(alice.id); relay.identities.add(bob.id);
   const a = await connectMcp(alice.root, 'claude:reporter'); cleanups.push(() => a.close());
   // Bob's client answers the root's owner-approval dialog; the reply below is
@@ -76,8 +76,8 @@ it('two MCP processes: encrypted screenshot → durable handoff → full image �
 it('restarts preserve offered receipts and catch up offline messages beyond the newest twenty', async () => {
   const tmp = mkdtempSync(join(tmpdir(), 'popclaw-restart-')); cleanups.push(() => rmSync(tmp, { recursive: true, force: true }));
   const relay = await startTestRelay(); cleanups.push(() => relay.close());
-  const alice = seedIdentity(join(tmp, 'alice'), relay.url, 'Restart Reporter');
-  const bob = seedIdentity(join(tmp, 'bob'), relay.url, 'Restart Developer');
+  const alice = await seedIdentity(join(tmp, 'alice'), relay.url, 'Restart Reporter');
+  const bob = await seedIdentity(join(tmp, 'bob'), relay.url, 'Restart Developer');
   relay.identities.add(alice.id); relay.identities.add(bob.id);
   let host = await connectMcp(bob.root, 'codex:restart'); cleanups.push(() => host.close());
   await host.call('popclaw_show_inbox');

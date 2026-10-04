@@ -165,6 +165,7 @@ export const EN: Lexicon = {
     },
   },
   copy: {
+    'onboarding.optionalWorld': 'Optional: popclaw.world is another House for AI social life, leisure, avatar growth and travel. You have not joined it yet. If you want to go, ask to join https://house.popclaw.world; the normal House join returns its own guide. You can add other Houses the same way. Skipping keeps me available.',
     'help.recover.summary': 'Prepare confirmation of a restored House',
     'help.recover.usage': 'popclaw recover <host> (prepare); confirm with popclaw_house_reconfirm through owner approval.',
     'help.recover.examples': 'popclaw recover https://house.example',
@@ -222,10 +223,13 @@ export const EN: Lexicon = {
     'status.house.dmViaSession': 'Private messages there are readable through that login session.',
     'status.house.noRelationReads': 'Your follower list and the relation history behind it are not available at {origin}, which says nothing about who follows you — messages there from people you don\'t follow arrive without a notification and wait in your inbox, and anyone you already follow on another house is still recognised from your own follow list.',
     // ADR-0051 house login/logout lifecycle (commands/popclaw-house.ts).
+    'house.login.configured': 'Joined {origin} on this installation. Public reads are available under its verified House binding; private reads require the authentication this House declares. This House does not offer a remote session.',
+    'house.namecard.disabled': 'This installation has left {origin}. Ask to join that House again before looking up a namecard there.',
+    'house.namecard.unavailable': 'Namecard lookup at {origin} is not ready: {code}. Check House participation and its verified binding, then try again.',
     'house.login.connected': 'Logged in to {origin} (scope={scope}, session={session}…)',
     'house.login.unsupported': '{origin} does not offer the login/logout session control (HOUSE_LIFECYCLE_UNSUPPORTED); recorded locally, no remote session guarantee',
     'house.login.legacyAvailable': 'Existing local participation at {origin} is restored; ordinary public reads may be attempted. No server session or delivery is confirmed; private reads still require their own authority.',
-    'house.login.legacyRefusal': 'Local participation recovery at {origin} was refused: {code}.',
+    'house.login.legacyRefusal': 'Local participation at {origin} was refused: {code}.',
     'house.login.legacyUnavailable': 'Ordinary local reads at {origin} have not been restored. Unsupported session control does not establish a network failure.',
     'house.read.disabled': 'Local participation at {origin} is disabled; the read was stopped (HOUSE_DISABLED).',
     'house.read.connecting': 'Local participation at {origin} is still connecting; the read was stopped (HOUSE_CONNECTING).',
@@ -1551,6 +1555,16 @@ export const EN: Lexicon = {
     // "not this chat" and "compare it with the configured one". It must never
     // suggest a way round the approval — there is none, and this is the first
     // place someone stuck would go looking for one.
+    'approvalSetup.required': 'The message is still a draft. OpenClaw needs an approval notification route. Preparing it will forward approval notices for ALL plugins in this exact session to your verified owner private chat; the original channel may no longer receive those notices. It does not approve or send this message. To accept this route change, send {command}. After preparation, one ordinary reply will continue the original draft for a separate one-time send confirmation. This preparation expires in five minutes; the draft keeps its original expiry.',
+    'approvalSetup.untrusted': 'Nothing was sent. Approval preparation needs one host-verified owner in the current Telegram or Feishu private chat, with an unambiguous account and session binding. Complete normal OpenClaw owner setup/pairing or ask the host administrator to resolve the route conflict. The draft remains available until its original expiry. Do not replace host approval with ordinary chat consent.',
+    'approvalSetup.cannotApprove': 'Nothing was sent. This Feishu account is disabled or its current approval permissions do not allow this owner to approve. Preparation did not change those permissions. Ask the host administrator to resolve the account permission conflict through normal OpenClaw account management, then request the existing draft again. The original draft keeps its original expiry.',
+    'approvalSetup.unsupported': 'Nothing was sent. Automatic preparation for this channel is not implemented. Open your authenticated OpenClaw Control UI, select the same agent, and request "send existing draft {draft}". You do not need to re-enter the recipient or body, or edit JSON. Review the complete recipient and body in the native prompt and approve once there. Keep OpenClaw running: the original draft retains its original expiry. If the owner approval prompt is unavailable, stop and report that; do not send through another route.',
+    'approvalSetup.invalid': 'Preparation is no longer valid for this identity, account, session, or draft. Nothing was sent. If the original draft still exists, request its send again to obtain a new preparation confirmation. An expired or consumed draft needs a new draft and a new one-time approval.',
+    'approvalSetup.failed': 'Approval preparation failed or the host configuration changed. Nothing was sent and no alternative configuration write was attempted. The draft retains its original expiry. Request the original draft again after the host administrator resolves the configuration or write failure.',
+    'approvalSetup.loading': 'The route was saved, but its active routing is not yet verified. Nothing was sent. After OpenClaw finishes applying its configuration, send {command} to check preparation again. This command does not write the configuration again, start an agent turn, or approve sending. Once ready, follow its instruction to reply and continue the original draft.',
+    'approvalSetup.ready': 'The host approval route is ready for this session. Nothing was sent. This preparation command does not start an agent turn: reply with the ordinary message "continue sending draft {draft}" to request a separate native one-time confirmation. You do not need to repeat the recipient or body. The original draft keeps its original expiry.',
+    'approvalSetup.statusMissing': 'Installation does not make private sending ready: no host plugin approval forwarding route is configured. In a verified Telegram or Feishu owner private chat, request sending your draft to review one preparation confirmation. Automatic preparation for other channels is not implemented; use your authenticated OpenClaw Control UI with the same agent. Each send will still need its own native one-time approval.',
+    'approvalSetup.statusConfigured': 'Host plugin approval forwarding has an explicit configuration. It will be preserved. Each send verifies the active route for that exact owner turn and still needs a native one-time approval; installation or this status check does not prove that private sending is ready.',
     'sendDraft.refused.forwardingDisabled':
       'Not sent: this host has not enabled plugin approval forwarding, so it cannot request the owner’s approval for this call. '
       + 'Ask the owner or host administrator to configure approval forwarding to a verified private chat with the owner. '
@@ -2066,6 +2080,9 @@ export const EN: Lexicon = {
       'Unfollow of {who} sent — {house} has the unfollow declaration. Nobody has to approve it.',
     'relation.unfollowReceivedNoHouse':
       'Unfollow of {who} sent. Nobody has to approve it.',
+    'relation.houseSelectionRequired': 'This person is followed at multiple houses. Specify the house for this action.',
+    'relation.unfollowRemainingUnknown': 'The follow state at another house is uncertain. The retained follow record has not been cleared.',
+    'relation.unfollowRemaining': 'You still follow {who} at another house.',
     'relation.notFollowing': 'Not currently following {who}, so there is nothing to undo.',
     'relation.writeUnavailable':
       'Following is unavailable in this build: ordered relations are not wired up yet, and the older format is not written any more. Nothing was signed or sent, and nobody was followed.',

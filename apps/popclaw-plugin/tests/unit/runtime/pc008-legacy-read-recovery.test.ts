@@ -89,7 +89,7 @@ async function fixture(overrides: Partial<import('../../../src/runtime/house-lif
     fetch: transport, now: () => CLOCK / 1000 });
   expect(pinResult.ok).toBe(true);
   const rt = new HouseRuntime({ db, signer, origins, fetch: transport,
-    clock: () => CLOCK, commandPollMs: 1, commandTimeoutMs: 100,
+    clock: () => CLOCK, commandPollMs: 1, commandTimeoutMs: 1000,
     readAuthorityFor: origin => houseReadAuthority({ db, signer, clock: () => CLOCK }, origin), ...overrides });
   // Synthetic analogue of the PC008 metadata: enabled/connecting/unsupported,
   // op_seq=1, verified pin+relation, no session/ACK/lease/read-token authority.
@@ -305,19 +305,17 @@ it('PC008 recovery: unknown schema cannot prove absence of control history', asy
   expect(readParticipation(f.db,ORIGIN)?.phase).toBe('connecting');
 });
 
-it('PC008 recovery: supported unsent pending is cleared by successful explicit recovery; duplicate login preserves allocation rules', async()=>{
+it('configured admission refuses an unresolved earlier enter even with empty current credentials', async()=>{
   const f=await fixture(); f.db.execute("UPDATE house_participation SET pending_enter_request_id='proven-unsent' WHERE house_origin=?",[ORIGIN]);
   await ready(f); const first=await f.rt.commands.loginHouse(ORIGIN);
-  expect(first).toMatchObject({status:'unsupported',legacyAvailable:true});
-  const restored=readParticipation(f.db,ORIGIN)!;
-  expect(restored.pending_enter_request_id).toBeNull();
-  expect(await f.rt.commands.loginHouse(ORIGIN)).toMatchObject({status:'unsupported',legacyAvailable:true});
-  expect(readParticipation(f.db,ORIGIN)?.op_seq).toBe(restored.op_seq + 1);
+  expect(first).toMatchObject({status:'unsupported',legacyAvailable:false});
+  expect(readParticipation(f.db,ORIGIN)).toMatchObject({phase:'connecting',pending_enter_request_id:'proven-unsent'});
+  expect((await f.rt.commands.loginHouse(ORIGIN)).legacyAvailable).toBe(false);
 });
 
-it('PC008 recovery: original unpinned connected compatibility works but cannot newly recover', async()=>{
+it('configured public reads require a verified binding; a fresh explicit join may establish it', async()=>{
   const f=await fixture(); f.db.execute('DELETE FROM house_binding_pin'); f.phaseOnly(); await ready(f);
-  await expect(f.rt.runCommand(()=>f.summary.fetchSummary())).resolves.toEqual(PUBLIC_BODY);
+  await expect(f.rt.runCommand(()=>f.summary.fetchSummary())).resolves.toBeNull();
   const captured=f.rt.captureGate(ORIGIN);
   // Appearance of a trusted pin changes the authority, including no-pin captures.
   const {establishTrust}=await import('../../../src/world/house-binding-pin.js');
@@ -325,7 +323,7 @@ it('PC008 recovery: original unpinned connected compatibility works but cannot n
   expect(captured.isActive()).toBe(false);
   const g=await fixture(); g.db.execute('DELETE FROM house_binding_pin'); await ready(g);
   await g.rt.commands.loginHouse(ORIGIN);
-  expect(readParticipation(g.db,ORIGIN)?.phase).toBe('connecting');
+  expect(readParticipation(g.db,ORIGIN)?.phase).toBe('connected');
 });
 
 it.each(['logout','owner','trust','storage','key','config','pending'])('PC008 recovery: manifest await revoked by %s never restores', async kind=>{
@@ -551,7 +549,7 @@ it.each(['unchanged','equivalent-empty','replaced','unreadable','changed-in-comm
   } else {
     expect(outcome.legacyAvailable).not.toBe(true);
     expect(row.phase).toBe('connecting');
-    expect(row.pending_enter_request_id).toBeTruthy(); // failed recovery must not clear the pending or history
+    expect(row.pending_enter_request_id).toBeNull(); // this boardless round sent no control request; unrelated ledger stays intact
     expect(f.calls.filter(c=>c.url.includes('world-summary') || c.url.includes('world-feed'))).toEqual([]);
     // Reverting to the supported selection requires a new explicit command,
     // with fresh manifest/proof; the old operation was never recaptured.

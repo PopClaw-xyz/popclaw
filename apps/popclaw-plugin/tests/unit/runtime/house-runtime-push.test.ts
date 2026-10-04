@@ -3,6 +3,11 @@ import { createServer } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { registerStorageRuntime } from '../../../src/host/storage-maintenance.js';
+import { runMigrations } from '../../../src/host/migrations.js';
+import { pinConfiguredHouses } from '../../../src/social-graph/default-house-pinning.js';
+import { mintHouse } from '../../helpers/signed-manifest.js';
 import { once } from 'node:events';
 import { LocalHostDb } from '../../../src/host/local-host-db.js';
 import { HouseRuntime } from '../../../src/runtime/house-lifecycle/house-runtime.js';
@@ -59,8 +64,17 @@ async function fixture(){
  const address=server.address();if(!address||typeof address==='string')throw new Error('no address');const origin=`http://127.0.0.1:${address.port}`;
  const dir=mkdtempSync(join(tmpdir(),'runtime-push-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));
  const dbs=[new LocalHostDb(join(dir,'host.db')),new LocalHostDb(join(dir,'host.db'))];cleanup.push(()=>dbs.forEach(d=>d.close()));
+ runMigrations(dbs[0]!, fileURLToPath(new URL('../../../migrations/', import.meta.url)));
+ const storageReleases = dbs.map(db => registerStorageRuntime(db, new PopclawPaths(dir)));
+ cleanup.push(() => storageReleases.forEach(release => release()));
  const runtimes=dbs.map(db=>new HouseRuntime({readAuthorityFor: refusingReadAuthorityFor, db,origins:[origin],signer:{} as Signer,commandTimeoutMs:100,commandPollMs:2}));
  for(const rt of runtimes){rt.configureResources({stores:[],host:{} as HostAdapter,recipientPopclawId:'fixture',worldStreamMode:false,openStore:async()=>{throw new Error('unused');},isOfficialActor:()=>false});cleanup.push(()=>rt.stop());}
+ // This fixture starts with actual configured first trust, rather than
+ // treating an unverified seeded row as permission for its public reads.
+ const owner = runtimes[0]!; owner.manager.seedLegacyHouse(origin);
+ const house = mintHouse({ origin });
+ expect((await pinConfiguredHouses({ db: dbs[0]!, recipientPopclawId: 'fixture', origins: [origin],
+   pinning: owner.configuredHousePinning, fetch: house.fetch as typeof fetch }))[0]?.outcome).toBe('pinned');
  return {origin,received,reads,hold,dbs,owner:runtimes[0]!,reader:runtimes[1]!};
 }
 it('a reader sends exact raw bytes through the resident owner and receives the HTTP receipt',async()=>{
@@ -348,7 +362,7 @@ it('an effect scope snapshots before asynchronous work and permits only the exac
 async function statusOnSecondHost(){
  const s=await fixture();s.owner.start();s.reader.startReader();
  const dir=mkdtempSync(join(tmpdir(),'status-reader-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));
- seedTrustedHouse(dir,s.origin);
+ await seedTrustedHouse(dir,s.origin);
  const hostDb=new LocalHostDb(new PopclawPaths(dir).socialDb());cleanup.push(()=>hostDb.close());
  cleanup.push(()=>{setOwnerLang('en','config');});
  setOwnerLang('en','config');

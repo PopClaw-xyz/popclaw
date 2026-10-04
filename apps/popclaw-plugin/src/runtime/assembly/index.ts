@@ -134,7 +134,7 @@ export async function assembleRuntime<S extends object, P extends object = Recor
   reportSubscribedCaches(ports, houseStores);
 
   const inboxStore = new InboxStore(host.db);
-  const { mountedHouses, houseStarted } = mountedHousesOf(boot, paths, inboxStore);
+  const { mountedHouses, houseStarted } = mountedHousesOf(boot, paths, inboxStore, houses);
   // The owner's cadence and the social graph, each root in its own relative
   // order (DriftPins.ownerCadenceBeforeSocialGraph): a hook observing owner
   // text while the root waits on either decides the owner language differently.

@@ -1,6 +1,8 @@
 /** Identity reads: someone's namecard, and the owner's own status report. */
 
 import { EmptySchema, ShowNamecardSchema } from './tool-schemas.js';
+import { renderCopy } from '../lexicon/index.js';
+import { ownerLang } from '../lexicon/owner-language.js';
 import { renderDirective } from '../lexicon/directive.js';
 import { runStatusCommand } from '../commands/status.js';
 import { statusDepsFrom } from '../commands/status-deps.js';
@@ -61,6 +63,17 @@ export function registerNamecardTool(ctx: ToolsCtx): void {
       // say so; never fetch a namecard for a person we couldn't name.
       const person = await resolvePersonRef(ref, deps);
       if (person.kind !== 'resolved') {
+        if (person.kind === 'notFound' && person.lanternDown) {
+          try {
+            const rt = await runtime();
+            const origin = rt.boot.loreHouseUrl;
+            const failure = rt.houseRuntime?.publicReadFailure?.(origin);
+            if (failure === 'HOUSE_DISABLED') return { type: 'text' as const,
+              text: renderCopy(ownerLang(), 'house.namecard.disabled', { origin }) };
+            if (failure !== undefined) return { type: 'text' as const,
+              text: renderCopy(ownerLang(), 'house.namecard.unavailable', { origin, code: failure }) };
+          } catch { /* An unavailable local runtime keeps the resolver's honest answer. */ }
+        }
         return { type: 'text' as const, text: unresolvedText(ref, person) };
       }
       const rt = await runtime();

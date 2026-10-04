@@ -91,7 +91,7 @@ export default tseslint.config(
   {
     // Accepted Phase 1 storage adapters: filesystem/SQLite ownership is their job.
     // Keep business restrictions and the historical grandfather list unchanged.
-    files: ['src/host/execution-store.ts', 'src/host/execution-store-migration.ts',
+    files: ['src/host/local-participation.ts', 'src/host/execution-store.ts', 'src/host/execution-store-migration.ts',
       'src/host/execution-partition-factory.ts', 'src/host/draft-review-files.ts',
       'src/host/storage-maintenance.ts', 'src/host/storage-backup.ts'],
     rules: {

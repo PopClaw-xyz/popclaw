@@ -1,3 +1,4 @@
+import { localParticipationPort } from './host/local-participation.js';
 import { hostDbSlug } from './ingress/host-slug.js';
 import { makeRelationProducer } from './social-graph/relation-assembly.js';
 import { resolve, dirname } from 'node:path';
@@ -157,7 +158,7 @@ async function runDaemonMode(
     { db: host.db, signer },
     origin,
   );
-  const houses = new HouseRuntime({ db: host.db, signer, origins: boot.loreHouseUrls,
+  const houses = new HouseRuntime({ db: host.db, signer, actorId:boot.popclawId, participation:localParticipationPort(() => undefined), origins: boot.loreHouseUrls,
     readAuthorityFor,
     publicV1Mode: process.env['POPCLAW_WORLD_STREAM'] === 'public-v1', executionStores: boot.executionStores,
     log: message => logger.warn({}, message) });
@@ -440,12 +441,12 @@ async function runHouseSubcommand(
     return 2;
   }
   let exitCode = 0;
-  const ctx = { lang: ownerLang, recovery: houses.recovery,
+  const ctx = { lang: ownerLang, recovery: houses.recovery, readHouseGuide: (origin:string) => houses.readHouseGuide(origin),
     readAgentContext: (origin: string, sessionId: string) => houses.readAgentContext(origin, actorId, {}, sessionId),
     coordinator: () => ({ ...houses.commands,
     loginHouse: async (origin: string) => {
       const result = await houses.commands.loginHouse(origin);
-      exitCode = result.status === 'connected' ? 0 : 1;
+      exitCode = result.status === 'connected' || result.admission === 'configured' ? 0 : 1;
       return result;
     },
   }) };
@@ -545,7 +546,7 @@ async function main() {
   try {
     // Publish the one-shot boot marker only after cancellation is installed.
     boot.logger.info({ data_root: cliRoot(), subcommand: args.subcommand }, 'popclaw-plugin starting');
-    houses = new HouseRuntime({ db: boot.host.db, signer: boot.signer, origins: boot.loreHouseUrls,
+    houses = new HouseRuntime({ db: boot.host.db, signer: boot.signer, actorId:boot.popclawId, participation:localParticipationPort(() => undefined), origins: boot.loreHouseUrls,
       readAuthorityFor: (origin: string) => houseReadAuthority(
         { db: boot.host.db, signer: boot.signer },
         origin,

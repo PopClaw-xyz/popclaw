@@ -1,3 +1,6 @@
+import { guideBindingDigest } from '../../world/house-guide-context.js';
+import type { HouseParticipationAdmissionPort, HouseParticipationSource, HouseParticipationReceipt } from './participation-admission.js';
+import { stageParticipationPlan, recordParticipationReceipt, entryDigest, cancelInitialSetup } from './participation-journal.js';
 import { houseRecoveryHeld, recoveryRetiredLeave, houseBindingBlocked, readHouseRecoveryStatus, type HouseRecoveryStatus } from '../../world/house-recovery-fence.js';
 /**
  * ADR-0051 S2 — HouseLifecycleManager (S2a: the state-machine core; wiring
@@ -30,10 +33,13 @@ import { houseRecoveryHeld, recoveryRetiredLeave, houseBindingBlocked, readHouse
  *   1000 exactly once.
  */
 
+import { houseKeyFromAckHex } from '../../world/house-binding.js';
+import { pinnedBinding } from '../../world/house-binding-pin.js';
+import { readVerifiedDeclaration, declarationFingerprint } from '../../world/house-read-declaration.js';
 import { configuredFirstPinPort, configuredPublicPinPort, type ConfiguredFirstPinPort, type ConfiguredPublicPinPort } from './configured-first-pin.js';
-import { storageDatabasePathAllowed } from '../../host/storage-maintenance.js';
+import { storageDatabasePathAllowed, storageDatabaseGeneration } from '../../host/storage-maintenance.js';
 import { captureLegacyTrust, legacyTrustCurrent, type LegacyTrustCapture } from './legacy-trust.js';
-import { emptyControlState, neverControlSubset } from './legacy-history.js';
+import { emptyControlState, neverControlSubset, configuredControlSubset } from './legacy-history.js';
 import type { HouseReadFailureCode } from './read-failure.js';
 import type { HostDb } from '../../host/host-db.js';
 import type { TrustedManifestInput, PreparedTrustedManifest } from './trusted-manifest.js';
@@ -102,6 +108,8 @@ export interface LoginResult {
   origin: string;
   status: 'connected' | 'connecting' | 'unsupported';
   sessionId: string;
+  /** Verified local participation; this does not claim a remote session. */
+  admission?: 'configured';
   errorCode?: string;
   /** Local legacy readiness is independent of remote control unsupported. */
   legacyAvailable?: boolean;
@@ -142,9 +150,12 @@ export interface HouseStatus {
 export interface LoginAuthority {
   /** The persisted `house_lifecycle_commands` row being executed. */
   readonly requestId: string;
+  readonly participationSource?: HouseParticipationSource;
 }
 
 export interface ManagerOptions {
+  participation?: HouseParticipationAdmissionPort;
+  actorId?: string;
   db: HostDb;
   signer: ControlSigner;
   installationId: string;
@@ -219,6 +230,7 @@ export interface ManagerOptions {
 interface GateState {
   generation: number;
   legacyTrust?: LegacyTrustCapture;
+  configuredTrustRequired: boolean;
   controller: AbortController;
   /** The persistent generation this controller was minted for
    * (`op_seq:session_id`). When the row advances (lease-expired relogin
@@ -294,8 +306,18 @@ export class HouseLifecycleManager {
   /** The resident's durable owner authority, when bound. Unbound managers
    * (unit tests, one-shot CLI) keep the pre-ownership behavior. */
   private ownerAuth: OwnerAuthority | null = null;
+  private readonly configuredPinningMode: 'static' | 'public-v1';
+  private readonly configuredParticipationRequired: boolean;
 
+  private readonly participation: HouseParticipationAdmissionPort | undefined;
+  private readonly actorId: string | undefined;
   constructor(opts: ManagerOptions) {
+    this.participation = opts.participation;
+    this.actorId = opts.actorId;
+    this.configuredPinningMode = opts.configuredPinningMode ?? 'static';
+    // HouseRuntime selects this policy for the whole native configured lane.
+    // It remains required on a new runtime even for an origin removed from config.
+    this.configuredParticipationRequired = opts.configuredPinningMode === 'static';
     this.db = opts.db;
     this.signer = opts.signer;
     this.installationId = opts.installationId;
@@ -355,6 +377,29 @@ export class HouseLifecycleManager {
     return !pin || row.ack_key_hex === pin;
   }
 
+  /** Positively selected ordinary entry, independent of a failed session request. */
+  isConfiguredParticipation(origin: string): boolean {
+    return this.configuredPinningMode === 'static' && this.legacyRecoveryConfigured(origin);
+  }
+
+  /** Current and retained control facts must both be sessionless. */
+  private configuredControlAbsent(origin: string, row: ParticipationRow | null): boolean {
+    return !!row && row.installation_id === this.installationId && row.pending_enter_request_id === null
+      && configuredControlSubset(this.db, origin, row);
+  }
+
+  /** Shared by resident and foreground reads: configuration names an origin,
+   * but only its verified binding can open that origin's sessionless lane. */
+  legacyParticipationTrustCurrent(origin: string, trust: LegacyTrustCapture | undefined,
+    configured = this.isConfiguredParticipation(origin)): boolean {
+    try {
+      if (!legacyTrustCurrent(this.db, trust)) return false;
+      if (!this.participation && (configured || this.configuredParticipationRequired) && (!this.isConfiguredParticipation(origin) || !trust?.binding)) return false;
+      const pin = this.configuredPinFor(origin);
+      return !pin || trust?.binding?.houseKey === houseKeyFromAckHex(pin);
+    } catch { return false; }
+  }
+
   /** Per-house generation gate. A handle binds the captured in-memory
    * generation AND the persistent generation (op_seq/session) — after
    * another same-root process logs out and re-logs-in, this process's old
@@ -376,7 +421,7 @@ export class HouseLifecycleManager {
         if (this.localLogoutFences.has(origin) || row?.desired === 'disabled') return 'HOUSE_DISABLED';
         if (!storageDatabasePathAllowed(this.db, 'execution')) return 'HOUSE_STORAGE_UNAVAILABLE';
         if (!row || row.phase !== 'connected') return row?.remote_status === 'unsupported' ? 'HOUSE_LIFECYCLE_UNSUPPORTED' : 'HOUSE_CONNECTING';
-        if (capturedSession === '' && !legacyTrustCurrent(this.db, trust)) return 'HOUSE_TRUST_REVOKED';
+        if (capturedSession === '' && !this.legacyParticipationTrustCurrent(origin, trust, state?.configuredTrustRequired ?? this.isConfiguredParticipation(origin))) return 'HOUSE_TRUST_REVOKED';
         if (!HouseLifecycleManager.pinAgreesWithBinding(row, this.configuredPinFor(origin))) return 'HOUSE_TRUST_REVOKED';
         return 'HOUSE_ACTION_STALE';
       } catch { return 'HOUSE_TRUST_REVOKED'; }
@@ -410,7 +455,7 @@ export class HouseLifecycleManager {
         // Pin-conflict wall (pin-bypass review ①) — see pinAgreesWithBinding.
         if (!HouseLifecycleManager.pinAgreesWithBinding(row, this.configuredPinFor(origin))) return false;
         if (!storageDatabasePathAllowed(this.db, 'execution')) return false;
-        if (capturedSession === '' && !legacyTrustCurrent(this.db, trust)) return false;
+        if (capturedSession === '' && !this.legacyParticipationTrustCurrent(origin, trust, state?.configuredTrustRequired ?? this.isConfiguredParticipation(origin))) return false;
         return true;
         } catch { return false; }
       },
@@ -565,6 +610,95 @@ export class HouseLifecycleManager {
     return run;
   }
 
+  private async admitSessionless(origin: string, manifest: SessionManifest, baseline: ParticipationRow | null,
+    ctx: {authority?: LoginAuthority; flight: AbortController; authorized: () => boolean; intentUnchanged: () => boolean; releaseLogoutFence: () => void}): Promise<LoginResult> {
+    const pending = (code: string): LoginResult => ({scope:'local_installation',origin,status:'connecting',sessionId:'',errorCode:code});
+    const source = ctx.authority?.participationSource;
+    const port = this.participation!;
+    const trust = captureLegacyTrust(this.db, origin);
+    if (baseline?.desired === 'enabled' && baseline.phase === 'connected' && emptyControlState(baseline)
+      && baseline.pending_enter_request_id === null && trust?.binding && this.legacyParticipationTrustCurrent(origin, trust)) {
+      ctx.releaseLogoutFence(); this.openGate(origin);
+      return {scope:'local_installation',origin,status:'unsupported',sessionId:'',admission:'configured',legacyAvailable:true};
+    }
+    if (!source || source.origin !== origin || source.installationId !== this.installationId) return pending('HOUSE_PARTICIPATION_AUTHORITY_REQUIRED');
+    if (!this.prepareRelationBinding) return pending('HOUSE_BINDING_PREPARER_REQUIRED');
+    const commands = this.db.queryAll<Record<string,unknown>>('SELECT * FROM house_lifecycle_commands WHERE house_origin=? ORDER BY created_at,request_id',[origin]);
+    const leaves = this.db.queryAll<Record<string,unknown>>('SELECT * FROM house_lifecycle_outbox WHERE house_origin=? ORDER BY created_at,request_id',[origin]);
+    const selectedSessionBoard = !!(trust?.binding && readVerifiedDeclaration(this.db, pinnedBinding(this.db,origin)!)?.sessionBoard);
+    if (selectedSessionBoard || (baseline && (!emptyControlState(baseline) || baseline.installation_id !== this.installationId)))
+      return pending('HOUSE_CONTROL_HISTORY_NOT_SESSIONLESS');
+    // Existing unsupported pending controls require the known host's positive
+    // unsent assessment. Empty tokens or an error string are not that proof.
+    const nativeKnown = baseline ? baseline.pending_enter_request_id === null && configuredControlSubset(this.db,origin,baseline)
+      : commands.every(c => c.kind === 'status' || c.request_id === ctx.authority?.requestId) && leaves.length === 0;
+    if (!(port.assessHistory ? port.assessHistory(origin,{participation:baseline,commands,leaves,selectedSessionBoard}) : nativeKnown))
+      return pending('HOUSE_CONTROL_HISTORY_UNPROVEN');
+    const signal = composeFlightSignal(ctx.flight.signal,this.stopController.signal,this.pauseController.signal);
+    const expected = JSON.stringify(baseline);
+    const evidence = JSON.stringify({commands,leaves,selectedSessionBoard});
+    const configuration = this.configuredPinFor(origin);
+    const storageGeneration = storageDatabaseGeneration(this.db);
+    let plan: ReturnType<typeof stageParticipationPlan> | undefined;
+    let receivedPermit = false;
+    let receipt: HouseParticipationReceipt | undefined;
+    try {
+      const prepared = await this.prepareRelationBinding({origin,rawBytes:new Uint8Array(manifest.rawBytes),proofHeader:manifest.proofHeader,signal});
+      const current = () => !signal.aborted && ctx.authorized() && ctx.intentUnchanged()
+        && JSON.stringify(readParticipation(this.db,origin)) === expected && this.configuredPinFor(origin) === configuration
+        && storageDatabasePathAllowed(this.db,'execution') && storageDatabasePathAllowed(this.db,'consumers')
+        && storageDatabaseGeneration(this.db) === storageGeneration
+        && JSON.stringify({commands:this.db.queryAll('SELECT * FROM house_lifecycle_commands WHERE house_origin=? ORDER BY created_at,request_id',[origin]),
+          leaves:this.db.queryAll('SELECT * FROM house_lifecycle_outbox WHERE house_origin=? ORDER BY created_at,request_id',[origin]),selectedSessionBoard}) === evidence;
+      if (!current()) return pending('STALE_OPERATION');
+      const beforeOpSeq = baseline?.op_seq ?? 0, afterOpSeq = beforeOpSeq + 1;
+      plan = stageParticipationPlan(this.db,source,{expectedParticipationJson:expected,controlEvidenceJson:evidence,
+        manifestDigest:entryDigest(Buffer.from(manifest.rawBytes).toString('base64')),
+        bindingDigest:entryDigest({origin,manifest:Buffer.from(manifest.rawBytes).toString('base64'),proof:manifest.proofHeader}),
+        configurationDigest:entryDigest(configuration),ownerGeneration:this.ownerAuth?.captureEpoch() ?? null,
+        storageGeneration:entryDigest(storageGeneration),
+        beforeOpSeq,afterOpSeq,transitionDigest:entryDigest({origin,installationId:this.installationId,desired:'enabled',phase:'connected',beforeOpSeq,afterOpSeq})});
+      const deadlineAtMs = this.clock() + 30_000;
+      const decision = await port.admit(plan,{signal,deadlineAtMs});
+      if (decision.status !== 'permitted') return pending(decision.status === 'denied' ? decision.code : 'HOUSE_ADMISSION_UNRESOLVED');
+      receivedPermit = true;
+      // LocalHostDb.transaction uses BEGIN IMMEDIATE. All final checks follow
+      // that real write lock; there is no await between permit and receipt.
+      this.db.transaction(tx => {
+        if (this.clock() >= deadlineAtMs || !current()) throw new Error('STALE_OPERATION');
+        const p = plan!;
+        if (p.reason === 'initial_me_setup' && tx.queryOne<{state:string}>(`SELECT state FROM house_initial_setup WHERE actor_id=? AND installation_id=?`,[p.actorId,p.installationId])?.state !== 'pending')
+          throw new Error('HOUSE_SETUP_ALREADY_RESOLVED');
+        decision.permit.beforeCommit(tx,p);
+        const refusal = prepared.commit(tx);
+        if (refusal !== undefined) throw new Error(refusal);
+        // Explicit local join has no invented server ACK, token or pending ENTER.
+        tx.execute(`INSERT INTO house_participation (house_origin,installation_id,op_seq,desired,phase,updated_at)
+          VALUES (?,?,?,'enabled','connected',?) ON CONFLICT(house_origin) DO UPDATE SET
+          installation_id=excluded.installation_id,op_seq=excluded.op_seq,desired='enabled',phase='connected',pending_enter_request_id=NULL,
+          remote_status='unsupported',remote_error='no house_session board',updated_at=excluded.updated_at`,[origin,this.installationId,afterOpSeq,this.nowSecs()]);
+        const doc = JSON.parse(new TextDecoder().decode(manifest.rawBytes)) as {guide_url?:unknown};
+        const url = typeof doc.guide_url === 'string' ? new URL(doc.guide_url,origin) : undefined;
+        const binding = pinnedBinding(tx,origin);
+        if (!binding) throw new Error('HOUSE_BINDING_UNAVAILABLE');
+        tx.execute(`INSERT INTO house_guide_context (origin,binding_digest,op_seq,guide_url,manifest_digest)
+          VALUES (?,?,?,?,?) ON CONFLICT(origin) DO UPDATE SET binding_digest=excluded.binding_digest,op_seq=excluded.op_seq,
+          guide_url=excluded.guide_url,manifest_digest=excluded.manifest_digest,guide_digest=NULL,guide_body=NULL,delivered_digest=NULL`,
+          [origin,guideBindingDigest(tx,origin),afterOpSeq,url && ['http:','https:'].includes(url.protocol) ? url.href : '',p.manifestDigest]);
+        receipt = recordParticipationReceipt(tx,p,this.clock());
+      });
+      ctx.releaseLogoutFence(); this.closeGate(origin); this.openGate(origin);
+      await port.settle(plan.attemptRef,{status:'committed',receipt:receipt!}).catch(() => {});
+      return {scope:'local_installation',origin,status:'unsupported',sessionId:'',admission:'configured',legacyAvailable:this.gateFor(origin).isActive()};
+    } catch (error) {
+      if (plan && receivedPermit && !receipt) {
+        this.db.execute(`UPDATE house_participation_attempts SET state='not_committed' WHERE attempt_ref=? AND state='prepared'`,[plan.attemptRef]);
+        await port.settle(plan.attemptRef,{status:'not_committed',detail:'synchronous SQLite rollback'}).catch(() => {});
+      }
+      return pending(error instanceof Error ? error.message : 'HOUSE_ADMISSION_FAILED');
+    }
+  }
+
   private async loginHouseInner(
     origin: string,
     now: number,
@@ -601,6 +735,33 @@ export class HouseLifecycleManager {
     const recoveryCandidate = !!ctx.authority && this.ownerAuth !== null && priorRow?.installation_id === this.installationId && priorRow?.desired === 'enabled' && priorRow.phase === 'connecting'
       && priorRow.remote_status === 'unsupported' && recoveryTrust?.binding !== null && recoveryTrust !== undefined
       && this.legacyRecoveryConfigured(origin) && neverControlSubset(this.db, origin, priorRow);
+    // The ordinary configured entry is an explicit act, not recovery based
+    // on old-version history. Normal sessionless leaves remain in the ledger.
+    // Any control authority left on the row prevents this admission.
+    const configuredBaseline = JSON.stringify(priorRow);
+    const configuredScopeAtStart = this.isConfiguredParticipation(origin);
+    let priorBinding: ReturnType<typeof pinnedBinding>;
+    let priorDeclaration: ReturnType<typeof readVerifiedDeclaration>;
+    let configuredTrustReadable = false;
+    if (configuredScopeAtStart) {
+      try {
+        priorBinding = pinnedBinding(this.db, origin);
+        priorDeclaration = priorBinding ? readVerifiedDeclaration(this.db, priorBinding) : undefined;
+        configuredTrustReadable = true;
+      } catch { /* Unreadable trust cannot authorize configured admission. */ }
+    }
+    const configuredDeclaration = declarationFingerprint(priorDeclaration);
+    const configuredDeclarationCurrent = () => {
+      if (!configuredTrustReadable) return false;
+      try {
+        const binding = pinnedBinding(this.db, origin);
+        return declarationFingerprint(binding ? readVerifiedDeclaration(this.db, binding) : undefined) === configuredDeclaration;
+      } catch { return false; }
+    };
+    const previouslySelectedSession = priorDeclaration?.sessionBoard === true;
+    const configuredControlFacts = configuredScopeAtStart && configuredControlSubset(this.db, origin, priorRow);
+    const configuredCandidate = !!ctx.authority && configuredScopeAtStart && configuredTrustReadable
+      && !previouslySelectedSession && this.configuredControlAbsent(origin, priorRow);
     const originalPending = priorRow?.pending_enter_request_id;
     const recoveryCurrent = (pending: string | null | undefined, seq: number): boolean => {
       if (!recoveryCandidate) return false;
@@ -648,6 +809,13 @@ export class HouseLifecycleManager {
       // call must NOT re-enable the house.
       return { scope: 'local_installation', origin, status: 'connecting', sessionId: '' };
     }
+    // The trusted host source authorizes this local transaction, independently
+    // of the optional remote session protocol. No optimistic enabled row is written.
+    if (this.participation && !board) {
+      if (!discoveryReached || discoveredManifest?.sessionBoardAbsent !== true)
+        return {scope:'local_installation',origin,status:'connecting',sessionId:'',errorCode:'HOUSE_MANIFEST_UNAVAILABLE'};
+      return this.admitSessionless(origin, discoveredManifest, priorRow, ctx);
+    }
     // After OUR commit the invariant flips: the row must stay at this login's
     // (op_seq, enabled) — checked before the ENTER is sent and again after
     // the ack arrives (the login itself changed the row, so the pre-login
@@ -661,13 +829,18 @@ export class HouseLifecycleManager {
     // house), else the persisted pin, else the discovered session board key
     // under the existing TOFU rule, else '' (unknown).
     const recovering = recoveryCandidate && discoveredManifest?.sessionBoardAbsent === true;
-    const trustedKey = this.configuredPinFor(origin) || persistedPinBeforeDiscovery || board?.ack_pubkey || '';
+    // A relation pin is not a session ACK key, including a manifest-only
+    // outage. Preserve real control evidence or a positively selected board,
+    // but never invent ACK authority for the configured sessionless subset.
+    const trustedKey = configuredControlFacts && !board && !previouslySelectedSession
+      ? persistedPinBeforeDiscovery || '' : this.configuredPinFor(origin) || persistedPinBeforeDiscovery || board?.ack_pubkey || '';
 
     const requestId = newRequestId();
     // Owner authority and intent CAS share the write lock. Another process
     // cannot acquire a new epoch between this check and the intent write.
     const committed = this.db.transaction(tx => {
       if (flight.signal.aborted || !authorized() || !intentUnchanged()
+        || (configuredScopeAtStart && (!this.isConfiguredParticipation(origin) || JSON.stringify(readParticipation(tx, origin)) !== configuredBaseline || (configuredCandidate && !configuredDeclarationCurrent())))
         || (recoveryCandidate && !recoveryCurrent(originalPending, ctx.baselineSeq))) return null;
       return commitLocalLogin(
       tx,
@@ -692,6 +865,7 @@ export class HouseLifecycleManager {
         }
       });
     };
+    const configuredCommitBaseline = JSON.stringify(readParticipation(this.db, origin));
     const effectiveRequestId = mode === 'reuse-pending' && pendingEnterRequestId ? pendingEnterRequestId : requestId;
 
     // Configured pin beats everything (handoff §18:26): the board must
@@ -743,14 +917,15 @@ export class HouseLifecycleManager {
           origin,
           rawBytes: new Uint8Array(discoveredManifest.rawBytes),
           proofHeader: discoveredManifest.proofHeader,
-          signal: composeFlightSignal(flight.signal, this.stopController.signal),
+          signal: composeFlightSignal(flight.signal, this.stopController.signal, this.pauseController.signal),
         });
         // The refusal travels OUT of the transaction, not through it. A
         // throw would roll back a block this very commit may have written,
         // and a block is the one refusal that has to outlive the round.
         let refusal: string | undefined;
         this.db.transaction(tx => {
-          if (flight.signal.aborted || !unchangedSinceCommit()
+          if (flight.signal.aborted || !unchangedSinceCommit() || !configuredSelectionCurrent()
+            || (configuredScopeAtStart && (!this.isConfiguredParticipation(origin) || JSON.stringify(readParticipation(tx, origin)) !== configuredCommitBaseline || (configuredCandidate && !configuredDeclarationCurrent())))
             || (recovering && !recoveryCurrent(pendingEnterRequestId, opSeq))) return;
           refusal = prepared.commit(tx);
           // Keep any security block the commit records; a refusal does not
@@ -808,7 +983,7 @@ export class HouseLifecycleManager {
       if (!discoveryReached) {
         return { scope: 'local_installation', origin, status: 'connecting', sessionId: '' };
       }
-      fail('unsupported', 'no house_session board');
+      fail('unsupported', 'no house_session board', configuredCandidate && !ackKeyHex);
       // The control plane is unsupported; the lane is not. A house that was
       // serving before this login goes back to serving after it.
       const canRecover = () => recovering && relationCommitted && discoveredManifest?.sessionBoardAbsent === true
@@ -821,15 +996,24 @@ export class HouseLifecycleManager {
           && recoveryTrust !== undefined
           && (recoveryTrust.binding === null ? (legacyTrustCurrent(tx, recoveryTrust) || relationCommitted)
             : relationCommitted && legacyTrustCurrent(tx, recoveryTrust));
-        if (oldLaneAllowed || canRecover()) {
+        const confirmedTrust = captureLegacyTrust(tx, origin);
+        const configuredAllowed = configuredCandidate && this.isConfiguredParticipation(origin)
+          && discoveredManifest?.sessionBoardAbsent === true && relationCommitted && emptyControlState(current)
+          && configuredSelectionCurrent() && confirmedTrust?.binding !== null && confirmedTrust !== undefined
+          && this.legacyParticipationTrustCurrent(origin, confirmedTrust, true)
+          && storageDatabasePathAllowed(tx, 'execution') && storageDatabasePathAllowed(tx, 'consumers');
+        if (configuredAllowed || (!configuredScopeAtStart && (oldLaneAllowed || canRecover()))) {
           restoreLegacyLane(tx, origin, opSeq, now);
           restored = readParticipation(tx, origin)?.phase === 'connected';
         }
       });
       if (restored) { ctx.releaseLogoutFence(); this.closeGate(origin); this.openGate(origin); }
+      if (configuredCandidate && restored && this.gateFor(origin).isActive()) {
+        return { scope: 'local_installation', origin, status: 'unsupported', sessionId: '', admission: 'configured', legacyAvailable: true, errorCode: 'HOUSE_LIFECYCLE_UNSUPPORTED' };
+      }
       return { scope: 'local_installation', origin, status: 'unsupported', sessionId: '', errorCode: 'HOUSE_LIFECYCLE_UNSUPPORTED', legacyAvailable: restored && this.gateFor(origin).isActive(),
         ...(!restored ? {legacyRefusal: relationRefused ? 'AUTH_INVALID' : discoveredManifest?.sessionBoardAbsent !== true
-          ? 'MANIFEST_SESSION_DECLARATION_INVALID' : 'LEGACY_RECOVERY_NOT_AUTHORIZED'} : {}) };
+          ? 'MANIFEST_SESSION_DECLARATION_INVALID' : configuredScopeAtStart ? 'HOUSE_CONFIGURED_JOIN_NOT_AUTHORIZED' : 'LEGACY_RECOVERY_NOT_AUTHORIZED'} : {}) };
     }
     // Pre-send re-check (review C + counter-example 2): this generation may
     // have been disabled while awaiting manifest/signing (a logout in this
@@ -1056,6 +1240,9 @@ export class HouseLifecycleManager {
     // must not mistake the unchanged row for unchanged owner intent.
     this.localLogoutEpochs.set(origin, (this.localLogoutEpochs.get(origin) ?? 0) + 1);
     this.localLogoutFences.set(origin, {});
+    if (this.participation && this.actorId && origin === 'https://house.popclaw.me') this.db.transaction(tx => cancelInitialSetup(tx,this.actorId!,this.installationId));
+    if (this.participation) this.db.execute(`UPDATE house_initial_setup SET state='cancelled' WHERE original_intent_ref IN
+      (SELECT original_intent_ref FROM house_participation_attempts WHERE json_extract(plan_json,'$.origin')=?)`,[origin]);
     const requestId = newRequestId();
     // Abort any in-flight login for this house FIRST — its discovery/signing/
     // fetch awaits must not resume into a re-enabled row (review counter-
@@ -1068,13 +1255,20 @@ export class HouseLifecycleManager {
     // on a legacy-classified house still wins — the operator's pin is an
     // explicit trust statement that outranks a stale 'unsupported' snapshot.
     const configuredPin = this.configuredPinFor(origin);
-    const pinnedKey = row?.ack_key_hex || configuredPin;
+    let binding: ReturnType<typeof pinnedBinding>;
+    if (this.isConfiguredParticipation(origin)) {
+      try { binding = pinnedBinding(this.db, origin); } catch { /* Local logout never grants trust. */ }
+    }
+    const configuredWithoutSession = this.isConfiguredParticipation(origin) && emptyControlState(row)
+      && row.installation_id === this.installationId && binding !== undefined
+      && readVerifiedDeclaration(this.db, binding)?.sessionBoard === false;
+    const pinnedKey = configuredWithoutSession ? '' : row?.ack_key_hex || configuredPin;
     // Three states (review): key bound -> the leave goes under the pinned
     // key; probed legacy (an earlier discovery explicitly found no control
     // plane) -> terminal unsupported; discovery never completed (network
     // window) -> unknown, an empty-key outbox row is written and classified
     // on retry — "no ack yet" is never treated as "no control plane".
-    const knownLegacy = !pinnedKey && row?.remote_status === 'unsupported';
+    const knownLegacy = configuredWithoutSession || (!pinnedKey && row?.remote_status === 'unsupported');
     let committed = false;
     try {
       commitLocalLogout(this.db, origin, this.installationId, requestId, this.nowSecs(), pinnedKey);
@@ -1088,7 +1282,7 @@ export class HouseLifecycleManager {
       this.closeGate(origin);
     }
     void committed;
-    if (configuredPin && !row?.ack_key_hex) {
+    if (configuredPin && !row?.ack_key_hex && !configuredWithoutSession) {
       // Backfill AFTER the commit: on a first-ever logout the row did not
       // exist when the pin was read. The operator's pin fills an empty
       // binding (handoff §18:26) — never overwriting an existing one.
@@ -1476,6 +1670,7 @@ export class HouseLifecycleManager {
       generation: (existing?.generation ?? 0) + 1,
       controller: new AbortController(),
       persistGeneration,
+      configuredTrustRequired: this.isConfiguredParticipation(origin),
       ...(row?.session_id === '' ? {legacyTrust: captureLegacyTrust(this.db, origin)} : {}),
     });
   }

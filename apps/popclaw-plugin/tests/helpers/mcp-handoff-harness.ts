@@ -12,7 +12,7 @@ import { readCredentialMessage } from '../../src/identity/read-credential.js';
 import { seedTrustedHouse, SEEDED_HOUSE_KEY } from './seed-trusted-house.js';
 
 export const pluginRoot = fileURLToPath(new URL('../../', import.meta.url));
-export function seedIdentity(root: string, house: string, nickname: string) {
+export async function seedIdentity(root: string, house: string, nickname: string) {
   if (existsSync(join(root, 'vault/social/identity/master.key'))) throw new Error('Refusing to replace an existing test identity');
   const seed = nacl.randomBytes(32);
   const kp = nacl.sign.keyPair.fromSeed(seed);
@@ -24,7 +24,7 @@ export function seedIdentity(root: string, house: string, nickname: string) {
   writeFileSync(join(root, 'config/cadence/cadence.json'), JSON.stringify({ schemaVersion: 1, delivery: { primaryLanguage: 'en' }, notifications: { vipExternalFollowerThreshold: 100 } }));
   // A modern house this machine has already trusted. Without both halves the
   // inbox stream refuses to open and every handoff here goes quiet.
-  seedTrustedHouse(root, house);
+  await seedTrustedHouse(root, house);
   return { id, root, signer: new MasterKeySigner({ seed, publicKey: kp.publicKey, secretKey: kp.secretKey, popclawId: id }) };
 }
 

@@ -29,9 +29,8 @@ export interface RelationProducerAssembly {
   /** Configured houses, in configured order; the first is home. */
   readonly houses: readonly { readonly slug: string; readonly origin: string }[];
   /**
-   * Which house a person has been seen in, for routing a NEW follow. Absent
-   * (the CLI, which holds no world-feed cache) routes to the home house —
-   * the same answer the resolver gives when nobody has been seen anywhere.
+   * Retained discovery input. New follow routing uses home or an explicit
+   * house; where a person was last seen does not select the signing house.
    */
   readonly houseOf?: (popclawId: string) => string | undefined;
   /**
@@ -47,15 +46,13 @@ export interface RelationProducerAssembly {
 }
 
 export function makeRelationProducer(deps: RelationProducerAssembly): RelationProducer {
-  const houses = [...deps.houses];
   return createRelationProducer({
     db: deps.db,
     signer: deps.signer,
     // Pin-aware, and it decides the house — the producer never picks one.
     resolveScope: makeRelationScopeResolver({
       db: deps.db,
-      houses,
-      ...(deps.houseOf ? { houseOf: deps.houseOf } : {}),
+      get houses() { return deps.houses; },
     }),
     signingReadiness: relationSigningReadiness(deps.db),
     // Refuses an unknown house rather than falling back to home: a receipt
@@ -63,7 +60,7 @@ export function makeRelationProducer(deps: RelationProducerAssembly): RelationPr
     // house never acknowledged.
     push: makeRelationPush({
       db: deps.db,
-      houses,
+      get houses() { return deps.houses; },
       pushVerified: (slug, bytes) => deps.pushTo(slug, bytes),
     }),
     // A refusal is journalled even when the caller drops the outcome, so a

@@ -4,6 +4,7 @@
  * result gets it appended.
  */
 
+import { optionalWorldOffer } from '../onboarding/optional-world.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
 import { fileLastRun } from '../runtime/last-run.js';
@@ -25,6 +26,7 @@ import type { RegisterToolsDeps } from './tools-context.js';
 
 /** The minimal surface the tail computation needs from runtime — consistent shape across both hosts (OpenClaw / MCP) is enough. */
 interface TailRuntime {
+  readonly houseRuntime?: import('../runtime/house-lifecycle/house-runtime.js').HouseRuntime;
   readonly host: HostAdapter;
   readonly boot: { popclawId: string };
   readonly replyPings?: { unreadCount(): number };
@@ -136,9 +138,15 @@ export function withTail(
           ? [args[0], captureParameters(args[1]), ...args.slice(2)] : args;
         const invoke = async (): Promise<unknown> => {
         const result = await inner(...capturedArgs);
-        const text = (result as { text?: unknown } | null)?.text;
+        let text = (result as { text?: unknown } | null)?.text;
         if (typeof text !== 'string') return result;
         try {
+          const rt = (await runtime()) as TailRuntime | undefined;
+          const guides = await rt?.houseRuntime?.pendingHouseGuides();
+          if (guides?.length) {
+            text += '\n' + JSON.stringify({house_guide_contexts:guides});
+            if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) text += '\n' + optionalWorldOffer(ownerLang());
+          }
           const unreadLine = await unreadTailLine(runtime);
           const nowSec = Math.floor(Date.now() / 1000);
           const pick =
@@ -153,7 +161,7 @@ export function withTail(
             const rt = (await runtime()) as TailRuntime | undefined;
             if (rt) await recordNudgeSent(rt.host, pick.key, nowSec);
           }
-          return tail ? { ...(result as object), text: `${text}\n\n${tail}` } : result;
+          return { ...(result as object), text: tail ? `${text}\n\n${tail}` : text };
         } catch {
           return result;
         }

@@ -23,14 +23,14 @@ async function drafted(answer?: ElicitationAnswer, body = 'APPROVAL-CANARY', ext
   beforeConnect?: (root: string) => void) {
   const tmp = mkdtempSync(join(tmpdir(), 'popclaw-send-approval-')); cleanups.push(() => rmSync(tmp, { recursive: true, force: true }));
   const relay = await startTestRelay(); cleanups.push(() => relay.close());
-  const alice = seedIdentity(join(tmp, 'alice'), relay.url, 'Approval Sender');
-  const bob = seedIdentity(join(tmp, 'bob'), relay.url, 'Approval Recipient');
+  const alice = await seedIdentity(join(tmp, 'alice'), relay.url, 'Approval Sender');
+  const bob = await seedIdentity(join(tmp, 'bob'), relay.url, 'Approval Recipient');
   relay.identities.add(alice.id); relay.identities.add(bob.id);
   beforeConnect?.(alice.root);
   const sender = await connectMcp(alice.root, 'audit:approval', answer === undefined ? {} : { answerApprovals: answer });
   cleanups.push(() => sender.close());
   await sender.call('popclaw_show_inbox');
-  const draft = text(await sender.call('popclaw_draft_message', { recipient: bob.id, body, ...extra }));
+  const draft = text(await sender.call('popclaw_draft_message', { recipient: bob.id, house:relay.url, body, ...extra }));
   const token = /draft_id: (\S+)/.exec(draft)?.[1];
   expect(token, 'the draft must carry a draft_id').toBeTruthy();
   const framesBefore = relay.frames.size;

@@ -1,3 +1,4 @@
+import { mintHouse } from '../helpers/signed-manifest.js';
 import { publishStorageJson, MaintenanceSession } from '../../src/host/storage-maintenance.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
@@ -86,7 +87,7 @@ describe('actual source process house entrypoints, isolated and offline', () => 
       run.proc.stdin.write(JSON.stringify({jsonrpc: '2.0', id, method, params}) + '\n');
       const deadline = Date.now() + 15000;
       while (Date.now() < deadline) {
-        for (const line of run.stdout().trim().split('\n').filter(Boolean)) {
+        for (const line of run.stdout().split('\n').slice(0,-1).filter(Boolean)) {
           const message = JSON.parse(line) as {id?: number; error?: unknown; result?: Record<string, unknown>};
           if (message.id === id) {expect(message.error).toBeUndefined(); return message.result!;}
         }
@@ -253,7 +254,7 @@ process.stderr.write = function (chunk, ...args) {
       const id=++seq;run.proc.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');
       const deadline=Date.now()+15000;
       while(Date.now()<deadline){
-        for(const line of run.stdout().trim().split('\n').filter(Boolean)){
+        for(const line of run.stdout().split('\n').slice(0,-1).filter(Boolean)){
           const message=JSON.parse(line) as {id?:number;result?:Record<string,unknown>;error?:unknown};
           if(message.id===id){expect(message.error).toBeUndefined();return message.result!;}
         }
@@ -384,7 +385,7 @@ it('actual MCP reads the same new global view under restored-root holds without 
     const id = ++seq; run.proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
-      for (const line of run.stdout().trim().split('\n').filter(Boolean)) {
+      for (const line of run.stdout().split('\n').slice(0,-1).filter(Boolean)) {
         const message = JSON.parse(line) as { id?: number; result?: Record<string, unknown>; error?: unknown };
         if (message.id === id) { expect(message.error).toBeUndefined(); return message.result!; }
       }
@@ -423,7 +424,8 @@ it('normal MCP startup keeps ordinary loopback handshake/SSE while new typed com
   const server = createServer((request, response) => {
     received.push({ method: request.method ?? '', url: request.url ?? '' });
     if (request.method === 'GET' && request.url === '/v1/manifest') {
-      response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ house: { name: 'Synthetic ordinary House', slug: 'fixture' }, official_ids: [] }));
+      response.writeHead(200, { 'content-type': 'application/json', 'X-Popclaw-Manifest-Proof': signedHouse.proofHeader });
+      response.end(Buffer.from(signedHouse.bodyBytes));
     } else if (request.method === 'GET' && (request.url?.startsWith('/world-feed/stream') || /^\/inbox\/[1-9A-HJ-NP-Za-km-z]{32,44}\/stream$/.test(request.url ?? ''))) {
       response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' }); response.write(': synthetic ordinary stream\n\n');
     } else { response.writeHead(404); response.end(); }
@@ -431,6 +433,7 @@ it('normal MCP startup keeps ordinary loopback handshake/SSE while new typed com
   await new Promise<void>((resolveListen, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolveListen); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   const origin = `http://127.0.0.1:${address.port}`, box = sandbox();
+  const signedHouse = mintHouse({ origin, seed: 27, incarnation: 'first_release_house', manifest: { official_ids: [] } });
   writeFileSync(join(box.data, 'config/plugin.json'), JSON.stringify({ lore_houses: [origin] }));
   box.env.POPCLAW_WEB_BASE_URL = origin; box.env.POPCLAW_CANVAS_BASE_URL = origin;
   // Allow only this owned loopback fixture and tsx's Unix loader socket.

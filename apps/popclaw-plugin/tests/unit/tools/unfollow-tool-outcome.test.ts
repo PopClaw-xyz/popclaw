@@ -106,7 +106,7 @@ describe('popclaw_unfollow adapter: branches on the command outcome (R5-A1)', ()
     expect(r.text).toBe('✓ looks like success');
   });
 
-  it('call shape unchanged: one resolve, one command call with the owner id, same runtime acquisitions', async () => {
+  it('call shape unchanged: one resolve, one command call with the owner id, runtime acquisitions include pending guide delivery', async () => {
     command.mockResolvedValue({ text: '✓ x', house: undefined, outcome: { kind: 'accepted' } });
     const { unfollow, runtime, resolve } = setup();
     await unfollow('#4f68bd');
@@ -115,8 +115,8 @@ describe('popclaw_unfollow adapter: branches on the command outcome (R5-A1)', ()
     expect(command.mock.calls[0]![0]).toBe('id_elon');
     expect(command.mock.calls[0]![1]).toMatchObject({ ownPopclawId: OWNER });
     // Measured at base 7e63b1e3 (person sources, both ownerPopclawId reads, the
-    // command's runtime()); the refactor must not add or drop an acquisition.
-    expect(runtime).toHaveBeenCalledTimes(6);
+    // command's runtime()) plus the accepted pending-house-guide tail read.
+    expect(runtime).toHaveBeenCalledTimes(7);
   });
 
   it('owner resolved: refused before the runtime is acquired for the command', async () => {

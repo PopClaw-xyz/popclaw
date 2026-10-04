@@ -75,8 +75,7 @@ interface Tool {
   execute(callId: string, params: unknown): Promise<{ text: string }>;
 }
 
-/** `house` is what `inboxStore.houseOf` answers — on a real data root that is
- *  the slug of the house the recipient last wrote in from, e.g.
+/** `house` is the configured home house slug in this fixture, e.g.
  *  `127-0-0-1-8112` for a local test house. `people` are extra entries in the
  *  bond book, so a recipient resolves with the nickname a real one carries. */
 function setup(opts: {
@@ -108,7 +107,7 @@ function setup(opts: {
       loreHouseUrl: 'http://home-house:9000',
       loreHouseUrls: ['http://home-house:9000'],
     },
-    egress: { push, pushTo },
+    egress: { home: { slug: opts.house ?? 'house-home' }, push, pushTo },
     inboxStore: { houseOf: () => opts.house ?? 'house-home', get: () => undefined },
     guideClient: { fetchGuideText: async () => guide },
     paths: { houseGuideFile: (slug: string) => join(dir, `${slug}.md`) },

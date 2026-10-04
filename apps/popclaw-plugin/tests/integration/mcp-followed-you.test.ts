@@ -128,7 +128,7 @@ function startFakeHouse(followers: string[]) {
 }
 
 /** A data root pointed at `house`, which this machine already trusts and has synced once. */
-function seedDataRoot(house: string): string {
+async function seedDataRoot(house: string): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), 'popclaw-followed-'));
   mkdirSync(join(dir, 'config', 'cadence'), { recursive: true });
   writeFileSync(join(dir, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [house] }));
@@ -136,7 +136,7 @@ function seedDataRoot(house: string): string {
     join(dir, 'config', 'cadence', 'cadence.json'),
     JSON.stringify({ schemaVersion: 1, delivery: { primaryLanguage: 'en' } }),
   );
-  seedTrustedHouse(dir, house);   // runs the migrations this next write needs
+  await seedTrustedHouse(dir, house);   // runs the migrations this next write needs
   const db = new LocalHostDb(join(dir, 'vault', 'social', 'my-social-assets.db'));
   try {
     // An install that has polled before. Without it the first pass would be
@@ -159,7 +159,7 @@ describe('an MCP-only citizen is told that someone followed them', () => {
   beforeAll(async () => {
     house = startFakeHouse([FOLLOWER]);
     const url = await house.listen();
-    dataRoot = seedDataRoot(url);
+    dataRoot = await seedDataRoot(url);
     mcp = new McpProcess(
       spawn(process.execPath, ['--import', 'tsx', join(pkgRoot, 'src', 'mcp.ts')], {
         cwd: pkgRoot,

@@ -14,8 +14,8 @@ function text(result: unknown): string {
 it('document/audio byte delivery is supported, but MCP returns only a local path; Word is rejected', async () => {
   const root = mkdtempSync(join(tmpdir(), 'popclaw-attachment-audit-')); cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const relay = await startTestRelay(); cleanup.push(() => relay.close());
-  const alice = seedIdentity(join(root, 'alice'), relay.url, 'Attachment Reporter');
-  const bob = seedIdentity(join(root, 'bob'), relay.url, 'Attachment Developer');
+  const alice = await seedIdentity(join(root, 'alice'), relay.url, 'Attachment Reporter');
+  const bob = await seedIdentity(join(root, 'bob'), relay.url, 'Attachment Developer');
   relay.identities.add(alice.id); relay.identities.add(bob.id);
   // The letter is only sent because the owner answered the root's approval
   // dialog — the same dialog a real Claude Code / Codex client renders.
@@ -27,7 +27,7 @@ it('document/audio byte delivery is supported, but MCP returns only a local path
   for (const ext of ['md', 'pdf', 'ogg', 'mp3', 'wav', 'm4a', 'amr']) {
     const bytes = Buffer.from(`ATTACHMENT-ONLY-CANARY-${ext}\n# transport fixture\n`);
     const path = join(root, `fixture.${ext}`); writeFileSync(path, bytes);
-    const draft = text(await sender.call('popclaw_draft_message', { recipient: bob.id, body: `AUDIT-${ext}`, attachment_path: path }));
+    const draft = text(await sender.call('popclaw_draft_message', { recipient: bob.id, house:relay.url, body: `AUDIT-${ext}`, attachment_path: path }));
     const token = /draft_id: (\S+)/.exec(draft)?.[1]; expect(token).toBeTruthy();
     const dialogsBefore = sender.dialogs.length;
     expect(text(await sender.call('popclaw_send_draft', { draft_id: token }))).toContain('event_id:');
@@ -53,7 +53,7 @@ it('document/audio byte delivery is supported, but MCP returns only a local path
   const before = relay.frames.size;
   for (const ext of ['doc', 'docx']) {
     const path = join(root, `unsupported.${ext}`); writeFileSync(path, 'extension rejection fixture');
-    expect(text(await sender.call('popclaw_draft_message', { recipient: bob.id, body: 'unsupported Word test', attachment_path: path }))).not.toContain('draft_id:');
+    expect(text(await sender.call('popclaw_draft_message', { recipient: bob.id, house:relay.url, body: 'unsupported Word test', attachment_path: path }))).not.toContain('draft_id:');
   }
   expect(relay.frames.size).toBe(before);
 }, 60_000);

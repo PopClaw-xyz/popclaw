@@ -8,6 +8,8 @@
  * that needs the filesystem path API (the notification consumer id) is passed
  * in by `mcp.ts`.
  */
+import { localParticipationPort } from './local-participation.js';
+import type { LocalSetupEvidence } from './local-participation.js';
 import { PopclawPaths } from './popclaw-paths.js';
 import { createMcpOwnerAuthorization, type McpOwnerAuthorization, type McpServerBox } from './mcp-owner-authorization.js';
 import { worldDuplicateLookup } from '../runtime/world-runtime.js';
@@ -72,6 +74,7 @@ export const MCP_DRIFT_PINS: DriftPins = Object.freeze({
 });
 
 export function mcpRuntimePorts(input: {
+  initialEvidence?: () => LocalSetupEvidence | undefined;
   logger: ReturnType<typeof pinoHostLogger>;
   dataRoot: string;
   storagePaths: PopclawPaths;
@@ -90,6 +93,7 @@ export function mcpRuntimePorts(input: {
     },
   };
   return {
+    participation: localParticipationPort(input.initialEvidence ?? (() => undefined)),
     platform: {
       storagePaths: input.storagePaths,
       paths: () => new PopclawPaths(dataRoot),
@@ -180,6 +184,7 @@ export type McpPluginRuntime = AssembledRuntime<McpWorldSlots>;
  * (the data root and the notification consumer) and passes them in.
  */
 export async function buildMcpRuntime(input: {
+  initialEvidence?: () => LocalSetupEvidence | undefined;
   logger: ReturnType<typeof pinoHostLogger>;
   closing: AbortSignal;
   serverBox: McpServerBox;
@@ -194,6 +199,6 @@ export async function buildMcpRuntime(input: {
   let releaseStorage!: () => void;
   const host = new LocalHostAdapter({ dataRoot, logger,
     beforeDbInitialize: db => (releaseStorage = registerStorageRuntime(db, storagePaths)) });
-  return assembleRuntime(host, mcpRuntimePorts({ logger, dataRoot, storagePaths, releaseStorage: () => releaseStorage(),
+  return assembleRuntime(host, mcpRuntimePorts({ initialEvidence:input.initialEvidence, logger, dataRoot, storagePaths, releaseStorage: () => releaseStorage(),
     serverBox: input.serverBox, approvalWindowMs: input.approvalWindowMs, consumerId: input.consumerId }), input.closing);
 }

@@ -46,13 +46,13 @@ function fixture() {
 }
 it('verified config first pin advances once and reopens only new work without control login', async () => {
   const f = fixture(); const old = f.resident.captureGate(ORIGIN);
-  expect(old.isActive()).toBe(true);
+  expect(old.isActive()).toBe(false);
   expect((await f.pin())[0]?.outcome).toBe('pinned');
   expect(readParticipation(f.db, ORIGIN)).toMatchObject({ op_seq: 1, desired: 'enabled', phase: 'connected',
     session_id: '', ack_key_hex: '', pending_enter_request_id: null, remote_status: 'none' });
   expect(old.isActive()).toBe(false);
   expect(f.resident.captureGate(ORIGIN).isActive()).toBe(true);
-  expect(f.events).toEqual(['open', 'stop', 'open']);
+  expect(f.events).toEqual(['open']);
   expect((await f.pin())[0]?.outcome).toBe('already-decided');
   expect(readParticipation(f.db, ORIGIN)?.op_seq).toBe(1);
   f.db.execute('DELETE FROM house_binding_pin WHERE origin=?', [ORIGIN]);

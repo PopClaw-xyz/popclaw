@@ -93,7 +93,9 @@ it('capturing a stopped runtime gate does not access a closed database', async (
 
 it('business commands keep their original per-house participation across awaits', async () => {
   const {assertHouseActionActive} = await import('../../../src/runtime/house-lifecycle/action-context.js');
-  const rt = runtime(['https://a.invalid', 'https://b.invalid']);
+  const db = new InMemoryHostDb(); dbs.push(db);
+  const rt = new HouseRuntime({ readAuthorityFor: refusingReadAuthorityFor, db, signer: {} as Signer,
+    origins: ['https://a.invalid', 'https://b.invalid'], publicV1Mode: true }); instances.push(rt);
   for (const origin of ['https://a.invalid', 'https://b.invalid']) rt.manager.db.execute(
     "INSERT INTO house_participation(house_origin,installation_id,desired,phase,op_seq) VALUES(?,'install','enabled','connected',1)", [origin]);
   let release!: () => void; const hold = new Promise<void>(r => {release=r;});

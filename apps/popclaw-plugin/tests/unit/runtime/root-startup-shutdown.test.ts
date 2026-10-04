@@ -73,7 +73,7 @@ describe('actual OpenClaw root startup and gateway shutdown ordering', () => {
   it('keeps all concurrent stop callers waiting for the same runtime cleanup', async () => {
     const drain = deferred<void>();
     const shutdown = vi.fn(() => drain.promise);
-    seam.runtime.mockResolvedValue({ shutdown });
+    seam.runtime.mockResolvedValue({ shutdown, houseRuntime:{activateInitialMe:vi.fn(async()=>undefined),readHouseGuide:vi.fn(async()=>({status:'unavailable'}))} });
     const root = register();
     await root.start();
     let completed = 0;

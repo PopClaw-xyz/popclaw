@@ -11,6 +11,8 @@ import {
   ConfirmDraftSchema,
   PopclawDraftPostSchema,
 } from './tool-schemas.js';
+import { normalizeHouseOrigin } from '../runtime/house-lifecycle/control-client.js';
+import { assertHouseActionActive } from '../runtime/house-lifecycle/action-context.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
 import { formatPerson, unresolvedText } from '../identity/person-resolver.js';
@@ -206,13 +208,14 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       'Draft a direct message for user review. recipient takes any form you address someone by (name#sigil, sigil, name) ' +
       'or a full popclaw_id — the tool resolves the person itself; when several people match it returns a candidate list, read it back to the owner to pick from. ' +
       'To attach a picture, a voice clip, or a document the recipient agent can read, use attachment_path (a local path) — never write the path into body. If the owner means something they just sent you in chat, call popclaw_recent_attachments to get its path. ' +
+      'New messages use the home house (normally house.popclaw.me). Set house only when the owner explicitly chooses a house or the current action has an explicit house context; never infer it from contact history or the last login. ' +
       'To reply, first read popclaw_show_inbox with message_id, then set reply_to_message_id here to pin the sender and house. ' +
       'For a picture-only DM (a sticker/meme) just omit body entirely, no need to force a sentence. ' +
       BODY_OWNERSHIP +
       CONFIRM_DISCIPLINE,
     parameters: DraftMessageSchema,
     execute: async (_callId: string, params: unknown) => {
-      const p = params as { recipient?: string; reply_to_message_id?: number; body?: string; attachment_path?: string; image_path?: string };
+      const p = params as { recipient?: string; reply_to_message_id?: number; house?: string; body?: string; attachment_path?: string; image_path?: string };
       // `image_path` is the old name — before the format was opened up, it could only send images. Both are accepted; new calls should use attachment_path.
       const attachmentPath = p.attachment_path ?? p.image_path;
       const body = (p.body ?? '').trim();
@@ -240,7 +243,30 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         return { type: 'text' as const, text: renderCopy(ownerLang(), 'person.thatIsYou') };
       }
       if (replySource && person.popclawId !== replySource.fromPopclawId) throw new Error('Recipient conflicts with reply source');
-      const houseSlug = replySource ? replySource.houseSlug : (await runtime()).inboxStore.houseOf(person.popclawId);
+      // New conversations use home. A reply is tied to one source message;
+      // the contact's unrelated last incoming message is never a routing input.
+      const rt = await runtime();
+      let houseSlug = replySource?.houseSlug || rt.egress?.home?.slug;
+      if (p.house !== undefined) {
+        const ref = p.house.trim();
+        const targets = rt.egress.capturePlan().targets;
+        let target;
+        if (ref.includes(':') || ref.includes('/')) {
+          let origin;
+          try {
+            origin = normalizeHouseOrigin(ref);
+            if (new URL(ref).pathname !== '/') throw new Error('Not a bare origin');
+          } catch { throw new Error('INVALID_HOUSE_ORIGIN'); }
+          target = targets.find(target => target.origin === origin);
+        } else {
+          target = targets.find(target => target.slug === ref);
+        }
+        if (!target) throw new Error('INVALID_HOUSE');
+        houseSlug = target.slug;
+        // Mounting is not permission. Retain the command's actual joined
+        // generation, which is also checked again on the eventual push.
+        assertHouseActionActive(target.origin ?? target.slug);
+      }
       const replyToEventId = replySource?.eventId;
       // The image is validated at the **draft stage**: an unrecognized format / unreadable /
       // over 1MB is rejected right now, with no draft_id issued. Failing only after the owner
@@ -286,7 +312,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
             signer: rt.boot.signer,
             egress: rt.egress,
             nickname: rt.boot.nickname,
-            // Slice ④: reply back to the same house they wrote in from; no local record of an incoming letter → the primary house.
+            // The exact route approved in the snapshot, never recomputed at send time.
             houseOfRecipient: () => houseSlug,
             replyToEventId,
             // The person resolved at draft time is the same person the message is sent to: no
@@ -312,7 +338,9 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const attach = image ? renderCopy(draftLang, 'draft.message.attach', { name: image.name, size: kb(image.bytes.length) }) : '';
       const bodyLine = snapshot.body ? `   "${snapshot.body}"\n` : renderCopy(draftLang, 'draft.message.imageOnly');
       const preview =
-        `${renderCopy(draftLang, 'draft.message.title', { who: formatPerson(pinned, draftLang) })}\n${bodyLine}${attach}${unverifiedWarning(pinned, draftLang)}${advice}\n` +
+        `${renderCopy(draftLang, 'draft.message.title', { who: formatPerson(pinned, draftLang) })}\n` +
+        (snapshot.house ? `${renderCopy(draftLang, 'sendDraft.approval.house', { house: snapshot.house })}\n` : '') +
+        `${bodyLine}${attach}${unverifiedWarning(pinned, draftLang)}${advice}\n` +
         `draft_id: ${token}`;
       const outcome = await deliverDraftPreview(toolCtx, preview);
       noteDraftPreview(token, preview, outcome.status);

@@ -61,11 +61,9 @@ export interface PopclawMessageDeps {
    */
   approvedRecipient?: { readonly popclawId: string; readonly nickname: string; readonly sigil: string };
   /**
-   * Spec B slice 4: which house this person's most recent incoming message
-   * came from (`InboxStore.houseOf`). "A reply goes back wherever the
-   * message came from." undefined = no local record of an incoming message
-   * → the primary house (proactively opening a new cross-house conversation
-   * is phase 2, out of scope for this slice).
+   * Explicit route supplied by the caller (an approved draft, exact reply,
+   * or a live world session). Ordinary new messages use the home house.
+   * This must never infer a route from the recipient's last incoming mail.
    */
   houseOfRecipient?: (id: string) => string | undefined;
   /** Social-log collection point `dm_sent` (spec 2026-07-26 §4). Not injected = not recorded. */
@@ -165,10 +163,8 @@ export async function runPopclawMessageCommand(
   // lore-house, so asking again is a wasted round trip, and if the
   // lore-house is down it would even raise a false "couldn't verify"
   // banner.
-  // A reply goes back the same way it came: whichever house their last
-  // message came from is where this one goes. The roster check also queries
-  // that same house — asking the primary house would misreport "someone who
-  // only has a namecard on a second house" as "no such id".
+  // The caller pins an explicit reply/world/draft route. An omitted route
+  // uses home; recipient history is not a routing decision here.
   const houseSlug = deps.houseOfRecipient?.(toId);
 
   let warn = '';

@@ -40,8 +40,8 @@
 import { popclaw } from '@popclaw/contracts';
 import type { HostDb } from '../host/host-db.js';
 import type { Signer } from '../identity/signer.js';
-import { FollowEventStore } from './follow-event-store.js';
 import { RelationAllocator, type PendingRelationPush } from './relation-allocator.js';
+import { activeRelationHouses } from './relation-active-houses.js';
 import { signFollowDeclared, signFollowRevoked } from './sign-event.js';
 
 
@@ -76,6 +76,12 @@ export interface RelationScopeRequest {
   readonly followee: string;
   /** Revoke only: where this edge lives and under which key(s) it was signed. */
   readonly declaredEdge?: DeclaredEdgeOrigin;
+  /** Explicit exact configured slug or origin; never inferred from discovery. */
+  readonly house?: string;
+  /** Active local intents, including durable originals whose ledger write was lost. */
+  readonly activeHouses?: readonly (string | undefined)[];
+  readonly activeUncertainty?: string;
+  readonly uncertainHouses?: readonly (string | undefined)[];
 }
 
 /**
@@ -110,6 +116,7 @@ export type RelationScope =
   /** No pin, a proof that failed, or a binding that moved. Never legacy. */
   | {
       readonly support: 'unproven';
+      readonly reason?: RelationRefusalReason;
       readonly houseSlug?: string;
       readonly detail?: string;
     }
@@ -203,7 +210,7 @@ export interface RelationPushFailure {
 }
 
 /** Whether the bytes got there and the send todo can close. */
-export type RelationTransportState = 'intent_recorded' | 'queued' | 'accepted';
+export type RelationTransportState = 'unchanged' | 'intent_recorded' | 'queued' | 'accepted';
 
 /**
  * What the house DID with the event, as opposed to whether it took delivery.
@@ -243,6 +250,8 @@ export type RelationRefusalReason =
   /** Readiness said no, or the allocator did. */
   | 'RELATION_SIGNING_NOT_READY'
   | 'RELATION_SEQ_EXHAUSTED'
+  | 'HOUSE_SELECTION_REQUIRED'
+  | 'RELATION_NOT_FOLLOWING'
   /** A different original already occupies this seq — a fork, caught early. */
   | 'RELATION_SEQ_ALREADY_SIGNED'
   /** No pin, a failed proof, or a binding that moved. Not a licence for legacy. */
@@ -326,10 +335,11 @@ export interface RelationOrderedOutcome extends RelationOutcomeBase {
   readonly failure?: RelationPushFailure;
 }
 
-/** Nothing signed, nothing sent. The intent is recorded with its reason. */
+/** Nothing signed or sent. An actionable refusal is recorded; no-edge and
+ * house-selection answers leave the database unchanged. */
 export interface RelationRefusedOutcome extends RelationOutcomeBase {
   readonly mode: 'none';
-  readonly transport: 'intent_recorded';
+  readonly transport: 'intent_recorded' | 'unchanged';
   readonly reason: RelationRefusalReason;
   readonly detail?: string;
 }
@@ -426,8 +436,8 @@ export interface RelationProducerDeps {
 
 export interface RelationProducer {
   /** Follow `followee`. PUBLIC only; PRIVATE stays local-canonical. */
-  declare(followee: string, opts?: { tasteSubscribed?: boolean }): Promise<RelationOutcome>;
-  revoke(followee: string): Promise<RelationOutcome>;
+  declare(followee: string, opts?: { tasteSubscribed?: boolean; house?: string }): Promise<RelationOutcome>;
+  revoke(followee: string, opts?: { house?: string }): Promise<RelationOutcome>;
   /**
    * Re-send every stored original that has not been accepted, oldest first.
    * The bytes go out verbatim — the CID is unchanged, so the house's own dedup
@@ -471,7 +481,6 @@ function restatesTheSameFollow(signedPayload: Uint8Array, tasteSubscribed: boole
 export function createRelationProducer(deps: RelationProducerDeps): RelationProducer {
   const now = deps.now ?? (() => Math.floor(Date.now() / 1000));
   const logger = deps.logger ?? NOOP_LOGGER;
-  const ledger = new FollowEventStore(deps.db);
   const allocator = new RelationAllocator(deps.db, now);
 
   /**
@@ -702,25 +711,33 @@ export function createRelationProducer(deps: RelationProducerDeps): RelationProd
     action: RelationAction,
     followee: string,
     tasteSubscribed: boolean,
+    house?: string,
   ): Promise<RelationOutcome> {
-    // ① Scope. For a revoke the origin of the edge goes WITH the question:
-    // that person may no longer be in any cache, or may have shown up in a
-    // different house since, and neither changes where the follow is held.
-    const declaredHouseSlug =
-      action === 'revoke' ? ledger.declaredHouseOf(followee) : undefined;
-    const declaredEdge: DeclaredEdgeOrigin | undefined =
-      action === 'revoke'
-        ? {
-            ...(declaredHouseSlug ? { houseSlug: declaredHouseSlug } : {}),
-            houseKeys: keysAtHouse(declaredHouseSlug, followee),
-          }
-        : undefined;
+    // Read-only routing evidence. A lost ledger write cannot turn an existing
+    // world declaration into a fresh home declaration. No retry bytes move houses.
+    const owner = await deps.signer.popclawId();
+    const active = activeRelationHouses(deps.db, followee, owner);
+    const activeHouses = active.houses;
+    const originalHouse = activeHouses.length === 1 ? activeHouses[0] : undefined;
     const scope = await deps.resolveScope({
-      action,
-      followee,
-      ...(declaredEdge ? { declaredEdge } : {}),
+      action, followee, activeHouses,
+      ...(active.uncertain ? { activeUncertainty: active.uncertain, uncertainHouses: active.uncertainHouses } : {}),
+      ...(house !== undefined ? { house } : {}),
+      ...(action === 'revoke' && activeHouses.length === 1 ? {
+        declaredEdge: { houseSlug: originalHouse, houseKeys: keysAtHouse(originalHouse, followee) },
+      } : {}),
     });
-    const houseSlug = declaredHouseSlug ?? scope.houseSlug;
+    const houseSlug = scope.houseSlug;
+
+    // No edge, or no selected edge: no signed statement and no actionable
+    // pending intent. Retained ordered history does not change this answer.
+    if (scope.support === 'unproven' &&
+        (scope.reason === 'RELATION_NOT_FOLLOWING' || scope.reason === 'HOUSE_SELECTION_REQUIRED')) {
+      return { mode: 'none', transport: 'unchanged', domain: 'unknown', action, followee,
+        ...(houseSlug ? { houseSlug } : {}), reason: scope.reason, detail: scope.detail };
+    }
+
+    if (scope.support === 'unproven' && scope.reason) return refuse(action, followee, houseSlug, scope.reason, scope.detail);
 
     if (scope.support !== 'supported') {
       // An edge already in ordered mode NEVER degrades to legacy. Whatever the
@@ -740,7 +757,7 @@ export function createRelationProducer(deps: RelationProducerDeps): RelationProd
       // facts about this end's knowledge, not statements that the house lacks
       // the capability. Emitting the legacy shape on either is the downgrade.
       if (scope.support === 'unproven') {
-        return refuse(action, followee, houseSlug, 'HOUSE_BINDING_UNPROVEN', scope.detail);
+        return refuse(action, followee, houseSlug, scope.reason ?? 'HOUSE_BINDING_UNPROVEN', scope.detail);
       }
       if (scope.support === 'unreachable') {
         return refuse(action, followee, houseSlug, 'HOUSE_UNREACHABLE', scope.detail);
@@ -781,6 +798,19 @@ export function createRelationProducer(deps: RelationProducerDeps): RelationProd
     if (readiness !== 'ready') {
       return refuse(action, followee, houseSlug, 'RELATION_SIGNING_NOT_READY', readiness.blocked);
     }
+    // Verified consumer history may be ahead before issuance recovery has
+    // recorded its position. It can block new signing, never allocate a seq.
+    const applied = deps.db.queryOne<{ seq: string | null }>(
+      `SELECT CAST(applied_seq AS TEXT) AS seq FROM relation_edges
+       WHERE house_key = ? AND follower_popclaw_id = ? AND followee_popclaw_id = ?`,
+      [scope.houseKey, owner, followee],
+    );
+    const bound = allocator.bound(scope.houseKey, followee);
+    if (applied?.seq && BigInt(applied.seq) > bound.signed && BigInt(applied.seq) > bound.observed) {
+      return refuse(action, followee, houseSlug, 'RELATION_SIGNING_NOT_READY',
+        'verified consumer position is ahead of the issuance record');
+    }
+
     // Saying the same thing again is not a new thing to say.
     //
     // Running `follow` twice used to mint a second numbered statement, and the
@@ -803,7 +833,13 @@ export function createRelationProducer(deps: RelationProducerDeps): RelationProd
     // follow at a second house is a separate edge and starts at 1.
     if (action === 'declare') {
       const standing = allocator.latestAt(scope.houseKey, followee);
-      if (standing !== undefined && restatesTheSameFollow(standing.signedPayload, tasteSubscribed)) {
+      if (standing && standing.houseSlug !== houseSlug) {
+        return refuse(action, followee, houseSlug, 'ORDERED_EDGE_NEEDS_BINDING',
+          'stored original has no matching house route; retry and ledger repair stopped');
+      }
+      if (standing !== undefined && activeHouses.includes(houseSlug) &&
+          allocator.bound(scope.houseKey, followee).observed <= standing.seq &&
+          restatesTheSameFollow(standing.signedPayload, tasteSubscribed)) {
         // Unconditionally, and before any network work: a house being
         // unreachable is no reason to leave the owner unable to see what they
         // already declared.
@@ -914,8 +950,8 @@ export function createRelationProducer(deps: RelationProducerDeps): RelationProd
   }
 
   return {
-    declare: (followee, opts) => produce('declare', followee, opts?.tasteSubscribed ?? false),
-    revoke: (followee) => produce('revoke', followee, false),
+    declare: (followee, opts) => produce('declare', followee, opts?.tasteSubscribed ?? false, opts?.house),
+    revoke: (followee, opts) => produce('revoke', followee, false, opts?.house),
     async resendPending(opts: { readonly stillValid?: () => boolean } = {}): Promise<readonly RelationResendOutcome[]> {
       // Before the FIRST DB read: a dead round does not even list the
       // queue, because pending() reads the database too.

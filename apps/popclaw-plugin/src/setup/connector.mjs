@@ -129,7 +129,7 @@ export function probeMcp(pkg, root, node, env, timeout = 10000) {
   return new Promise((resolveProbe, reject) => {
     const child = spawn(node, [join(pkg, 'dist/bundled/mcp.js')], {
       cwd: pkg, stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...env, POPCLAW_DATA_ROOT: root, POPCLAW_NOTIFICATION_CONSUMER: 'setup-probe', POPCLAW_RECEIVE_ON_START: '0', POPCLAW_MCP_ENABLE_RANGER: '0' },
+      env: { ...env, POPCLAW_DATA_ROOT: root, POPCLAW_NOTIFICATION_CONSUMER: 'setup-probe', POPCLAW_SETUP_RECEIPT: '', POPCLAW_RECEIVE_ON_START: '0', POPCLAW_MCP_ENABLE_RANGER: '0' },
     });
     let done = false, buffer = '', total = 0;
     const finish = (error) => { if (done) return; done = true; clearTimeout(timer); child.kill('SIGKILL'); error ? reject(error) : resolveProbe(); };
@@ -290,12 +290,13 @@ export async function setup(options = {}) {
   const plans = [];
   for (const h of hosts) {
     const consumer = `${h}:${hash(project)}`;
-    const server = { command: node, args: [join(pkg, 'dist/bundled/mcp.js')], env: { POPCLAW_DATA_ROOT: root, POPCLAW_NOTIFICATION_CONSUMER: consumer, POPCLAW_RECEIVE_ON_START: '1' } };
+    const server = { command: node, args: [join(pkg, 'dist/bundled/mcp.js')], env: { POPCLAW_DATA_ROOT: root, POPCLAW_NOTIFICATION_CONSUMER: consumer, POPCLAW_RECEIVE_ON_START: '1', POPCLAW_SETUP_RECEIPT: join(project,'.popclaw/setup.json') } };
     const item = local[h];
+    const legacy = value => value ? { ...value, env: Object.fromEntries(Object.entries(value.env).filter(([key]) => key !== 'POPCLAW_SETUP_RECEIPT')) } : undefined;
     const priorServer = options.previousPackage ? { ...server, args: [join(options.previousPackage, 'dist/bundled/mcp.js')] } : undefined;
     if (h === 'claude') {
       const data = structuredClone(item.data); data.mcpServers = object(data.mcpServers ?? {}, 'mcpServers');
-      if (data.mcpServers.popclaw && !equal(data.mcpServers.popclaw, server) && !equal(data.mcpServers.popclaw, priorServer)) throw new Error('Claude PopClaw is already configured differently; nothing was overwritten');
+      if (data.mcpServers.popclaw && !equal(data.mcpServers.popclaw, server) && !equal(data.mcpServers.popclaw, priorServer) && !(options.previousPackage && (equal(data.mcpServers.popclaw, legacy(server)) || equal(data.mcpServers.popclaw, legacy(priorServer))))) throw new Error('Claude PopClaw is already configured differently; nothing was overwritten');
       if (!equal(data.mcpServers.popclaw, server)) { data.mcpServers.popclaw = server; plans.push({ path: item.path, before: item.text, after: JSON.stringify(data, null, 2) + '\n' }); }
     } else {
       // Codex only: its tool timeout could end the call while an approval
@@ -316,7 +317,7 @@ export async function setup(options = {}) {
         delete compared.env.POPCLAW_WORLD_STREAM;
       }
       const same = (a, b) => b !== undefined && equal(a === current ? compared : withoutToolTimeout(a), withoutToolTimeout(b));
-      if (current && !same(current, server) && !same(current, priorServer)) throw new Error('Codex PopClaw is already configured differently; nothing was overwritten');
+      if (current && !same(current, server) && !same(current, priorServer) && !(options.previousPackage && (same(current, legacy(server)) || same(current, legacy(priorServer))))) throw new Error('Codex PopClaw is already configured differently; nothing was overwritten');
       // A user's own larger value is kept; a missing or smaller one is raised.
       const existing = current?.tool_timeout_sec;
       const timeout = typeof existing === 'number' && existing >= CODEX_TOOL_TIMEOUT_SECONDS ? existing : CODEX_TOOL_TIMEOUT_SECONDS;

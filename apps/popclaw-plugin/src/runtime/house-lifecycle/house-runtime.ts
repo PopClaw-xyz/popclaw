@@ -13,11 +13,15 @@ import { INBOX_TOKEN_HEADER } from '../../identity/read-credential.js';
 import type { InboxReadCredential } from '../../messaging/inbox-stream-client.js';
 import type { ReadAuthority, ReadCredentialOutcome } from '../../identity/read-authority.js';
 import type { ConfiguredHousePinningStrategy } from './configured-first-pin.js';
+import { entryDigest, cancelInitialSetup } from './participation-journal.js';
+import { guideBindingDigest, readHouseGuideContext, markHouseGuideDelivered, type HouseGuideContext } from '../../world/house-guide-context.js';
+import { findParticipationReceipt } from './participation-journal.js';
+import type { HouseParticipationReceiptQuery, HouseParticipationReceiptResult } from './participation-admission.js';
 import { HouseLifecycleManager, type HouseGate, type ManagerOptions } from './manager.js';
 import { ResidentLifecycle } from './resident.js';
 import { HouseCommandBus, type HouseCommandPort, type PushOperation, type CommandPushResult } from './command-bus.js';
 import { resolveInstallationId } from './installation.js';
-import { normalizeHouseOrigin, newRequestId } from './control-client.js';
+import { fetchSessionManifest, normalizeHouseOrigin, newRequestId } from './control-client.js';
 import { readParticipation, type ParticipationRow, type RemoteStatus } from './participation-store.js';
 import { renderCopy } from '../../lexicon/index.js';
 import { ownerLang } from '../../lexicon/owner-language.js';
@@ -37,7 +41,7 @@ import type { ExecutionCatalogRow } from '../../host/execution-store.js';
 import { PUBLIC_JOURNAL_TABLES, ACTION_RECEIPT_FEATURE_TABLES, NATIVE_ACTION_FEATURE_TABLES } from '../../host/execution-store-schema.js';
 import { readHouseCapabilityView } from '../../world/world-capabilities.js';
 import { normalizeAckKeyHex } from './control-client.js';
-import { captureLegacyTrust, legacyTrustCurrent } from './legacy-trust.js';
+import { captureLegacyTrust } from './legacy-trust.js';
 import type { HouseReadFailureCode } from './read-failure.js';
 import { publicProducerPolicy } from './public-read-resources.js';
 import type { ExecutionStoreCatalog } from '../../host/execution-store.js';
@@ -85,6 +89,7 @@ export class HousePushError extends Error {
 
 export interface HouseRuntimeOptions extends Omit<ManagerOptions, 'installationId' | 'signer' | 'configuredPinningMode'> {
   signer: Signer;
+  onJoined?: (origin:string) => Promise<void>;
   /**
    * How reads at one house prove who is asking. Required: the inbox lane
    * below chooses between this and a remembered session token, and a runtime
@@ -227,7 +232,7 @@ export class HouseRuntime {
     this.resident = new ResidentLifecycle({ manager: this.manager, token: newRequestId(),
       intentPollMs: opts.intentPollMs, now: opts.clock, log: opts.log,
       publicStreams: { capture: origin => this.publicResources?.capture(origin) ?? null },
-      seedConfiguredLegacy: opts.publicV1Mode !== true,
+      seedConfiguredLegacy: !opts.participation && opts.publicV1Mode !== true,
       onParticipationObserved: origin => {
         for (const changed of [...this.participationObservers.get(origin) ?? []]) {
           try { changed(); } catch (error) { opts.log?.(`participation observer failed: ${String(error)}`); }
@@ -279,7 +284,9 @@ export class HouseRuntime {
       reconfirmHouse: id => { const epoch = this.resident.authority.captureEpoch(); return recovery.apply(id,
         () => !this.stopped && epoch !== null && this.resident.authority.isEpochCurrent(epoch)); },
     };
-    this.bus = new HouseCommandBus({ db: opts.db, coordinator, authority: this.resident.authority,
+    this.bus = new HouseCommandBus({
+      whenReady: () => this.resident.whenReady(),
+      captureLogin: origin => opts.participation?.capture({reason:'explicit_owner_join',origin,actorId:opts.actorId!,installationId:resolveInstallationId(opts.db)}), db: opts.db, coordinator, authority: this.resident.authority,
       pollMs: opts.commandPollMs, timeoutMs: opts.commandTimeoutMs, log: opts.log,
       executePush: async (origin, bytes, context) => {
         context.authorizeSend();
@@ -312,13 +319,91 @@ export class HouseRuntime {
       } });
     this.egress = new MultiHouseEgress(origins.map(origin => this.egressFor(origin)), {warn: opts.log});
     this.commands = {
-      loginHouse: input => { this.bindOrigin(input); return this.bus.loginHouse(input); },
-      logoutHouse: input => { this.bindOrigin(input); return this.bus.logoutHouse(input); },
+      loginHouse: input => { const origin = this.bindOrigin(input); return this.bus.loginHouse(input).then(async result => {
+        if (result.admission === 'configured' || result.status === 'connected') await opts.onJoined?.(origin);
+        return result; }); },
+      logoutHouse: input => { this.bindOrigin(input);
+        if (opts.participation && normalizeHouseOrigin(input) === 'https://house.popclaw.me') opts.db.transaction(tx => cancelInitialSetup(tx,opts.actorId!,resolveInstallationId(opts.db)));
+        return this.bus.logoutHouse(input); },
       getHouseStatus: input => this.bus.getHouseStatus(input),
       knownHouseOrigins: () => this.bus.knownHouseOrigins(),
     };
   }
 
+  /** Trusted root-only normal installation activation. Read/list paths never call it. */
+  async activateInitialMe(): Promise<import('./manager.js').LoginResult | undefined> {
+    const origin = normalizeHouseOrigin('https://house.popclaw.me');
+    if (this.opts.db.queryOne<{state:string}>(`SELECT state FROM house_initial_setup WHERE actor_id=? AND installation_id=?`,[this.opts.actorId!,resolveInstallationId(this.opts.db)])?.state !== undefined
+      && this.opts.db.queryOne<{state:string}>(`SELECT state FROM house_initial_setup WHERE actor_id=? AND installation_id=?`,[this.opts.actorId!,resolveInstallationId(this.opts.db)])?.state !== 'pending') return undefined;
+    const source = this.opts.participation?.capture({reason:'initial_me_setup',origin,actorId:this.opts.actorId!,installationId:resolveInstallationId(this.opts.db)});
+    if (!source) return undefined;
+    this.bindOrigin(origin);
+    return this.bus.loginHouse(origin,{requestId:source.originalOperationRef,participationSource:source});
+  }
+  async readHouseGuide(input: string) {
+    const origin = normalizeHouseOrigin(input), gate = this.publicReadGate(origin);
+    // Existing joined Houses may predate the journal. Refresh their verified
+    // declared pointer without creating a join or first trust.
+    if (gate.isActive() && !this.opts.db.queryOne('SELECT origin FROM house_guide_context WHERE origin=?',[origin])) {
+      const row = readParticipation(this.opts.db,origin), binding = pinnedBinding(this.opts.db,origin);
+      if (row && binding) try {
+        const manifest = await fetchSessionManifest(origin,this.opts.fetch ?? globalThis.fetch,gate.signal);
+        const prepared = await makeRelationBindingPreparer({db:this.opts.db,
+          configuredKeyFor: origin => this.opts.configuredPinFor?.(origin),
+          allowInsecureOrigin: origin => isPrivateAddressOrigin(origin)})({origin,rawBytes:manifest.rawBytes,proofHeader:manifest.proofHeader,signal:gate.signal});
+        this.opts.db.transaction(tx => {
+          if (!gate.isActive() || JSON.stringify(readParticipation(tx,origin)) !== JSON.stringify(row)) throw new Error('HOUSE_GUIDE_CONTEXT_STALE');
+          const refusal = prepared.commit(tx);
+          if (refusal) return;
+          const doc = JSON.parse(new TextDecoder().decode(manifest.rawBytes));
+          const url = typeof doc.guide_url === 'string' ? new URL(doc.guide_url,origin) : undefined;
+          tx.execute(`INSERT INTO house_guide_context(origin,binding_digest,op_seq,guide_url,manifest_digest) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`,
+            [origin,guideBindingDigest(tx,origin),row.op_seq,url && ['https:','http:'].includes(url.protocol) ? url.href : '',entryDigest(Buffer.from(manifest.rawBytes).toString('base64'))]);
+        });
+      } catch { /* Joined status remains separate from guide availability. */ }
+    }
+    return readHouseGuideContext(this.opts.db,origin,this.documentFetch(origin,{...gate,origin,generation:readParticipation(this.opts.db,origin)?.op_seq ?? 0}),() => !this.stopped && gate.isActive());
+  }
+  async pendingHouseGuides(): Promise<HouseGuideContext[]> {
+    const result: HouseGuideContext[] = [];
+    for (const {origin} of this.opts.db.queryAll<{origin:string}>(`SELECT origin FROM house_guide_context WHERE delivered_digest IS NULL OR delivered_digest!=guide_digest`)) {
+      const context = await this.readHouseGuide(origin);
+      if (context.status === 'available' && !context.delivered) result.push(context);
+    }
+    return result;
+  }
+  /** Actual host output/LLM-input observer; never claim a prepared or truncated body was delivered. */
+  markGuidesInAgentInput(serialized: string): void {
+    const rows = this.opts.db.queryAll<{origin:string;guide_body:string;guide_digest:string;binding_digest:string;op_seq:number}>(
+      `SELECT * FROM house_guide_context WHERE guide_body IS NOT NULL AND (delivered_digest IS NULL OR delivered_digest!=guide_digest)`);
+    // MCP serializes JSON context inside a text result; native history wraps
+    // the same text in messages. Inspect those actual emitted values.
+    const inspect = (value: unknown, depth: number): void => {
+      if (depth > 8) return;
+      if (typeof value === 'string') {
+        for (const text of [value, ...value.split('\n')]) {
+          if (!text.startsWith('{') && !text.startsWith('[')) continue;
+          try { inspect(JSON.parse(text), depth + 1); } catch { /* Ordinary reply text. */ }
+        }
+      } else if (value && typeof value === 'object') {
+        const context = value as Record<string, unknown>;
+        for (const row of rows) {
+          if (context.status !== 'available' || context.origin !== row.origin || context.opSeq !== row.op_seq
+            || context.guide !== row.guide_body || context.guideDigest !== row.guide_digest
+            || context.bindingDigest !== row.binding_digest) continue;
+          this.markHouseGuideDelivered({status:'available',origin:row.origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,
+            guideUrl:'',guideDigest:row.guide_digest,guide:row.guide_body,delivered:false});
+        }
+        for (const child of Object.values(context)) inspect(child, depth + 1);
+      }
+    };
+    inspect(serialized, 0);
+  }
+
+  markHouseGuideDelivered(context: HouseGuideContext): boolean { return markHouseGuideDelivered(this.opts.db,context); }
+  findParticipationReceipt(query: HouseParticipationReceiptQuery): HouseParticipationReceiptResult {
+    return findParticipationReceipt(this.opts.db,query);
+  }
   /** A recovery confirms trust, never the old standing execution policy. */
   nativeRecoveryDecisionId(origin: string): string | undefined {
     return this.opts.db.queryOne<{decision_id:string}>("SELECT decision_id FROM house_recovery_fences_v1 WHERE origin=? AND state='complete'",[origin])?.decision_id;
@@ -755,13 +840,14 @@ export class HouseRuntime {
     let captured: ParticipationRow | null = null;
     try { captured = readParticipation(this.opts.db, origin); } catch { /* Unreadable authority remains closed. */ }
     const trust = captured?.session_id === '' ? captureLegacyTrust(this.opts.db, origin) : undefined;
+    const configuredTrustRequired = this.manager.isConfiguredParticipation(origin);
     const reason = (): HouseReadFailureCode => {
       try {
         const current = readParticipation(this.opts.db, origin);
         if (current?.desired === 'disabled') return 'HOUSE_DISABLED';
         if (!this.storageAllows('execution')) return 'HOUSE_STORAGE_UNAVAILABLE';
         if (!current || current.phase !== 'connected') return current?.remote_status === 'unsupported' ? 'HOUSE_LIFECYCLE_UNSUPPORTED' : 'HOUSE_CONNECTING';
-        if (captured?.session_id === '' && !legacyTrustCurrent(this.opts.db, trust)) return 'HOUSE_TRUST_REVOKED';
+        if (captured?.session_id === '' && !this.manager.legacyParticipationTrustCurrent(origin, trust, configuredTrustRequired)) return 'HOUSE_TRUST_REVOKED';
         return 'HOUSE_ACTION_STALE';
       } catch { return 'HOUSE_TRUST_REVOKED'; }
     };
@@ -774,7 +860,7 @@ export class HouseRuntime {
         && current.house_revision === captured.house_revision
         && current.installation_id === captured.installation_id && current.ack_key_hex === captured.ack_key_hex
         && (current.session_id === '' || current.lease_expires_at > Math.floor((this.opts.clock?.() ?? Date.now()) / 1000))
-        && (captured.session_id !== '' || legacyTrustCurrent(this.opts.db, trust));
+        && (captured.session_id !== '' || this.manager.legacyParticipationTrustCurrent(origin, trust, configuredTrustRequired));
       } catch { return false; }
     }};
   }
@@ -843,6 +929,11 @@ export class HouseRuntime {
    *    or blocks the pin on a key/incarnation disagreement — all from bytes
    *    verified against the key already pinned here; it never pins a new one.
    */
+  publicReadFailure(input: string): HouseReadFailureCode | undefined {
+    const gate = this.publicReadGate(normalizeHouseOrigin(input));
+    return gate.isActive() ? undefined : gate.inactiveReason?.() ?? 'HOUSE_ACTION_STALE';
+  }
+
   houseReadFetch(input: string): typeof globalThis.fetch {
     const origin = normalizeHouseOrigin(input);
     return async (url, init) => {
@@ -870,7 +961,7 @@ export class HouseRuntime {
   /** Joined here AND not in pin conflict — see `houseReadFetch` above. The
    * pin comparison is the OWNER lane's own, called here rather than restated,
    * so this lane can never end up the more permissive of the two. */
-  private publicReadGate(origin: string): ActionGate {
+  publicReadGate(origin: string): ActionGate {
     const joined = this.participationGate(origin);
     const agrees = () => {
       try {

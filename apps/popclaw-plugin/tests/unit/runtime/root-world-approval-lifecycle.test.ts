@@ -34,7 +34,7 @@ function runtimeFixture() {
   const owner = createWorldOwnerApproval();
   return { boot: { popclawId: ACTOR }, host: { db: { open: true } },
     orchestrator: { start: vi.fn(async () => {}), stop: vi.fn(async () => {}) },
-    houseRuntime: { runCommand: async <T>(work: () => Promise<T>) => work() },
+    houseRuntime: { activateInitialMe: vi.fn(async()=>undefined), readHouseGuide: vi.fn(async()=>({status:'unavailable'})), runCommand: async <T>(work: () => Promise<T>) => work() },
     worldRuntime: { readCapabilities: vi.fn<() => unknown>(() => verifiedView()) },
     worldOwnerApproval: owner,
     shutdown: vi.fn(async () => { owner.stop(); clearPerProcess('runtime'); }),

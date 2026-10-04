@@ -18,7 +18,8 @@ import {
   setOwnerApprovalSurface,
 } from './owner-approval.js';
 
-export function registerOpenClawOwnerApprovalHooks(api: Pick<OpenClawPluginApi, 'on' | 'logger'>): void {
+export function registerOpenClawOwnerApprovalHooks(api: Pick<OpenClawPluginApi, 'on' | 'logger'>,
+  setup?: Pick<ReturnType<typeof import('./openclaw-approval-setup.js').createOpenClawApprovalSetup>, 'before'>): void {
   // The owner-approval seam's OpenClaw backend: one typed hook.
   //
   // The subject it asks about is declared beside the world tool itself
@@ -40,6 +41,8 @@ export function registerOpenClawOwnerApprovalHooks(api: Pick<OpenClawPluginApi, 
   // then refuse every one of them at the gate.
   try {
     api.on('before_tool_call', async (event, ctx) => {
+      const preparing = await setup?.before(event, ctx);
+      if (preparing) return preparing;
       const request = await ownerApprovalBeforeToolCall(event, ctx);
       // THE ONE PLACE A REFUSED ORIGIN BECOMES VISIBLE TO AN OPERATOR.
       // The guard's named reason reaches the agent (`nativeWorldInvoke`

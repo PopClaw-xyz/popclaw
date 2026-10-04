@@ -24,6 +24,8 @@ import { ResolveClient } from '../world/resolve-client.js';
 
 export interface FollowCommandDeps {
   socialGraph: SocialGraph;
+  /** Explicit owner-selected house; absent uses the ordinary relation default. */
+  house?: string;
   /** Social-log collection point `follow_added` (spec 2026-07-26 §4). If not injected, not recorded. */
   socialLog?: SocialLogRecorder;
   /**
@@ -163,13 +165,15 @@ export async function runFollowCommand(
   // is reported as what it is rather than as "never sent".
   let transportAccepted = false;
   try {
-    const outcome = await deps.socialGraph.declareFollowWithOutcome(popclawId);
+    const outcome = deps.house === undefined
+      ? await deps.socialGraph.declareFollowWithOutcome(popclawId)
+      : await deps.socialGraph.declareFollowWithOutcome(popclawId, { house: deps.house });
     if (outcome.mode === 'none') {
       // Refused before signing. Not a failure of the network and not a follow —
       // and, when it is the HOUSE that offers no follow, not a failure of this
       // build either, which is what the single shared sentence used to claim.
       return {
-        text: `⚠️ ${renderCopy(ownerLang(), relationRefusalCopyKey(outcome.reason))}`,
+        text: `⚠️ ${renderCopy(ownerLang(), relationRefusalCopyKey(outcome.reason), { who: popclawId })}`,
         outcome: { kind: 'refused', reason: 'house' },
       };
     }

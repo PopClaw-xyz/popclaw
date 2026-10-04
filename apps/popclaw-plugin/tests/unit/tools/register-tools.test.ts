@@ -805,7 +805,12 @@ describe('registerPopclawTools', () => {
       api,
       runtime: (async () => ({
         ...(await runtime()),
-        socialGraph: withOutcomes({ revokeFollow, following: () => [] }), // not following anyone
+        socialGraph: {
+          ...withOutcomes({ revokeFollow, following: () => [] }),
+          // The per-house producer refuses an absent relation before signing.
+          revokeFollowWithOutcome: async () => ({ mode: 'none', transport: 'unchanged', domain: 'unknown',
+            action: 'revoke', followee: followeeId, reason: 'RELATION_NOT_FOLLOWING' }),
+        },
       })) as unknown as Parameters<typeof registerPopclawTools>[0]['runtime'],
       getWorldDeps: (async () => ({ resolveClient: { resolve: vi.fn(async () => []) } })) as unknown as Parameters<
         typeof registerPopclawTools

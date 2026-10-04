@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { identity, inspectRoot, safeAbsolute, claimRoot } from './identity.js';
 import { runtimePlan, copyRuntime, probeNative, stableNode } from './runtime.js';
 import { setup as connect, commitFiles, probeMcp } from './connector.mjs';
@@ -49,7 +49,7 @@ export async function setup(options: SetupOptions) {
   if (reopened.popclawId !== selected.popclawId) throw new Error('Identity changed during setup; configuration was not written');
   const credential = claimRoot(root, selected.popclawId, runtime.digest, id ? 'existing_key' : 'created_by_setup');
   const finalPlan = await connect({ ...options, package: installed, root, home, project, env, node, planOnly: true, validateRoot: (p: string) => p === root, previousPackage: previous?.package, requireNewBinding: !previous });
-  const record = { format: 1, root, identityOrigin: credential.identityOrigin, package: installed, digest: runtime.digest, popclawId: selected.popclawId, ...(previous?.package !== installed && previous ? { previousPackage: previous.package } : previous?.previousPackage ? { previousPackage: previous.previousPackage } : {}) };
+  const record = { initialMe: previous?.initialMe ?? {version:1,purpose:'initial_me_setup',origin:'https://house.popclaw.me',actorId:selected.popclawId,dataRoot:root,setupId:randomUUID()}, format: 1, root, identityOrigin: credential.identityOrigin, package: installed, digest: runtime.digest, popclawId: selected.popclawId, ...(previous?.package !== installed && previous ? { previousPackage: previous.package } : previous?.previousPackage ? { previousPackage: previous.previousPackage } : {}) };
   const after = JSON.stringify(record, null, 2) + '\n';
   // A missing plans array means the connector returned an abnormal shape: the
   // setup receipt must never be committed while the host config write is

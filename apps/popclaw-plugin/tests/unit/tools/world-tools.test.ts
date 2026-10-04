@@ -656,7 +656,12 @@ describe('popclaw_follow', () => {
   it('description keeps the exact-match fast path and adds the pending-list batch carve-out', () => {
     const { tools } = setup();
     const d = findTool(tools, 'popclaw_follow').description;
-    expect(d).toContain('on an exact match, execute directly without confirmation');
+    expect(d).toContain('An exact match records a reversible follow at the selected House and returns its outcome.');
+    for (const name of ['popclaw_follow', 'popclaw_unfollow']) {
+      const description = findTool(tools, name).description;
+      expect(description).not.toContain('without confirmation');
+      expect(description).not.toContain('FollowDeclared');
+    }
     expect(d).toContain(
       'When confirming names from the injected pending-follow list, batches of 6+ or ambiguous picks require echoing the full list back for a Y/N first.',
     );
@@ -1471,9 +1476,10 @@ describe('popclaw_unfollow · en lane (rollout slice 1)', () => {
       sigil: '4f68bd',
       profiles: [],
     };
-    const revokeFollow = vi.fn(async () => {});
+    let followed = true;
+    const revokeFollow = vi.fn(async () => { followed = false; });
     const runtime = vi.fn(async () => ({
-      socialGraph: withOutcomes({ revokeFollow, following: () => [{ popclawId: 'id_elon' }] }),
+      socialGraph: withOutcomes({ revokeFollow, following: () => followed ? [{ popclawId: 'id_elon' }] : [] }),
     }));
     const { tools } = setup({ resolve: async () => [elon] }, runtime as unknown as () => Promise<unknown>);
 
@@ -1495,13 +1501,14 @@ describe('popclaw_unfollow · en lane (rollout slice 1)', () => {
       sigil: '4f68bd',
       profiles: [],
     };
-    const revokeFollow = vi.fn(async () => 'north-house');
+    let followed = true;
+    const revokeFollow = vi.fn(async () => { followed = false; return 'north-house'; });
     // No cached handshake name for this slug → the receipt's house resolves
     // through the origin-host fallback; `north-house` doubles as both the
     // slug and (via this URL) the origin host, so the pinned wording below
     // is unchanged.
     const runtime = vi.fn(async () => ({
-      socialGraph: withOutcomes({ revokeFollow, following: () => [{ popclawId: 'id_elon' }] }),
+      socialGraph: withOutcomes({ revokeFollow, following: () => followed ? [{ popclawId: 'id_elon' }] : [] }),
       paths: { houseHandshakeFile: () => '/nonexistent/handshake.json' },
       boot: { loreHouseUrls: ['https://north-house'] },
     }));

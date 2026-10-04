@@ -47,8 +47,8 @@ export interface RelationPushDeps {
 }
 
 export function makeRelationPush(deps: RelationPushDeps): RelationPush {
-  const map = buildStrictSlugMap(deps.houses);
   return async (bytes, houseSlug) => {
+    const map = buildStrictSlugMap(deps.houses);
     const slug = houseSlug ?? map.homeSlug;
     if (slug === undefined) {
       throw new Error('relation push refused: no houses are configured');
