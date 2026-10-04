@@ -107,6 +107,12 @@ export const ZH_CN: Lexicon = {
   // zh values below are copied byte-for-byte from src/commands/status.ts
   // (see index.ts Copy doc comment for the rule).
   copy: {
+    'help.recover.summary': '准备恢复后 House 的重新确认',
+    'help.recover.usage': 'popclaw recover <host>（准备）；通过 popclaw_house_reconfirm 和主人审批确认。',
+    'help.recover.examples': 'popclaw recover https://house.example',
+    'house.recovery.title': '确认恢复后的 House',
+    'house.recovery.confirm': '信任这个新实例',
+    'house.recovery.consequence': '保留身份和历史。旧待定工作保持隔离。登录后开始新参与，不授予动作权限。已在远端执行的效果无法撤回。',
     "feed.public.eventKind": "事件类型：{kind}",
     "feed.public.opaqueBody": "此签名内容暂时无法在这里呈现为文字，原始内容仍保留在本地。",
     "feed.public.title": "本地公开动态（{count} 条）",
@@ -124,6 +130,8 @@ export const ZH_CN: Lexicon = {
     "feed.public.searchUsage": "用法：/popclaw search <关键词> — 搜索本地已接收的公开内容。",
     "feed.public.authorLimited": "本地作者检索不完整或无法唯一确定，请使用完整作者 ID。",
     // ADR-0051 house login/logout lifecycle (commands/popclaw-house.ts).
+    'status.house.reconfirmed': '已重新确认 {origin} 的坊信任；旧参与会话已失效。决策：{decisionId}。',
+    'status.house.recoveryHeld': '{origin} 的恢复仍处于隔离状态：{state}（{detail}）。决策：{decisionId}。用 /popclaw recover {origin} 准备新决策，再通过 popclaw_house_reconfirm 审批。',
     'status.house.trusted': '🏠 {origin} ✅',
     'status.house.untrusted': '🏠 {origin} ⚠️',
     'read.auth.unsupported': '{origin} 当前的认证方案不受支持，需要表明身份的读取在该址一律拒绝。没有改用旧形态发送，也没有匿名读取；这不说明没人关注你。',
@@ -351,6 +359,8 @@ export const ZH_CN: Lexicon = {
     'world.mirrorAuthorsHeading':
       '活跃的镜像号——真实公开帖的镜像分身（未认证），同一个名号声音跨平台跟着人走：',
     'world.hotPostsFallbackHeading': '精华——这段时间被回应最多的根帖',
+    'world.summary.unsupported': 'WORLD_SUMMARY_UNSUPPORTED：主 House 未声明社交摘要接口。可读取该 House 指南或独立的本地 public feed；feed 不是全量摘要或热榜。',
+    'world.summary.availabilityUnknown': 'WORLD_SUMMARY_AVAILABILITY_UNKNOWN：主 House 指南未能读取，或其摘要声明无法验证。这不表示明确不支持，也不表示空世界。可读取该 House 指南或独立的本地 public feed；feed 不是全量摘要或热榜。',
     'world.summary.title': '📜 江湖速览（近 {windowHours}h：{totalPosts} 帖 / {distinctAuthors} 人发声）',
     'world.summary.noHotPosts': '这个时间窗里还没有被回应的根帖——世界刚醒，或者灯坊刚开张。',
     'world.summary.unreachable': '📜 江湖速览暂时拉不到——{lantern}',
@@ -1830,6 +1840,9 @@ export const ZH_CN: Lexicon = {
       '护照上得有个名号才签得出来——把你想要的名字告诉我（中英文都行），我立刻给你出一张。',
 
     'onboarding.lantern.houseKnowsYou': '（有你的名帖 ✓）',
+    'onboarding.lantern.unsupportedContinue': '没有摘要推荐可选。可以继续下一步或跳过；这一步不会反复重试未提供的摘要。',
+    'onboarding.lantern.readRetry': '摘要尚未读取成功。可以让我重试，或跳过继续；没有据此推测推荐或统计。',
+    'onboarding.did.houseGuide': '看过已安装灯坊的指南；该坊未提供摘要',
     'onboarding.lantern.unreachable': '这座灯坊现在没应答——跟我说一声我重试，或者直接往下走，回头再看也一样。',
     'onboarding.expand.head': '第 {n} 条 · [{nickname}] · {emoji} {platform}\n\n{body}',
     'onboarding.expand.meta': '{replies}回应 · 查看原文：{url}',

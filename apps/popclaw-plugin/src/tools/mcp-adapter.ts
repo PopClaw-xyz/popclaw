@@ -123,6 +123,11 @@ export function toMcpToolListing(tool: Pick<CollectedTool, 'name' | 'description
  * anything else is JSON-serialized rather than dropped (v1 rule).
  */
 export type McpContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
+/** The normal MCP catch path, with host-language formatting supplied by the
+ * caller. A rejected business read must not become ordinary successful text. */
+export function toMcpToolError(text: string): { content: McpContent[]; isError: true } {
+  return { content: [{ type: 'text', text }], isError: true };
+}
 export interface StructuredToolResult {
   content: McpContent[];
   structuredContent: Record<string, unknown>;

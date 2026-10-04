@@ -166,3 +166,11 @@ messages stay until you delete the directory yourself. Before deleting it,
 stop all processes sharing the root and preserve a complete offline copy;
 the key alone cannot recover the rest of your history. See
 [backup and recovery](../apps/popclaw-plugin/INSTALL.md#back-up-your-identity--move-to-a-new-machine).
+
+## Restored House confirmation
+
+Use the [House recovery flow](house-recovery.md) when a known House changes
+server incarnation after a restore or rebuild. CLI and slash prepare a bound
+decision; the OpenClaw/MCP reconfirm tool obtains independent owner approval.
+Keep the normal resident running on the original data root. Identity and
+committed history stay; old pending work does not resume as the new instance.

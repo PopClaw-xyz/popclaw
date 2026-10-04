@@ -12,7 +12,7 @@ function setup() {
     presenter: { present: vi.fn(async () => { effects.push('present'); }) },
     llm: { complete: vi.fn(async () => { effects.push('rank'); return '{"order":[2,1]}'; }) },
     tasteRoot: '/unused-test-taste-root',
-    guideClient: { fetchGuideText: vi.fn(async () => 'Guide paragraph') },
+    guideClient: { fetchGuideText: vi.fn(async () => '---\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary\n---\nGuide paragraph') },
     summaryClient: { fetchSummary: vi.fn(async () => ({
       window_hours: 24, generated_at_ms: 0, total_posts: 2, distinct_authors: 2,
       authors: { alice: { nickname: 'Alice' }, bob: { nickname: 'Bob' } },
@@ -138,7 +138,7 @@ describe('OnboardingDiscovery interface', () => {
     let known = false;
     vi.mocked(h.ports.houseKnowsYou).mockImplementation(() => known);
     const fetch = h.ports.guideClient.fetchGuideText;
-    vi.mocked(fetch).mockImplementation(async () => { known = true; return 'Guide paragraph'; });
+    vi.mocked(fetch).mockImplementation(async () => { known = true; return '---\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary\n---\nGuide paragraph'; });
     const reply = await h.discovery.presentLantern();
     expect(reply.text).toContain('has your namecard ✓');
     expect(h.ports.houseKnowsYou).toHaveBeenCalledWith('home');

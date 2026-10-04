@@ -63,7 +63,7 @@ import { mountedHouseGuides } from './world/house-handshake.js';
 import { ResolveClient } from './world/resolve-client.js';
 import { registerPopclawTools } from './tools/register-tools.js';
 import { fetchImageOverHttp } from './visual/fetch-image.js';
-import { dispatchMcpCall, makeToolCollector, toMcpToolListing, toMcpToolResult } from './tools/mcp-adapter.js';
+import { dispatchMcpCall, makeToolCollector, toMcpToolError, toMcpToolListing, toMcpToolResult } from './tools/mcp-adapter.js';
 import { inboundMediaDirsFromEnv } from './notifier/media-staging.js';
 import { unreadNotice, makeNotificationsTool } from './notifier/mcp-notice.js';
 import type { ProposalLiveness } from './notifier/l2-handoff.js';
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
     api,
     runtime,
     runCommand: async work => (await runtime()).houseRuntime.runCommand(work),
-    getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, lang: ownerLang,
+    getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, recovery: rt.houseRuntime.recovery, lang: ownerLang,
         readAgentContext: (origin: string, sessionId: string) => rt.houseRuntime.readAgentContext(origin, rt.boot.popclawId, {}, sessionId)}; },
     // The same host capability the OpenClaw gateway injects (index.ts). Without it
     // the newspaper's avatar deps are never assembled at all, and an MCP-published
@@ -370,10 +370,7 @@ async function main(): Promise<void> {
     } catch (err) {
       // A throwing tool becomes an MCP tool error — never a dead server.
       logger.warn({ tool: tool.name }, `popclaw: tool failed — ${String(err)}`);
-      return {
-        content: [{ type: 'text' as const, text: failureText(tool.name, err instanceof Error ? err.message : err) }],
-        isError: true,
-      };
+      return toMcpToolError(failureText(tool.name, err instanceof Error ? err.message : err));
     }
   });
 

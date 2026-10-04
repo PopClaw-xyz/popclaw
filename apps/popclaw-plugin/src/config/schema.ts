@@ -15,6 +15,8 @@ export const WorldExecutionPolicy = z.object({
     catch { return false; }
   }),
   houseKey: executionIdentity.optional(),
+  // An owner must explicitly bind a standing grant to the completed recovery.
+  recoveryDecisionId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional(),
   kinds: z.array(z.string().regex(/^[a-z0-9]{1,24}\.[a-z0-9_]{1,24}(?:\.[a-z0-9_]{1,24})?$/)).min(1).max(256)
     .refine(values => new Set(values).size === values.length),
   authorizedAt: executionUtc,

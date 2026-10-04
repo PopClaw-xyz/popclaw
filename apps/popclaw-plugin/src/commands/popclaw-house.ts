@@ -14,6 +14,7 @@ import { renderCopy, type Lang } from '../lexicon/index.js';
 
 export interface HouseCommandContext {
   readonly coordinator: () => HouseCommandPort;
+  readonly recovery?: import('../world/house-recovery.js').HouseRecoveryPort;
   /** The host's language lane (roots pass theirs; defaults to zh-CN). */
   readonly lang?: () => Lang;
   readonly readAgentContext?: (origin: string, sessionId: string) => WorldAgentContextResult | Promise<WorldAgentContextResult>;
@@ -84,6 +85,7 @@ export async function runHouseStatusCommand(
     sessionId: string;
     remoteStatus: string;
     gateActive: boolean;
+    recovery?: import('../world/house-recovery-fence.js').HouseRecoveryStatus;
   }>
 > {
   const coordinator = ctx.coordinator();
@@ -99,7 +101,14 @@ export async function runHouseStatusCommand(
       sessionId: status.sessionId,
       remoteStatus: status.remoteStatus,
       gateActive: status.gateActive,
+      ...(status.recovery ? {recovery:status.recovery}:{}),
     });
   }
   return out;
+}
+
+/** Prepare only: approval belongs to the host's reconfirm tool, not slash text. */
+export async function runHouseRecoveryCommand(ctx: HouseCommandContext, input: string): Promise<string> {
+  if (!ctx.recovery) throw new Error('HOUSE_RECOVERY_UNAVAILABLE');
+  return JSON.stringify({decision:await ctx.recovery.prepare(normalizeHouseOrigin(input)),next_tool:'popclaw_house_reconfirm'});
 }

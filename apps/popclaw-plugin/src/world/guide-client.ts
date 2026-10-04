@@ -8,6 +8,10 @@
  * out (must not block the spine).
  */
 import { LORE_HOUSE_TIMEOUT_MS } from './http-timeout.js';
+import { houseReadFailure, type HouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
+
+export type GuideTextResult = { readonly ok: true; readonly text: string }
+  | { readonly ok: false; readonly failure: HouseReadFailure };
 
 export interface GuideClientOptions {
   readonly baseUrl: string;
@@ -23,13 +27,20 @@ export class GuideClient {
 
   /** Full text of guide.md; any error (network / non-2xx) → null. */
   async fetchGuideText(): Promise<string | null> {
+    const result = await this.fetchGuideResult();
+    return result.ok ? result.text : null;
+  }
+
+  /** A missing/unreadable guide is unknown capability, not an absent endpoint.
+   * Preserve the existing read gate and remote failure classifications. */
+  async fetchGuideResult(): Promise<GuideTextResult> {
     const url = `${this.opts.baseUrl.replace(/\/$/, '')}/v1/guide.md`;
     try {
       const res = await this.fetchFn(url, { signal: AbortSignal.timeout(LORE_HOUSE_TIMEOUT_MS) });
-      if (!res.ok) return null;
-      return await res.text();
-    } catch {
-      return null;
+      if (!res.ok) return { ok: false, failure: { code: 'HOUSE_REMOTE_HTTP', origin: this.opts.baseUrl, status: res.status } };
+      return { ok: true, text: await res.text() };
+    } catch (error) {
+      return { ok: false, failure: houseReadFailure(error, this.opts.baseUrl) };
     }
   }
 }

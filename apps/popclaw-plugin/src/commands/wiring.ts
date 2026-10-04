@@ -31,7 +31,7 @@ import { runPopclawDreamCommand } from '../commands/popclaw-dream.js';
 import { runPopclawFeedCommand } from '../commands/popclaw-feed.js';
 import { runPopclawFeedbackCommand } from '../commands/popclaw-feedback.js';
 import { runPopclawInboxCommand } from '../commands/popclaw-inbox.js';
-import { runHouseLoginCommand, runHouseLogoutCommand, type HouseCommandContext } from './popclaw-house.js';
+import { runHouseRecoveryCommand, runHouseLoginCommand, runHouseLogoutCommand, type HouseCommandContext } from './popclaw-house.js';
 import { runPopclawMarkCommand, runPopclawMarksCommand, runPopclawUnmarkCommand } from '../commands/popclaw-mark.js';
 import { runPopclawMessageCommand } from '../commands/popclaw-message.js';
 import { runPopclawNameCommand } from '../commands/popclaw-name.js';
@@ -80,7 +80,7 @@ export const SUBCOMMAND_NAMES = [
   'feedback', 'reply', 'message', 'post', 'canvas', 'brief', 'newspaper', 'inbox',
   'mark', 'unmark', 'marks', 'bond', 'dream', 'taste', 'review', 'who', 'status',
   'version', 'profile', 'name', 'feed', 'search', 'start', 'next', 'skip',
-  'doctor', 'help', 'login', 'logout',
+  'doctor', 'help', 'login', 'logout', 'recover',
 ] as const;
 
 /**
@@ -96,6 +96,7 @@ export const HELP_SUBS: readonly { name: string; usage?: true; examples?: true }
   { name: 'start' },
   { name: 'login', usage: true, examples: true },
   { name: 'logout', usage: true, examples: true },
+  { name: 'recover', usage: true, examples: true },
   { name: 'next', usage: true },
   { name: 'skip' },
   { name: 'status' },
@@ -238,7 +239,7 @@ export function buildSubcommands(
     picksFile: w.picksFile(),
   });
 
-  const houseCommand = (operation: 'login' | 'logout'): SubcommandHandler => async (ctx) => {
+  const houseCommand = (operation: 'login' | 'logout' | 'recover'): SubcommandHandler => async (ctx) => {
     const { positional } = subArgs(ctx);
     const target = positional[0]?.trim();
     if (positional.length !== 1 || !target) {
@@ -249,7 +250,7 @@ export function buildSubcommands(
     }
     try {
       const commandContext = await w.getHouseCommandContext();
-      const run = operation === 'login' ? runHouseLoginCommand : runHouseLogoutCommand;
+      const run = operation === 'recover' ? runHouseRecoveryCommand : operation === 'login' ? runHouseLoginCommand : runHouseLogoutCommand;
       return { text: await run(commandContext, target) };
     } catch (err) {
       return { text: failureText(`/popclaw ${operation}`, err) };
@@ -259,6 +260,7 @@ export function buildSubcommands(
   const handlers: Record<(typeof SUBCOMMAND_NAMES)[number], SubcommandHandler> = {
     login: houseCommand('login'),
     logout: houseCommand('logout'),
+    recover: houseCommand('recover'),
     // Pin the current channel as the proactive-notification target. The
     // capture hook above stashes rt.lastCommandAddress before routeSubcommand
     // dispatches here (its runtime().then runs before this handler's await).

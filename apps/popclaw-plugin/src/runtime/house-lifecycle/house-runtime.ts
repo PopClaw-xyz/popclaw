@@ -1,9 +1,11 @@
+import { houseBindingBlocked } from '../../world/house-recovery-fence.js';
+import { HouseRecovery, type HouseRecoveryPort } from '../../world/house-recovery.js';
 import { projectWorldAgentContext, type WorldAgentContextQuery, type WorldAgentContextResult } from '../../world/world-agent-context.js';
 import { storageDatabasePathAllowed, readStorageControl, assertStorageBootstrap, type RecoveryPath } from '../../host/storage-maintenance.js';
 /** One composition seam for OpenClaw, MCP and the standalone daemon/CLI. */
 import { popclaw } from '@popclaw/contracts';
 import type { Signer } from '../../identity/signer.js';
-import type { HouseStore } from '../../ingress/world-feed-store.js';
+import { executionDbFor, type HouseStore } from '../../ingress/world-feed-store.js';
 import { hostDbSlug } from '../../ingress/host-slug.js';
 import { MultiHouseEgress } from '../../egress/multi-house-egress.js';
 import { ServerPushEgress } from '../../egress/server-push-egress.js';
@@ -165,6 +167,7 @@ export class HouseRuntime {
   readonly manager: HouseLifecycleManager;
   readonly resident: ResidentLifecycle;
   readonly commands: HouseCommandPort;
+  readonly recovery: HouseRecoveryPort;
   readonly configuredHousePinning: ConfiguredHousePinningStrategy;
   private readonly participationObservers = new Map<string, Set<() => void>>();
   readonly egress: MultiHouseEgress;
@@ -245,11 +248,36 @@ export class HouseRuntime {
         consumersAllowed: () => storageDatabasePathAllowed(opts.db, 'consumers', catalog.options.paths), storeFor: origin => this.storeFor(origin),
         fetch: opts.fetch, log: opts.log });
     }
+    const recovery = new HouseRecovery({db:opts.db,fetch:opts.fetch,configuredPinFor:opts.configuredPinFor,
+      enqueue: (id,origin) => this.bus.reconfirmHouse(id,origin),
+      isOwnerCurrent: () => false,
+      quiesce: async (origin,id) => {
+        await this.resident.coordinator.quiesceHouse(origin);
+        // Legacy cursors lack an incarnation namespace. Archive their exact
+        // rows before resetting the live cache cursor; committed rows stay.
+        if (this.resources) {
+          const store = await this.storeFor(origin);
+          for (const db of new Set([store.db, executionDbFor(store)])) {
+            const rows: Record<string, unknown> = {};
+            for (const table of ['world_feed_cursor','world_stream_cursor']) {
+              if (db.queryOne("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",[table])) rows[table] = db.queryAll(`SELECT * FROM ${table}`);
+            }
+            const fence = opts.db.queryOne<{decision_id:string}>('SELECT decision_id FROM house_recovery_fences_v1 WHERE origin=?',[origin]);
+            if (fence?.decision_id !== id) throw new Error('HOUSE_RECOVERY_DECISION_STALE');
+            opts.db.execute('CREATE TABLE IF NOT EXISTS house_recovery_cursor_evidence_v1 (decision_id TEXT NOT NULL, store_lane TEXT NOT NULL, evidence_json TEXT NOT NULL, PRIMARY KEY(decision_id,store_lane))');
+            opts.db.execute('INSERT OR IGNORE INTO house_recovery_cursor_evidence_v1 VALUES(?,?,?)',[fence!.decision_id,db === store.db ? 'cache':'execution',JSON.stringify(rows)]);
+            db.transaction(tx => { for (const table of Object.keys(rows)) tx.execute(`UPDATE ${table} SET seq=0`); });
+          }
+        }
+      }});
+    this.recovery = recovery;
     const coordinator: HouseCommandPort = {
       loginHouse: (origin, authority) => { this.bindOrigin(origin); return this.resident.coordinator.loginHouse(origin, authority); },
       logoutHouse: origin => this.resident.coordinator.logoutHouse(origin),
       getHouseStatus: origin => this.resident.coordinator.getHouseStatus(origin),
       knownHouseOrigins: () => this.resident.coordinator.knownHouseOrigins(),
+      reconfirmHouse: id => { const epoch = this.resident.authority.captureEpoch(); return recovery.apply(id,
+        () => !this.stopped && epoch !== null && this.resident.authority.isEpochCurrent(epoch)); },
     };
     this.bus = new HouseCommandBus({ db: opts.db, coordinator, authority: this.resident.authority,
       pollMs: opts.commandPollMs, timeoutMs: opts.commandTimeoutMs, log: opts.log,
@@ -289,6 +317,11 @@ export class HouseRuntime {
       getHouseStatus: input => this.bus.getHouseStatus(input),
       knownHouseOrigins: () => this.bus.knownHouseOrigins(),
     };
+  }
+
+  /** A recovery confirms trust, never the old standing execution policy. */
+  nativeRecoveryDecisionId(origin: string): string | undefined {
+    return this.opts.db.queryOne<{decision_id:string}>("SELECT decision_id FROM house_recovery_fences_v1 WHERE origin=? AND state='complete'",[origin])?.decision_id;
   }
 
   /** Root-only reconstruction of current durable authority at actual send. */
@@ -578,7 +611,7 @@ export class HouseRuntime {
       || !Number.isSafeInteger(captured.lease_expires_at)) throw sessionUnavailableError(origin, captured?.remote_status);
     const gate: HouseGate = { origin, generation: captured.op_seq, signal: this.terminal.signal,
       isActive: () => {
-        if (this.stopped || !this.storageAllows('execution')) return false;
+        if (this.stopped || !this.storageAllows('execution') || houseBindingBlocked(this.opts.db,origin)) return false;
         const current = readParticipation(this.opts.db, origin);
         return !!current && current.desired === 'enabled' && current.phase === 'connected'
           && current.op_seq === captured.op_seq && current.session_id === captured.session_id
@@ -734,7 +767,7 @@ export class HouseRuntime {
     };
     return {origin, signal: this.terminal.signal, inactiveReason: reason, isActive: () => {
       try {
-      if (this.stopped || !this.storageAllows('execution') || !captured || captured.desired !== 'enabled' || captured.phase !== 'connected') return false;
+      if (this.stopped || !this.storageAllows('execution') || houseBindingBlocked(this.opts.db,origin) || !captured || captured.desired !== 'enabled' || captured.phase !== 'connected') return false;
       const current = readParticipation(this.opts.db, origin);
       return !!current && current.desired === 'enabled' && current.phase === 'connected'
         && current.op_seq === captured.op_seq && current.session_id === captured.session_id

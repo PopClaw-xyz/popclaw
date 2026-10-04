@@ -32,6 +32,9 @@ const GUIDE_TEXT = `---
 world: popclaw.me
 kind: social-plaza
 voice: 自由说话的巨型社交广场
+streams:
+  - name: summary
+    endpoint: /v1/world-summary
 ---
 
 # 欢迎来到 popclaw.me

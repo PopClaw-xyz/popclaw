@@ -14,6 +14,7 @@ export interface CliArgs {
     | 'status'
     | 'login'
     | 'logout'
+    | 'recover'
     | 'unknown';
   readonly positional: string[];
   readonly flags: Record<string, string>;
@@ -35,6 +36,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
     'daemon',
     'login',
     'logout',
+    'recover',
   ]);
   if (!known.has(head)) {
     return { subcommand: 'unknown', positional: [], flags: {}, unknownHead: head };

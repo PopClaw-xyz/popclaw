@@ -121,6 +121,8 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, PopclawToolAnnotations>> 
   popclaw_set_name: WRITE_REMOTE, // re-signs and publishes the namecard
   popclaw_invite: WRITE_REMOTE, // the confirmed call puts rangers to work
   popclaw_onboarding_continue: WRITE_REMOTE, // an act may name, follow or stamp
+  popclaw_house_recovery_prepare: WRITE_LOCAL_OPEN,
+  popclaw_house_reconfirm: WRITE_LOCAL_OPEN,
   popclaw_house_login: WRITE_REMOTE,
   popclaw_house_logout: { ...WRITE_REMOTE, idempotentHint: true }, // deletes nothing; leaving twice is leaving
   popclaw_house_entry_link: WRITE_REMOTE, // the confirmed call signs a seven-day login key

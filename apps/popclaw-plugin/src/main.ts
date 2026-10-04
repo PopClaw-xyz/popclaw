@@ -45,7 +45,7 @@ import { HouseRuntime } from './runtime/house-lifecycle/house-runtime.js';
 import { actionSigner } from './runtime/house-lifecycle/action-context.js';
 import { openHouseStores, openWorldFeedStore } from './ingress/world-feed-store.js';
 import {
-  runHouseLoginCommand,
+  runHouseRecoveryCommand, runHouseLoginCommand,
   runHouseLogoutCommand,
 } from './commands/popclaw-house.js';
 import { InboxStore } from './messaging/inbox-store.js';
@@ -440,7 +440,7 @@ async function runHouseSubcommand(
     return 2;
   }
   let exitCode = 0;
-  const ctx = { lang: ownerLang,
+  const ctx = { lang: ownerLang, recovery: houses.recovery,
     readAgentContext: (origin: string, sessionId: string) => houses.readAgentContext(origin, actorId, {}, sessionId),
     coordinator: () => ({ ...houses.commands,
     loginHouse: async (origin: string) => {
@@ -449,7 +449,7 @@ async function runHouseSubcommand(
       return result;
     },
   }) };
-  console.log(await (args.subcommand === 'login'
+  console.log(await (args.subcommand === 'recover' ? runHouseRecoveryCommand(ctx,target) : args.subcommand === 'login'
     ? runHouseLoginCommand(ctx, target) : runHouseLogoutCommand(ctx, target)));
   return exitCode;
 }
@@ -465,6 +465,7 @@ function printUsage(sink: (line: string) => void): void {
   sink(renderCopy(lang, 'cli.usage.daemon', {}));
   sink(renderCopy(lang, 'cli.usage.login', {}));
   sink(renderCopy(lang, 'cli.usage.logout', {}));
+  sink(renderCopy(lang, 'help.recover.usage', {}));
   sink(renderCopy(lang, 'cli.usage.mcp', {}));
   sink(renderCopy(lang, 'cli.usage.more', {}));
   sink(WORLD_COMMAND_HELP);
@@ -506,9 +507,9 @@ async function main() {
     process.exitCode = 0;
     return;
   }
-  if (args.subcommand === 'login' || args.subcommand === 'logout') {
+  if (args.subcommand === 'login' || args.subcommand === 'logout' || args.subcommand === 'recover') {
     const target = args.positional[0] ?? '';
-    if (!target) {
+    if (!target || (args.subcommand === 'recover' && (args.positional.length !== 1 || Object.keys(args.flags).length))) {
       console.error(`usage: popclaw ${args.subcommand} <host>`);
       process.exitCode = 2;
       return;
@@ -562,7 +563,7 @@ async function main() {
     }
     houses.startReader();
     const runtime = houses;
-    const code = args.subcommand === 'login' || args.subcommand === 'logout'
+    const code = args.subcommand === 'login' || args.subcommand === 'logout' || args.subcommand === 'recover'
       ? await runHouseSubcommand(args, runtime, boot.popclawId)
       : await runtime.runCommand(async () => {
           switch (args.subcommand) {

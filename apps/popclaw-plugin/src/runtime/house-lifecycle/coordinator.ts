@@ -76,6 +76,8 @@ export class HouseLifecycleCoordinator {
   private readonly bindings = new Map<string, HouseBinding>();
   private stopped = false;
   private readonly stopping = new Set<Promise<void>>();
+  private readonly houseStopping = new Map<string, Set<Promise<void>>>();
+  private readonly houseStopFailures = new Set<string>();
   private teardownDepth = 0;
   private readonly publicFactory?: PublicResourceFactory;
   private readonly publicBindings = new Map<string, PublicBinding>();
@@ -174,6 +176,25 @@ export class HouseLifecycleCoordinator {
     const result = await this.managerRef.logoutHouse(input);
     this.syncHouse(origin);
     return result;
+  }
+
+  /** Strict per-House drain for recovery. A teardown failure must keep the
+   * durable recovery fence held; it is never logged as successful cutover. */
+  async quiesceHouse(origin: string): Promise<void> {
+    this.publicLogoutFences.set(origin, {});
+    const binding = this.bindings.get(origin);
+    const streams = binding?.streams;
+    if (binding) { binding.streams = null; binding.generation = -1; }
+    const quiet = this.managerRef.quiesceHouse(origin);
+    this.syncPublic(origin);
+    await quiet;
+    try { await streams?.stop(); }
+    catch (error) { this.houseStopFailures.add(origin); throw error; }
+    while (this.houseStopping.get(origin)?.size) await Promise.allSettled([...this.houseStopping.get(origin)!]);
+    if (this.houseStopFailures.has(origin)) throw new Error('HOUSE_RECOVERY_TEARDOWN_FAILED');
+    const publicBinding = this.publicBindings.get(origin);
+    await publicBinding?.draining;
+    if (publicBinding?.failed) throw new Error('HOUSE_RECOVERY_PUBLIC_TEARDOWN_FAILED');
   }
 
   /** The manager this coordinator binds (roots call through for status). */
@@ -292,10 +313,14 @@ export class HouseLifecycleCoordinator {
       const result = streams.stop();
       if (!result) return;
       const task = Promise.resolve(result).catch(err => {
+        this.houseStopFailures.add(binding.origin);
         this.log(`stream teardown failed (${binding.origin}): ${String(err)}`);
-      }).finally(() => { this.stopping.delete(task); });
+      }).finally(() => { this.stopping.delete(task); this.houseStopping.get(binding.origin)?.delete(task); });
       this.stopping.add(task);
+      const tasks = this.houseStopping.get(binding.origin) ?? new Set<Promise<void>>();
+      tasks.add(task); this.houseStopping.set(binding.origin,tasks);
     } catch (err) {
+      this.houseStopFailures.add(binding.origin);
       this.log(`stream teardown failed (${binding.origin}): ${String(err)}`);
     } finally {
       this.teardownDepth--;

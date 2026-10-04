@@ -13,6 +13,7 @@
 import { reportOwnerLang } from '../lexicon/owner-language.js';
 import type { OnboardingOrchestrator } from '../onboarding/orchestrator.js';
 import type { WorldSummaryResult, WorldSummaryResponse } from '../world/world-summary-client.js';
+import type { GuideTextResult } from '../world/guide-client.js';
 import type { SocialLogRecorder } from '../social-log/social-log.js';
 import type { ResolveCandidate } from '../identity/follow-resolution.js';
 import type { PluginRuntime } from '../runtime/plugin-runtime.js';
@@ -47,7 +48,7 @@ export interface WorldSnapshotItemLike {
  * pipeline); resolved lazily via getWorldDeps, mirroring getOrchestrator.
  */
 export interface WorldToolsDeps {
-  guideClient: { fetchGuideText(): Promise<string | null> };
+  guideClient: { fetchGuideText(): Promise<string | null>; fetchGuideResult?(): Promise<GuideTextResult> };
   summaryClient: {
     fetchSummary(windowHours?: number): Promise<WorldSummaryResponse | null>;
     fetchSummaryResult?(windowHours?: number): Promise<WorldSummaryResult>;

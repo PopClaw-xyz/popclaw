@@ -188,12 +188,13 @@ export function createOpenClawWorldExecution(options: OpenClawWorldExecutionOpti
      * into the capability view so a kind that nothing authorizes reports
      * not-ready BEFORE a person picks it, rather than after they confirmed it.
      */
-    actionReadiness(input: { house: string; kind: string }): NativeActionReadiness {
+    actionReadiness(input: { house: string; kind: string; recoveryDecisionId?: string }): NativeActionReadiness {
       const subject = subjectOf(input.house, input.kind);
       try {
         const applied = config(options.readActiveConfig());
         const code = applied.enabled
-          ? readinessCode(applied.policies, options.actorId, input.house, input.kind)
+          ? input.recoveryDecisionId !== undefined && !coveringPolicies(applied.policies,options.actorId,input.house,input.kind).some(p => p.recoveryDecisionId === input.recoveryDecisionId)
+            ? 'NATIVE_POLICY_RECONFIRMATION_REQUIRED' : readinessCode(applied.policies, options.actorId, input.house, input.kind)
           : NATIVE_AUTHORIZATION_REASONS.disabled;
         // A probe that finds nothing to refuse clears this subject's memo, so
         // the next genuine refusal for it gets its own line.

@@ -113,8 +113,8 @@ describe('tool annotations table', () => {
     expect(Object.keys(TOOL_ANNOTATIONS).sort()).toEqual([...surface].sort());
   });
 
-  it('leaves the OpenClaw manifest untouched: contracts.tools still names 50 tools, all annotated', () => {
-    expect(declared).toHaveLength(50);
+  it('keeps all 52 shared tools in the OpenClaw manifest, including recovery, annotated', () => {
+    expect(declared).toHaveLength(52);
     for (const name of declared) expect(toolAnnotations(name), name).toBeDefined();
     for (const name of MCP_ONLY_TOOLS) expect(declared).not.toContain(name);
   });
@@ -154,8 +154,8 @@ describe('tool annotations table', () => {
     const gated = [...new Set(names)].filter(
       (name) => (consumeOwnerApproval(name, {}, 'annotation-probe') as { reason?: string }).reason !== 'SUBJECT_NOT_REGISTERED',
     );
-    // The two subjects that exist today; the probe itself must be live.
-    expect(gated.sort()).toEqual(['popclaw_send_draft', 'popclaw_world_invoke']);
+    // The three subjects that exist today; the probe itself must be live.
+    expect(gated.sort()).toEqual(['popclaw_house_reconfirm', 'popclaw_send_draft', 'popclaw_world_invoke']);
     for (const name of gated) {
       expect(toolAnnotations(name)?.readOnlyHint, name).toBe(false);
       expect(toolAnnotations(name)?.openWorldHint, name).toBe(true);

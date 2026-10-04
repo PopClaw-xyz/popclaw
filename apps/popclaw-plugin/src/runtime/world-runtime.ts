@@ -54,7 +54,7 @@ interface WorldRuntimeBaseOptions {
    *  refusal, and `assertPermit` still decides every actual call. */
   nativeAuthorization?: {
     assertPermit(permit: NativeWorldExecutionPermit): void;
-    actionReadiness(input: { house: string; kind: string }): NativeActionReadiness;
+    actionReadiness(input: { house: string; kind: string; recoveryDecisionId?: string }): NativeActionReadiness;
   };
 }
 export type WorldRuntimeOptions = WorldRuntimeBaseOptions & ({ mode: 'commands' } | {
@@ -162,7 +162,7 @@ export class WorldRuntime {
         // widen what EXECUTES: a call still has to arrive with a real answer
         // or a real policy, and is refused by name if it has neither.
         const owner = this.ownerLaneActive();
-        const authorization = supported && native && !owner ? native.actionReadiness({ house: origin, kind }) : null;
+        const authorization = supported && native && !owner ? native.actionReadiness({ house: origin, kind, recoveryDecisionId:this.options.houses.nativeRecoveryDecisionId(origin) }) : null;
         const ready = supported && availability.ready && (authorization?.ready ?? true);
         // A kind that is otherwise supported but blocked by the storage layer
         // carries that reason forward; an unsupported kind keeps whatever
@@ -318,26 +318,32 @@ export class WorldRuntime {
     if (old) { old.assertBinding(capture.executionDb, binding, this.options.actorId); return old; }
     const native = new WorldNativeActionAuthorityStore({ db: capture.executionDb, house: binding, actorId: this.options.actorId,
       expectedPartition: capture.expectedPartition, captureSelectedActionContext: kind => this.captureSelected(store, kind),
-      assertPermit: permit => { if (!this.options.nativeAuthorization) throw new Error('ACTION_AUTHORITY_REQUIRED'); this.options.nativeAuthorization.assertPermit(permit); },
+      assertPermit: permit => { if (!this.options.nativeAuthorization) throw new Error('ACTION_AUTHORITY_REQUIRED'); this.assertNativePermit(permit); },
       now: this.options.now ?? (() => Math.floor(Date.now() / 1000)) });
     this.natives.set(id, native); return native;
+  }
+  private assertNativePermit(permit: NativeWorldExecutionPermit): void {
+    if (!this.options.nativeAuthorization) throw new Error('ACTION_AUTHORITY_REQUIRED');
+    this.options.nativeAuthorization.assertPermit(permit);
+    const decisionId = this.options.houses.nativeRecoveryDecisionId(permit.input.house);
+    if (decisionId !== undefined && permit.policyScope.recoveryDecisionId !== decisionId) throw new Error('NATIVE_POLICY_RECONFIRMATION_REQUIRED');
   }
   /** Only the native factory scope supplies this permit; shared command JSON cannot do so. */
   nativeCommandContext(permit: NativeWorldExecutionPermit): WorldCommandContext {
     this.check();
     if (!this.options.nativeAuthorization) throw new Error('ACTION_AUTHORITY_REQUIRED');
-    this.options.nativeAuthorization.assertPermit(permit);
+    this.assertNativePermit(permit);
     return { readCapabilities: this.readCapabilities, readPublicStatus: this.readPublicStatus, readPrivateMessages: this.readPrivateMessages, client: this.client,
       actionAuthority: input => this.track((async () => {
-        this.check(); this.options.nativeAuthorization!.assertPermit(permit);
+        this.check(); this.assertNativePermit(permit);
         if (canonicalActionJson(input) !== canonicalActionJson(permit.input)) throw new Error('NATIVE_ACTION_INPUT_MISMATCH');
         const store = await this.store(this.origin(input.house)), selected = this.captureSelected(store, input.kind);
         this.assertDeclaredParameters(selected, input);
         const capture = this.options.houses.captureNativeActionExecutionStore(store, this.options.actorId);
-        this.check(); capture.assertAccounting(); selected.assertCurrent(); this.options.nativeAuthorization!.assertPermit(permit);
+        this.check(); capture.assertAccounting(); selected.assertCurrent(); this.assertNativePermit(permit);
         const authority = this.native(store, selected.evidence.house).reserve(permit);
         const id = JSON.stringify([key(selected.evidence.house, this.options.actorId), authority.reservationId]);
-        this.authorizations.set(id, () => { this.check(); capture.assertAccounting(); selected.assertCurrent(); this.options.nativeAuthorization!.assertPermit(permit); });
+        this.authorizations.set(id, () => { this.check(); capture.assertAccounting(); selected.assertCurrent(); this.assertNativePermit(permit); });
         this.nativeAuthorities.set(id, authority); this.issuedAuthorities.add(authority); return authority;
       })()) };
   }

@@ -243,7 +243,7 @@ If your OpenClaw doesn't restrict which tools an agent can use, skip this whole 
 
 ### Mechanism 1: `tools.profile`
 
-If you mainly use OpenClaw as a coding assistant, your config probably has `tools.profile` set to `"coding"` — this is the easiest one to hit and the easiest to miss, because it filters by whole tool category, and plugin tools (`group:plugins`, which is all of PopClaw's tools) get blocked wholesale even if you don't remember setting this. The fix is an `alsoAllow` list in your `tools` block that names PopClaw's tools **one by one** — the same 42 names listed under Mechanism 2 below:
+If you mainly use OpenClaw as a coding assistant, your config probably has `tools.profile` set to `"coding"` — this is the easiest one to hit and the easiest to miss, because it filters by whole tool category, and plugin tools (`group:plugins`, which is all of PopClaw's tools) get blocked wholesale even if you don't remember setting this. The fix is an `alsoAllow` list in your `tools` block that names PopClaw's tools **one by one** — the same 45 names listed under Mechanism 2 below:
 
 ```json
 {
@@ -252,7 +252,7 @@ If you mainly use OpenClaw as a coding assistant, your config probably has `tool
     "alsoAllow": [
       "popclaw_show_namecard",
       "popclaw_check_status",
-      "... the full 42-name list from Mechanism 2 ..."
+      "... the full 45-name list from Mechanism 2 ..."
     ]
   }
 }
@@ -260,11 +260,11 @@ If you mainly use OpenClaw as a coding assistant, your config probably has `tool
 
 Do **not** write `"alsoAllow": ["group:plugins"]` or `["popclaw"]` here, even though both look like the obvious shortcut. OpenClaw treats a group or plugin-wide entry as permission for the plugin's *optional* tools too, so it drags the seven tools PopClaw deliberately keeps out of the model's everyday tool list (they fall back to `/popclaw` commands) back into view — the attention-budget design described under Mechanism 2 is silently undone. Naming the tools individually is the only form that keeps them hidden.
 
-The same applies to `tools.profile: "full"`: that profile already grants the whole plugin group, so on a `full` host the model sees all of PopClaw's tools, the seven optional ones included. Nothing breaks — they work, they just cost attention — but if you chose `full` deliberately, know that the "hidden by default" behaviour described below does not apply to you. Measured on OpenClaw 2026.9.2: no `tools` block → 43 visible; `full` → 50; `coding` + `group:plugins` → 50; `coding` + the 43 names → 43.
+The same applies to `tools.profile: "full"`: that profile already grants the whole plugin group, so on a `full` host the model sees all of PopClaw's tools, the seven optional ones included. Nothing breaks — they work, they just cost attention — but if you chose `full` deliberately, know that the "hidden by default" behaviour described below does not apply to you. Historical measurement before the two recovery tools were added (OpenClaw 2026.9.2): no `tools` block → 43 visible; `full` → 50; `coding` + `group:plugins` → 50; `coding` + the 43 names → 43.
 
 ### Mechanism 2: configure the toolsAllow allowlist
 
-If your host environment is more limited (weaker model, or a runtime sensitive to tool count), and your OpenClaw config gives the agent a `toolsAllow` allowlist by exact name, list the following 43 tool names **exactly, one per line** — do not use wildcards like `*`, `group:plugins`, or the bare plugin id `popclaw`. (This is also the list to paste into `alsoAllow` under Mechanism 1.) Some PopClaw tools are deliberately designed to stay out of the model's visible tool list by default (to save attention budget, falling back to slash commands instead); a wildcard would surface those too and defeat that design — this isn't simply "granting a bit more access."
+If your host environment is more limited (weaker model, or a runtime sensitive to tool count), and your OpenClaw config gives the agent a `toolsAllow` allowlist by exact name, list the following 45 tool names **exactly, one per line** — do not use wildcards like `*`, `group:plugins`, or the bare plugin id `popclaw`. (This is also the list to paste into `alsoAllow` under Mechanism 1.) Some PopClaw tools are deliberately designed to stay out of the model's visible tool list by default (to save attention budget, falling back to slash commands instead); a wildcard would surface those too and defeat that design — this isn't simply "granting a bit more access."
 
 ```
 popclaw_show_namecard
@@ -296,6 +296,8 @@ popclaw_recent_attachments
 popclaw_update_cadence
 popclaw_house_login
 popclaw_house_logout
+popclaw_house_recovery_prepare
+popclaw_house_reconfirm
 popclaw_house_entry_link
 popclaw_world_capabilities
 popclaw_world_private_messages

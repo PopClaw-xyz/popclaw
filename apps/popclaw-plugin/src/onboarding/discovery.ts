@@ -3,7 +3,6 @@ import {
   briefingCard,
   buildExpandedCard,
   cardText,
-  lanternUnreachableText,
   markFailedText,
   markSavedText,
   mehAckText,
@@ -20,7 +19,9 @@ import { displayPerson } from '../identity/person-resolver.js';
 import { appendCorePrivate } from '../taste/taste-writer.js';
 import type { LearnedPick, LearnedSignal } from '../taste/learned-writer.js';
 import { renderLanternPage, uploadOnboardingPage, type OnboardingCanvasDeps } from './canvas-pages.js';
-import { parseGuideFrontmatter, type HouseEntry } from '../world/guide.js';
+import { parseGuideFrontmatter, summaryDeclaration, type HouseEntry } from '../world/guide.js';
+import type { GuideTextResult } from '../world/guide-client.js';
+import { formatHouseReadFailure, houseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
 import {
   formatHotPostLine,
   formatNotablePersonLine,
@@ -31,16 +32,18 @@ import {
 } from '../world/summary-format.js';
 import { rankBySummaryTaste } from '../world/summary-ranker.js';
 import { aggregateNotableAuthors, type AuthorSource } from '../world/notable-authors.js';
-import type { HotPost, WorldSummaryResponse } from '../world/world-summary-client.js';
+import type { HotPost, WorldSummaryResponse, WorldSummaryResult } from '../world/world-summary-client.js';
 import type { SessionContextIndex } from './context-index.js';
 
 export interface GuideClientLike {
   /** Full text of guide.md; failure → null (GuideClient contract). */
   fetchGuideText(): Promise<string | null>;
+  fetchGuideResult?(): Promise<GuideTextResult>;
 }
 
 export interface SummaryClientLike {
   fetchSummary(windowHours?: number): Promise<WorldSummaryResponse | null>;
+  fetchSummaryResult?(windowHours?: number): Promise<WorldSummaryResult>;
 }
 
 /** Minimal projection of a WorldFeedClient.fetchSnapshot entry (compatible with pbjs IWorldFeedItem). */
@@ -111,8 +114,8 @@ interface LanternEntry {
 
 /** Persisted answer material. The state machine owns this data; the session never copies it into an answer cache. */
 export interface DiscoveryDrafts {
-  /** lantern: the highlighted entries fetched; 'degraded' = the lore-house didn't respond (next retries). */
-  lantern?: 'degraded' | { entries: LanternEntry[] };
+  /** No declared summary is terminal for this act; an unknown/failed read may be retried. */
+  lantern?: 'degraded' | 'unsupported' | { entries: LanternEntry[] };
   /** attune: the same batch of entries carried over from lantern (reranking must use that same batch). */
   attune?: { entries: LanternEntry[] };
 }
@@ -176,22 +179,59 @@ export class OnboardingDiscovery {
   } | null = null;
   private cachedTasteText: string | null = null;
   private cachedRerank: string[] | null = null;
+  private cachedLanternNotice: string | null = null;
 
   constructor(private readonly deps: DiscoveryDeps) {}
 
   async presentLantern(): Promise<{ text: string }> {
-    const [guideText, summary, snapshot] = await Promise.all([
-      this.deps.guideClient.fetchGuideText().catch(() => null),
-      this.deps.summaryClient.fetchSummary(SUMMARY_WINDOW_HOURS).catch(() => null),
+    const lang = ownerLang();
+    let guide: GuideTextResult;
+    try {
+      if (this.deps.guideClient.fetchGuideResult) guide = await this.deps.guideClient.fetchGuideResult();
+      else {
+        const text = await this.deps.guideClient.fetchGuideText();
+        guide = text === null ? { ok: false, failure: { code: 'HOUSE_REMOTE_UNKNOWN' } } : { ok: true, text };
+      }
+    } catch (error) { guide = { ok: false, failure: houseReadFailure(error) }; }
+    const declaration = guide.ok ? summaryDeclaration(guide.text) : 'unknown';
+    if (declaration !== 'supported') {
+      if (declaration === 'unsupported') {
+        const houseLines = this.houses().map(h => {
+          const say = h.entry?.headline ?? houseBlurb(h, () => this.houses(), guide.ok ? guide.text : null);
+          return h.name + (say ? ` — ${say}` : '');
+        });
+        const text = [t('world.summary.unsupported'), ...houseLines, t('onboarding.lantern.unsupportedContinue')].join('\n\n');
+        this.cachedLantern = null;
+        this.cachedLanternNotice = text;
+        this.deps.recordDone(t('onboarding.did.houseGuide'));
+        this.deps.setDrafts({ lantern: 'unsupported' });
+        return this.presentCard({ blocks: [{ kind: 'text', text }] });
+      }
+      this.deps.setDrafts({ lantern: 'degraded' });
+      const reason = guide.ok ? '' : ` ${formatHouseReadFailure(lang, guide.failure)}`;
+      const text = t('world.summary.availabilityUnknown') + reason + '\n\n' + t('onboarding.lantern.readRetry');
+      this.cachedLanternNotice = this.cachedLantern ? null : text;
+      return this.presentCard({ blocks: [{ kind: 'text', text }] });
+    }
+    const guideText = guide.ok ? guide.text : null;
+    const [summaryResult, snapshot] = await Promise.all([
+      (this.deps.summaryClient.fetchSummaryResult ? this.deps.summaryClient.fetchSummaryResult(SUMMARY_WINDOW_HOURS)
+        : this.deps.summaryClient.fetchSummary(SUMMARY_WINDOW_HOURS).then((summary): WorldSummaryResult => summary
+          ? { ok: true, summary } : { ok: false, failure: { code: 'HOUSE_REMOTE_UNKNOWN' } }))
+        .catch((error): WorldSummaryResult => ({ ok: false, failure: houseReadFailure(error) })),
       this.deps.snapshotClient
         .fetchSnapshot({ limit: SNAPSHOT_LIMIT })
         .catch(() => [] as SnapshotItemLike[]),
     ]);
-    if (summary === null) {
-      // An unreachable lore-house never blocks the spine: give an honest card, next retries, skip just moves on.
+    if (!summaryResult.ok) {
+      // An actual read failure never blocks the spine, but must not be called a quiet world.
       this.deps.setDrafts({ lantern: 'degraded' });
-      return this.presentCard({ blocks: [{ kind: 'text', text: lanternUnreachableText() }] });
+      const text = formatHouseReadFailure(lang, summaryResult.failure) + '\n\n' + t('onboarding.lantern.readRetry');
+      this.cachedLanternNotice = this.cachedLantern ? null : text;
+      return this.presentCard({ blocks: [{ kind: 'text', text }] });
     }
+    const summary = summaryResult.summary;
+    this.cachedLanternNotice = null;
 
     // Gradient cold start: only spend one LLM matrix call once core taste is
     // non-empty (right now it's usually still empty → falls back to
@@ -274,6 +314,7 @@ export class OnboardingDiscovery {
   answerLantern(trimmed: string): LanternAnswer | Promise<{ text: string }> {
     const drafts = this.deps.drafts().lantern;
     if (drafts === undefined || drafts === 'degraded') return this.presentLantern();
+    if (drafts === 'unsupported') return { attune: { entries: [] } };
     const entries = drafts.entries;
     if (!trimmed) return { attune: { entries: [...entries] } };
     const mark = matchMark(trimmed);
@@ -418,6 +459,7 @@ export class OnboardingDiscovery {
   /** Zero I/O and no writes. Cache lifetime is this instance, including stop/start of its spine. */
   currentCardText(stage: 'lantern' | 'attune'): string {
     if (stage === 'lantern') {
+      if (this.cachedLanternNotice) return this.cachedLanternNotice;
       if (!this.cachedLantern) return t('onboarding.readonly.lantern');
       return renderBriefingForAgent(this.lanternBriefing());
     }

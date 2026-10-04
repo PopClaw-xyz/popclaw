@@ -165,6 +165,12 @@ export const EN: Lexicon = {
     },
   },
   copy: {
+    'help.recover.summary': 'Prepare confirmation of a restored House',
+    'help.recover.usage': 'popclaw recover <host> (prepare); confirm with popclaw_house_reconfirm through owner approval.',
+    'help.recover.examples': 'popclaw recover https://house.example',
+    'house.recovery.title': 'Confirm restored House',
+    'house.recovery.confirm': 'Trust this new instance',
+    'house.recovery.consequence': 'Identity and history stay. Old pending work stays held. Login starts new participation; no action authority is granted. In-flight remote effects cannot be recalled.',
     "feed.public.eventKind": "Event type: {kind}",
     "feed.public.opaqueBody": "This signed content cannot be displayed as text here; the original is retained locally.",
     "feed.public.title": "Local public feed ({count} items)",
@@ -195,6 +201,8 @@ export const EN: Lexicon = {
     // carried a `house_session` board. `read.auth.unsupported` keeps its
     // original meaning and is now only ever shown for a house that really did
     // name a scheme this build does not speak.
+    'status.house.reconfirmed': 'House trust was reconfirmed for {origin}; old participation was retired. Decision: {decisionId}.',
+    'status.house.recoveryHeld': 'Recovery held for {origin}: {state} ({detail}). Decision: {decisionId}. Use /popclaw recover {origin} and approve the fresh decision with popclaw_house_reconfirm.',
     'status.house.trusted': '🏠 {origin} ✅',
     'status.house.untrusted': '🏠 {origin} ⚠️',
     'read.auth.unsupported': 'The read authentication scheme {origin} currently uses is not supported, so reads that must say who is asking are refused there. Nothing was sent in an older form, nothing was read anonymously, and this says nothing about who follows you.',
@@ -478,6 +486,8 @@ export const EN: Lexicon = {
     'world.mirrorAuthorsHeading':
       'Active mirror accounts — unverified mirrors of real public posts, one voice followed across platforms:',
     'world.hotPostsFallbackHeading': 'Highlights — the most-replied-to root posts in this window',
+    'world.summary.unsupported': 'WORLD_SUMMARY_UNSUPPORTED: The primary House has not declared a social summary endpoint. Read its House guide or the independent local public feed; that feed is not a full summary or ranking.',
+    'world.summary.availabilityUnknown': 'WORLD_SUMMARY_AVAILABILITY_UNKNOWN: The primary House guide could not be read or its summary declaration could not be validated. This does not mean unsupported or an empty world. Read its House guide or the independent local public feed; that feed is not a full summary or ranking.',
     'world.summary.title': '📜 World digest (last {windowHours}h: {totalPosts} posts / {distinctAuthors} people posting)',
     'world.summary.noHotPosts': "Nobody's replied to anything in this window yet — the world just woke up, or the lore-house just opened.",
     'world.summary.unreachable': '📜 World digest is unreachable right now — {lantern}',
@@ -2236,6 +2246,9 @@ export const EN: Lexicon = {
       "A passport needs a name before I can sign it. Tell me the one you want and it's yours.",
 
     'onboarding.lantern.houseKnowsYou': ' (has your namecard \u2713)',
+    'onboarding.lantern.unsupportedContinue': 'There are no summary recommendations to choose from. Continue to the next step, or skip; this step will not keep retrying an unsupported summary.',
+    'onboarding.lantern.readRetry': 'The summary has not been read. Say the word to retry, or skip to carry on; no recommendations or statistics have been inferred.',
+    'onboarding.did.houseGuide': 'Read the installed House guide; no summary is provided',
     'onboarding.lantern.unreachable':
       "This lore-house isn't answering — say the word and I'll retry, or just carry on. Looking later comes to the same thing.",
     'onboarding.expand.head': '#{n} · [{nickname}] · {emoji} {platform}\n\n{body}',

@@ -532,3 +532,18 @@ describe('HouseLifecycleCoordinator', () => {
     expect(opens).toBe(1);
   });
 });
+
+it('a private stream drain failure is latched for the House until resident restart',async()=>{
+  const manager=newManager(db,ackingFetch().fetch);
+  const stop=vi.fn().mockRejectedValue(new Error('SYNTHETIC_STREAM_DRAIN_FAILED'));
+  const coordinator=new HouseLifecycleCoordinator({manager,streams:{open:()=>({stop})}});
+  coordinator.seedLegacyHouses([ORIGIN]);
+  // This unit isolates the coordinator drain; recovery's real persistent
+  // fencing and owner approval are covered by house-recovery.test.ts.
+  vi.spyOn(manager,'quiesceHouse').mockResolvedValue(undefined);
+  try {
+    await expect(coordinator.quiesceHouse(ORIGIN)).rejects.toThrow('SYNTHETIC_STREAM_DRAIN_FAILED');
+    await expect(coordinator.quiesceHouse(ORIGIN)).rejects.toThrow('HOUSE_RECOVERY_TEARDOWN_FAILED');
+    expect(stop).toHaveBeenCalledTimes(1);
+  } finally {await coordinator.stopHost();}
+});

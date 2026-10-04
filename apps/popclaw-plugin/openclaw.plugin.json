@@ -69,7 +69,9 @@
       "popclaw_feedback",
       "popclaw_update_cadence",
       "popclaw_mute_notices",
-      "popclaw_recent_attachments"
+      "popclaw_recent_attachments",
+      "popclaw_house_recovery_prepare",
+      "popclaw_house_reconfirm"
     ]
   },
   "toolMetadata": {
@@ -147,6 +149,11 @@
                     "type": "string",
                     "pattern": "^[a-z0-9]{1,24}\\.[a-z0-9_]{1,24}(?:\\.[a-z0-9_]{1,24})?$"
                   }
+                },
+                "recoveryDecisionId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,128}$",
+                  "description": "For a recovered House, explicitly authorize this policy for the completed House recovery decision ID. Old policies cannot continue under a new incarnation."
                 },
                 "authorizedAt": {
                   "type": "string",

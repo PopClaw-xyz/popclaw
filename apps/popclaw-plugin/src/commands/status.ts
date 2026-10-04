@@ -51,6 +51,7 @@ import { routingLine } from '../routing/status-line.js';
 import { configReport, langSourceCopyKey, tzSourceCopyKey, type ConfigReport } from '../host/config-report.js';
 import { shortBuildStamp } from '../runtime/install-notice.js';
 import { houseReadStanding, readAuthRefusalMessage } from '../identity/read-authority.js';
+import { readHouseRecoveryStatus } from '../world/house-recovery-fence.js';
 import { listParticipation } from '../runtime/house-lifecycle/participation-store.js';
 import { normalizeHouseOrigin } from '../runtime/house-lifecycle/control-client.js';
 import type { HostDb } from '../host/host-db.js';
@@ -100,6 +101,11 @@ function statusHouses(db: HostDb, configured: readonly string[]): string[] {
   } catch {
     // The lifecycle tables are created when the first house is mounted; a
     // machine that never joined one legitimately has none.
+  }
+  // Recovery deliberately disables participation. Keep that held House
+  // visible even when it was joined at runtime and is absent from config.
+  if (db.queryOne("SELECT 1 FROM sqlite_master WHERE type='table' AND name='house_recovery_fences_v1'")) {
+    for (const row of db.queryAll<{origin: string}>('SELECT origin FROM house_recovery_fences_v1')) push(row.origin);
   }
   return out;
 }
@@ -693,6 +699,12 @@ export async function runStatusCommand(deps: StatusCommandDeps): Promise<{
       // two places the read path reads — the verified declaration and the
       // participation row — and never from the network.
       const standing = houseReadStanding(deps.host.db, origin);
+      const recovery = readHouseRecoveryStatus(deps.host.db, standing.origin);
+      if (recovery) houseLines.push(renderCopy(lang, recovery.state === 'complete'
+        ? 'status.house.reconfirmed' : 'status.house.recoveryHeld', {
+        origin: standing.origin, state: recovery.state, detail: recovery.detail || 'HOUSE_RECOVERY_HELD',
+        decisionId: recovery.decisionId,
+      }));
       // Scheme and trailing slash dropped: a phone line is ~30 cells and the
       // sentence below already names the origin in full.
       houseLines.push(

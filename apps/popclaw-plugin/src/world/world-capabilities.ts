@@ -1,3 +1,4 @@
+import { recoveredCapabilityBinding } from './house-recovery-fence.js';
 import { houseKeyFromAckHex, verifyManifestProof } from './house-binding.js';
 import { popclaw, isHouseSessionBoard } from '@popclaw/contracts';
 import boardSchema from '../../../../protocol/packages/contracts/protocol/public-envelope-01/board.schema.json';
@@ -83,6 +84,12 @@ function tables(tx: HostDb): void {
     origin TEXT NOT NULL, capability_revision TEXT NOT NULL, house_key TEXT NOT NULL, incarnation TEXT NOT NULL,
     manifest_bytes BLOB NOT NULL, proof_bytes BLOB NOT NULL, pin_provenance TEXT NOT NULL, guide_bytes BLOB,
     PRIMARY KEY(origin,capability_revision))`);
+  // A restore may change only proof metadata, keeping identical manifest
+  // bytes and digest. Preserve every incarnation's signed observation.
+  tx.execute(`CREATE TABLE IF NOT EXISTS world_capability_recovery_views_v1 (
+    origin TEXT NOT NULL, capability_revision TEXT NOT NULL, house_key TEXT NOT NULL, incarnation TEXT NOT NULL,
+    manifest_bytes BLOB NOT NULL, proof_bytes BLOB NOT NULL, pin_provenance TEXT NOT NULL, guide_bytes BLOB,
+    PRIMARY KEY(origin,house_key,incarnation,capability_revision))`);
   tx.execute(`CREATE TABLE IF NOT EXISTS world_capability_current_v1 (
     origin TEXT PRIMARY KEY, capability_revision TEXT NOT NULL, active INTEGER NOT NULL, detail TEXT NOT NULL,
     validation_json TEXT NOT NULL,
@@ -202,8 +209,15 @@ export function revokeHouseCapabilityView(tx: HostDb, origin: string, detail: st
 }
 export function readHouseCapabilityView(db: HostDb, origin: string): HouseCapabilityView | null {
   if (!db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='world_capability_current_v1'")) return null;
-  const row = db.queryOne<ObservationRow>(`SELECT v.*,c.validation_json FROM world_capability_views_v1 v
+  let row = db.queryOne<ObservationRow>(`SELECT v.*,c.validation_json FROM world_capability_views_v1 v
     JOIN world_capability_current_v1 c USING(origin,capability_revision) WHERE c.origin=? AND c.active=1`, [origin]);
+  if (db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='house_recovery_fences_v1'")) {
+    const recovery = db.queryOne<{house_key:string;new_incarnation:string}>("SELECT * FROM house_recovery_fences_v1 WHERE origin=? AND state='complete'",[origin]);
+    if (recovery && !db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='world_capability_recovery_views_v1'")) return null;
+    if (recovery) row = db.queryOne<ObservationRow>(`SELECT v.*,c.validation_json FROM world_capability_recovery_views_v1 v
+      JOIN world_capability_current_v1 c USING(origin,capability_revision)
+      WHERE c.origin=? AND c.active=1 AND v.house_key=? AND v.incarnation=?`,[origin,recovery.house_key,recovery.new_incarnation]);
+  }
   if (!row) return null;
   const verified: VerifiedHouseManifest = { house: { origin, houseKey: row.house_key, incarnation: row.incarnation },
     capabilityRevision: row.capability_revision, get manifestBytes() { return new Uint8Array(row.manifest_bytes); },
@@ -423,7 +437,8 @@ export function makeWorldManifestPreparer(options: { fetch?: typeof globalThis.f
       tables(tx);
       const old = tx.queryOne<{ house_key: string; incarnation: string }>('SELECT house_key,incarnation FROM world_capability_views_v1 WHERE origin=? LIMIT 1', [origin])
         ?? (tx.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='world_capabilities'") ? tx.queryOne<{ house_key: string; incarnation: string }>('SELECT house_key,incarnation FROM world_capabilities WHERE origin=?', [origin]) : null);
-      if (old && (old.house_key !== pinId || old.incarnation !== incarnation)) throw new Error('HOUSE_BINDING_CHANGED');
+      if (old && (old.house_key !== pinId || old.incarnation !== incarnation)
+        && !recoveredCapabilityBinding(tx, origin, pinId, incarnation)) throw new Error('HOUSE_BINDING_CHANGED');
       const verifiedHouse = { origin, houseKey: pinId, incarnation };
       retainUncoveredManifestHistory(tx, verifiedHouse);
       const logObservation = manifestLogObservation(document);
@@ -447,6 +462,10 @@ export function makeWorldManifestPreparer(options: { fetch?: typeof globalThis.f
         ON CONFLICT(origin,direction,kind) DO UPDATE SET version=excluded.version,schema_digest=excluded.schema_digest`, [origin, row.direction, row.kind, row.version, row.digest]);
       tx.execute(`INSERT INTO world_capability_views_v1(origin,capability_revision,house_key,incarnation,manifest_bytes,proof_bytes,pin_provenance,guide_bytes)
         VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(origin,capability_revision) DO NOTHING`, [origin, revision, pinId, incarnation, rawBytes, proofBytes, input.provenance, retainedGuide]);
+      if (recoveredCapabilityBinding(tx,origin,pinId,incarnation)) tx.execute(`INSERT INTO world_capability_recovery_views_v1
+        (origin,capability_revision,house_key,incarnation,manifest_bytes,proof_bytes,pin_provenance,guide_bytes)
+        VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(origin,house_key,incarnation,capability_revision) DO UPDATE SET guide_bytes=COALESCE(excluded.guide_bytes,guide_bytes)`,
+        [origin,revision,pinId,incarnation,rawBytes,proofBytes,input.provenance,retainedGuide]);
       if (guideBytes) tx.execute('UPDATE world_capability_views_v1 SET guide_bytes=? WHERE origin=? AND capability_revision=? AND guide_bytes IS NULL', [guideBytes, origin, revision]);
       revokeHouseCapabilityView(tx, origin, 'FIRST_RELEASE_SELECTION');
       tx.execute(`INSERT INTO world_capability_current_v1(origin,capability_revision,active,detail,validation_json) VALUES(?,?,?,?,?)

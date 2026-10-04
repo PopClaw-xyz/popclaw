@@ -1,3 +1,4 @@
+import { houseBindingBlocked } from '../../world/house-recovery-fence.js';
 import { storageDatabasePathAllowed } from '../../host/storage-maintenance.js';
 /** Same-data-root request/reply IPC. SQLite is the transport, so commands
  * survive a caller exit or owner takeover without a second network daemon. */
@@ -12,7 +13,9 @@ import { serializeLegacyPushCapture, parseLegacyPushCapture } from './push-captu
 import { captureHousePushEffect, parseHousePushEffect, type HousePushEffectReference } from './push-effect.js';
 
 export type HouseCommandPort = Pick<HouseLifecycleCoordinator,
-  'loginHouse' | 'logoutHouse' | 'getHouseStatus' | 'knownHouseOrigins'>;
+  'loginHouse' | 'logoutHouse' | 'getHouseStatus' | 'knownHouseOrigins'> & {
+  reconfirmHouse?(decisionId: string, origin: string): Promise<unknown>;
+};
 /** /v1/push uses Axum's Bytes extractor with its unchanged 2 MiB default. */
 export const MAX_IPC_PUSH_BYTES = 2 * 1024 * 1024;
 export interface CommandPushResult extends PushResult {
@@ -43,7 +46,7 @@ export interface PushExecutionContext {
 }
 interface CommandRow {
   request_id: string;
-  kind: 'login' | 'status' | 'push';
+  kind: 'login' | 'status' | 'push' | 'recovery';
   house_origin: string;
   baseline_seq: number;
   state: 'pending' | 'running' | 'done';
@@ -115,6 +118,15 @@ export class HouseCommandBus implements HouseCommandPort {
     return await this.wait<LoginResult>(requestId) ?? pending;
   }
 
+  reconfirmHouse(decisionId: string, origin: string): Promise<unknown> {
+    return this.trackCaller(this.reconfirmHouseInner(decisionId,origin));
+  }
+  private async reconfirmHouseInner(decisionId: string, origin: string): Promise<unknown> {
+    if (this.stoppedSignal.signal.aborted) throw new Error('HOUSE_RUNTIME_STOPPED');
+    this.enqueue(decisionId, 'recovery', origin);
+    return await this.wait<unknown>(decisionId) ?? {status:'held',decision_id:decisionId,origin};
+  }
+
   /** One durable operation per invocation. An uncertain result must be queried
    * with its operationId, never automatically retried as a new push. */
   push(input: string, bytes: Uint8Array, effectReference?: HousePushEffectReference): Promise<CommandPushResult> {
@@ -131,7 +143,7 @@ export class HouseCommandBus implements HouseCommandPort {
     const enqueued = this.opts.db.transaction(tx => {
       if (!storageDatabasePathAllowed(this.opts.db, 'execution')) return false;
       const row = readParticipation(tx, origin);
-      if (!row || row.desired !== 'enabled' || row.phase !== 'connected'
+      if (houseBindingBlocked(tx,origin) || !row || row.desired !== 'enabled' || row.phase !== 'connected'
         || (row.session_id !== '' && row.lease_expires_at <= Math.floor(Date.now() / 1000))) return false;
       let effectJson = effect === undefined ? null : JSON.stringify(effect);
       if (row.session_id === '') {
@@ -179,6 +191,7 @@ export class HouseCommandBus implements HouseCommandPort {
   }
 
   private pushCurrent(row: CommandRow): boolean {
+    if (houseBindingBlocked(this.opts.db,row.house_origin)) return false;
     if (row.deadline_at === null || row.deadline_at <= Date.now()) return false;
     const latest = readParticipation(this.opts.db, row.house_origin);
     return !!latest && latest.desired === 'enabled' && latest.phase === 'connected'
@@ -226,9 +239,10 @@ export class HouseCommandBus implements HouseCommandPort {
   private enqueue(requestId: string, kind: CommandRow['kind'], origin: string): void {
     this.opts.db.transaction(tx => {
       const baseline = readParticipation(tx, origin)?.op_seq ?? 0;
+      const expectedEpoch = kind === 'recovery' ? tx.queryOne<{generation:number;holder:string}>('SELECT generation,holder FROM house_lifecycle_owner WHERE id=1') : null;
       tx.execute(`INSERT INTO house_lifecycle_commands
-        (request_id, kind, house_origin, baseline_seq, created_at) VALUES (?,?,?,?,?)`,
-      [requestId, kind, origin, baseline, Date.now()]);
+        (request_id, kind, house_origin, baseline_seq, created_at, running_epoch) VALUES (?,?,?,?,?,?)`,
+      [requestId, kind, origin, baseline, Date.now(), expectedEpoch?.holder ? expectedEpoch.generation : null]);
     });
     this.pump();
   }
@@ -268,6 +282,13 @@ export class HouseCommandBus implements HouseCommandPort {
       // consumer. Epoch takeover records uncertainty instead of replaying it.
       this.opts.db.transaction(tx => {
         if (!this.opts.authority.isEpochCurrent(epoch)) return;
+        // A held approval belongs to the resident generation present when
+        // it was consumed, even if the caller exited before command enqueue.
+        if (tx.queryOne("SELECT 1 FROM sqlite_master WHERE type='table' AND name='house_recovery_decisions_v1'")) {
+          tx.execute(`UPDATE house_recovery_decisions_v1 SET state='failed',detail='HOUSE_RECOVERY_INTERRUPTED'
+            WHERE state IN ('approved','applying') AND (approved_epoch IS NULL OR approved_epoch != ?)
+            AND decision_id IN (SELECT decision_id FROM house_recovery_fences_v1 WHERE state='held')`,[epoch]);
+        }
         const orphaned = tx.queryAll<CommandRow>("SELECT * FROM house_lifecycle_commands WHERE kind = 'push' AND state = 'running' AND running_epoch != ?", [epoch]);
         for (const row of orphaned) tx.execute("UPDATE house_lifecycle_commands SET state = 'done', result_json = ?, payload_bytes = NULL WHERE request_id = ?", [JSON.stringify(this.pushUnknown(row.request_id)), row.request_id]);
       });
@@ -280,6 +301,10 @@ export class HouseCommandBus implements HouseCommandPort {
         if (this.executions.has(row.request_id) || this.origins.has(row.house_origin)) continue;
         const claimed = this.opts.db.transaction(tx => {
           if (this.stoppedSignal.signal.aborted || !this.opts.authority.isEpochCurrent(epoch)) return false;
+          if (row.kind === 'recovery' && (row.state !== 'pending' || row.running_epoch !== epoch)) {
+            tx.execute("UPDATE house_lifecycle_commands SET state='done',result_json=? WHERE request_id=?",[JSON.stringify({error:'HOUSE_RECOVERY_INTERRUPTED'}),row.request_id]);
+            return false;
+          }
           if (row.kind === 'push' && !this.pushCurrent(row)) {
             const result = this.pushFailure(row.request_id, row.deadline_at !== null && row.deadline_at <= Date.now() ? 408 : 409,
               row.deadline_at !== null && row.deadline_at <= Date.now() ? 'deadline expired before execution' : 'captured participation changed', 'STALE_OPERATION');
@@ -318,7 +343,10 @@ export class HouseCommandBus implements HouseCommandPort {
     if (row.kind === 'push') { await this.executePush(row, epoch); return; }
     let result: LoginResult | HouseStatus | { error: string };
     try {
-      if (row.kind === 'login') {
+      if (row.kind === 'recovery') {
+        if (!this.opts.coordinator.reconfirmHouse) throw new Error('HOUSE_RECOVERY_UNAVAILABLE');
+        result = await this.opts.coordinator.reconfirmHouse(row.request_id, row.house_origin) as {error:string};
+      } else if (row.kind === 'login') {
         const latest = readParticipation(this.opts.db, row.house_origin);
         const seq = latest?.op_seq ?? 0;
         // One enabled advance is our interrupted ENTER (or a coalesced

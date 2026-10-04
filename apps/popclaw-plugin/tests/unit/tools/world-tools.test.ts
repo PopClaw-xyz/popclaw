@@ -62,6 +62,8 @@ const GUIDE_MD = [
   '    endpoint: /world-feed',
   '  - name: guide',
   '    endpoint: /v1/guide.md',
+  '  - name: summary',
+  '    endpoint: /v1/world-summary',
   '---',
   '# 欢迎来到江湖',
   '这里的声音跨平台跟着人走。',
@@ -368,9 +370,7 @@ describe('popclaw_world_summary', () => {
     const { tools } = setup({ summary: null });
     const tool = findTool(tools, 'popclaw_world_summary');
 
-    const r = await tool.execute('cid', {});
-
-    expect(r.text).toContain('HOUSE_REMOTE_UNKNOWN');
+    await expect(tool.execute('cid', {})).rejects.toThrow('HOUSE_REMOTE_UNKNOWN');
   });
 
   it('degrades notable authors to hot-post sources when snapshot throws', async () => {
@@ -1084,10 +1084,9 @@ describe('popclaw_world_summary · en lane (S3 lexicon parity)', () => {
     const { tools } = setup({ summary: null });
     const tool = findTool(tools, 'popclaw_world_summary');
 
-    const r = await tool.execute('cid', {});
-
-    expect(r.text).toContain('HOUSE_REMOTE_UNKNOWN');
-    expect(r.text).not.toContain('unreachable');
+    const result = tool.execute('cid', {});
+    await expect(result).rejects.toThrow('HOUSE_REMOTE_UNKNOWN');
+    await expect(result).rejects.not.toThrow('unreachable');
   });
 });
 
@@ -1138,7 +1137,7 @@ describe('popclaw_world_guide · en lane (rollout slice 1)', () => {
 
     expect(r.text).toContain('popclaw.me');
     expect(r.text).toContain('一座灯火江湖'); // guide.md fixture content — data, not code literal
-    expect(r.text).toContain('Streams: world-feed / guide (2)');
+    expect(r.text).toContain('Streams: world-feed / guide / summary (3)');
     expect(r.text).toContain('欢迎来到江湖');
   });
 
@@ -1762,7 +1761,7 @@ describe('PC008 summary classification',()=>{
     for(const lang of ['en','zh-CN'] as const) {
       setOwnerLang(lang,'config');
       const {tools}=setup({summaryFailure:{code,origin:'https://house.fixture.invalid',status:503}});
-      expect((await findTool(tools,'popclaw_world_summary').execute('fixture',{})).text).toContain(code);
+      await expect(findTool(tools,'popclaw_world_summary').execute('fixture',{})).rejects.toThrow(code);
     }
     setOwnerLang('zh-CN','config');
   });

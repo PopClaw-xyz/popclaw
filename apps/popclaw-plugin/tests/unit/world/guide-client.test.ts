@@ -3,6 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { GuideClient } from '../../../src/world/guide-client.js';
+import { ActionInactiveError } from '../../../src/runtime/house-lifecycle/action-context.js';
 
 const BASE = 'http://localhost:8080';
 const GUIDE_TEXT = '---\nworld: popclaw.me\n---\n\n# 欢迎\n';
@@ -16,6 +17,18 @@ function textFetch(status: number, body: string): typeof globalThis.fetch {
 }
 
 describe('GuideClient', () => {
+  it.each(['http', 'network', 'local', 'body-network'] as const)('typed guide result preserves %s classification while nullable reads stay null', async kind => {
+    const client = new GuideClient({ baseUrl: BASE, fetch: async () => {
+      if (kind === 'local') throw new ActionInactiveError('HOUSE_TRUST_REVOKED', BASE);
+      if (kind === 'network') throw new TypeError('synthetic network');
+      if (kind === 'body-network') return new Response(new ReadableStream({ start(c) { c.error(new TypeError('synthetic body error')); } }));
+      return new Response('hidden response body', { status: 404 });
+    } });
+    const code = kind === 'local' ? 'HOUSE_TRUST_REVOKED' : kind === 'http' ? 'HOUSE_REMOTE_HTTP' : 'HOUSE_REMOTE_NETWORK';
+    expect(await client.fetchGuideResult()).toMatchObject({ ok: false, failure: { code, origin: BASE } });
+    expect(await client.fetchGuideText()).toBeNull();
+  });
+
   it('200 → 返回全文', async () => {
     let requested = '';
     const fetchFn = (async (url: RequestInfo | URL) => {

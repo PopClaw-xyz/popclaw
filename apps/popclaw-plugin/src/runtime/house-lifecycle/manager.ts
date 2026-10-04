@@ -1,3 +1,4 @@
+import { houseRecoveryHeld, recoveryRetiredLeave, houseBindingBlocked, readHouseRecoveryStatus, type HouseRecoveryStatus } from '../../world/house-recovery-fence.js';
 /**
  * ADR-0051 S2 — HouseLifecycleManager (S2a: the state-machine core; wiring
  * streams/ranger/notifications per house is S2b, done serially by the same
@@ -128,6 +129,7 @@ export interface HouseStatus {
   remoteStatus: string;
   gateActive: boolean;
   streams: { world: 'inactive' | 'active'; inbox: 'inactive' | 'active' };
+  recovery?: HouseRecoveryStatus;
 }
 
 /**
@@ -268,6 +270,8 @@ export class HouseLifecycleManager {
   private readonly loginFlights = new Map<string, AbortController>();
   private readonly leaveWorkers = new Map<string, Promise<void>>();
   private readonly controlTasks = new Set<Promise<void>>();
+  private readonly houseControlTasks = new Map<string, Set<Promise<void>>>();
+  private readonly recoveryStops = new Map<string, AbortController>();
   private readonly renewFlights = new Map<string, Promise<boolean>>();
   private stopped = false;
   /** Torn down by stopHost: every control fetch links this signal, so a
@@ -384,7 +388,7 @@ export class HouseLifecycleManager {
       inactiveReason: reason,
       isActive: () => {
         try {
-        if (this.stopped || this.localLogoutFences.has(origin)) return false;
+        if (this.stopped || houseBindingBlocked(this.db, origin) || houseRecoveryHeld(this.db, origin) || this.localLogoutFences.has(origin)) return false;
         if (capturedSignal.aborted) return false;
         const current = this.gates.get(origin);
         if (!current || current.generation !== capturedGeneration || current.controller.signal.aborted) {
@@ -435,6 +439,7 @@ export class HouseLifecycleManager {
     const authorized = () => !this.stopped && (!this.ownerAuth || (
       ownerEpoch !== null && this.ownerAuth.isEpochCurrent(ownerEpoch) && !this.pauseController.signal.aborted
     ));
+    if (houseRecoveryHeld(this.db, origin)) return {scope:'local_installation',origin,status:'connecting',sessionId:'',errorCode:'AUTH_INVALID'};
     if (!authorized()) return { scope: 'local_installation', origin, status: 'connecting', sessionId: '' };
     const now = this.nowSecs();
     const logoutFence = this.localLogoutFences.get(origin);
@@ -495,6 +500,9 @@ export class HouseLifecycleManager {
     const result = register(this.loginHouseInner(origin, now, { baselineSeq, baselineDesired, configuredPin: configuredPinEarly, intentUnchanged, flight, authorized, releaseLogoutFence, ...(authority ? { authority } : {}) }));
     const task = result.then(() => undefined, () => undefined).finally(() => { this.controlTasks.delete(task); });
     this.controlTasks.add(task);
+    const houseTasks = this.houseControlTasks.get(origin) ?? new Set<Promise<void>>();
+    houseTasks.add(task); this.houseControlTasks.set(origin, houseTasks);
+    void task.finally(() => { houseTasks.delete(task); });
     return result;
   }
 
@@ -551,6 +559,9 @@ export class HouseLifecycleManager {
     })();
     const task = run.then(() => undefined, () => undefined).finally(() => this.controlTasks.delete(task));
     this.controlTasks.add(task);
+    const houseTasks = this.houseControlTasks.get(origin) ?? new Set<Promise<void>>();
+    houseTasks.add(task); this.houseControlTasks.set(origin, houseTasks);
+    void task.finally(() => { houseTasks.delete(task); });
     return run;
   }
 
@@ -936,6 +947,9 @@ export class HouseLifecycleManager {
     this.renewFlights.set(origin, result);
     const task = result.then(() => undefined, () => undefined).finally(() => { this.controlTasks.delete(task); });
     this.controlTasks.add(task);
+    const houseTasks = this.houseControlTasks.get(origin) ?? new Set<Promise<void>>();
+    houseTasks.add(task); this.houseControlTasks.set(origin, houseTasks);
+    void task.finally(() => { houseTasks.delete(task); });
     return result;
   }
 
@@ -1104,6 +1118,7 @@ export class HouseLifecycleManager {
     const origin = normalizeHouseOrigin(input);
     const row = readParticipation(this.db, origin);
     const gate = this.gateFor(origin);
+    const recovery = readHouseRecoveryStatus(this.db,origin);
     return {
       origin,
       desired: row?.desired ?? 'disabled',
@@ -1115,6 +1130,7 @@ export class HouseLifecycleManager {
       // The manager owns permission, not sockets. The coordinator supplies
       // actual receiving state when a resident has opened stream resources.
       streams: { world: 'inactive', inbox: 'inactive' },
+      ...(recovery ? {recovery}:{}),
     };
   }
 
@@ -1229,6 +1245,22 @@ export class HouseLifecycleManager {
     }
   }
 
+  /** Stop only the recovered House. The durable fence was written before this
+   * call; remote effects already in flight may still finish as evidence. */
+  async quiesceHouse(origin: string): Promise<void> {
+    if (!houseRecoveryHeld(this.db, origin)) throw new Error('HOUSE_RECOVERY_FENCE_REQUIRED');
+    this.localLogoutEpochs.set(origin, (this.localLogoutEpochs.get(origin) ?? 0) + 1);
+    this.localLogoutFences.set(origin, {});
+    this.loginFlights.get(origin)?.abort(new Error('HOUSE_RECOVERY_HELD'));
+    this.closeGate(origin);
+    this.recoveryStops.get(origin)?.abort(new Error('HOUSE_RECOVERY_HELD'));
+    const leaves = this.db.queryAll<{request_id: string}>('SELECT request_id FROM house_lifecycle_outbox WHERE house_origin=?', [origin]);
+    await Promise.allSettled([...this.houseControlTasks.get(origin) ?? [],
+      ...leaves.flatMap(row => this.leaveWorkers.get(row.request_id) ? [this.leaveWorkers.get(row.request_id)!] : []),
+      ...(this.renewFlights.get(origin) ? [this.renewFlights.get(origin)!] : [])]);
+    this.recoveryStops.delete(origin);
+  }
+
   /** Drain all control work before a root releases its database. */
   async waitForQuiet(): Promise<void> {
     while (this.leaveWorkers.size > 0 || this.controlTasks.size > 0) {
@@ -1278,6 +1310,7 @@ export class HouseLifecycleManager {
     let row = readOutboxRow(this.db, requestId);
     if (!row || row.settled_at !== null) return;
     const origin = row.house_origin;
+    if (recoveryRetiredLeave(this.db, origin, row.op_seq)) return;
 
     if (!row.ack_key_hex) {
       // Unknown state (empty key at commit). Trust sources, in order —
@@ -1327,7 +1360,9 @@ export class HouseLifecycleManager {
       row.ack_key_hex,
       this.clock,
     );
-    const stopSignal = composeFlightSignal(this.stopController.signal, pauseSignal);
+    const recoveryStop = this.recoveryStops.get(origin) ?? new AbortController();
+    this.recoveryStops.set(origin, recoveryStop);
+    const stopSignal = composeFlightSignal(this.stopController.signal, pauseSignal, recoveryStop.signal);
     // Durable owner epoch at worker start (resume-review probe 2): a manager
     // bound to an owner authority only sends/settles while the ROW still
     // names this holder at this generation. null = not an authority holder:
@@ -1339,7 +1374,8 @@ export class HouseLifecycleManager {
     // (review finding 5) — resume re-spawns from the durable outbox. Only
     // the captured signal is consulted: the current controller may already
     // be a fresh post-resume one whose signal is NOT aborted.
-    while (!this.stopped && !pauseSignal.aborted && Date.now() < deadline) {
+    while (!this.stopped && !pauseSignal.aborted && !recoveryStop.signal.aborted && Date.now() < deadline) {
+      if (recoveryRetiredLeave(this.db, origin, row.op_seq)) return;
       const stillOpen = readOutboxRow(this.db, requestId);
       if (!stillOpen || stillOpen.settled_at !== null) return;
       let settled = false;
@@ -1358,13 +1394,14 @@ export class HouseLifecycleManager {
           // send — zero posts from a dead epoch, independent of timer
           // callbacks (resume-review probe 'sign').
           authorizeSend: () => {
+            if (recoveryRetiredLeave(this.db, origin, row!.op_seq)) throw new Error('HOUSE_RECOVERY_OLD_LEAVE');
             if (!this.ownerAuth) return;
             if (ownerEpoch === null || !this.ownerAuth.isEpochCurrent(ownerEpoch)) {
               throw new Error('leave send refused: durable owner epoch lost');
             }
           },
         });
-        if (pauseSignal.aborted) {
+        if (pauseSignal.aborted || recoveryStop.signal.aborted || recoveryRetiredLeave(this.db, origin, row.op_seq)) {
           // Ownership lost while this request was in flight: the verified
           // ack settles NOTHING here — the next owner's worker replays the
           // same request_id (server idempotency returns the same decision).

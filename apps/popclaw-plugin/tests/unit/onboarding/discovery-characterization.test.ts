@@ -11,6 +11,10 @@ import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import type { WorldSummaryResponse } from '../../../src/world/world-summary-client.js';
 import { appendCorePrivate } from '../../../src/taste/taste-writer.js';
 import { noDmCrypto } from '../../helpers/test-signer.js';
+import { GuideClient } from '../../../src/world/guide-client.js';
+import { WorldSummaryClient } from '../../../src/world/world-summary-client.js';
+import { ActionInactiveError } from '../../../src/runtime/house-lifecycle/action-context.js';
+import { invalidSummaryDeclarations } from '../../helpers/summary-declaration-cases.js';
 
 vi.mock('../../../src/taste/taste-writer.js', async (original) => {
   const mod = await original<typeof import('../../../src/taste/taste-writer.js')>();
@@ -22,7 +26,7 @@ const evidence: Record<string, unknown> = {};
 const roots: string[] = [];
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
-async function setup() {
+async function setup(readClients?: Pick<OnboardingOrchestratorDeps, 'guideClient' | 'summaryClient'>) {
   const root = await mkdtemp(join(tmpdir(), 'discovery-characterization-'));
   roots.push(root);
   const host = new InMemoryHostAdapter({ now: new Date(1700000000000) });
@@ -73,7 +77,7 @@ async function setup() {
     egress: { async push() { throw new Error('unexpected push'); } }, houseOrigins: [],
     llm: { async complete(prompt) { record('rank', prompt); if (controls.rejectRank) throw new Error('rank failed'); return controls.rank; } },
     tasteRoot: root, readOwnerPersona: async () => undefined, fetchVerifiedHandles: async () => [],
-    guideClient: { async fetchGuideText() { record('guide'); if (controls.rejectGuide) throw new Error('guide failed'); return '# Guide\n\nLive guide paragraph'; } },
+    guideClient: { async fetchGuideText() { record('guide'); if (controls.rejectGuide) throw new Error('guide failed'); return '---\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary\n---\n# Guide\n\nLive guide paragraph'; } },
     summaryClient: { async fetchSummary(hours) { record('summary', hours); if (controls.rejectSummary) throw new Error('summary failed'); return controls.summary; } },
     snapshotClient: { async fetchSnapshot(query) { record('snapshot', query); if (controls.rejectSnapshot) throw new Error('snapshot failed'); return []; } },
     tasteLoader: { async enabledSources() { record('sources'); if (controls.rejectSources) throw new Error('sources failed'); return controls.sources; } },
@@ -87,6 +91,7 @@ async function setup() {
       signer: { ...noDmCrypto, publicKey: async () => new Uint8Array(32), sign: async () => new Uint8Array(64), popclawId: async () => PID },
       nickname: 'Owner',
     },
+    ...readClients,
   };
   const orch = new OnboardingOrchestrator(deps);
   async function capture(label: string, run: () => Promise<unknown>) {
@@ -290,13 +295,100 @@ describe('discovery behavior at the orchestrator interface', () => {
     h.controls.rejectGuide = h.controls.rejectSnapshot = mode === 'guide-snapshot';
     h.controls.rejectRank = mode === 'rank';
     await h.capture(mode, () => h.orch.handleStartCommand());
-    expect(h.sm.drafts(PID).lantern).toHaveProperty('entries');
-    expect(h.trace.some((e) => e[0] === 'rank')).toBe(!['sources', 'learned-only'].includes(mode));
+    if (mode === 'guide-snapshot') {
+      expect(h.sm.drafts(PID).lantern).toBe('degraded');
+      expect(h.trace.some(e => e[0] === 'summary' || e[0] === 'snapshot')).toBe(false);
+    } else expect(h.sm.drafts(PID).lantern).toHaveProperty('entries');
+    expect(h.trace.some((e) => e[0] === 'rank')).toBe(!['sources', 'learned-only', 'guide-snapshot'].includes(mode));
     // Houses are read live again when replaying the stage, including catch fallback.
     h.controls.rejectHouses = false;
     h.controls.houses = [{ slug: 'new', name: 'New house', blurb: 'New blurb' }];
     await h.capture('live-houses', () => h.orch.handleStartCommand());
     evidence[mode] = h.trace;
+  });
+});
+
+describe('optional summary at the normal onboarding orchestrator', () => {
+  const origin = 'https://onboarding-summary.invalid';
+  async function reads(kind: 'unsupported' | 'guide-denied' | 'guide-malformed' | 'http' | 'network' | 'parse') {
+    const refGuide = await readFile(new URL('../../fixtures/world/reference-house-guide-65a.md', import.meta.url), 'utf8');
+    const socialGuide = await readFile(new URL('../../fixtures/world/guide.md', import.meta.url), 'utf8');
+    const requests: string[] = [];
+    const transport = vi.fn(async (url: RequestInfo | URL) => {
+      requests.push(String(url));
+      if (String(url).endsWith('/v1/guide.md')) {
+        if (kind === 'guide-denied') throw new ActionInactiveError('HOUSE_TRUST_REVOKED', origin);
+        return new Response(kind === 'unsupported' ? refGuide : kind === 'guide-malformed' ? '---\nstreams:\n' : socialGuide);
+      }
+      if (kind === 'network') throw new TypeError('private network message');
+      return new Response(kind === 'parse' ? 'private invalid JSON' : 'private HTTP body', { status: kind === 'http' ? 404 : 200 });
+    });
+    const h = await setup({ guideClient: new GuideClient({ baseUrl: origin, fetch: transport }),
+      summaryClient: new WorldSummaryClient({ baseUrl: origin, fetch: transport }) });
+    return { ...h, requests };
+  }
+
+  it.each(['next', 'skip'] as const)('REF without summary presents its guide, then %s proceeds without retrying', async action => {
+    const h = await reads('unsupported');
+    const card = await h.orch.handleStartCommand();
+    expect(card.text).toContain('WORLD_SUMMARY_UNSUPPORTED');
+    expect(card.text).toContain('Home');
+    expect(card.text).toContain('Revision `rangermap-guide-2`');
+    expect(card.text).not.toContain("isn't answering");
+    expect(card.text).not.toContain('pretty quiet');
+    expect(h.sm.drafts(PID).lantern).toBe('unsupported');
+    expect(h.requests).toEqual([`${origin}/v1/guide.md`]);
+    expect(h.trace.some(e => ['snapshot', 'sources', 'rank', 'index', 'canvas'].includes(String(e[0])))).toBe(false);
+    const before = h.trace.length;
+    const replay = await h.orch.currentCardText();
+    expect(replay).toContain('WORLD_SUMMARY_UNSUPPORTED');
+    expect(replay).toContain('Revision `rangermap-guide-2`');
+    expect(h.trace.length).toBe(before);
+    await h.orch.handleAdvance(action);
+    expect(h.sm.current(PID)).toBe(action === 'next' ? 'attune' : 'errand');
+    if (action === 'next') {
+      expect(h.sm.drafts(PID).attune).toEqual({ entries: [] });
+      await h.orch.handleAdvance('skip');
+      expect(h.sm.current(PID)).toBe('errand');
+    }
+    expect(h.requests).toHaveLength(1);
+  });
+
+  it.each(invalidSummaryDeclarations)('raw %s is unknown and sends no summary/snapshot at the real card', async (_name, guide) => {
+    const requests: string[] = [];
+    const transport = vi.fn(async (url: RequestInfo | URL) => { requests.push(String(url)); return new Response(guide); });
+    const h = await setup({ guideClient: new GuideClient({ baseUrl: origin, fetch: transport }),
+      summaryClient: new WorldSummaryClient({ baseUrl: origin, fetch: transport }) });
+    const card = await h.orch.handleStartCommand();
+    expect(card.text).toContain('WORLD_SUMMARY_AVAILABILITY_UNKNOWN');
+    expect(card.text).not.toContain('WORLD_SUMMARY_UNSUPPORTED');
+    expect(card.text).not.toContain('pretty quiet');
+    expect(h.sm.drafts(PID).lantern).toBe('degraded');
+    expect(h.trace.some(e => ['summary', 'snapshot', 'rank', 'index', 'canvas'].includes(String(e[0])))).toBe(false);
+    expect(requests).toEqual([`${origin}/v1/guide.md`]);
+    expect(await h.orch.currentCardText()).toContain('WORLD_SUMMARY_AVAILABILITY_UNKNOWN');
+    await h.orch.handleAdvance('skip');
+    expect(h.sm.current(PID)).toBe('errand');
+    expect(requests).toHaveLength(1);
+  });
+
+  it.each(['guide-denied', 'guide-malformed', 'http', 'network', 'parse'] as const)('preserves %s facts, without pretending unsupported or empty', async kind => {
+    const h = await reads(kind);
+    const card = await h.orch.handleStartCommand();
+    const code = { 'guide-denied': 'HOUSE_TRUST_REVOKED', 'guide-malformed': 'WORLD_SUMMARY_AVAILABILITY_UNKNOWN',
+      http: 'HOUSE_REMOTE_HTTP', network: 'HOUSE_REMOTE_NETWORK', parse: 'HOUSE_REMOTE_PARSE' }[kind];
+    expect(card.text).toContain(code);
+    expect(card.text).not.toContain('WORLD_SUMMARY_UNSUPPORTED');
+    expect(card.text).not.toContain('pretty quiet');
+    expect(card.text).not.toContain('private');
+    expect(h.sm.drafts(PID).lantern).toBe('degraded');
+    expect(await h.orch.currentCardText()).toContain(code);
+    if (kind.startsWith('guide-')) {
+      expect(h.requests).toHaveLength(1);
+      expect(h.trace.some(e => e[0] === 'snapshot')).toBe(false);
+    }
+    await h.orch.handleAdvance('skip');
+    expect(h.sm.current(PID)).toBe('errand');
   });
 });
 

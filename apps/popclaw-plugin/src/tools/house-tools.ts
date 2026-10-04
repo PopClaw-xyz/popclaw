@@ -1,3 +1,5 @@
+import { registerOwnerApprovalSubject } from '../host/owner-approval.js';
+import { HOUSE_RECONFIRM_TOOL, houseRecoverySubject } from '../world/house-recovery.js';
 /**
  * ADR-0051 S3 — house login/logout lifecycle tools (MCP + plugin tool table).
  *
@@ -39,6 +41,24 @@ export function registerHouseTools(ctx: ToolsCtx): void {
   // never boot it) the tools are absent rather than fake-successful.
   const getCtx = deps.getHouseCommandContext;
   if (!getCtx) return;
+
+  registerOwnerApprovalSubject(HOUSE_RECONFIRM_TOOL, houseRecoverySubject(async id => (await getCtx()).recovery?.read(id) ?? null));
+  api.registerTool({name:'popclaw_house_recovery_prepare',
+    description:'Prepare owner reconfirmation after a restored House changes incarnation. Only the same origin and verified House key are supported. Returns a short-lived decision; grants no trust or action authority. Then use popclaw_house_reconfirm, which asks the owner through the host approval surface.',
+    parameters:HostParameters,
+    execute:async (_callId:string, params:unknown) => {
+      const p=LoginSchema.strict().parse(params), recovery=(await getCtx()).recovery;
+      if (!recovery) throw new Error('HOUSE_RECOVERY_UNAVAILABLE');
+      return {type:'text' as const,text:JSON.stringify(await recovery.prepare(p.host))};
+    }});
+  api.registerTool({name:HOUSE_RECONFIRM_TOOL,
+    description:'Reconfirm the exact prepared restored House after independent owner approval. Keeps identity/history and isolates old pending work. Leaves the House disabled; use normal login afterward. No confirmation boolean can authorize this operation.',
+    parameters:{type:'object',properties:{decision_id:{type:'string'}},required:['decision_id'],additionalProperties:false},
+    execute:async (callId:string, params:unknown) => {
+      const recovery=(await getCtx()).recovery;
+      if (!recovery) throw new Error('HOUSE_RECOVERY_UNAVAILABLE');
+      return {type:'text' as const,text:JSON.stringify(await recovery.confirm(params,callId))};
+    }});
 
   api.registerTool({
     name: 'popclaw_house_login',

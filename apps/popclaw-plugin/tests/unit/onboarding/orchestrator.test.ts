@@ -57,6 +57,9 @@ const GUIDE_TEXT = `---
 world: popclaw.me
 kind: social-plaza
 voice: 自由说话的巨型社交广场
+streams:
+  - name: summary
+    endpoint: /v1/world-summary
 ---
 
 # 欢迎来到 popclaw.me
@@ -889,7 +892,7 @@ describe('lantern（认坊 = guide + 速览合一）', () => {
     expect(res.text).toContain('灯坊甲（有你的名帖 ✓）');
     expect(res.text).toContain('1. [mrbeast] Last to leave wins $100k');
     expect(res.text).toContain('https://canvas.test/p/2');
-    // guide / summary / snapshot 三件并行取，各一次
+    // 先确认 guide 声明，再并行取 summary / snapshot，各一次
     expect(ctx.world.guideFetches).toBe(1);
     expect(ctx.world.summaryFetches).toBe(1);
     expect(ctx.world.snapshotFetches).toBe(1);
@@ -925,10 +928,11 @@ describe('lantern（认坊 = guide + 速览合一）', () => {
     expect(ctx.contextIndex.lastBatch()).toHaveLength(8);
   });
 
-  it('灯坊够不着 → 诚实降级卡，next 重试；恢复后照常', async () => {
+  it('摘要读取未成功 → 诚实降级卡，next 重试；恢复后照常', async () => {
     ctx = makeOrchestrator({ summary: null });
     const res = await toLantern(ctx);
-    expect(res.text).toContain('没应答');
+    expect(res.text).toContain('HOUSE_REMOTE_UNKNOWN');
+    expect(res.text).toContain('摘要尚未读取成功');
     expect(ctx.sm.drafts(PID)).toEqual({ lantern: 'degraded' });
     ctx.world.summary = makeSummary();
     const retry = await ctx.orch.handleAdvance('next');

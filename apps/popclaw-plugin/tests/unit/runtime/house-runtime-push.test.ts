@@ -303,7 +303,7 @@ it('a house this machine has left is explained in the owner language, naming no 
  }
  expect(s.reads).toEqual([]);
 });
-it('none of the five re-routed tools lets the exception class reach the owner on a left house',async()=>{
+it('all five left-House tools retain readable refusals; summary rejects rather than claiming success',async()=>{
  const s=await fixture();s.owner.start();s.reader.startReader();
  const tools=readerTools(s);
  s.dbs[0]!.execute("UPDATE house_participation SET desired='disabled',op_seq=op_seq+1 WHERE house_origin=?",[s.origin]);
@@ -312,9 +312,17 @@ it('none of the five re-routed tools lets the exception class reach the owner on
  for(const lang of ['en','zh-CN'] as const){
   setOwnerLang(lang,'config');
   for(const [name,params] of calls){
-   const text=await toolText(tools,name,params);
-   // Not vacuous: each tool DOES answer, and what it answers says nothing
-   // about the machinery underneath.
+   // Native registration propagates a failed summary call. The actual MCP
+   // wire response (isError + readable content) is tested in mcp-stdio.
+   let text:string;
+   if(name==='popclaw_world_summary'){
+    const call=toolText(tools,name,params);
+    await expect(call).rejects.toThrow('WORLD_SUMMARY_AVAILABILITY_UNKNOWN');
+    await expect(call).rejects.toThrow(renderCopy(lang,'house.read.disabled',{origin:s.origin}));
+    text=await call.then(()=>{throw new Error('Expected summary refusal');},error=>String(error));
+   }else text=await toolText(tools,name,params);
+   // Not vacuous: each resolves readable text or the documented summary
+   // failure, without leaking an exception class or bypassing the read gate.
    expect(text.length).toBeGreaterThan(0);
    expect(text,name).not.toContain('ActionInactiveError');
    expect(text,name).not.toContain('House action is no longer active');

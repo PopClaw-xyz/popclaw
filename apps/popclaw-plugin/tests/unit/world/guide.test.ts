@@ -11,11 +11,35 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseGuideFrontmatter } from '../../../src/world/guide.js';
+import { parseGuideFrontmatter, summaryDeclaration } from '../../../src/world/guide.js';
 import type { WorldDescriptor } from '../../../src/world/guide.js';
+import { invalidSummaryDeclarations } from '../../helpers/summary-declaration-cases.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const realGuidePath = resolve(__dirname, '../../../../lore-house/assets/guide.md');
+
+describe('raw summary capability without changing the tolerant display parser', () => {
+  it.each(invalidSummaryDeclarations)('classifies %s as unknown', (_name, guide) => {
+    expect(summaryDeclaration(guide)).toBe('unknown');
+  });
+  it.each(['', '    transport: http\n', '    transport: rest\n'])('accepts the fixed path and valid transport %s', transport => {
+    const guide = `---\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary\n${transport}---\n# House`;
+    expect(summaryDeclaration(guide)).toBe('supported');
+    expect(summaryDeclaration(guide.replaceAll('\n', '\r\n'))).toBe('supported');
+  });
+  it('does not make another incomplete stream into a summary or rewrite general parser behavior', () => {
+    const guide = '---\nstreams:\n  - name: latest\n  - endpoint: /v1/world-summary\n    name: summary\n---\n# House';
+    expect(summaryDeclaration(guide)).toBe('supported');
+    expect(parseGuideFrontmatter(guide).frontmatter?.streams).toEqual([{ name: 'summary', endpoint: '/v1/world-summary' }]);
+    const duplicate = invalidSummaryDeclarations[1][1];
+    expect(parseGuideFrontmatter(duplicate).frontmatter?.streams).toEqual([{ name: 'summary', endpoint: '/v1/world-summary' }]);
+  });
+  it('does not promote an indented streams-like field inside another guide block', () => {
+    const guide = '---\nentry:\n  streams:\n    - name: summary\n      endpoint: /v1/world-summary\n---\n# House';
+    expect(parseGuideFrontmatter(guide).frontmatter?.streams).toEqual([]);
+    expect(summaryDeclaration(guide)).toBe('unknown');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // 端到端：读脱敏的 guide.md fixture

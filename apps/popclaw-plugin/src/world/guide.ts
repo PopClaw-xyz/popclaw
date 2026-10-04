@@ -100,6 +100,64 @@ export interface ParsedGuide {
   readonly body: string;
 }
 
+/** Summary is an optional primary-House REST read, not a public-stream or
+ * tool-registration capability. The declaration never supplies a URL to fetch:
+ * only the existing fixed same-origin path is accepted. Unknown/malformed
+ * material cannot be interpreted as proof that the House provides nothing. */
+export function summaryDeclaration(md: string): 'supported' | 'unsupported' | 'unknown' {
+  if (!md.trim() || /^\s*(?:<!doctype\b|<html\b)/i.test(md)) return 'unknown';
+  const { frontmatter } = parseGuideFrontmatter(md);
+  if (!frontmatter) return /^---(?:\r?\n|$)/.test(md) ? 'unknown' : 'unsupported';
+  const raw = md.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1] ?? '';
+  const declarations = rawSummaryStreams(raw);
+  if (!declarations.length) {
+    // The tolerant general parser drops incomplete items. Do not turn a
+    // broken summary declaration into a confident unsupported answer.
+    return /\bsummary\b/.test(raw) ? 'unknown' : 'unsupported';
+  }
+  const declaration = declarations[0]!;
+  const fields = declaration.fields;
+  const parsed = frontmatter.streams.filter(stream => stream.name === 'summary');
+  return declarations.length === 1 && !declaration.invalid
+    && parsed.length === 1 && parsed[0]!.endpoint === '/v1/world-summary'
+    && Object.values(fields).every(values => values.length === 1)
+    && fields.name?.[0] === 'summary' && fields.endpoint?.[0] === '/v1/world-summary'
+    && (fields.transport === undefined || ['http', 'rest'].includes(fields.transport[0]!)) ? 'supported' : 'unknown';
+}
+
+/** Inspect only raw stream items for summary capability. Unlike the general
+ * display parser below, never drop incomplete summary items or overwrite
+ * duplicate fields. Other guide parsing remains tolerant and unchanged. */
+function rawSummaryStreams(raw: string): Array<{ fields: Record<string, string[]>; invalid: boolean }> {
+  const summaries: Array<{ fields: Record<string, string[]>; invalid: boolean }> = [];
+  let inStreams = false;
+  let item: { fields: Record<string, string[]>; invalid: boolean } | undefined;
+  const flush = () => {
+    if (item?.fields.name?.includes('summary')) summaries.push(item);
+    item = undefined;
+  };
+  for (const rawLine of raw.split('\n')) {
+    const line = rawLine.replace(/\r$/, '');
+    if (line.trim() === 'streams:') { flush(); inStreams = true; continue; }
+    if (!inStreams) continue;
+    if (/^(?:lexicon|feedback|entry|newspaper):$/.test(line.trim())
+      || (line.trim() && !/^[ \t]/.test(line))) { flush(); inStreams = false; continue; }
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    const start = line.match(/^[ \t]+-(?:[ \t]+(.*))?$/);
+    if (start) {
+      flush();
+      item = { fields: Object.create(null) as Record<string, string[]>, invalid: false };
+    }
+    const field = start ? start[1]?.match(/^(\w+):[ \t]*(.*)$/) : line.match(/^[ \t]{4,}(\w+):[ \t]*(.*)$/);
+    if (!item) continue;
+    if (!field) { item.invalid = true; continue; }
+    const key = field[1]!;
+    (item.fields[key] ??= []).push(field[2]!.trim());
+  }
+  flush();
+  return summaries;
+}
+
 /** One `  - key: value` list item, keys as written. Unknown keys are harmless. */
 type ListItem = Record<string, string>;
 

@@ -704,7 +704,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     // a thunk, so nothing is opened, read or constructed until a handler runs.
     const SUBCOMMANDS = buildSubcommands({
       runtime,
-      getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, lang: ownerLang,
+      getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, recovery: rt.houseRuntime.recovery, lang: ownerLang,
         readAgentContext: (origin: string, sessionId: string) => rt.houseRuntime.readAgentContext(origin, rt.boot.popclawId, {}, sessionId)}; },
       paths: gatewayPaths,
       picksFile: () => join(gatewayPaths().tasteDir(), 'learned', 'picks.jsonl'),
@@ -801,7 +801,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       api: api as unknown as Parameters<typeof registerPopclawTools>[0]['api'],
       runtime,
       runCommand: async work => (await runtime()).houseRuntime.runCommand(work),
-      getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, lang: ownerLang,
+      getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, recovery: rt.houseRuntime.recovery, lang: ownerLang,
         readAgentContext: (origin: string, sessionId: string) => rt.houseRuntime.readAgentContext(origin, rt.boot.popclawId, {}, sessionId)}; },
       // The host's plugin-runtime subagent surface, which is what lets
       // popclaw_newspaper dispatch the paper into a dedicated workshop session

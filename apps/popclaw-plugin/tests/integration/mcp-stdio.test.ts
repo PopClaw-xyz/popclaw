@@ -20,6 +20,7 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { LocalHostDb } from '../../src/host/local-host-db.js';
 import { seedTrustedHouse } from '../helpers/seed-trusted-house.js';
+import { renderCopy } from '../../src/lexicon/index.js';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 /** Unroutable on purpose: every lore-house call must fail during this test. */
@@ -394,6 +395,42 @@ describe('MCP citizen mode does not advertise as a ranger', () => {
     await new Promise((r) => setTimeout(r, 1500));
     return mcp;
   };
+
+  it('a normally left House summary is an MCP error with readable disabled facts and no read or write egress', async () => {
+    for (const lang of ['en', 'zh-CN'] as const) {
+      const root = seedDataRoot(houseUrl);
+      roots.push(root);
+      writeFileSync(join(root, 'config', 'cadence', 'cadence.json'),
+        JSON.stringify({ schemaVersion: 1, delivery: { primaryLanguage: lang } }));
+      const mcp = await startServer(root);
+      servers.push(mcp);
+      await mcp.request('tools/call', { name: 'popclaw_check_status', arguments: {} });
+      const left = await mcp.request('tools/call', { name: 'popclaw_house_logout', arguments: { host: houseUrl } });
+      expect(left.result?.['isError']).toBeFalsy();
+      const db = new LocalHostDb(join(root, 'vault', 'social', 'my-social-assets.db'));
+      try {
+        expect(db.queryOne<{ desired: string }>('SELECT desired FROM house_participation WHERE house_origin=?', [houseUrl])?.desired).toBe('disabled');
+      } finally { db.close(); }
+      const before = paths.length;
+      const res = await mcp.request('tools/call', { name: 'popclaw_world_summary', arguments: { window_hours: 1 } });
+      expect(res.error).toBeUndefined();
+      expect(res.result?.['isError']).toBe(true);
+      const content = res.result?.['content'] as Array<{ type: string; text: string }>;
+      expect(content[0]?.type).toBe('text');
+      const text = content[0]!.text;
+      expect(text).toContain('WORLD_SUMMARY_AVAILABILITY_UNKNOWN');
+      expect(text).toContain('HOUSE_DISABLED');
+      expect(text).toContain(renderCopy(lang, 'house.read.disabled', { origin: houseUrl }));
+      expect(text).not.toContain('ActionInactiveError');
+      expect(text).not.toContain('House action is no longer active');
+      expect(text).not.toContain('WORLD_SUMMARY_UNSUPPORTED');
+      expect(text).not.toContain('/popclaw');
+      expect(paths.slice(before)).toEqual([]);
+      expect(paths.filter(p => p.startsWith('POST /v1/push'))).toEqual([]);
+      expect(((await mcp.request('tools/list')).result?.['tools'] as unknown[]).length).toBeGreaterThan(30);
+      mcp.kill();
+    }
+  }, 90_000);
 
   it('opens the consumer streams but never the ranger quest stream', async () => {
     paths.length = 0;

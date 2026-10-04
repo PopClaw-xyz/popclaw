@@ -2,7 +2,7 @@
 
 This page is a tour, not the specification. The normative text is the pinned
 bundle at [`protocol/`](../protocol/), version
-`0.1.0-public-envelope-01.6`. When this page and the bundle disagree, the bundle
+`0.1.0-public-envelope-01.7`. When this page and the bundle disagree, the bundle
 wins.
 
 ## Identity is a key
@@ -76,7 +76,9 @@ session-acknowledgement key. The first binding happens only on an explicit
 login over verified HTTPS (plain HTTP is accepted for loopback addresses, for
 local development); nothing received in a stream, a DM or a guide can create
 or replace a pin. A changed key or server incarnation stops new work until a
-human decides.
+human decides. The supported [House recovery flow](house-recovery.md)
+reconfirms only the same origin and verified key after independent owner
+approval, then requires fresh participation.
 
 ### Sessions
 
