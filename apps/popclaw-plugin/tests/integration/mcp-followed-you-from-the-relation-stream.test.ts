@@ -1,3 +1,4 @@
+import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
 /**
  * "Someone followed you" reaching an MCP-only citizen from the RELATION
  * STREAM, on a data root that has never polled anything.
@@ -151,6 +152,7 @@ function startRelayingHouse() {
     listRefused,
     get ownerPopclawId() { return ownerPopclawId; },
     get houseKey() { return minted?.houseKey ?? ''; },
+    get origin() { return origin; },
     async listen() {
       await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
       origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -227,6 +229,7 @@ describe('an MCP-only citizen is told about a follow that arrived on the relatio
     // Boot the lazy runtime: nothing reaches the house until a tool is called.
     const status = await mcp.request('tools/call', { name: 'popclaw_check_status', arguments: {} });
     expect(status.result?.['isError']).toBeFalsy();
+    await loginMcpHouse(dataRoot, house.origin, () => mcp.request('tools/call', { name: 'popclaw_house_login', arguments: { host: house.origin } }));
 
     // Wait for the personal stream, which is how we learn who this root is,
     // then relay the follow down it.

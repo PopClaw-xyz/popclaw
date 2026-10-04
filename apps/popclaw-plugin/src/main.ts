@@ -261,9 +261,11 @@ async function runDaemonMode(
           readAuthorityFor: (house) => readAuthorityFor(house.baseUrl),
           logger: { info: (m) => logger.info({}, m), warn: (m) => logger.warn({}, m) },
         },
-        houses: () => houseStores.map((h) => ({ slug: h.slug, baseUrl: h.baseUrl })),
+        houses: () => [...new Set([...houseStores.map(h => h.baseUrl), ...houses.commands.knownHouseOrigins()])]
+          .map(baseUrl => ({slug: hostDbSlug(baseUrl), baseUrl})),
         runCommand: (work) => houses.runCommand(work),
         captureGate: (origin) => houses.captureGate(origin),
+        observeParticipation: changed => houses.observeParticipationChanges(changed),
       })
     : undefined;
   void followerSync?.start();

@@ -1,10 +1,11 @@
+import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
 /**
  * One namecard write = one captured target plan, on the real MCP root.
  *
  * `popclaw_set_name` against a spawned `src/mcp.ts` (real bootstrap,
  * HouseRuntime, command bus, resident owner, tools, MultiHouseEgress) and two
- * loopback houses that record every request. Configuration names only H1; H2
- * is joined by `popclaw_house_login` before the rename (and, in one case,
+ * loopback houses that record every request. Configuration names only H1; both houses
+ * are explicitly joined by `popclaw_house_login` before the rename (and, in one case,
  * reloaded from persisted participation after a restart). A preload refuses
  * any non-loopback connection or DNS lookup and records the attempt.
  *
@@ -218,7 +219,8 @@ async function scenario(opts: { h2Avatar: string; restartAfterLogin?: boolean })
     return { m, child };
   };
   let { m: mcp, child } = await boot();
-  await mcp.callText('popclaw_house_login', { host: o2 });
+  await loginMcpHouse(dataRoot, o1, () => mcp.callText('popclaw_house_login', { host: o1 }));
+  await loginMcpHouse(dataRoot, o2, () => mcp.callText('popclaw_house_login', { host: o2 }), 'connected');
   if (opts.restartAfterLogin) {
     const exited = new Promise(r => child.once('exit', r));
     child.kill('SIGTERM');

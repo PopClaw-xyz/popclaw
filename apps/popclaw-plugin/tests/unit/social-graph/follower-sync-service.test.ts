@@ -26,7 +26,7 @@ import { SqliteNotifier } from '../../../src/notifier/sqlite-notifier.js';
 import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
 import { INBOX_TOKEN_HEADER, readCredentialMessage } from '../../../src/identity/read-credential.js';
 import { KnownFollowersStore } from '../../../src/social-graph/followers-sync.js';
-import { createFollowerSync } from '../../../src/social-graph/follower-sync-service.js';
+import { createFollowerSync, type FollowerSyncServiceDeps } from '../../../src/social-graph/follower-sync-service.js';
 import { declaringReadAuthority } from '../../helpers/read-authority.js';
 
 const MIGRATIONS = resolve(dirname(fileURLToPath(import.meta.url)), '../../../migrations');
@@ -50,6 +50,8 @@ function root() {
   establishTrust(db, { origin: BASE, houseKey: HOUSE_KEY, incarnation: 'inc-1' }, 'configured', () => 1_700_000_000);
 
   let served: string[] = [];
+  let status = 200;
+  let releaseRead: Promise<void> | undefined;
   const purposesRefused: string[] = [];
   const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
     const header = ((init?.headers ?? {}) as Record<string, string>)[INBOX_TOKEN_HEADER] ?? '';
@@ -66,13 +68,16 @@ function root() {
         );
     } catch { ok = false; }
     if (!ok) { purposesRefused.push(String(url)); return new Response('[]', { status: 401 }); }
-    return new Response(JSON.stringify(served.map((popclaw_id) => ({ popclaw_id }))), {
+    const listed = served.slice();
+    await releaseRead;
+    if (status !== 200) return new Response('', { status });
+    return new Response(JSON.stringify(listed.map((popclaw_id) => ({ popclaw_id }))), {
       status: 200, headers: { 'content-type': 'application/json' },
     });
-  }) as unknown as typeof globalThis.fetch;
+  });
 
   const store = new KnownFollowersStore(db, () => 1000);
-  const service = () => createFollowerSync({
+  const service = (extra: Partial<FollowerSyncServiceDeps> = {}) => createFollowerSync({
     db,
     houses: () => [{ slug: SLUG, baseUrl: BASE }],
     runCommand: (work) => work(),
@@ -86,6 +91,7 @@ function root() {
       fetch: fetchImpl,
       readAuthorityFor: (house) => declaringReadAuthority(db, signer)(house.baseUrl),
     },
+    ...extra,
   });
 
   const announced = (): { kind: string; followerPopclawId: string }[] =>
@@ -95,7 +101,9 @@ function root() {
     ).map((r) => ({ kind: r.kind, followerPopclawId: String(JSON.parse(r.payload_json).followerPopclawId ?? '') }));
 
   return {
-    db, store, announced, purposesRefused,
+    db, store, announced, purposesRefused, fetchImpl,
+    status: (code: number) => { status = code; },
+    hold: (promise?: Promise<void>) => { releaseRead = promise; },
     serve: (ids: string[]) => { served = ids; },
     service,
   };
@@ -168,5 +176,104 @@ describe('the follower poll as every resident root starts it', () => {
     await new Promise((done) => setTimeout(done, 20));
     expect(r.announced()).toEqual([]);
     r.db.close();
+  });
+});
+
+
+describe('a running follower poll observes normal late participation', () => {
+  function lifecycle() {
+    const r = root();
+    let active = false, generation = 0, present = true;
+    let changed: ((origin: string) => void) | undefined;
+    let subscribed = false;
+    const loop = r.service({
+      houses: () => present ? [{slug: SLUG, baseUrl: BASE}] : [],
+      captureGate: origin => {
+        const captured = generation;
+        return {origin, signal: new AbortController().signal, isActive: () => active && captured === generation};
+      },
+      observeParticipation: listener => {
+        changed = listener; subscribed = true;
+        return () => { subscribed = false; changed = undefined; };
+      },
+      notTrustedRetryDelaysMs: [20, 40],
+    });
+    return {...r, loop,
+      join: () => { active = true; generation += 1; changed?.(BASE); },
+      leave: () => { active = false; generation += 1; changed?.(BASE); },
+      remove: () => { present = false; changed?.(BASE); },
+      wake: (origin = BASE) => changed?.(origin),
+      subscribed: () => subscribed,
+    };
+  }
+
+  it('late join reaches a real 503 and retries normally without concurrent same-house reads', async () => {
+    const r = lifecycle();
+    let release!: () => void;
+    r.hold(new Promise<void>(resolve => { release = resolve; }));
+    r.status(503);
+    try {
+      await r.loop.start();
+      expect(r.fetchImpl).not.toHaveBeenCalled();
+      r.join();
+      await vi.waitFor(() => expect(r.fetchImpl).toHaveBeenCalledTimes(1));
+      r.wake(); r.wake(); r.wake('https://other.test');
+      await new Promise(resolve => setTimeout(resolve, 30));
+      expect(r.fetchImpl).toHaveBeenCalledTimes(1);
+      release();
+      await vi.waitFor(() => expect(r.fetchImpl.mock.calls.length).toBeGreaterThan(1));
+      expect(r.store.hasBaseline(SLUG)).toBe(false);
+      r.status(200); r.serve(['early']);
+      await vi.waitFor(() => expect(r.store.hasBaseline(SLUG)).toBe(true));
+      expect(r.store.list(SLUG)).toEqual(['early']);
+      expect(r.announced()).toEqual([]);
+      expect(r.fetchImpl.mock.calls.every(call => String(call[0]).startsWith(BASE + '/followers/'))).toBe(true);
+    } finally {r.loop.stop(); r.db.close();}
+  });
+
+  it('leave and rejoin during an old read captures the new generation without overlap', async () => {
+    const r = lifecycle();
+    let release!: () => void;
+    r.serve(['old']);
+    r.hold(new Promise<void>(resolve => { release = resolve; }));
+    try {
+      await r.loop.start(); r.join();
+      await vi.waitFor(() => expect(r.fetchImpl).toHaveBeenCalledTimes(1));
+      r.leave(); r.serve(['new']); r.join();
+      expect(r.fetchImpl).toHaveBeenCalledTimes(1);
+      release();
+      await vi.waitFor(() => expect(r.store.hasBaseline(SLUG)).toBe(true));
+      expect(r.fetchImpl).toHaveBeenCalledTimes(2);
+      expect(r.store.list(SLUG)).toEqual(['new']);
+      expect(r.announced()).toEqual([]);
+    } finally {r.loop.stop(); r.db.close();}
+  });
+
+  it.each([401, 403])('an explicit HTTP %s refusal is not retried', async status => {
+    const r = lifecycle(); r.status(status);
+    try {
+      await r.loop.start(); r.join();
+      await vi.waitFor(() => expect(r.fetchImpl).toHaveBeenCalledTimes(1));
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(r.fetchImpl).toHaveBeenCalledTimes(1);
+      expect(r.store.hasBaseline(SLUG)).toBe(false);
+    } finally {r.loop.stop(); r.db.close();}
+  });
+
+  it.each(['leave', 'remove', 'stop'] as const)('%s prevents an old read from committing or restarting', async ending => {
+    const r = lifecycle();
+    let release!: () => void;
+    r.hold(new Promise<void>(resolve => { release = resolve; }));
+    r.status(200);
+    try {
+      await r.loop.start(); r.join();
+      await vi.waitFor(() => expect(r.fetchImpl).toHaveBeenCalledTimes(1));
+      if (ending === 'stop') r.loop.stop(); else r[ending]();
+      release();
+      await new Promise(resolve => setTimeout(resolve, 150));
+      expect(r.fetchImpl).toHaveBeenCalledTimes(1);
+      expect(r.store.hasBaseline(SLUG)).toBe(false);
+      if (ending === 'stop') expect(r.subscribed()).toBe(false);
+    } finally {r.loop.stop(); r.db.close();}
   });
 });

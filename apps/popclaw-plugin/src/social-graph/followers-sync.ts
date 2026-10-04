@@ -440,6 +440,8 @@ export interface FollowerSyncDeps {
    * half an hour. Absent = the refusal is only logged, as before.
    */
   readonly onHouseNotYetTrusted?: (house: HouseRef) => void;
+  /** Only a transient HTTP read failure can request a bounded scheduled retry. */
+  readonly onHouseTransientReadFailure?: (house: HouseRef) => void;
   readonly fetch: typeof globalThis.fetch;
   /**
    * How a read at this house proves who is asking.
@@ -455,6 +457,10 @@ export interface FollowerSyncDeps {
   readonly logger?: { info(m: string): void; warn(m: string): void };
   /** Composition guards from the author-verified edges; absent = poll-only. */
   readonly verifiedGuards?: (house: HouseRef) => VerifiedFollowerGuards;
+}
+
+class FollowerListHttpError extends Error {
+  constructor(readonly status: number) { super(`HTTP ${status}`); }
 }
 
 /**
@@ -499,7 +505,7 @@ export async function fetchFollowers(
   // Saying "unauthorized" for it would send a person to re-register a key
   // that was never the problem.
   if (resp.status === 403) throw new Error('FOLLOWER_LIST_NOT_OURS');
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  if (!resp.ok) throw new FollowerListHttpError(resp.status);
   const body = (await resp.json()) as Array<{ popclaw_id?: string }>;
   assertActionActive();
   if (!Array.isArray(body)) throw new Error('followers response is not an array');
@@ -754,6 +760,8 @@ export async function syncFollowers(
     } catch (err) {
       if (!(err instanceof ActionInactiveError)) {
         if (isHouseNotYetTrusted(err)) deps.onHouseNotYetTrusted?.(house);
+        if (err instanceof FollowerListHttpError && (err.status === 429 || err.status >= 500))
+          deps.onHouseTransientReadFailure?.(house);
         deps.logger?.warn(`popclaw: followers sync failed [${house.slug}] — ${String(err)}`);
       }
       return 0;

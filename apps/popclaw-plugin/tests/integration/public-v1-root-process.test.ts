@@ -1,3 +1,4 @@
+import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
 import { afterEach, expect, it } from 'vitest';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -293,8 +294,9 @@ it.each([false, true])('actual public root with held=%s never opens an unauthori
   f.noForbidden();
 }, 30_000);
 
-it.each([null, '1'])('actual mode %s preserves its separately selected legacy transport', async mode => {
+it.each([null, '1'])('actual mode %s preserves its separately selected ordinary me transport', async mode => {
   const f = await fixture(mode, false), run = f.start(); await run.activate();
+  await loginMcpHouse(f.paths.rootDir(), f.origin, () => run.rpc('tools/call', { name: 'popclaw_house_login', arguments: { host: f.origin } }));
   const endpoint = mode === '1' ? '/v1/world-stream' : '/world-feed/stream';
   await until(() => f.requests.some(request => request.url.startsWith(endpoint)), run.stderr);
   expect(f.requests.some(request => request.url.includes('mode=public-v1'))).toBe(false);

@@ -1,3 +1,4 @@
+import { hostDbSlug } from '../../ingress/host-slug.js';
 /**
  * House start, DM recovery and the four resident loops. With
  * `LifecyclePort.loops === 'inline'` the assembly starts the loops itself,
@@ -48,9 +49,11 @@ function followerSyncFor(input: FollowerSyncInput): FollowerSyncService {
     db: host.db, deps: input.followerDeps,
     houses: ports.drift.followerPollHousesFromCatalog
       ? () => worldFeedCache.houses().map((h) => ({ slug: h.slug, baseUrl: h.baseUrl }))
-      : () => houseStores.map((h) => ({ slug: h.slug, baseUrl: h.baseUrl })),
+      : () => [...new Set([...houseStores.map(h => h.baseUrl), ...houses.commands.knownHouseOrigins()])]
+        .map(baseUrl => ({slug: hostDbSlug(baseUrl), baseUrl})),
     runCommand: (work) => houses.runCommand(work),
     captureGate: (origin) => houses.captureGate(origin),
+    observeParticipation: changed => houses.observeParticipationChanges(changed),
   });
 }
 

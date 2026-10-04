@@ -1,3 +1,4 @@
+import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
 /**
  * A reader's ➕ has to reach an MCP-only citizen AND lead somewhere.
  *
@@ -190,15 +191,8 @@ function startFixture() {
   };
 }
 
-/**
- * A data root that knows the house's address and nothing else.
- *
- * Deliberately NOT pre-pinned. The default-house-pinning loop this root runs
- * does the real thing at boot — fetch the manifest, verify its proof, pin, and
- * ACTIVATE participation — and participation is what a declared follow needs
- * (a pin alone answers `HOUSE_OWNER_MOVED_ON`). Seeding a pin by hand skips
- * the activation and would have this test pass on a machine where following
- * is impossible.
+/** A configured address alone grants no participation. The real MCP owner
+ * explicitly joins this house before exercising the follow-intent chain.
  */
 function seedDataRoot(minted: MintedHouse): string {
   const dir = mkdtempSync(join(tmpdir(), 'popclaw-doorbell-'));
@@ -266,6 +260,7 @@ describe('a reader"s follow intent reaches an MCP-only citizen and leads somewhe
     // DM recovery do, so nothing reaches the canvas until a tool is called.
     const status = await mcp.request('tools/call', { name: 'popclaw_check_status', arguments: {} });
     expect(status.result?.['isError']).toBeFalsy();
+    await loginMcpHouse(dataRoot, fixture.house.origin, () => mcp.callText('popclaw_house_login', { host: fixture.house.origin }));
 
     // ① the loop collected it, and ② the bag can show it. Polled together:
     // the card IS the observation, so a pass here cannot be a row nobody can

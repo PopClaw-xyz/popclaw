@@ -174,6 +174,7 @@ export class HouseRuntime {
   readonly commands: HouseCommandPort;
   readonly recovery: HouseRecoveryPort;
   readonly configuredHousePinning: ConfiguredHousePinningStrategy;
+  private readonly allParticipationObservers = new Set<(origin: string) => void>();
   private readonly participationObservers = new Map<string, Set<() => void>>();
   readonly egress: MultiHouseEgress;
   private readonly bus: HouseCommandBus;
@@ -234,6 +235,9 @@ export class HouseRuntime {
       publicStreams: { capture: origin => this.publicResources?.capture(origin) ?? null },
       seedConfiguredLegacy: !opts.participation && opts.publicV1Mode !== true,
       onParticipationObserved: origin => {
+        for (const changed of [...this.allParticipationObservers]) {
+          try { changed(origin); } catch (error) { opts.log?.(`participation observer failed: ${String(error)}`); }
+        }
         for (const changed of [...this.participationObservers.get(origin) ?? []]) {
           try { changed(); } catch (error) { opts.log?.(`participation observer failed: ${String(error)}`); }
         }
@@ -450,6 +454,15 @@ export class HouseRuntime {
       observers.delete(changed);
       if (observers.size === 0) this.participationObservers.delete(origin);
     };
+  }
+
+  /** Observe the resident's existing tuple changes, including newly joined houses.
+   * A notification grants no authority; consumers capture their own current gate.
+   */
+  observeParticipationChanges(changed: (origin: string) => void): () => void {
+    if (this.stopped) return () => {};
+    this.allParticipationObservers.add(changed);
+    return () => { this.allParticipationObservers.delete(changed); };
   }
 
   participationChanged(): void { if (!this.stopped) this.resident.participationChanged(); }
@@ -1141,6 +1154,7 @@ export class HouseRuntime {
     if (this.stopTask) return this.stopTask;
     this.stopped = true;
     this.participationObservers.clear();
+    this.allParticipationObservers.clear();
     this.terminal.abort();
     const resident = this.resident.stop();
     const bus = this.bus.stop();

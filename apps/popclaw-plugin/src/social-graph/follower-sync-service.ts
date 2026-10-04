@@ -54,8 +54,10 @@ export interface FollowerSyncServiceDeps {
   readonly runCommand: <T>(work: () => Promise<T>) => Promise<T>;
   /** One owner per house per pass, captured before the first await. */
   readonly captureGate?: (origin: string) => ActionGate;
+  /** Existing resident observations; the callback is a wakeup, never a grant. */
+  readonly observeParticipation?: (changed: (origin: string) => void) => () => void;
   readonly intervalMs?: number;
-  /** Test seam for the backoff below. */
+  /** Test seam for bounded trust and transient HTTP read retries. */
   readonly notTrustedRetryDelaysMs?: readonly number[];
 }
 
@@ -88,85 +90,102 @@ export interface FollowerSyncService {
 }
 
 export function createFollowerSync(service: FollowerSyncServiceDeps): FollowerSyncService {
+  const retryDelays = service.notTrustedRetryDelaysMs ?? NOT_TRUSTED_RETRY_DELAYS_MS;
+  let stopped = false;
+  let closing = new AbortController();
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let unsubscribe: (() => void) | undefined;
+  const retries = new Map<string, {attempt: number; timer?: ReturnType<typeof setTimeout>}>();
+  const flights = new Map<string, {gate: ActionGate; work: Promise<{count: number; retry: boolean}>}>();
+  const pendingWake = new Set<string>();
+  const houseFor = (origin: string) => service.houses().find(house => house.baseUrl === origin);
+  const active = (origin: string) => !stopped && !!houseFor(origin)
+    && (service.captureGate?.(origin).isActive() ?? true);
+  const clearRetry = (origin: string) => {
+    const state = retries.get(origin);
+    if (state?.timer) clearTimeout(state.timer);
+    retries.delete(origin);
+  };
   const deps: FollowerSyncDeps = {
     ...service.deps,
-    // Per house, the author's VERIFIED facts at that house outrank what its
-    // list says. Built from the database rather than taken from the caller so
-    // no root can be wired without them.
     verifiedGuards: houseScopedVerifiedGuards(service.db, service.deps.ownerPopclawId, hostDbSlug),
-    ...(service.captureGate
-      ? { gateForHouse: (house: HouseRef) => service.captureGate!(house.baseUrl) }
-      : {}),
+    gateForHouse: house => {
+      const captured = service.captureGate?.(house.baseUrl), shutdown = closing.signal;
+      return {origin: house.baseUrl,
+        signal: captured ? AbortSignal.any([shutdown, captured.signal]) : shutdown,
+        isActive: () => !shutdown.aborted && active(house.baseUrl) && (captured?.isActive() ?? true)};
+    },
   };
-  /**
-   * One pass, and whether any house refused it for want of a pin. The flag
-   * belongs to the pass, not to the service: two passes can overlap when a
-   * slow house outlasts the retry that was already scheduled, and a flag
-   * shared between them would attribute one pass's refusal to the other.
-   */
-  const runPass = async (): Promise<{ count: number; notYetTrusted: boolean }> => {
-    let notYetTrusted = false;
-    const count = await service.runCommand(() => syncFollowers(
-      { ...deps, onHouseNotYetTrusted: () => { notYetTrusted = true; } },
-      service.houses(),
-    ));
-    return { count, notYetTrusted };
+  // All scheduled, observed and explicit passes share one flight per house.
+  const runHouse = (house: HouseRef): Promise<{count: number; retry: boolean}> => {
+    const existing = flights.get(house.baseUrl);
+    if (existing) return existing.work;
+    const gate = deps.gateForHouse!(house);
+    let retry = false;
+    const work = service.runCommand(() => syncFollowers({...deps,
+      gateForHouse: () => gate,
+      onHouseNotYetTrusted: () => { retry = true; },
+      onHouseTransientReadFailure: () => { retry = true; },
+    }, [house])).then(count => ({count, retry})).finally(() => {
+      flights.delete(house.baseUrl);
+      if (pendingWake.delete(house.baseUrl) && active(house.baseUrl)) void pass(house.baseUrl);
+    });
+    flights.set(house.baseUrl, {gate, work});
+    return work;
   };
-
-  // An explicit one-shot, which must not start a background schedule.
-  const runOnce = async (): Promise<number> => (await runPass()).count;
-
-  const retryDelays = service.notTrustedRetryDelaysMs ?? NOT_TRUSTED_RETRY_DELAYS_MS;
-  let timer: ReturnType<typeof setInterval> | null = null;
-  let retryTimer: ReturnType<typeof setTimeout> | null = null;
-  let retryAttempt = 0;
-  let stopped = false;
-
-  const pass = async (): Promise<void> => {
-    let notYetTrusted = false;
-    try {
-      notYetTrusted = (await runPass()).notYetTrusted;
-    } catch (err) {
+  const runOnce = async (): Promise<number> => (await Promise.all(service.houses().map(runHouse)))
+    .reduce((count, result) => count + result.count, 0);
+  const pass = async (origin: string): Promise<void> => {
+    const house = houseFor(origin);
+    if (!house || !active(origin)) { clearRetry(origin); return; }
+    let result: {count: number; retry: boolean};
+    try { result = await runHouse(house); }
+    catch (err) {
       deps.logger?.warn(`popclaw: follower sync failed (non-fatal): ${String(err)}`);
-    }
-    if (stopped) return;
-    if (!notYetTrusted) {
-      // Every house answered, so the boot race is over and the next one — a
-      // house mounted later, a pin still in flight — gets its own short
-      // ladder rather than inheriting a spent one.
-      retryAttempt = 0;
       return;
     }
-    // One retry in flight at a time, and only while the ladder has rungs
-    // left: this is a nudge past a race the pinning loop is already working
-    // on, never a second poller.
-    const delay = retryDelays[retryAttempt];
-    if (delay === undefined || retryTimer !== null) return;
-    retryAttempt += 1;
-    retryTimer = setTimeout(() => { retryTimer = null; void pass(); }, delay);
-    // Never worth keeping a process alive for (ADR-0035's discipline).
-    retryTimer.unref?.();
+    if (!active(origin) || !result.retry) { clearRetry(origin); return; }
+    const state = retries.get(origin) ?? {attempt: 0};
+    if (state.timer) return;
+    const delay = retryDelays[state.attempt];
+    if (delay === undefined) return;
+    state.attempt += 1;
+    state.timer = setTimeout(() => { state.timer = undefined; void pass(origin); }, delay);
+    state.timer.unref?.();
+    retries.set(origin, state);
   };
-
+  const changed = (origin: string): void => {
+    if (!active(origin)) { clearRetry(origin); pendingWake.delete(origin); return; }
+    const flight = flights.get(origin);
+    if (flight) {
+      // Repeated signals for this generation coalesce. A new generation waits
+      // for the old fenced read to finish before capturing fresh authority.
+      if (!flight.gate.isActive()) pendingWake.add(origin);
+      return;
+    }
+    clearRetry(origin);
+    void pass(origin);
+  };
   return {
     runOnce,
     start: async () => {
+      if (stopped) closing = new AbortController();
       stopped = false;
-      retryAttempt = 0;
-      await pass();
-      // A root that stopped while the boot pass was in flight must not leave a
-      // timer behind it.
+      unsubscribe ??= service.observeParticipation?.(changed);
+      await Promise.all(service.houses().map(house => pass(house.baseUrl)));
       if (stopped || timer !== null) return;
-      timer = setInterval(() => void pass(), service.intervalMs ?? FOLLOWER_SYNC_INTERVAL_MS);
-      // Never worth keeping a process alive for (ADR-0035's discipline).
+      timer = setInterval(() => {
+        for (const house of service.houses()) { clearRetry(house.baseUrl); void pass(house.baseUrl); }
+      }, service.intervalMs ?? FOLLOWER_SYNC_INTERVAL_MS);
       timer.unref?.();
     },
     stop: () => {
-      stopped = true;
+      stopped = true; closing.abort();
+      unsubscribe?.(); unsubscribe = undefined;
       if (timer) clearInterval(timer);
       timer = null;
-      if (retryTimer) clearTimeout(retryTimer);
-      retryTimer = null;
+      for (const origin of retries.keys()) clearRetry(origin);
+      pendingWake.clear();
     },
   };
 }

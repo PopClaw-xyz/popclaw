@@ -1,3 +1,4 @@
+import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
 import { mintHouse } from '../helpers/signed-manifest.js';
 import { publishStorageJson, MaintenanceSession } from '../../src/host/storage-maintenance.js';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -433,7 +434,9 @@ it('normal MCP startup keeps ordinary loopback handshake/SSE while new typed com
   await new Promise<void>((resolveListen, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolveListen); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   const origin = `http://127.0.0.1:${address.port}`, box = sandbox();
-  const signedHouse = mintHouse({ origin, seed: 27, incarnation: 'first_release_house', manifest: { official_ids: [] } });
+  const signedHouse = mintHouse({ origin, seed: 27, incarnation: 'first_release_house', manifest: { official_ids: [],
+    world_interaction: { version: 1, public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_1',
+      envelope_baseline: 'public-envelope-01', initial_public_scopes: ['sc_public'] } } } });
   writeFileSync(join(box.data, 'config/plugin.json'), JSON.stringify({ lore_houses: [origin] }));
   box.env.POPCLAW_WEB_BASE_URL = origin; box.env.POPCLAW_CANVAS_BASE_URL = origin;
   // Allow only this owned loopback fixture and tsx's Unix loader socket.
@@ -485,6 +488,11 @@ syncBuiltinESMExports();`);
     // WORLD_LOCAL_UNSUPPORTED — which the capabilities read above still reports.
     // Either way nothing is signed, attempted or queued, which is what follows.
     expect(invoke.isError).toBe(true); expect(JSON.stringify(invoke)).toContain('OWNER_CONFIRMATION_UNAVAILABLE');
+    const loginRequestId = await loginMcpHouse(box.data, origin, () => rpc('tools/call', { name: 'popclaw_house_login', arguments: { host: origin } }));
+    // Normal participation changes no selected public-v1 transport capability.
+    const joinedCapabilities = await rpc('tools/call', { name: 'popclaw_world_capabilities', arguments: { house: origin } });
+    expect(joinedCapabilities.structuredContent).toMatchObject({ code: 'WORLD_LOCAL_UNSUPPORTED',
+      blocks: { public_stream: { validation: 'valid', support: 'unsupported', ready: false } } });
     // The doorbell and the page-state sync are legs every resident root owes,
     // this real MCP process included: nothing else collects a reader's ➕ off
     // the canvas, and nothing else tells the canvas which authors on a page
@@ -509,8 +517,8 @@ syncBuiltinESMExports();`);
     expect(existsSync(box.attempts) ? readFileSync(box.attempts, 'utf8') : '').toBe('');
     const db = new LocalHostDb(new PopclawPaths(box.data).socialDb(), { readOnly: true });
     try {
-      expect(db.queryAll('SELECT kind FROM house_lifecycle_commands')).toEqual([]);
-      // A real MCP root, started with no script and no out-of-band step, comes
+      expect(db.queryAll('SELECT request_id,kind,state FROM house_lifecycle_commands')).toEqual([{request_id: loginRequestId, kind: 'login', state: 'done'}]);
+      // A real MCP root, joined through its normal login tool, comes
       // up with its execution ledgers already built: the storage precondition
       // for the owner-confirmation step holds here, which before this was the
       // silent `ACTION_RECEIPT_PROTECTION_INCOMPLETE` every fresh install hit.
