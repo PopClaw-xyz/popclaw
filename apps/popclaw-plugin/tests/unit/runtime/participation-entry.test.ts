@@ -16,6 +16,7 @@ import {localParticipationPort} from '../../../src/host/local-participation.js';
 import type {HouseParticipationAdmissionPort,HouseParticipationPlan} from '../../../src/runtime/house-lifecycle/participation-admission.js';
 import {mintHouse} from '../../helpers/signed-manifest.js';
 import type {HouseStore} from '../../../src/ingress/world-feed-store.js';
+import {pinConfiguredHouses} from '../../../src/social-graph/default-house-pinning.js';
 import {runHouseLoginCommand} from '../../../src/commands/popclaw-house.js';
 const ME='https://house.popclaw.me',WORLD='https://house.popclaw.world';
 const closes:Array<()=>Promise<void>>=[];
@@ -137,4 +138,19 @@ it('actual MCP text wrapping marks only the full current guide context delivered
   f.rt.markGuidesInAgentInput(emitted(guide));expect(await f.rt.readHouseGuide(ME)).toMatchObject({delivered:true});
   await f.rt.commands.logoutHouse(ME);await f.rt.commands.loginHouse(ME);await f.rt.readHouseGuide(ME);
   f.rt.markGuidesInAgentInput(emitted(guide));expect(await f.rt.readHouseGuide(ME)).toMatchObject({delivered:false});
+});
+
+it('configured first-pin cannot preseed a port-authorized install before initial activation',async()=>{
+  const f=await fixture();
+  const unavailable=vi.fn(async()=>new Response('synthetic unavailable service',{status:503}));
+  expect(await pinConfiguredHouses({db:f.db,recipientPopclawId:f.boot.popclawId,
+    origins:f.boot.loreHouseUrls,pinning:f.rt.configuredHousePinning,fetch:unavailable}))
+    .toEqual([{origin:ME,outcome:'refused',refusal:'HOUSE_FIRST_PIN_NOT_AUTHORIZED'}]);
+  expect(unavailable).not.toHaveBeenCalled();
+  expect(readParticipation(f.db,ME)).toBeNull();
+  expect(f.rt.captureGate(ME).isActive()).toBe(false);
+  expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_initial_setup')?.n).toBe(0);
+  expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_participation_attempts')?.n).toBe(0);
+  expect(await f.rt.activateInitialMe()).toMatchObject({admission:'configured'});
+  expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_participation_attempts')?.n).toBe(1);
 });

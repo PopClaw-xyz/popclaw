@@ -51,13 +51,16 @@ afterEach(async () => { for (const fn of cleanup.splice(0).reverse()) await fn()
 async function fixture(routes: Record<string, () => Response> = {
   [`${HOUSE}/v1/manifest`]: () => new Response(MANIFEST, { status: 200, headers: { etag: '"m1"' } }),
   [GUIDE_URL]: () => new Response(GUIDE, { status: 200, headers: { etag: '"g1"' } }),
-}, house = HOUSE) {
+}, house = HOUSE, holdJoin = false) {
   const signed=mintHouse({origin:house,manifest:{house:{name:'popclaw.world',slug:'world'},guide_url:GUIDE_URL}});
   let joining=true;
+  let releaseJoin!: () => void;
+  const joinReady = new Promise<void>(resolve => { releaseJoin = resolve; });
+  if (!holdJoin) releaseJoin();
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const fetch = vi.fn<typeof globalThis.fetch>(async (url, init) => {
     const u = url instanceof Request ? url.url : String(url);
-    if(joining)return signed.fetch(u);
+    if(joining) { await joinReady; return signed.fetch(u); }
     calls.push({ url: u, init });
     const route = routes[u];
     return route ? route() : new Response(null, { status: 404 });
@@ -75,12 +78,37 @@ async function fixture(routes: Record<string, () => Response> = {
     openStore: async () => { throw new Error('unused'); }, isOfficialActor: () => false });
   cleanup.push(() => houses.stop());
   houses.start();
-  expect(await houses.commands.loginHouse(house)).toMatchObject({admission:'configured'});
+  const requested = await houses.commands.loginHouse(house);
+  releaseJoin();
+  // The caller's wait window can expire while the exact login keeps running.
+  // Read its stored terminal result; never enqueue another login to wait for it.
+  const joined = requested.operationId ? await vi.waitFor(() => {
+    const row = db.queryOne<{ kind: string; house_origin: string; state: string; result_json: string }>(
+      'SELECT kind,house_origin,state,result_json FROM house_lifecycle_commands WHERE request_id=?',
+      [requested.operationId!]);
+    expect(row).toMatchObject({ kind: 'login', house_origin: house, state: 'done' });
+    expect(row?.result_json).toEqual(expect.any(String));
+    return JSON.parse(row!.result_json) as typeof requested;
+  }, { timeout: 5000, interval: 10 }) : requested;
+  expect(joined).toMatchObject({admission:'configured'});
   joining=false;fetch.mockClear();
-  return { houses, paths, calls, fetch, db };
+  return { houses, paths, calls, fetch, db, requested };
 }
 
 describe('a declared guide on another origin', () => {
+  it('waits for the same pending login before fetching the cross-origin guide', async () => {
+    const { houses, paths, calls, db, requested } = await fixture(undefined, HOUSE, true);
+    expect(requested).toMatchObject({ status: 'connecting', operationId: expect.any(String) });
+    expect(db.queryAll('SELECT request_id,state FROM house_lifecycle_commands WHERE kind=\'login\''))
+      .toEqual([{ request_id: requested.operationId, state: 'done' }]);
+    const gate = houses.captureGate(HOUSE);
+    expect(gate.isActive()).toBe(true);
+    await refreshHouseHandshake(HOUSE, { paths, logger: { info() {}, warn() {} },
+      fetch: houses.houseFetch(HOUSE, gate), guideFetch: houses.documentFetch(HOUSE, gate) });
+    expect(readHouseGuide(paths, SLUG)).toBe(GUIDE);
+    expect(calls.map(c => c.url)).toEqual([`${HOUSE}/v1/manifest`, GUIDE_URL]);
+  });
+
   it('is fetched through the document lane and written to disk', async () => {
     const { houses, paths, calls } = await fixture();
     const gate = houses.captureGate(HOUSE);

@@ -336,7 +336,8 @@ export class HouseLifecycleManager {
     this.legacyRecoveryConfigured = opts.legacyRecoveryConfigured ?? (() => false);
     ensureHouseLifecycleSchema(this.db);
     this.configuredFirstPin = configuredFirstPinPort({ db: this.db, installationId: this.installationId,
-      selected: () => opts.configuredPinningMode !== 'public-v1',
+      // An admission port owns static participation; config cannot preseed it.
+      selected: () => !this.participation && opts.configuredPinningMode !== 'public-v1',
       configured: this.legacyRecoveryConfigured, configuredPin: this.configuredPinFor,
       fence: origin => this.localLogoutFences.get(origin),
       cancellationEpoch: origin => this.localLogoutEpochs.get(origin) ?? 0, stopped: () => this.stopped,
