@@ -574,6 +574,12 @@ The helper does not add a reload merely to obtain a machine-readable result.
 Its config checks preserve an explicitly disabled entry and reject unreviewed
 transitions without undoing the changed config. They are not a zero-effect or
 rollback guarantee.
+OpenClaw 2026.9.8 may stamp `meta.migrations.modelPolicyAllowlist` and
+`meta.migrations.utilityModelSeparation` during normal install/config writes.
+The helper accepts only a previously absent marker becoming literal `true`;
+existing markers must stay unchanged. It still rejects actual model, policy,
+other plugin or unrelated metadata edits. Doctor/onboarding is not required
+just to accommodate these two markers.
 
 Keep the private receipt. It records native stage results and child join state.
 A config digest may be absent or remain from an earlier successful stage after

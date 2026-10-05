@@ -24,6 +24,13 @@ const fs = require('node:fs');
 const a=process.argv.slice(2);
 fs.appendFileSync(process.env.FIXTURE_CALLS, JSON.stringify({argv:a,node:process.execPath,state:process.env.OPENCLAW_STATE_DIR,config:process.env.OPENCLAW_CONFIG_PATH,profile:process.env.OPENCLAW_PROFILE,root:process.env.POPCLAW_DATA_ROOT})+'\\n');
 const stage=a.includes('--help')?'help':a[0]==='plugins'?'install':'config'; if(process.env.FIXTURE_MUTATION===stage) fs.writeFileSync(process.env.OPENCLAW_CONFIG_PATH, JSON.stringify({agents:{defaults:{workspace:'/unreviewed'}},plugins:{entries:{unreviewed:{enabled:true}}}}));
+if(process.env.FIXTURE_CONFIG_PATCH_STAGE===stage) {
+  const c=JSON.parse(fs.readFileSync(process.env.OPENCLAW_CONFIG_PATH));
+  function merge(target,patch){for(const [key,value] of Object.entries(patch)){if(value && typeof value==='object' && !Array.isArray(value)){target[key]??={};merge(target[key],value);}else target[key]=value;}}
+  merge(c,JSON.parse(process.env.FIXTURE_CONFIG_PATCH));
+  if(process.env.FIXTURE_REMOVE_MIGRATION) delete c.meta.migrations[process.env.FIXTURE_REMOVE_MIGRATION];
+  fs.writeFileSync(process.env.OPENCLAW_CONFIG_PATH,JSON.stringify(c));
+}
 if(a.includes('--help')) { console.log(process.env.FIXTURE_CAP === '0' ? 'old help' : '--accept-capabilities'); process.exit(Number(process.env.FIXTURE_HELP_RC || 0)); }
 console.log('SECRET_TOKEN unrelated message'); console.error('SECRET_STDERR private chat');
 if(a[0]==='plugins' && a[1]==='install') {
@@ -76,6 +83,48 @@ test('one-argument fresh install uses only the default selected state',()=>fixtu
   const r=f.run(); assert.equal(r.status,0,r.stdout+r.stderr); const calls=f.readCalls(); assert.equal(calls.length,3); assert.equal(calls[1].state,f.state); assert.equal(calls[1].root,path.join(f.state,'popclaw')); assert.equal(r.stdout.includes('SECRET'),false);
 }));
 test('fresh install with explicit receipt retains consent and hook declaration',()=>fixture(f=>success(f,f.run(['--receipt',f.receipt]))));
+for(const stage of ['install','config']) for(const mode of ['first-install','maintenance']) test(`9.8 ${mode} accepts only new true automatic markers after ${stage}`,()=>fixture(f=>{
+  if(mode==='maintenance')f.maintenance();
+  const before={agents:{defaults:{model:{primary:'openai/gpt-6-astra'}}},meta:{retained:'unchanged'},plugins:{entries:{other:{enabled:false}}}};
+  fs.writeFileSync(f.config,JSON.stringify(before));
+  if(mode==='maintenance'){f.record.hashes.config=hash(fs.readFileSync(f.config));f.saveRecord();}
+  const args=mode==='maintenance'?f.args:['--receipt',f.receipt];
+  success(f,f.run(args,{FIXTURE_CONFIG_PATCH_STAGE:stage,FIXTURE_CONFIG_PATCH:JSON.stringify({meta:{migrations:{modelPolicyAllowlist:true,utilityModelSeparation:true}}})}));
+  const after=JSON.parse(fs.readFileSync(f.config));
+  assert.deepEqual(after.agents,before.agents);assert.equal(after.meta.retained,'unchanged');assert.deepEqual(after.plugins.entries.other,before.plugins.entries.other);
+  assert.deepEqual(after.meta.migrations,{modelPolicyAllowlist:true,utilityModelSeparation:true});
+}));
+for(const key of ['modelPolicyAllowlist','utilityModelSeparation']) for(const value of [false,'true',1,null,{}]) test(`reject new ${key} marker ${JSON.stringify(value)}`,()=>fixture(f=>{
+  const r=f.run(['--receipt',f.receipt],{FIXTURE_CONFIG_PATCH_STAGE:'install',FIXTURE_CONFIG_PATCH:JSON.stringify({meta:{migrations:{[key]:value}}})});
+  assert.notEqual(r.status,0);assert.equal(f.readCalls().length,2);
+  const receipt=JSON.parse(fs.readFileSync(f.receipt));assert.equal(receipt.status,'failed');assert.equal(receipt.effectsUnknown,true);
+}));
+for(const key of ['modelPolicyAllowlist','utilityModelSeparation']) for(const value of [false,'true',null]) test(`reject changing existing ${key} to ${JSON.stringify(value)}`,()=>fixture(f=>{
+  fs.writeFileSync(f.config,JSON.stringify({meta:{migrations:{[key]:true}}}));
+  const r=f.run(['--receipt',f.receipt],{FIXTURE_CONFIG_PATCH_STAGE:'install',FIXTURE_CONFIG_PATCH:JSON.stringify({meta:{migrations:{[key]:value}}})});
+  assert.notEqual(r.status,0);assert.equal(f.readCalls().length,2);
+}));
+for(const key of ['modelPolicyAllowlist','utilityModelSeparation']) test(`reject removing completed ${key}`,()=>fixture(f=>{
+  fs.writeFileSync(f.config,JSON.stringify({meta:{migrations:{[key]:true}}}));
+  const r=f.run(['--receipt',f.receipt],{FIXTURE_CONFIG_PATCH_STAGE:'install',FIXTURE_CONFIG_PATCH:'{}',FIXTURE_REMOVE_MIGRATION:key});
+  assert.notEqual(r.status,0);assert.equal(f.readCalls().length,2);
+}));
+for(const patch of [
+  {meta:{migrations:{unknownMigration:true}}},
+  {meta:{other:'unreviewed'}},
+  {agents:{defaults:{modelPolicy:{allow:['openai/gpt-6-astra']}}}},
+  {agents:{defaults:{model:{primary:'openai/gpt-6-astra'}}}},
+  {plugins:{entries:{other:{enabled:true}}}},
+  {tools:{allow:['unreviewed_tool']}},
+]) test(`known markers cannot hide protected config change ${JSON.stringify(patch)}`,()=>fixture(f=>{
+  patch.meta??={};patch.meta.migrations??={};Object.assign(patch.meta.migrations,{modelPolicyAllowlist:true,utilityModelSeparation:true});
+  const r=f.run(['--receipt',f.receipt],{FIXTURE_CONFIG_PATCH_STAGE:'install',FIXTURE_CONFIG_PATCH:JSON.stringify(patch)});
+  assert.notEqual(r.status,0);assert.equal(f.readCalls().length,2);
+}));
+test('native metadata stamping during help remains forbidden',()=>fixture(f=>{
+  const r=f.run(['--receipt',f.receipt],{FIXTURE_CONFIG_PATCH_STAGE:'help',FIXTURE_CONFIG_PATCH:JSON.stringify({meta:{migrations:{modelPolicyAllowlist:true,utilityModelSeparation:true}}})});
+  assert.notEqual(r.status,0);assert.equal(f.readCalls().length,1);
+}));
 test('records native live application without adding a reload or claiming runtime verification',()=>fixture(f=>{
   const r=f.run(['--receipt',f.receipt],{FIXTURE_APPLICATION:'Applied in Gateway generation 17.'});
   assert.equal(r.status,0,r.stdout+r.stderr);

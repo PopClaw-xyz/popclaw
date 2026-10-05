@@ -135,6 +135,14 @@ function configTransition(beforeBytes, afterBytes, stage) {
   const allowed=stage==='install'
     ? ['plugins.entries.popclaw.enabled','plugins.installs.popclaw','meta.lastTouchedAt','meta.lastTouchedVersion']
     : ['plugins.entries.popclaw.hooks.allowConversationAccess','meta.lastTouchedAt','meta.lastTouchedVersion'];
+  // Official 2026.9.8 stamps these two completion markers on ordinary config
+  // writes, even without Doctor/onboarding. Only a new literal true is allowed;
+  // actual model/policy edits and every other metadata change remain protected.
+  for(const key of ['modelPolicyAllowlist','utilityModelSeparation']) {
+    const prior=before.meta?.migrations?.[key], next=after.meta?.migrations?.[key];
+    if(prior===undefined && next===true) allowed.push('meta.migrations.'+key);
+    else if(prior!==next) abort('Native operation changed an existing or invalid migration marker; keep the fence.');
+  }
   if(stage==='install') {
     for(const key of ['allow','deny']) {
       const a=before.plugins?.[key], b=after.plugins?.[key];
