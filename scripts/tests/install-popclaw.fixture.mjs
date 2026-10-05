@@ -83,6 +83,69 @@ test('one-argument fresh install uses only the default selected state',()=>fixtu
   const r=f.run(); assert.equal(r.status,0,r.stdout+r.stderr); const calls=f.readCalls(); assert.equal(calls.length,3); assert.equal(calls[1].state,f.state); assert.equal(calls[1].root,path.join(f.state,'popclaw')); assert.equal(r.stdout.includes('SECRET'),false);
 }));
 test('fresh install with explicit receipt retains consent and hook declaration',()=>fixture(f=>success(f,f.run(['--receipt',f.receipt]))));
+for(const mode of ['first-install','maintenance']) test(`provider credential references survive ${mode} without exposing their values`,()=>fixture(f=>{
+  if(mode==='maintenance')f.maintenance();
+  const before='{"models":{"providers":{"deepseek":{"apiKey":"${DEEPSEEK_API_KEY}"}}}}\n';
+  fs.writeFileSync(f.config,before);
+  if(mode==='maintenance'){f.record.hashes.config=hash(Buffer.from(before));f.saveRecord();}
+  const value='synthetic-credential-only';
+  const r=f.run(mode==='maintenance'?f.args:['--receipt',f.receipt],{DEEPSEEK_API_KEY:value});
+  success(f,r);
+  const after=fs.readFileSync(f.config,'utf8');
+  const receipt=fs.readFileSync(f.receipt,'utf8');
+  assert.equal(JSON.parse(after).models.providers.deepseek.apiKey,'${DEEPSEEK_API_KEY}');
+  assert.equal(JSON.parse(receipt).hashes.config,hash(Buffer.from(before)));
+  assert.equal((after+receipt+r.stdout+r.stderr).includes(value),false);
+}));
+test('native materialization of a provider credential stops subsequent commands',()=>fixture(f=>{
+  fs.writeFileSync(f.config,JSON.stringify({models:{providers:{deepseek:{apiKey:'${DEEPSEEK_API_KEY}'}}}}));
+  const value='synthetic-credential-only';
+  const r=f.run(['--receipt',f.receipt],{DEEPSEEK_API_KEY:value,FIXTURE_CONFIG_PATCH_STAGE:'install',FIXTURE_CONFIG_PATCH:JSON.stringify({models:{providers:{deepseek:{apiKey:value}}}})});
+  assert.notEqual(r.status,0);assert.equal(f.readCalls().length,2);
+  const receipt=fs.readFileSync(f.receipt,'utf8');
+  assert.equal(JSON.parse(receipt).status,'failed');assert.equal(JSON.parse(receipt).effectsUnknown,true);
+  assert.equal((receipt+r.stdout+r.stderr).includes(value),false);
+}));
+for(const config of [
+  {plugins:{load:{paths:['${PLUGIN_PATH}']}}},
+  {plugins:{installs:{popclaw:{installPath:'${PLUGIN_PATH}'}}}},
+  {agents:{defaults:{workspace:'${PLUGIN_PATH}'}}},
+  {plugins:{entries:{popclaw:{config:{dataRoot:'${PLUGIN_PATH}'}}}}},
+  {plugins:{entries:{popclaw:{config:{actorId:'${ACTOR_ID}'}}}}},
+  {models:{providers:{deepseek:{apiKey:{source:'file',provider:'default',id:'${PLUGIN_PATH}'}}}}},
+  {models:{providers:{deepseek:{apiKey:'${DEEPSEEK_API_KEY}'}}},env:{vars:{OPENCLAW_STATE_DIR:'${PLUGIN_PATH}'}}},
+  {models:{providers:{'${PROVIDER_ID}':{apiKey:'synthetic-literal'}}}},
+]) test(`reject environment-dependent paths or selectors ${JSON.stringify(config)}`,()=>fixture(f=>{
+  fs.writeFileSync(f.config,JSON.stringify(config));
+  refused(f,f.run(['--receipt',f.receipt],{PLUGIN_PATH:f.base,ACTOR_ID:'synthetic',DEEPSEEK_API_KEY:'synthetic'}));
+}));
+for(const flag of ['--state-dir','--config-path','--data-root','--receipt','--openclaw-cli','--node']) test(`reject unresolved ${flag} even as a literal directory name`,()=>fixture(f=>{
+  const literal=path.join(f.base,'${UNFIXED}');
+  if(flag==='--node')fs.symlinkSync(process.execPath,literal);
+  if(flag==='--openclaw-cli'){fs.copyFileSync(f.cli,literal);fs.chmodSync(literal,0o700);}
+  const args=[flag,literal];
+  if(flag!=='--receipt')args.push('--receipt',f.receipt);
+  refused(f,f.run(args,{UNFIXED:'synthetic'}));
+}));
+for(const selector of ['HOME','OPENCLAW_HOME','OPENCLAW_STATE_DIR','OPENCLAW_CONFIG_PATH','OPENCLAW_PROFILE','CLAWDBOT_STATE_DIR','CLAWDBOT_CONFIG_PATH','POPCLAW_DATA_ROOT']) for(const nested of [false,true]) test(`reject config env ${nested?'vars.':''}${selector} even with a literal value`,()=>fixture(f=>{
+  const entries={[selector]:f.base};
+  fs.writeFileSync(f.config,JSON.stringify({env:nested?{vars:entries}:entries}));
+  refused(f,f.run(['--receipt',f.receipt],{DEEPSEEK_API_KEY:'synthetic'}));
+}));
+for(const selector of ['HOME','OPENCLAW_STATE_DIR','OPENCLAW_CONFIG_PATH','POPCLAW_DATA_ROOT']) test(`reject unresolved environment ${selector}`,()=>fixture(f=>{
+  refused(f,f.run(['--receipt',f.receipt],{[selector]:path.join(f.base,'${UNFIXED}')}));
+}));
+test('reject a literal env placeholder in an otherwise valid maintenance-record path',()=>fixture(f=>{
+  f.maintenance();
+  const literal=path.join(f.base,'${UNFIXED}');
+  fs.copyFileSync(f.recordPath,literal);fs.chmodSync(literal,0o600);
+  f.args[f.args.indexOf('--maintenance-record')+1]=literal;
+  refused(f,f.run(f.args));
+}));
+test('reject a literal env placeholder in an otherwise valid archive path',()=>fixture(f=>{
+  const literal=path.join(f.base,'${UNFIXED}');fs.copyFileSync(f.tgz,literal);f.tgz=literal;
+  refused(f,f.run(['--receipt',f.receipt]));
+}));
 for(const stage of ['install','config']) for(const mode of ['first-install','maintenance']) test(`9.8 ${mode} accepts only new true automatic markers after ${stage}`,()=>fixture(f=>{
   if(mode==='maintenance')f.maintenance();
   const before={agents:{defaults:{model:{primary:'openai/gpt-6-astra'}}},meta:{retained:'unchanged'},plugins:{entries:{other:{enabled:false}}}};

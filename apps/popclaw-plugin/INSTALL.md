@@ -548,8 +548,13 @@ OpenClaw state/config is allowed. Its first-install branch does not require a
 maintenance record. Unpublished development repairs use a separate internal
 plan; do not generate a sample record and treat it as evidence of a real repair.
 
-The helper accepts only a strict JSON object; JSON5, comments, trailing commas,
-`$include` and `${...}` substitutions are outside its supported config scope.
+The helper accepts only a strict JSON object; JSON5, comments, trailing commas
+and `$include` are outside its supported config scope. It preserves `${...}`
+references in `models.providers.<provider>.apiKey` string values and delegates
+credential resolution to OpenClaw. Native 9.8 retains undefined references as
+pending credentials; installation does not verify that those credentials work.
+References in other fields, paths or selector keys remain unsupported. Selected
+paths must be literal, and config `env` must not supply instance selectors.
 It requires explicit, consistent instance selections or its documented defaults,
 physical state/data/config-parent paths, and a supported Node/OpenClaw JavaScript
 entry. Shell aliases and arbitrary service/container wrappers are not JS entries.

@@ -48,7 +48,7 @@ function parse(args) {
   return out;
 }
 function absolute(p) {
-  if (typeof p!=='string' || !path.isAbsolute(p) || /[\x00-\x1f\x7f]/.test(p) || path.normalize(p)!==p || p==='/') abort('Selections must be normalized absolute paths.');
+  if (typeof p!=='string' || !path.isAbsolute(p) || p.includes('${') || /[\x00-\x1f\x7f]/.test(p) || path.normalize(p)!==p || p==='/') abort('Selections must be fixed, normalized absolute paths.');
   return p;
 }
 // Check each parent before traversing it; never follow a state/root/config link.
@@ -113,9 +113,23 @@ function configBytes(config, optional) {
   let parsed;
   try {parsed=JSON.parse(bytes);} catch {abort('Selected config must be strict JSON; JSON5 requires a separately reviewed adapter.');}
   if (!parsed || typeof parsed!=='object' || Array.isArray(parsed)) abort('Selected config is not an object.');
-  function check(v) {
-    if (typeof v==='string' && v.includes('${')) abort('Config environment substitution is not fixed.');
-    if (v && typeof v==='object') for(const [k,value] of Object.entries(v)) {if (k==='$include') abort('Config includes are outside the fixed selection.'); check(value);}
+  // Config env is published by native reads. Alternate home/legacy selectors
+  // may otherwise appear only after the child starts, outside our fixed target.
+  const selectors=new Set(['HOME','OPENCLAW_HOME','OPENCLAW_STATE_DIR','OPENCLAW_CONFIG_PATH','OPENCLAW_PROFILE','CLAWDBOT_STATE_DIR','CLAWDBOT_CONFIG_PATH','POPCLAW_DATA_ROOT']);
+  for(const entries of [parsed.env,parsed.env?.vars]) if(entries && typeof entries==='object') {
+    for(const key of Object.keys(entries)) if(selectors.has(key.toUpperCase())) abort('Config environment must not supply instance selectors.');
+  }
+  function check(v, keys=[]) {
+    // Native 9.8 resolves provider credentials and restores authored references
+    // when writing config. Leave values to native resolution; never expand here.
+    // Unknown fields, SecretRef selectors and all path/identity fields stay fixed.
+    const credential=keys.length===4 && keys[0]==='models' && keys[1]==='providers' && keys[3]==='apiKey';
+    if (typeof v==='string' && v.includes('${') && !credential) abort('Config environment substitution is outside reviewed credential fields.');
+    if (v && typeof v==='object') for(const [k,value] of Object.entries(v)) {
+      if (k==='$include') abort('Config includes are outside the fixed selection.');
+      if (k.includes('${')) abort('Config keys must be fixed.');
+      check(value,[...keys,k]);
+    }
   }
   check(parsed);
   return bytes;
