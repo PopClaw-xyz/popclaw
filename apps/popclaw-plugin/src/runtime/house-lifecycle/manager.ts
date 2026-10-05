@@ -39,7 +39,7 @@ import { readVerifiedDeclaration, declarationFingerprint } from '../../world/hou
 import { configuredFirstPinPort, configuredPublicPinPort, type ConfiguredFirstPinPort, type ConfiguredPublicPinPort } from './configured-first-pin.js';
 import { storageDatabasePathAllowed, storageDatabaseGeneration } from '../../host/storage-maintenance.js';
 import { captureLegacyTrust, legacyTrustCurrent, type LegacyTrustCapture } from './legacy-trust.js';
-import { emptyControlState, neverControlSubset, configuredControlSubset } from './legacy-history.js';
+import { emptyControlState, neverControlSubset, configuredControlSubset, unstartedSessionlessHistory } from './legacy-history.js';
 import type { HouseReadFailureCode } from './read-failure.js';
 import type { HostDb } from '../../host/host-db.js';
 import type { TrustedManifestInput, PreparedTrustedManifest } from './trusted-manifest.js';
@@ -633,7 +633,9 @@ export class HouseLifecycleManager {
     // unsent assessment. Empty tokens or an error string are not that proof.
     const nativeKnown = baseline ? baseline.pending_enter_request_id === null && configuredControlSubset(this.db,origin,baseline)
       : commands.every(c => c.kind === 'status' || c.request_id === ctx.authority?.requestId) && leaves.length === 0;
-    if (!(port.assessHistory ? port.assessHistory(origin,{participation:baseline,commands,leaves,selectedSessionBoard}) : nativeKnown))
+    const retryHistory = !port.assessHistory && !baseline && !nativeKnown && !!ctx.authority?.requestId
+      && source.actorId === this.actorId && unstartedSessionlessHistory(this.db,source,ctx.authority.requestId);
+    if (!(port.assessHistory ? port.assessHistory(origin,{participation:baseline,commands,leaves,selectedSessionBoard}) : nativeKnown || retryHistory))
       return pending('HOUSE_CONTROL_HISTORY_UNPROVEN');
     const signal = composeFlightSignal(ctx.flight.signal,this.stopController.signal,this.pauseController.signal);
     const expected = JSON.stringify(baseline);
@@ -650,7 +652,8 @@ export class HouseLifecycleManager {
         && storageDatabasePathAllowed(this.db,'execution') && storageDatabasePathAllowed(this.db,'consumers')
         && storageDatabaseGeneration(this.db) === storageGeneration
         && JSON.stringify({commands:this.db.queryAll('SELECT * FROM house_lifecycle_commands WHERE house_origin=? ORDER BY created_at,request_id',[origin]),
-          leaves:this.db.queryAll('SELECT * FROM house_lifecycle_outbox WHERE house_origin=? ORDER BY created_at,request_id',[origin]),selectedSessionBoard}) === evidence;
+          leaves:this.db.queryAll('SELECT * FROM house_lifecycle_outbox WHERE house_origin=? ORDER BY created_at,request_id',[origin]),selectedSessionBoard}) === evidence
+        && (!retryHistory || unstartedSessionlessHistory(this.db,source,ctx.authority!.requestId,plan));
       if (!current()) return pending('STALE_OPERATION');
       const beforeOpSeq = baseline?.op_seq ?? 0, afterOpSeq = beforeOpSeq + 1;
       plan = stageParticipationPlan(this.db,source,{expectedParticipationJson:expected,controlEvidenceJson:evidence,
