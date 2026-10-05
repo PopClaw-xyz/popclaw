@@ -18,7 +18,9 @@
  * (better-sqlite3 internally requires `bindings`).
  *
  * Only better-sqlite3's `build/Release/*.node` is shipped (the prebuild
- * binary). `prebuild-install` (postinstall-only) is excluded.
+ * binary). The runtime manifest declares the shipped dependency closure;
+ * `prebuild-install` and scripts are build-only and excluded. Its original
+ * manifest and exact derivation are retained in POPCLAW-RUNTIME-MANIFEST.json.
  *
  * `POPCLAW_NATIVE_DEPS_MINIMAL=1` vendors only, skipping the 15-combo prebuild
  * matrix (node-gyp cross-builds + GitHub release downloads). The matrix is PACK
@@ -30,6 +32,7 @@ import { cpSync, rmSync, existsSync, readdirSync, statSync, mkdirSync, readFileS
 import { execSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
+import { deriveNativeRuntimeManifest } from './native-runtime-manifest.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pluginRoot = resolve(here, '..');
@@ -89,6 +92,9 @@ function nestTransitiveDepsForStandardResolution() {
     cpSync(src, dst, { recursive: true });
     console.log(`nested ${dep} → native-deps/better-sqlite3/node_modules/${dep}`);
   }
+  // The top-level bindings slot is also a complete standard-resolution package,
+  // including when the host captures that slot independently of better-sqlite3.
+  cpSync(join(outDir, 'file-uri-to-path'), join(outDir, 'bindings', 'node_modules', 'file-uri-to-path'), { recursive: true });
 }
 
 // Node majors we ship prebuilt better-sqlite3 binaries for. The host loads the
@@ -330,6 +336,7 @@ mkdirSync(outDir, { recursive: true });
 for (const name of PACKAGES) {
   vendorOne(name);
 }
+deriveNativeRuntimeManifest(join(outDir, 'better-sqlite3'));
 nestTransitiveDepsForStandardResolution();
 
 if (process.env.POPCLAW_NATIVE_DEPS_MINIMAL === '1') {

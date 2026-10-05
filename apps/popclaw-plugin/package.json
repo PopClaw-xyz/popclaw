@@ -36,6 +36,7 @@
     "postpack": "node scripts/postpack.mjs",
     "test": "vitest run && pnpm run test:setup-connector",
     "test:setup-connector": "node --import tsx --test tests/setup/connector-codex-timeout.test.ts tests/setup/probe-tool-surface.test.ts",
+    "test:native-runtime-manifest": "node --test scripts/tests/native-runtime-manifest.fixture.mjs",
     "lint": "node scripts/check-deprecated-imports.mjs && eslint src tests",
     "dev": "tsx src/main.ts",
     "mcp": "tsx src/mcp.ts",
@@ -47,7 +48,7 @@
     "node": ">=24.16.0 <25 || >=26.1.0"
   },
   "peerDependencies": {
-    "openclaw": ">=2026.9.4"
+    "openclaw": ">=2026.9.8"
   },
   "peerDependenciesMeta": {
     "openclaw": {
@@ -59,10 +60,10 @@
       "./dist/bundled/index.js"
     ],
     "compat": {
-      "pluginApi": ">=2026.9.4"
+      "pluginApi": ">=2026.9.8"
     },
     "build": {
-      "openclawVersion": "2026.9.4"
+      "openclawVersion": "2026.9.8"
     }
   },
   "dependencies": {
@@ -86,7 +87,7 @@
     "@types/node": "^24.13.6",
     "esbuild": "^0.24.0",
     "eslint": "^9.14.0",
-    "openclaw": "2026.9.4",
+    "openclaw": "2026.9.8",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.15.0",

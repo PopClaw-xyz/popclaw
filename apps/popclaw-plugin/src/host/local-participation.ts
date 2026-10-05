@@ -44,7 +44,22 @@ export function readMcpSetupEvidence(path: string | undefined, dataRoot: string,
     return {reference:entryDigest({setupId:source.setupId,digest:record.digest,root:record.root}),actorId:record.popclawId};
   } catch { return undefined; }
 }
-/** OpenClaw 2026.9.4 persisted installation evidence, read only at full service activation. */
+/** Release support is separate from the persisted index's known schema contract.
+ * Accept canonical stable releases at the supported floor; a release number
+ * alone never authorizes an unknown index schema, owner, surface or path.
+ */
+function supportedNativeHostRelease(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const parts = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(value);
+  if (!parts) return false;
+  const version = parts.slice(1, 4).map(Number), floor = [2026, 9, 8];
+  if (version.some(part => !Number.isSafeInteger(part))) return false;
+  for (let i = 0; i < floor.length; i++) {
+    if (version[i] !== floor[i]) return version[i]! > floor[i]!;
+  }
+  return true;
+}
+/** Known persisted index contract, read only at full native service activation. */
 export function readNativeSetupEvidence(input: {stateDir:string;serviceStateDir:string;rootDir:string;source:string;enabled:boolean}): LocalSetupEvidence | undefined {
   if (!input.enabled || input.stateDir !== input.serviceStateDir) return undefined;
   let db: LocalHostDb | undefined;
@@ -55,7 +70,7 @@ export function readNativeSetupEvidence(input: {stateDir:string;serviceStateDir:
     const record = index?.installRecords?.popclaw;
     const plugins = index?.plugins?.filter((p: {pluginId:string}) => p.pluginId === 'popclaw');
     const plugin = plugins?.[0];
-    if (index?.version !== 1 || index.migrationVersion !== 1 || index.hostContractVersion !== '2026.9.4' || plugins.length !== 1
+    if (index?.version !== 1 || index.migrationVersion !== 1 || !supportedNativeHostRelease(index.hostContractVersion) || plugins.length !== 1
       || plugin.installOwner !== 'popclaw' || plugin.installOwnerAmbiguous || plugin.enabled !== true
       || typeof record?.installedAt !== 'string' || !Number.isFinite(Date.parse(record.installedAt))
       || typeof record.acceptedSurfaceHash !== 'string' || !record.acceptedSurfaceHash || !record.acceptedSurfaceAt || !record.acceptedSurface

@@ -19,7 +19,19 @@ function fixture(fn) {
   const tgz = path.join(base, 'popclaw-plugin-0.1.0+20261003-abcdef01.tgz');
   fs.writeFileSync(tgz, 'synthetic archive; the native stub does not unpack');
   const cli = path.join(bin, 'openclaw');
-  fs.writeFileSync(cli, `#!${process.execPath}\nconst fs = require('node:fs');\nconst a=process.argv.slice(2);\nfs.appendFileSync(process.env.FIXTURE_CALLS, JSON.stringify({argv:a,node:process.execPath,state:process.env.OPENCLAW_STATE_DIR,config:process.env.OPENCLAW_CONFIG_PATH,profile:process.env.OPENCLAW_PROFILE,root:process.env.POPCLAW_DATA_ROOT})+'\\n');\nconst stage=a.includes('--help')?'help':a[0]==='plugins'?'install':'config'; if(process.env.FIXTURE_MUTATION===stage) fs.writeFileSync(process.env.OPENCLAW_CONFIG_PATH, JSON.stringify({agents:{defaults:{workspace:'/unreviewed'}},plugins:{entries:{unreviewed:{enabled:true}}}}));\nif(a.includes('--help')) { console.log(process.env.FIXTURE_CAP === '0' ? 'old help' : '--accept-capabilities'); process.exit(Number(process.env.FIXTURE_HELP_RC || 0)); }\nconsole.log('SECRET_TOKEN unrelated message'); console.error('SECRET_STDERR private chat');\nif(a[0]==='plugins' && a[1]==='install') { if(process.env.FIXTURE_SLEEP) setTimeout(()=>process.exit(0), 10000); else process.exit(Number(process.env.FIXTURE_INSTALL_RC || 0)); } else if(a[0]==='config' && a[1]==='set') { if(!process.env.FIXTURE_MUTATION && !process.env.FIXTURE_CONFIG_RC) { const c=JSON.parse(fs.readFileSync(process.env.OPENCLAW_CONFIG_PATH)); c.plugins ??= {}; c.plugins.entries ??= {}; c.plugins.entries.popclaw ??= {}; c.plugins.entries.popclaw.hooks ??= {}; c.plugins.entries.popclaw.hooks.allowConversationAccess=true; fs.writeFileSync(process.env.OPENCLAW_CONFIG_PATH,JSON.stringify(c)); } process.exit(Number(process.env.FIXTURE_CONFIG_RC || 0)); } else process.exit(91);\n`);
+  fs.writeFileSync(cli, `#!${process.execPath}
+const fs = require('node:fs');
+const a=process.argv.slice(2);
+fs.appendFileSync(process.env.FIXTURE_CALLS, JSON.stringify({argv:a,node:process.execPath,state:process.env.OPENCLAW_STATE_DIR,config:process.env.OPENCLAW_CONFIG_PATH,profile:process.env.OPENCLAW_PROFILE,root:process.env.POPCLAW_DATA_ROOT})+'\\n');
+const stage=a.includes('--help')?'help':a[0]==='plugins'?'install':'config'; if(process.env.FIXTURE_MUTATION===stage) fs.writeFileSync(process.env.OPENCLAW_CONFIG_PATH, JSON.stringify({agents:{defaults:{workspace:'/unreviewed'}},plugins:{entries:{unreviewed:{enabled:true}}}}));
+if(a.includes('--help')) { console.log(process.env.FIXTURE_CAP === '0' ? 'old help' : '--accept-capabilities'); process.exit(Number(process.env.FIXTURE_HELP_RC || 0)); }
+console.log('SECRET_TOKEN unrelated message'); console.error('SECRET_STDERR private chat');
+if(a[0]==='plugins' && a[1]==='install') {
+  const marker=process.env.FIXTURE_APPLICATION ?? 'Saved for the next Gateway start.';
+  (process.env.FIXTURE_APPLICATION_STDERR ? console.error : console.log)(marker);
+  if(process.env.FIXTURE_SLEEP) setTimeout(()=>process.exit(0), 10000); else process.exit(Number(process.env.FIXTURE_INSTALL_RC || 0));
+} else if(a[0]==='config' && a[1]==='set') { if(!process.env.FIXTURE_MUTATION && !process.env.FIXTURE_CONFIG_RC) { const c=JSON.parse(fs.readFileSync(process.env.OPENCLAW_CONFIG_PATH)); c.plugins ??= {}; c.plugins.entries ??= {}; c.plugins.entries.popclaw ??= {}; c.plugins.entries.popclaw.hooks ??= {}; c.plugins.entries.popclaw.hooks.allowConversationAccess=true; fs.writeFileSync(process.env.OPENCLAW_CONFIG_PATH,JSON.stringify(c)); } process.exit(Number(process.env.FIXTURE_CONFIG_RC || 0)); } else process.exit(91);
+`);
   fs.chmodSync(cli, 0o700);
   fs.symlinkSync(process.execPath, path.join(bin, 'node'));
   // These stubs are never real managers/loggers/process scanners. Any call is a failure.
@@ -53,6 +65,8 @@ function success(f,r) {
   for(const c of calls) {assert.equal(c.state,f.state); assert.equal(c.config,f.config); assert.equal(c.root,f.root||path.join(f.state,'popclaw'));}
   const receipt=JSON.parse(fs.readFileSync(f.receipt,'utf8'));
   assert.equal(receipt.status,'installed-start-deferred'); assert.equal(receipt.runtimeVerified,false);
+  assert.equal(receipt.schema,'popclaw-install-receipt/v2'); assert.equal(receipt.startDeferred,true);
+  assert.deepEqual(receipt.installReported,{state:'deferred'});
   assert.equal(receipt.commands[1].exitCode,0); assert.equal(fs.statSync(f.receipt).mode&0o777,0o600);
   assert.equal(fs.readFileSync(f.receipt,'utf8').includes('SECRET'),false);
 }
@@ -62,6 +76,28 @@ test('one-argument fresh install uses only the default selected state',()=>fixtu
   const r=f.run(); assert.equal(r.status,0,r.stdout+r.stderr); const calls=f.readCalls(); assert.equal(calls.length,3); assert.equal(calls[1].state,f.state); assert.equal(calls[1].root,path.join(f.state,'popclaw')); assert.equal(r.stdout.includes('SECRET'),false);
 }));
 test('fresh install with explicit receipt retains consent and hook declaration',()=>fixture(f=>success(f,f.run(['--receipt',f.receipt]))));
+test('records native live application without adding a reload or claiming runtime verification',()=>fixture(f=>{
+  const r=f.run(['--receipt',f.receipt],{FIXTURE_APPLICATION:'Applied in Gateway generation 17.'});
+  assert.equal(r.status,0,r.stdout+r.stderr);
+  const receipt=JSON.parse(fs.readFileSync(f.receipt));
+  assert.equal(receipt.schema,'popclaw-install-receipt/v2');
+  assert.deepEqual(receipt.installReported,{state:'applied',generation:17});
+  assert.equal(receipt.startDeferred,false); assert.equal(receipt.runtimeVerified,false);
+  assert.equal(receipt.status,'installed-applied-runtime-unverified'); assert.equal(f.readCalls().length,3);
+}));
+for(const [name,extra] of [
+  ['missing',{FIXTURE_APPLICATION:''}],
+  ['ambiguous',{FIXTURE_APPLICATION:'Applied in Gateway generation 17.\nSaved for the next Gateway start.'}],
+  ['stderr-only',{FIXTURE_APPLICATION:'Applied in Gateway generation 17.',FIXTURE_APPLICATION_STDERR:'1'}],
+  ['unsafe-generation',{FIXTURE_APPLICATION:'Applied in Gateway generation 9007199254740993.'}],
+  ['duplicate',{FIXTURE_APPLICATION:'Applied in Gateway generation 17.\nApplied in Gateway generation 17.'}],
+]) test(`native ${name} application output remains unknown`,()=>fixture(f=>{
+  const r=f.run(['--receipt',f.receipt],extra); assert.equal(r.status,0,r.stdout+r.stderr);
+  const receipt=JSON.parse(fs.readFileSync(f.receipt));
+  assert.deepEqual(receipt.installReported,{state:'unknown'});
+  assert.equal(receipt.startDeferred,null); assert.equal(receipt.runtimeVerified,false);
+  assert.equal(receipt.status,'installed-application-unknown'); assert.equal(f.readCalls().length,3);
+}));
 for (const target of ['default','accept','ken']) test(`maintenance ${target} preserves siblings and defers all startup`,()=>fixture(f=>{
   const protectedDir=path.join(f.state,'popclaw'); fs.mkdirSync(protectedDir); fs.writeFileSync(path.join(protectedDir,'secret'),'protected-root');
   const options=target==='accept'?{state:path.join(f.home,'.openclaw-accept'),profile:'accept'}:target==='ken'?{root:path.join(f.state,'popclaw-ken-fresh-20261002')}:{root:path.join(f.base,'selected-default-root')};

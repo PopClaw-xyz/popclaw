@@ -3,7 +3,8 @@
 # Usage: sh install-popclaw.sh [options] /absolute/path/popclaw-plugin-<build>.tgz
 # First installs retain the one-argument form. Existing data requires a verified
 # external maintenance record; this script never creates a cold-backup claim.
-# No gateway/manager action, process scan, log discovery or doctor is performed.
+# Native installation may apply to a running Gateway. This script does not
+# launch a Gateway, invoke managers, scan processes, discover logs or run doctor.
 # POSIX sh launcher; the already-required selected Node handles JSON, paths,
 # bounded child execution and private receipts without another dependency.
 set -eu
@@ -178,6 +179,8 @@ async function native(node,cli,args,env,seconds) {
   return await new Promise(resolve=>{
     const child=spawn(node,[cli,...args],{env,cwd:env.OPENCLAW_STATE_DIR,stdio:['ignore','pipe','pipe']});
     const digest=crypto.createHash('sha256'); let size=0, help='', timedOut=false, outputLimited=false, done=false, grace;
+    const install=args[0]==='plugins' && args[1]==='install' && !args.includes('--help');
+    const stdout=[];
     const stop=()=>{ child.kill('SIGTERM'); grace=setTimeout(()=>finish(null,'unjoined'),2000); };
     const timer=setTimeout(()=>{timedOut=true; stop();},seconds*1000);
     function collect(bytes) {
@@ -185,11 +188,26 @@ async function native(node,cli,args,env,seconds) {
       if (args.includes('--help') && size<=65536) help+=bytes.toString();
       if(size>1024*1024 && !outputLimited) {outputLimited=true; stop();}
     }
-    child.stdout.on('data',collect); child.stderr.on('data',collect);
+    child.stdout.on('data',bytes=>{collect(bytes); if(install && size<=1024*1024) stdout.push(bytes);}); child.stderr.on('data',collect);
     function finish(code,signal,spawnFailed=false) {
       if(done) return; done=true; clearTimeout(timer); clearTimeout(grace);
       child.stdout.destroy(); child.stderr.destroy(); child.unref();
-      resolve({childPid:child.pid??null,command:args.slice(0,2).join(' ')+(args.includes('--help')?' --help':''),exitCode:code,signal:signal||null,spawnFailed,timedOut,outputLimited,childJoined:signal!=='unjoined',elapsedMs:Date.now()-started,outputBytes:size,outputSha256:digest.digest('hex'),help});
+      // OpenClaw 2026.9.8 install has no JSON output option. Accept exactly one
+      // official stdout marker; stderr, missing or ambiguous markers prove no application state.
+      let installReported;
+      if(install) {
+        installReported={state:'unknown'};
+        const markers=Buffer.concat(stdout).toString('utf8').split(/\r?\n/).filter(line=>line==='Saved for the next Gateway start.' || /^Applied in Gateway generation .*\.$/.test(line));
+        if(code===0 && !signal && !spawnFailed && !timedOut && !outputLimited && markers.length===1) {
+          if(markers[0]==='Saved for the next Gateway start.') installReported={state:'deferred'};
+          else {
+            const match=/^Applied in Gateway generation ([1-9]\d*)\.$/.exec(markers[0]);
+            const generation=match ? Number(match[1]) : NaN;
+            if(Number.isSafeInteger(generation)) installReported={state:'applied',generation};
+          }
+        }
+      }
+      resolve({childPid:child.pid??null,command:args.slice(0,2).join(' ')+(args.includes('--help')?' --help':''),exitCode:code,signal:signal||null,spawnFailed,timedOut,outputLimited,childJoined:signal!=='unjoined',elapsedMs:Date.now()-started,outputBytes:size,outputSha256:digest.digest('hex'),...(install ? {installReported} : {}),help});
     }
     child.on('error',()=>finish(null,null,true)); child.on('close',(code,signal)=>finish(code,signal));
   });
@@ -231,7 +249,7 @@ async function main() {
   fs.mkdirSync(state,{recursive:true,mode:0o700});
   fs.mkdirSync(path.dirname(receipt),{recursive:true,mode:0o700});
   const fd=fs.openSync(receipt,fs.constants.O_CREAT|fs.constants.O_EXCL|fs.constants.O_WRONLY|fs.constants.O_NOFOLLOW,0o600);
-  const report={schema:'popclaw-install-receipt/v1',mode,target,hashes,evidence,status:'pending',runtimeVerified:false,startDeferred:true,effectsUnknown:false,commands:[],startedAt:new Date().toISOString()};
+  const report={schema:'popclaw-install-receipt/v2',mode,target,hashes,evidence,status:'pending',installReported:{state:'unknown'},runtimeVerified:false,startDeferred:null,effectsUnknown:false,commands:[],startedAt:new Date().toISOString()};
   function save() {const b=Buffer.from(JSON.stringify(report,null,2)+'\n');fs.ftruncateSync(fd,0);fs.writeSync(fd,b,0,b.length,0);fs.fsyncSync(fd);}
   save();
   const env={...process.env,OPENCLAW_STATE_DIR:state,OPENCLAW_CONFIG_PATH:config,POPCLAW_DATA_ROOT:root,OPENCLAW_PROFILE:profile,PATH:path.dirname(node)+path.delimiter+process.env.PATH};
@@ -245,6 +263,10 @@ async function main() {
     configTransition(acceptedConfig,currentConfig,'help');
     const result=await native(node,cli,args,env,seconds); const help=result.help; delete result.help;
     report.commands.push(result);
+    if(result.installReported) {
+      report.installReported=result.installReported;
+      report.startDeferred=result.installReported.state==='unknown' ? null : result.installReported.state==='deferred';
+    }
     if(result.timedOut || result.outputLimited || !result.childJoined || result.spawnFailed || result.signal || result.exitCode!==0) {
       report.status='failed'; report.effectsUnknown=true; save();
       const code=result.timedOut?124:result.outputLimited?125:result.exitCode||1;
@@ -258,17 +280,18 @@ async function main() {
     save(); return help;
   }
   try {
-    console.log('Selected instance fixed. Installation does not prove zero bootstrap; no gateway action is performed.');
+    console.log('Selected instance fixed. Native installation may apply to a running Gateway; this script does not launch one.');
     const help=await run(['plugins','install','--help']); if(help===null) return;
     const supported=help.includes('--accept-capabilities');
     if((cap==='accept'&&!supported)||(cap==='legacy'&&supported)) abort('Capability consent choice conflicts with native support.');
     const args=['plugins','install','--force']; if(supported) args.push('--accept-capabilities'); args.push(tarball);
     if(await run(args)===null) return;
     if(await run(['config','set','plugins.entries.popclaw.hooks.allowConversationAccess','true'])===null) return;
-    report.status='installed-start-deferred'; report.completedAt=new Date().toISOString(); save();
-    console.log('Native installation and conversation-hook declaration completed. Start is deferred.');
+    report.status=report.installReported.state==='deferred' ? 'installed-start-deferred' : report.installReported.state==='applied' ? 'installed-applied-runtime-unverified' : 'installed-application-unknown';
+    report.completedAt=new Date().toISOString(); save();
+    console.log('Native installation and conversation-hook declaration completed. Native application report: '+report.installReported.state+'.');
     console.log('Registration, loaded build/identity and first-start behavior remain unverified.');
-    console.log('Carry the receipt selectors to the original launcher under the separate startup boundary.');
+    console.log('Use the receipt selectors for separate runtime verification; follow the native application report when selecting startup or reload.');
     console.log('Receipt: '+receipt);
   } catch(e) {report.status='failed';report.effectsUnknown=report.commands.length>0;save();throw e;}
   finally {fs.closeSync(fd);}

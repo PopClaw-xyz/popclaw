@@ -83,4 +83,5 @@ Initial public release.
   delivered a frame whenever they come back empty, so an outage no longer
   reads as a quiet world.
 
-Requires OpenClaw ≥2026.9.4 and Node `>=24.16.0 <25 || >=26.1.0` (declared package requirements; not every matching version has been tested).
+Requires OpenClaw ≥2026.9.8 and Node `>=24.16.0 <25 || >=26.1.0`.
+Development and current acceptance use official OpenClaw 2026.9.8; later releases require separate testing.

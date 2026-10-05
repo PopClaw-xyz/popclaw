@@ -20,7 +20,8 @@ that the plugin has loaded or completed first use.
 
 ## Prerequisites
 
-- **OpenClaw ≥ 2026.9.4**. Check before you install:
+- **OpenClaw ≥ 2026.9.8**. Development and current acceptance use official
+  2026.9.8; later releases require separate testing. Check before you install:
 
   ```
   openclaw --version
@@ -82,7 +83,7 @@ them. Confirmation flags do not override policy blocks or failures.
 ### Installing a release tarball
 
 Use the exact supplied PopClaw tarball and verify its checksum. On OpenClaw
-2026.9.4, a local archive outside ClawHub also requires source confirmation,
+2026.9.8, a local archive outside ClawHub also requires source confirmation,
 even when the extension is absent. After reviewing and accepting that package's
 source, declared capabilities and install-policy warnings, use this command
 shape with the verified path:
@@ -146,9 +147,14 @@ Installation and runtime verification are separate steps:
    record alone does not prove registration, native dependency compatibility,
    the loaded build, identity or first use. The standard path does not require
    a maintainer-script receipt.
-2. **Start or restart the selected instance normally.** Use its original
-   launcher with the same profile, state/config selection, data root and
-   Node/OpenClaw environment. Do not restart another instance. If PopClaw is
+2. **Follow the native application result.** On 2026.9.8, `Applied in Gateway
+   generation N.` reports application to a running Gateway; `Saved for the
+   next Gateway start.` reports an offline installation. For the latter, use
+   the original launcher with the same profile, state/config selection, data
+   root and Node/OpenClaw environment. An absent or ambiguous result remains
+   unverified. After the separate hook configuration, verify the running
+   instance's configuration; apply a reload or restart only when its native
+   result requires one. If PopClaw is
    explicitly disabled, make a deliberate enabling decision before proceeding.
 3. **Verify the running plugin.** Use the selected instance's startup evidence
    to confirm PopClaw registration and the loaded build against the exact
@@ -556,8 +562,15 @@ no-bootstrap requirement is not proven by the absence of a restart command or
 by an owner record. That record does not prove actual stop/fence, backup
 completeness or the complete native dependency chain.
 
-A successful helper run ends at `installed-start-deferred`: it has installed
-through the native CLI and set the hook, but startup and runtime checks remain.
+A successful helper run installs through the native CLI and sets the hook.
+Its `popclaw-install-receipt/v2` records `installReported.state` as `applied`,
+`deferred` or `unknown` from exactly one official stdout marker. `applied`
+also records the reported generation. `startDeferred` is respectively `false`,
+`true` or `null`; the final status is `installed-applied-runtime-unverified`,
+`installed-start-deferred` or `installed-application-unknown`.
+`runtimeVerified` remains `false`: the install report precedes the hook change
+and does not prove the current running build, registration, identity or first use.
+The helper does not add a reload merely to obtain a machine-readable result.
 Its config checks preserve an explicitly disabled entry and reject unreviewed
 transitions without undoing the changed config. They are not a zero-effect or
 rollback guarantee.

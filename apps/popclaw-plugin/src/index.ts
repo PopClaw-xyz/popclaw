@@ -288,11 +288,10 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
 
 
     // The ignition switch for the runtime. **Only the gateway ever starts this
-    // service** — this is exactly the concrete form of the official pattern
-    // "put sockets, clients, workers, and services behind 'full'-only paths":
-    // `plugins install` / `plugins list` only register, never start, so they
-    // only ever get the **declaration** of tools and commands, never open a
-    // single socket, and the process exits normally when it should.
+    // service** — sockets, clients, workers and services stay behind
+    // 'full'-only paths. CLI inspection registers declarations without booting
+    // this runtime. On 2026.9.8, native installation can also apply the plugin
+    // in a running Gateway, which then owns actual service activation.
     //
     // Gateway-side behavior is exactly the same as before (boot happens at
     // startup); the only difference is who pulls the trigger. If tool-discovery
