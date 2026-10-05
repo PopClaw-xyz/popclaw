@@ -339,18 +339,29 @@ export function previewDeliveryNote(outcome: PreviewDeliveryOutcome): string {
  * `popclaw_send_draft` goes through the owner-approval seam, which asks the
  * owner about the draft's immutable snapshot before the tool body runs.
  *
- * The wording stays, and gains one line, because the gate does not do this
- * part: the owner should already know what is coming when the host asks them,
- * and the agent must not narrate a send that has not happened.
+ * The gate cannot explain the interaction before it opens. Intent to send
+ * and the host's actual approval are distinct; the agent must explain that
+ * distinction without inventing controls or resubmitting a waiting call.
  *
  * It lives here rather than in write-tools.ts because the feedback tool mints
  * drafts too (2026-09-21): one wording, so the doors cannot drift apart.
  */
+export const SEND_APPROVAL_DISCIPLINE =
+  'Before requesting approval, explain that sending requires a separate host confirmation. ' +
+  'On OpenClaw, use an approval control only if the host offers it, or the complete /approve command shown by the host, with its actual request ID and allow-once decision. ' +
+  'On MCP, use that client\'s actual approval dialog; do not suggest OpenClaw commands. ' +
+  'Ordinary chat replies such as "发", "Allow" or "Allow（放行）" do not approve a pending host request. ' +
+  'Do not submit another send call while this one is waiting; wait for its result. ' +
+  'Without a tool result, report the send outcome as unknown; never invent expiry, cancellation or delivery, and never retry automatically. ' +
+  'Only an explicit failed tool result followed by a fresh owner request permits another attempt; never reuse an old approval. ' +
+  'Never tell the owner it was sent until this tool returns a successful send receipt.';
+
 export const CONFIRM_DISCIPLINE =
   'Show the draft above to the owner word for word; ' +
   'only after the owner has explicitly said to send it, hand the draft_id above to popclaw_send_draft; never call it before that confirmation. ' +
   'Never shorten or omit the body. If the channel cannot show the complete draft, do not send it; explain the limitation and arrange a complete preview first. ' +
-  'popclaw_send_draft does not send by itself — the host asks the owner to approve this exact draft first — so never tell the owner it was sent until that tool says it was.';
+  'popclaw_send_draft asks the owner to approve this exact draft before sending. ' +
+  SEND_APPROVAL_DISCIPLINE;
 
 /** preview + confirmation discipline + (when attempted) the honest delivery note. */
 export function draftResultText(preview: string, outcome: PreviewDeliveryOutcome): string {

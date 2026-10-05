@@ -35,7 +35,7 @@ import {
 import { resolvePostRef, type PostRefSources } from '../world/post-ref.js';
 import { type RegisterToolsDeps, type ToolsCtx } from './tools-context.js';
 import { ownerPopclawId, resolvePersonRef } from './person-sources.js';
-import { CONFIRM_DISCIPLINE, deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
+import { CONFIRM_DISCIPLINE, SEND_APPROVAL_DISCIPLINE, deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
 import { consumeOwnerApproval, registerOwnerApprovalSubject } from '../host/owner-approval.js';
 import { REFUSE_REVIEW_COPY, SEND_DRAFT_TOOL, sendDraftApprovalSubject, sendDraftRefusalText } from './send-draft-subject.js';
 import { withDraftReview } from './draft-review.js';
@@ -502,7 +502,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       'draft_id is the id returned by any popclaw_draft_* tool — it already knows which kind it is sending. ' +
       'Calling this does NOT send: the host asks the owner about this draft and sends only on their answer, ' +
       'and the answer is bound to the exact recipient and text of that draft, so a draft that changed after they read it is refused. ' +
-      'Never tell the owner the message is sent until this tool says so — read back what it returns, word for word, and if it was not sent, say that.',
+      'Read back what it returns, word for word. ' + SEND_APPROVAL_DISCIPLINE,
     parameters: ConfirmDraftSchema,
     execute: async (callId: string, params: unknown) => {
       const { draft_id } = params as { draft_id: string };

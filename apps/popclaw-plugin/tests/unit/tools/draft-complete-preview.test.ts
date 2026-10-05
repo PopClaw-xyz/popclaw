@@ -79,6 +79,12 @@ describe.each(['zh-CN', 'en-US'])('complete draft confirmation in %s', (language
     expect(result.text).toContain(body);
     expect(result.text).toContain('END😀');
     expect(result.text).toContain('only after the owner has explicitly said to send');
+    // The real draft result must distinguish intent from the host decision,
+    // before the model asks the owner to use an approval control.
+    expect(result.text).toContain('Ordinary chat replies such as "发", "Allow" or "Allow（放行）" do not approve');
+    expect(result.text).toContain('complete /approve command shown by the host');
+    expect(result.text).toContain('Do not submit another send call while this one is waiting');
+    expect(result.text).toContain('Without a tool result, report the send outcome as unknown');
     if (name === 'popclaw_draft_message') {
       expect(result.text).toContain(language === 'zh-CN' ? '📝 私信草稿：' : '📝 Draft DM to ');
       expect(result.text).toContain('Recipient Fixture#');
