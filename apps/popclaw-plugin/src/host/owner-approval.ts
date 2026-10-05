@@ -62,6 +62,7 @@ import {
   type ApprovalDisplayBudget, type ApprovalDialogProfile,
 } from './approval-presentation.js';
 import { verifiedFeishuApprovalTarget } from './owner-direct-binding.js';
+import { getOrCreatePerProcess } from '../runtime/once.js';
 export {
   APPROVAL_DESCRIPTION_CODE_POINTS, APPROVAL_TITLE_CODE_POINTS,
   APPROVAL_DESCRIPTION_BUDGET, APPROVAL_TITLE_BUDGET, APPROVAL_DESCRIPTION_MAX_LINES,
@@ -459,6 +460,7 @@ const RECORD_TTL_MS = 900_000;
 const MAX_RECORDS = 64;
 
 interface ApprovalRecord {
+  readonly owner: symbol;
   readonly toolName: string;
   readonly callRef: string;
   readonly subject: ApprovalSubject;
@@ -507,11 +509,21 @@ const subjects = new Map<string, OwnerApprovalSubjectDescriptor>();
  *  ever serves more than one actor, MUST NOT assume the seam binds identity:
  *  the actor would have to go into the registrant's `canonicalize` output (and
  *  into what the owner reads), or into this key. */
-const records = new Map<string, ApprovalRecord>();
+// Hooks and tools can belong to distinct plugin module loads in one Gateway.
+// Keep their call ledger together, as the draft store already does. Sharing
+// only this bookkeeping does not admit an origin or manufacture an answer:
+// each grant still requires the host's decision, exact call and exact subject.
+const callLedger = getOrCreatePerProcess('owner-approval-call-ledger-v1', () => ({
+  records: new Map<string, ApprovalRecord>(),
+  consumed: new Map<string, symbol>(),
+  originRefusals: new Map<string, { readonly reason: OwnerApprovalOriginRefusal; readonly at: number; readonly owner: symbol }>(),
+}));
+const moduleOwner = Symbol('owner-approval-module');
+const records = callLedger.records;
 /** Keys whose answer has already authorized their call. Kept so a second
  *  consume is told it is a REPLAY rather than being handed the same sentence
  *  as a call nobody ever approved. */
-const consumed = new Set<string>();
+const consumed = callLedger.consumed;
 /**
  * THE ONE ROUTE A NAMED ORIGIN REFUSAL HAS OUT OF THIS MODULE.
  *
@@ -529,7 +541,7 @@ const consumed = new Set<string>();
  * seam existed. Bounded and swept exactly like `records` — a diagnostic must
  * never become a leak.
  */
-const originRefusals = new Map<string, { readonly reason: OwnerApprovalOriginRefusal; readonly at: number }>();
+const originRefusals = callLedger.originRefusals;
 let surfacePresent = false;
 let clock: () => number = () => Date.now();
 
@@ -556,14 +568,18 @@ export function setOwnerApprovalSurface(present: boolean): void { surfacePresent
 export function ownerApprovalSurfacePresent(): boolean { return surfacePresent; }
 /** Gateway shutdown, and the one seam a test resets through. */
 export function resetOwnerApprovals(options?: { now?(): number }): void {
-  subjects.clear(); records.clear(); consumed.clear(); originRefusals.clear(); surfacePresent = false;
+  subjects.clear(); surfacePresent = false;
+  // An old module's shutdown must not erase another module's pending call.
+  for (const [key, record] of records) if (record.owner === moduleOwner) records.delete(key);
+  for (const [key, owner] of consumed) if (owner === moduleOwner) consumed.delete(key);
+  for (const [key, noted] of originRefusals) if (noted.owner === moduleOwner) originRefusals.delete(key);
   clock = options?.now ?? (() => Date.now());
 }
 
 function sweep(now: number): void {
   for (const [key, record] of records) if (now - record.at > RECORD_TTL_MS) records.delete(key);
   while (records.size >= MAX_RECORDS) records.delete(records.keys().next().value!);
-  while (consumed.size >= MAX_RECORDS) consumed.delete(consumed.values().next().value!);
+  while (consumed.size >= MAX_RECORDS) consumed.delete(consumed.keys().next().value!);
   for (const [key, noted] of originRefusals) if (now - noted.at > RECORD_TTL_MS) originRefusals.delete(key);
   while (originRefusals.size >= MAX_RECORDS) originRefusals.delete(originRefusals.keys().next().value!);
 }
@@ -576,7 +592,7 @@ function noteOriginRefusal(toolName: string, callRef: unknown, reason: OwnerAppr
   if (call === null) return;
   const now = clock();
   sweep(now);
-  originRefusals.set(recordKey(toolName, call), { reason, at: now });
+  originRefusals.set(recordKey(toolName, call), { reason, at: now, owner: moduleOwner });
 }
 /** Total by construction: a descriptor that throws here is a broken registrant,
  *  and the seam refuses rather than letting the throw escape into the host. */
@@ -1071,7 +1087,7 @@ async function prepare(toolName: string, params: unknown, callRef: string,
   const now = clock();
   sweep(now);
   const record: ApprovalRecord = {
-    toolName, callRef: call, subject, at: now, refused, decision: null, failed: null,
+    owner: moduleOwner, toolName, callRef: call, subject, at: now, refused, decision: null, failed: null,
     ...(described.kind === 'ask' && described.beforeAsk ? { beforeAsk: described.beforeAsk } : {}),
     foldedDropped: alternative !== null && alternative.unpresentable !== null,
   };
@@ -1152,7 +1168,7 @@ export function consumeOwnerApproval(toolName: string, params: unknown, callRef:
   // A refused subject was never shown, so there is no answer to consume and
   // nothing to mark as spent: saying so again is the correct outcome.
   if (record.refused !== null) return { decision: 'unavailable', reason: 'SUBJECT_REFUSED', detail: record.refused };
-  consumed.add(key);
+  consumed.set(key, record.owner);
   // Preserve "actually asked" and single-use bookkeeping, but an answer for
   // the captured old runtime cannot become a grant in its replacement.
   const captured = capturedRefusal(record.beforeAsk);
@@ -1342,7 +1358,7 @@ export function discardUnconsumedOwnerApproval(toolName: string, callRef: string
   // makes, so anything reading later is told ALREADY_CONSUMED instead of
   // "nobody was ever asked about this call" — which is the answer that sends
   // a caller down a fall-through lane.
-  consumed.add(key);
+  consumed.set(key, record.owner);
   return true;
 }
 
