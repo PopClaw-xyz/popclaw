@@ -40,6 +40,20 @@ const mode = process.env['C0_MODE'] ?? '';
 if (!file) throw new Error('C0_PROBE_FILE is required');
 const emit = (event: string) => appendFileSync(file, `${event}\n`);
 
+// Observe the normal initialized callback without guessing a live refusal.
+// These synthetic results deliberately contain fields forbidden in diagnostics.
+if (mode.startsWith('initial-soft-failure')) {
+  HouseRuntime.prototype.activateInitialMe = async function () {
+    emit('houses.initial-me');
+    return {scope:'local_installation',origin:'https://house.popclaw.me',status:'connecting',sessionId:'SYNTHETIC_PRIVATE_SESSION',
+      errorCode:'HOUSE_CONTROL_HISTORY_UNPROVEN',operationId:'SYNTHETIC_PRIVATE_OPERATION'};
+  };
+  HouseRuntime.prototype.readHouseGuide = async function () {
+    emit('houses.initial-guide');
+    return {status:'unavailable',origin:'https://house.popclaw.me',code:'HOUSE_GUIDE_CONTEXT_STALE'};
+  };
+}
+
 type Method = (...args: unknown[]) => unknown;
 function patch(proto: object, name: string, wrap: (original: Method) => Method): void {
   const bag = proto as Record<string, Method>;

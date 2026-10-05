@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -60,17 +60,30 @@ function spawnMcp(mode = '') {
   mkdirSync(join(root, 'config'), { recursive: true });
   writeFileSync(join(root, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [HOUSE], canvas_base_url: HOUSE }));
   const file = join(root, 'c0-events.log');
+  const initialDiagnostics = mode.startsWith('initial-soft-failure');
+  const receipt = join(root, 'setup-receipt.json');
+  if (initialDiagnostics && !mode.endsWith('no-evidence')) writeFileSync(receipt, JSON.stringify({format:1,digest:'synthetic-package-digest',
+    root,package:dirname(pkgRoot),popclawId:'synthetic-actor',initialMe:{version:1,purpose:'initial_me_setup',origin:'https://house.popclaw.me',
+      setupId:'synthetic-setup',actorId:'synthetic-actor',dataRoot:root}}));
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   delete env['POPCLAW_MCP_ENABLE_RANGER'];
   delete env['POPCLAW_WORLD_STREAM'];
+  delete env['POPCLAW_SETUP_RECEIPT'];
   Object.assign(env, {
     POPCLAW_DATA_ROOT: root, POPCLAW_NOTIFICATION_CONSUMER: 'mcp:c0-characterization', POPCLAW_RECEIVE_ON_START: '1',
-    LOG_LEVEL: 'silent', C0_PROBE_FILE: file, C0_MODE: mode,
+    LOG_LEVEL: initialDiagnostics ? 'info' : 'silent', C0_PROBE_FILE: file, C0_MODE: mode,
   });
+  if(initialDiagnostics) {
+    env['POPCLAW_RECEIVE_ON_START']='0';
+    if(!mode.endsWith('no-evidence'))env['POPCLAW_SETUP_RECEIPT']=receipt;
+  }
   const child = spawn(process.execPath, ['--import', TSX, '--import', PRELOAD, join(pkgRoot, 'src/mcp.ts')],
     { cwd: pkgRoot, env, stdio: ['pipe', 'pipe', 'pipe'] });
   let stderr = '';
+  let stdout = '';
+  child.stdout.setEncoding('utf-8');
+  child.stdout.on('data',(chunk:string)=>{stdout+=chunk;});
   child.stdout.resume();
   child.stderr.setEncoding('utf-8');
   child.stderr.on('data', (chunk: string) => { stderr += chunk; });
@@ -87,8 +100,39 @@ function spawnMcp(mode = '') {
       await new Promise(done => setTimeout(done, 20));
     }
   };
-  return { child, events, waitFor, exited, stderr: () => stderr, closeStdin: () => child.stdin.end() };
+  return { child, events, waitFor, exited, stderr: () => stderr, stdout: () => stdout, closeStdin: () => child.stdin.end() };
 }
+
+describe('MCP initial setup diagnostics',()=>{
+  for(const evidence of [true,false])it(`normal initialized callback exposes bounded results; setup evidence=${evidence}`,async()=>{
+    const mcp=spawnMcp(evidence?'initial-soft-failure':'initial-soft-failure-no-evidence');
+    const send=(message:unknown)=>mcp.child.stdin.write(JSON.stringify(message)+'\n');
+    const waitFrame=async(id:number)=>{
+      await vi.waitFor(()=>expect(mcp.stdout().split('\n').filter(Boolean).map(line=>JSON.parse(line)).some(frame=>frame.id===id)).toBe(true),{timeout:20_000,interval:20});
+    };
+    send({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'synthetic-startup-diagnostics',version:'1'}}});
+    await waitFrame(1);
+    send({jsonrpc:'2.0',method:'notifications/initialized'});
+    // An unknown tool crosses the existing initialSetup wait without executing
+    // any business body. The response is the startup completion barrier.
+    send({jsonrpc:'2.0',id:2,method:'tools/call',params:{name:'synthetic_diagnostic_barrier',arguments:{}}});
+    await waitFrame(2);
+    mcp.closeStdin();expect(await mcp.exited).toBe(0);
+    const logs=mcp.stderr().split('\n').filter(Boolean).flatMap(line=>{try{return [JSON.parse(line)];}catch{return [];}});
+    if(evidence){
+      expect(logs).toContainEqual(expect.objectContaining({stage:'initial_me',status:'connecting',errorCode:'HOUSE_CONTROL_HISTORY_UNPROVEN',hasOperationId:true}));
+      expect(logs).toContainEqual(expect.objectContaining({stage:'house_guide',status:'unavailable',code:'HOUSE_GUIDE_CONTEXT_STALE'}));
+      expect(mcp.events().filter(e=>e==='houses.initial-me')).toHaveLength(1);
+      expect(mcp.events().filter(e=>e==='houses.initial-guide')).toHaveLength(1);
+    }else{
+      expect(logs).toContainEqual(expect.objectContaining({stage:'initial_me',status:'not_started',reason:'setup_evidence_unavailable'}));
+      expect(mcp.events()).not.toContain('houses.initial-me');expect(mcp.events()).not.toContain('houses.initial-guide');
+      expect(mcp.events()).not.toContain('houses.start');
+    }
+    expect(mcp.stderr()).not.toContain('SYNTHETIC_PRIVATE_SESSION');expect(mcp.stderr()).not.toContain('SYNTHETIC_PRIVATE_OPERATION');
+    for(const line of mcp.stdout().split('\n').filter(Boolean))expect(JSON.parse(line).jsonrpc).toBe('2.0');
+  },60_000);
+});
 
 /** The component calls that make up a shutdown/cleanup sequence (house commands are timer noise). */
 const sequence = (events: string[]) => events.filter(e => e !== 'houses.runCommand');

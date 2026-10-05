@@ -42,6 +42,7 @@ import './runtime/house-lifecycle/house-runtime.js';
 // evaluated, so an import-time stdout write is caught too.
 import { protocolStdout } from './runtime/stdout-to-stderr.js';
 import { readMcpSetupEvidence } from './host/local-participation.js';
+import { logMcpInitialMe, logMcpInitialGuide, logMcpInitialSetupFailure, type McpInitialSetupStage } from './host/mcp-initial-setup-diagnostics.js';
 import { buildMcpRuntime, type McpPluginRuntime } from './host/mcp-runtime-ports.js';
 
 import pino from 'pino';
@@ -356,8 +357,17 @@ async function main(): Promise<void> {
   });
 
   server.oninitialized = () => {
-    if (!readMcpSetupEvidence(process.env.POPCLAW_SETUP_RECEIPT,mcpRoot(),resolve(dirname(fileURLToPath(import.meta.url)),'../..'))) return;
-    initialSetup = runtime().then(async rt => { await rt.houseRuntime.activateInitialMe(); await rt.houseRuntime.readHouseGuide('https://house.popclaw.me'); }).catch(error => logger.warn({}, String(error)));
+    if (!readMcpSetupEvidence(process.env.POPCLAW_SETUP_RECEIPT,mcpRoot(),resolve(dirname(fileURLToPath(import.meta.url)),'../..'))) {
+      logger.info({stage:'initial_me',status:'not_started',reason:'setup_evidence_unavailable'}, 'popclaw: MCP initial setup result');
+      return;
+    }
+    let stage: McpInitialSetupStage = 'runtime';
+    initialSetup = runtime().then(async rt => {
+      stage = 'initial_me';
+      logMcpInitialMe(logger, await rt.houseRuntime.activateInitialMe());
+      stage = 'house_guide';
+      logMcpInitialGuide(logger, await rt.houseRuntime.readHouseGuide('https://house.popclaw.me'));
+    }).catch(error => logMcpInitialSetupFailure(logger, stage, error));
   };
   const transport = new StdioServerTransport(process.stdin, protocolStdout);
   const send = transport.send.bind(transport);
