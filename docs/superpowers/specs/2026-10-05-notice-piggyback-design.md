@@ -14,7 +14,9 @@ The store's existing consumer receipts and one additive `notification_notice_sta
 
 Hosted consumers remain OAuth connection scoped. Local MCP retains the configured consumer or its existing cwd fallback, so clients sharing that fallback share receipts and cooldown. Native uses `native:<existing identity key>` within the installation's identity database, not a per-chat identity. Native automatic presentation excludes delivered/in-flight native items; a later native push can still repeat an offered summary. That accepted two-leg limitation is not hidden with implicit acknowledgement.
 
-Hosted `notifications.offer` is internal presentation bookkeeping authorized by the existing trusted read scope. It is not pure read-only. It neither cold-starts a worker nor fetches network/starts a House, and has a 250ms deadline. Current authority, storage holds and cancellation are checked before accounting is committed.
+Hosted `notifications.offer` is internal presentation bookkeeping authorized by the existing trusted read scope. Its supervisor registration and executor invocation both use the existing `popclaw_notifications` read policy, independently of the original business tool's write/files policy. It only offers; it does not invoke explicit notification fetching. It is not pure read-only. It neither cold-starts a worker nor fetches network/starts a House, and has a 250ms deadline. Current authority, storage holds and cancellation are checked before accounting is committed.
+
+The shared success guard also recognizes the existing localized `failureText` return contract, whose legacy catch arms lack an `isError` field. These original failures pass through unchanged and do not consume an offer or gate.
 
 ## Scope and release
 

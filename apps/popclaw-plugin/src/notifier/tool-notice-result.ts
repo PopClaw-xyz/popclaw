@@ -1,3 +1,5 @@
+import { renderCopy, type Lang } from '../lexicon/index.js';
+
 export const NOTICE_COOLDOWN_SECONDS = 60;
 export const NOTICE_REPEAT_SECONDS = 1800;
 export interface ToolNoticeOffer {
@@ -22,6 +24,29 @@ export function canAppendToolNotice(name: string, result: unknown): boolean {
     content?: unknown[];
   };
   if (r.isError) return false;
+  const first = r.content?.[0] as { type?: string; text?: string } | undefined;
+  const text =
+    typeof r.text === 'string'
+      ? r.text
+      : first?.type === 'text'
+        ? first.text
+        : undefined;
+  // Existing catch arms return failureText without an isError field. Match
+  // that shared lexicon contract without rewriting the original result.
+  if (
+    typeof text === 'string' &&
+    (['en', 'zh-CN'] as Lang[]).some((lang) => {
+      const [prefix, suffix] = renderCopy(lang, 'error.actionFailed', {
+        what: '\u0000',
+        err: '',
+      }).split('\u0000');
+      return (
+        text.startsWith(prefix!) &&
+        text.indexOf(suffix!, prefix!.length) > prefix!.length
+      );
+    })
+  )
+    return false;
   if (
     r.content?.some((block) => {
       const item = block as { type?: string; text?: string };

@@ -16,11 +16,59 @@ import { SqliteNotifier } from '../../../src/notifier/sqlite-notifier.js';
 import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
 import { runMigrations } from '../../../src/host/migrations.js';
 import { registerNotificationTools } from '../../../src/tools/notification-tools.js';
+import { registerMarkTools } from '../../../src/tools/mark-tools.js';
+import { withTail } from '../../../src/tools/tool-tail.js';
+import { decorateToolNotice } from '../../../src/notifier/tool-notice-result.js';
+import { renderCopy } from '../../../src/lexicon/index.js';
 const migrations = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../migrations',
 );
 describe('native notice adapter through pinned OpenClaw registration', () => {
+  it('keeps actual legacy catch failures unchanged without offering through native/local adapters', async () => {
+    const collector = makeToolCollector();
+    let offers = 0;
+    const runtime = async () =>
+      ({
+        marksStore: {
+          listActive: () => {
+            throw Error('SQLITE_BUSY');
+          },
+        },
+      }) as any;
+    const api = withNativeToolNotice(collector.api, async () => {
+      offers++;
+      throw Error('must not offer');
+    });
+    registerMarkTools({ api: withTail(api, runtime), runtime } as any);
+    const result = toMcpToolResult(
+      await collector.tools
+        .find((t) => t.name === 'popclaw_show_marks')!
+        .execute('failed', {}),
+    );
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('SQLITE_BUSY'),
+    });
+    expect(offers).toBe(0);
+    for (const lang of ['en', 'zh-CN'] as const) {
+      const local = toMcpToolResult({
+        type: 'text',
+        text: renderCopy(lang, 'error.actionFailed', {
+          what: 'follow',
+          err: 'SQLITE_BUSY',
+        }),
+      });
+      expect(
+        await decorateToolNotice('popclaw_follow', local, () => {
+          offers++;
+          throw Error('must not offer');
+        }),
+      ).toBe(local);
+    }
+    expect(offers).toBe(0);
+  });
   it('registers object/factory/array with the actual pinned SDK registrar and keeps JSON/image content', async () => {
     const require = createRequire(import.meta.url);
     const sdkEntry = require.resolve('openclaw/plugin-sdk/plugin-entry');
