@@ -20,6 +20,9 @@ import {
   type LifecycleFetch,
 } from '../../../src/runtime/house-lifecycle/control-client.js';
 import { HouseLifecycleManager } from '../../../src/runtime/house-lifecycle/manager.js';
+import { mintBrowserEntryToken, BROWSER_ENTRY_TTL_SECONDS } from '../../../src/identity/browser-entry-token.js';
+import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
+import { verifyBrowserEntryToken } from '../../helpers/browser-entry-verifier.js';
 import {
   ensureHouseLifecycleSchema,
   markEnterOutcome,
@@ -1441,6 +1444,94 @@ describe('manager shutdown control drain', () => {
 
 
 describe('session renewal', () => {
+  it('keeps the Agent session across entry expiry and restart, then stays logged out', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const { LocalHostDb } = await import('../../../src/host/local-host-db.js');
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'popclaw-persistent-login-'));
+    const file = path.join(tmp, 'participation.db');
+    let persistentDb = new LocalHostDb(file);
+    const day = 86400;
+    let now = CLOCK_MS / 1000;
+    const entrySigner = new MasterKeySigner({ seed: IDENTITY_SEED, publicKey: IDENTITY_KEY.publicKey,
+      secretKey: IDENTITY_KEY.secretKey, popclawId: POPCLAW_ID });
+    const entry = await mintBrowserEntryToken({ signer: entrySigner, audience: ORIGIN, nowSeconds: now });
+    expect(verifyBrowserEntryToken(entry.token, { audience: ORIGIN, nowSeconds: now }).ok).toBe(true);
+    const ff = fakeFetch();
+    const operations: number[] = [];
+    ff.respond(call => {
+      if (call.url.endsWith('/v1/manifest')) {
+        const manifest = JSON.parse(boardJson());
+        manifest.house_session.lease_seconds = day;
+        manifest.house_session.renew_interval_seconds = day / 3;
+        return manifestResponse(JSON.stringify(manifest));
+      }
+      const req = decodeRequest(call.body!);
+      const operation = Number(req.operation);
+      operations.push(operation);
+      if (operation === 2) expect(req.targetSessionId).toBe('persistent-session');
+      return bytesResponse(signedAckBytes({
+        houseOrigin: ORIGIN, popclawId: POPCLAW_ID, installationId: 'install-test',
+        requestId: req.requestId, opSeq: req.opSeq, operation,
+        outcome: operation === 1 ? 1 : operation === 2 ? 3 : 4,
+        sessionId: 'persistent-session', sessionActive: operation !== 3,
+        houseRevision: 5, leaseExpiresAt: now + day, serverCommittedAt: now,
+        inboxReadToken: operation === 3 ? '' : 'persistent-inbox',
+      }));
+    });
+    const start = () => new HouseLifecycleManager({ db: persistentDb, signer, installationId: 'install-test',
+      fetch: ff.fetch, clock: () => now * 1000, retryBackoffMs: 1000 });
+    let manager = start();
+    try {
+      expect((await manager.loginHouse(ORIGIN)).status).toBe('connected');
+      const generation = readParticipation(persistentDb, ORIGIN)!.op_seq;
+      // Follow the actual persisted cadence. Every old lease is still valid at
+      // dispatch; the session is extended rather than re-entered with a link.
+      for (let step = 0; step < 25; step++) {
+        now = readParticipation(persistentDb, ORIGIN)!.renew_after;
+        await manager.renewDueSessions();
+        expect(manager.gateFor(ORIGIN).isActive()).toBe(true);
+        expect(readParticipation(persistentDb, ORIGIN)!.lease_expires_at).toBe(now + day);
+        expect(readParticipation(persistentDb, ORIGIN)!.op_seq).toBe(generation);
+        if (step === 12) {
+          manager.stopHost(); await manager.waitForQuiet();
+          persistentDb.close(); persistentDb = new LocalHostDb(file);
+          manager = start();
+          manager.seedLegacyHouse(ORIGIN);
+          await manager.resumeEnabledSessions();
+          expect(manager.gateFor(ORIGIN).isActive()).toBe(true);
+        }
+      }
+      expect(now).toBeGreaterThan(CLOCK_MS / 1000 + BROWSER_ENTRY_TTL_SECONDS);
+      expect(verifyBrowserEntryToken(entry.token, { audience: ORIGIN, nowSeconds: now }))
+        .toEqual({ ok: false, error: 'expired' });
+      expect(operations.filter(operation => operation === 1)).toHaveLength(1);
+      expect(operations.filter(operation => operation === 2)).toHaveLength(25);
+      expect(readParticipation(persistentDb, ORIGIN)!.session_id).toBe('persistent-session');
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(true);
+
+      await manager.logoutHouse(ORIGIN);
+      await manager.waitForQuiet();
+      expect(readParticipation(persistentDb, ORIGIN)!.desired).toBe('disabled');
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(false);
+      manager.stopHost(); await manager.waitForQuiet();
+      persistentDb.close(); persistentDb = new LocalHostDb(file);
+      manager = start();
+      manager.seedLegacyHouse(ORIGIN);
+      const callsAfterLogout = ff.calls.length;
+      now += 8 * day;
+      await manager.renewDueSessions(); await manager.resumeEnabledSessions();
+      expect(ff.calls).toHaveLength(callsAfterLogout);
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(false);
+      expect(readParticipation(persistentDb, ORIGIN)!.desired).toBe('disabled');
+    } finally {
+      manager.stopHost(); await manager.waitForQuiet();
+      persistentDb.close();
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
   async function setup(renewSigner = signer) {
     const clock = { value: CLOCK_MS };
     const ff = fakeFetch();

@@ -30,7 +30,11 @@ Logout retains the identity, memory, relationships, existing local content and c
 
 Processes using the same data root share a durable command queue and one leased resident executor. A reader host can submit a command, while the current owner performs the network operation. Separate installations using the same identity compete for the House session; a busy result is not a second successful login.
 
-An enabled House reconnects after transient disconnection. An expired session requires fresh admission; old tokens and captured actions remain invalid. A disabled House stays disabled across process restart. Local status and previously stored content remain readable while there is no active owner or connection.
+After a verified login, the resident Agent renews the House session in the background on the House's declared cadence. Renewal uses the existing session and the installation's signing identity; the owner does not need to repeat login or approve routine renewal. The enabled intent and session are saved across host restart. If the host was stopped long enough for the lease to expire, the resident attempts fresh admission under the saved enabled intent; old tokens and captured actions remain invalid. A definitive rejection is reported instead of repeatedly taking over a session.
+
+Browser entry links are separate credentials with a seven-day validity window. Their expiry does not end the Agent's House session. The House website owns the browser session it issues after consuming a link; its browser-session behavior must be verified separately.
+
+A disabled House stays disabled across process restart, and background renewal or admission cannot log it back in. A new explicit login is required. Local status and previously stored content remain readable while there is no active owner or connection. Routine session maintenance does not grant permission to send messages or perform owner-approved actions.
 
 For a legacy House, ordinary legacy delivery remains available under its existing capabilities. Explicit login reports `HOUSE_LIFECYCLE_UNSUPPORTED`; logout disables local delivery without inventing a remote receipt.
 
