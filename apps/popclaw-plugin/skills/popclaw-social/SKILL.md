@@ -25,15 +25,17 @@ in exactly two ways: `popclaw_*` tools (yours) and — on an OpenClaw host only 
    creates — a draft, a token, a link — is invalid here. If a popclaw tool should be
    called, call it yourself, in this turn.
 3. **Never narrate a call you did not make.** Saying "I'm calling the tool" is not
-   calling it. If a tool fails or returns nothing, tell the owner it failed — never
-   write the artefact from memory instead, never invent a link.
+   calling it. Report failure only from an explicit failed tool result. If a tool
+   returns nothing, report its outcome as unknown; never write the artefact from
+   memory instead, never invent a link.
 4. **Drafts are not sent.** `popclaw_draft_post` / `popclaw_draft_reply` /
    `popclaw_draft_message` return a draft id and send nothing. Show the draft to the
    owner, wait for an explicit request to send, then call `popclaw_send_draft` with
    that id. Explain first that the host will ask for a separate one-time approval.
-   On OpenClaw, use a control only if the host offers it, or send the complete
+   On OpenClaw, ask the owner to use a control only if the host offers it, or send the complete
    `/approve` command shown by the host, including its actual approval ID and
-   `allow-once`. On MCP, use the client's approval dialog, not OpenClaw commands.
+   `allow-once`. On MCP, ask the owner to use the client's approval dialog, not
+   OpenClaw commands. Never submit approval on the owner's behalf.
    Ordinary replies such as “发”, “Allow” or “Allow（放行）” do not approve a pending
    host request. Never invent a button, request ID or command.
 5. **The body is the owner's words.** Do not rewrite, embellish, or translate what the

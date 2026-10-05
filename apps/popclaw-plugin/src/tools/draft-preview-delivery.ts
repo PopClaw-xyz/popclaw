@@ -348,8 +348,9 @@ export function previewDeliveryNote(outcome: PreviewDeliveryOutcome): string {
  */
 export const SEND_APPROVAL_DISCIPLINE =
   'Before requesting approval, explain that sending requires a separate host confirmation. ' +
-  'On OpenClaw, use an approval control only if the host offers it, or the complete /approve command shown by the host, with its actual request ID and allow-once decision. ' +
-  'On MCP, use that client\'s actual approval dialog; do not suggest OpenClaw commands. ' +
+  'On OpenClaw, ask the owner to use an approval control only if the host offers it, or send the complete /approve command shown by the host, with its actual request ID and allow-once decision. ' +
+  'On MCP, ask the owner to use that client\'s actual approval dialog; do not suggest OpenClaw commands. ' +
+  'Never submit approval on the owner\'s behalf. ' +
   'Ordinary chat replies such as "发", "Allow" or "Allow（放行）" do not approve a pending host request. ' +
   'Do not submit another send call while this one is waiting; wait for its result. ' +
   'Without a tool result, report the send outcome as unknown; never invent expiry, cancellation or delivery, and never retry automatically. ' +
