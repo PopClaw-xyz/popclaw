@@ -49,7 +49,7 @@ if(a[0]==='plugins' && a[1]==='install') {
   const receipt=path.join(base,'receipt.json');
   const env={ PATH:`${bin}:/usr/bin:/bin`, HOME:home, TMPDIR:base, FIXTURE_CALLS:calls };
   const f={base,home,bin,state,config,tgz,cli,calls,receipt,env};
-  f.run=(args=[], extra={})=>spawnSync('/bin/sh',[installer,...args,tgz],{env:{...env,...extra},encoding:'utf8',timeout:15000});
+  f.run=(args=[], extra={})=>spawnSync('/bin/sh',[installer,...args,f.tgz],{env:{...env,...extra},encoding:'utf8',timeout:15000});
   f.readCalls=()=>fs.existsSync(calls)?fs.readFileSync(calls,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];
   f.maintenance=(options={})=>{
     f.state=options.state||f.state;
