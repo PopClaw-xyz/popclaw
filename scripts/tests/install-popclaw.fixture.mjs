@@ -135,6 +135,11 @@ for(const selector of ['HOME','OPENCLAW_HOME','OPENCLAW_STATE_DIR','OPENCLAW_CON
 for(const selector of ['HOME','OPENCLAW_STATE_DIR','OPENCLAW_CONFIG_PATH','POPCLAW_DATA_ROOT']) test(`reject unresolved environment ${selector}`,()=>fixture(f=>{
   refused(f,f.run(['--receipt',f.receipt],{[selector]:path.join(f.base,'${UNFIXED}')}));
 }));
+for(const key of [' OPENCLAW_HOME','OPENCLAW_HOME ',' openclaw_home ','openclaw_home']) for(const nested of [false,true]) test(`reject normalized config env selector ${nested?'vars.':''}${JSON.stringify(key)}`,()=>fixture(f=>{
+  const entries={[key]:f.base};
+  fs.writeFileSync(f.config,JSON.stringify({env:nested?{vars:entries}:entries}));
+  refused(f,f.run(['--receipt',f.receipt]));
+}));
 test('reject a literal env placeholder in an otherwise valid maintenance-record path',()=>fixture(f=>{
   f.maintenance();
   const literal=path.join(f.base,'${UNFIXED}');

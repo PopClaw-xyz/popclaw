@@ -117,7 +117,7 @@ function configBytes(config, optional) {
   // may otherwise appear only after the child starts, outside our fixed target.
   const selectors=new Set(['HOME','OPENCLAW_HOME','OPENCLAW_STATE_DIR','OPENCLAW_CONFIG_PATH','OPENCLAW_PROFILE','CLAWDBOT_STATE_DIR','CLAWDBOT_CONFIG_PATH','POPCLAW_DATA_ROOT']);
   for(const entries of [parsed.env,parsed.env?.vars]) if(entries && typeof entries==='object') {
-    for(const key of Object.keys(entries)) if(selectors.has(key.toUpperCase())) abort('Config environment must not supply instance selectors.');
+    for(const key of Object.keys(entries)) if(selectors.has(key.trim().toUpperCase())) abort('Config environment must not supply instance selectors.');
   }
   function check(v, keys=[]) {
     // Native 9.8 resolves provider credentials and restores authored references
