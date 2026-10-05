@@ -51,9 +51,9 @@ describe('toMcpToolListing', () => {
     return c.tools;
   }
 
-  it('lists every shared tool with its annotations, and the shared count is 52', () => {
+  it('lists every shared tool with its annotations, and the shared count is 54', () => {
     const listed = mcpSurface().map(toMcpToolListing);
-    expect(listed).toHaveLength(52);
+    expect(listed).toHaveLength(54);
     for (const t of listed) {
       expect(t.annotations, t.name).toBeDefined();
       expect(t.inputSchema.type).toBe('object');

@@ -162,7 +162,7 @@ export function makeNotificationsTool(
   return {
     name: 'popclaw_notifications',
     description:
-      'Fetch pending notifications and exact inbox message IDs. Relay the notice, read its full message and image with popclaw_show_inbox, then acknowledge these notification IDs with popclaw_acknowledge_notifications. Acknowledgement does not mean the owner read the message or the request is resolved.',
+      'Fetch pending notifications and exact inbox message IDs. A result alone authorizes neither message retrieval nor acknowledgement. After the owner chooses to look, retrieve the requested message with popclaw_show_inbox. Confirm handoff only through an explicit popclaw_acknowledge_notifications action. This never means human read or request resolution.',
     execute: async () => {
       const notifier = await getNotifier();
       const nameOf = await getNameOf?.();
@@ -181,7 +181,7 @@ export function makeNotificationsTool(
         }
       } else items = dropSettledBondProposals([...notifier.drain('L1'), ...notifier.drain('L2')], proposals);
       try {
-        return { type: 'text', text: renderNotifications(items, nameOf) + (consumer ? '\n' + JSON.stringify({ consumer_id: consumer.id, notifications: items.map((it) => ({ notification_id: it.id, message_id: it.payload.messageId, level: it.level })), acknowledge_after_handoff: true }) : '') };
+        return { type: 'text', text: renderNotifications(items, nameOf) + (consumer ? '\n' + JSON.stringify({ consumer_id: consumer.id, notifications: items.map((it) => ({ notification_id: it.id, message_id: it.payload.messageId, level: it.level })), acknowledgement: 'explicit_tool_only' }) : '') };
       } catch (err) {
         // Same rule the native leg follows (index.ts): `drain()` already
         // marked these delivered, so a render that blew up must put the LIVE

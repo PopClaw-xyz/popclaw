@@ -15,6 +15,8 @@
  */
 
 import { type RegisterToolsDeps, type ToolsCtx } from './tools-context.js';
+import { registerNotificationTools } from './notification-tools.js';
+import { withNativeToolNotice } from './mcp-adapter.js';
 import { withTail } from './tool-tail.js';
 import { registerReadTools } from './read-tools.js';
 import { registerStubTools, registerMoreStubTools } from './stub-tools.js';
@@ -77,6 +79,7 @@ const REGISTER_STEPS: ReadonlyArray<(ctx: ToolsCtx) => void> = [
   // absent on some root while `contracts.tools` still declares it — and the
   // agent would improvise a link instead of hearing a refusal.
   registerHouseEntryTools,
+  registerNotificationTools,
 ];
 
 /**
@@ -125,8 +128,10 @@ function countRegistrations(deps: RegisterToolsDeps): number {
 export function registerPopclawTools(deps: RegisterToolsDeps): number {
   const { runtime } = deps;
   const total = countRegistrations(deps);
-  const api = withTail(deps.api, runtime, deps.runCommand);
-  const ctx: ToolsCtx = { api, runtime, deps, total };
+  const registrationApi = deps.nativeToolNotices && deps.getToolNoticeContext
+    ? withNativeToolNotice(deps.api, deps.getToolNoticeContext) : deps.api;
+  const api = withTail(registrationApi, runtime, deps.runCommand, deps.getToolNoticeContext);
+  const ctx: ToolsCtx = { api, runtime, deps: {...deps, api: registrationApi}, total };
 
   for (const step of REGISTER_STEPS) step(ctx);
 

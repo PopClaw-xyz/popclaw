@@ -91,7 +91,7 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, PopclawToolAnnotations>> 
   popclaw_show_inbox: SET_LOCAL, // marks a message retrieved; resolve_message_id closes it
   popclaw_show_pings: WRITE_LOCAL, // marks the shown batch read, so the next call shows another
   popclaw_show_dream_review: WRITE_LOCAL, // marks the shown bond dynamics reported, so each surfaces once
-  popclaw_notifications: WRITE_LOCAL, // drains / acknowledges settled items
+  popclaw_notifications: WRITE_LOCAL, // offers per-consumer receipts; may retire settled proposals
   popclaw_acknowledge_notifications: SET_LOCAL,
   popclaw_author_latest: WRITE_LOCAL_OPEN, // logs `person_asked` to the permanent social log
   popclaw_newspaper: WRITE_LOCAL, // gathers local material and mints candidate / publish ledger entries

@@ -88,7 +88,7 @@ describe('registerPopclawTools reported count', () => {
     expect(reported).toBe(declared.length);
   });
 
-  it('the MCP-surface-only notification tools are neither registered nor declared', () => {
+  it('native notification tools are registered and declared', () => {
     // They exist only in src/mcp.ts: inside an MCP host PopClaw cannot push, so
     // the agent has to pull. On the OpenClaw surface the plugin delivers notices
     // itself, so adding them to contracts.tools would declare two tools that no
@@ -97,8 +97,8 @@ describe('registerPopclawTools reported count', () => {
     const { names } = register(ALL_GATES);
     const declared = readManifest().contracts.tools;
     for (const name of mcpOnly) {
-      expect(names, `${name} must not be registered on the OpenClaw surface`).not.toContain(name);
-      expect(declared, `${name} is MCP-only and must not be in contracts.tools`).not.toContain(name);
+      expect(names, `${name} must not be registered on the OpenClaw surface`).toContain(name);
+      expect(declared, `${name} is MCP-only and must not be in contracts.tools`).toContain(name);
     }
   });
 });

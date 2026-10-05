@@ -71,7 +71,9 @@
       "popclaw_mute_notices",
       "popclaw_recent_attachments",
       "popclaw_house_recovery_prepare",
-      "popclaw_house_reconfirm"
+      "popclaw_house_reconfirm",
+      "popclaw_notifications",
+      "popclaw_acknowledge_notifications"
     ]
   },
   "toolMetadata": {

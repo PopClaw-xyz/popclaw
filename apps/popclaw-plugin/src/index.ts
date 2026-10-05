@@ -74,6 +74,7 @@ import {
   type FollowDoorbellLoop,
 } from './newspaper/follow-doorbell-service.js';
 import { routeSubcommand } from './commands/popclaw-router.js';
+import { runtimeToolNoticeContext } from './notifier/tool-notice.js';
 import { registerPopclawTools } from './tools/register-tools.js';
 import { visibleLogger } from './runtime/visible-logger.js';
 import { unsupportedNodeReason } from './runtime/node-support.js';
@@ -820,6 +821,8 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     // wiring (same source, same criteria).
     // The runtime() lexical closure is the lazy ignition path in register().
     toolsRegisteredCount = registerPopclawTools({
+      nativeToolNotices: true,
+      getToolNoticeContext: async signal => { const rt = await runtime(); return runtimeToolNoticeContext(rt, `native:${rt.boot.popclawId}`, signal, true); },
       api: api as unknown as Parameters<typeof registerPopclawTools>[0]['api'],
       runtime,
       runCommand: async work => (await runtime()).houseRuntime.runCommand(work),

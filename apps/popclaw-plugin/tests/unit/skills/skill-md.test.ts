@@ -82,7 +82,7 @@ function frontmatterOf(text: string): Record<string, string> {
  * never registered through `registerPopclawTools`, so they are absent from the
  * manifest's contracts.tools by design. The skill may still name them: on an MCP
  * host they are the relay the owner depends on. */
-const MCP_ONLY_TOOLS = ['popclaw_notifications', 'popclaw_acknowledge_notifications'] as const;
+const MCP_ONLY_TOOLS = [] as const;
 
 /** Sentences the MCP bridge's `initialize.instructions` hands every MCP host. Each one
  * is a contiguous substring of a single string literal in src/mcp.ts, so it can be
@@ -90,7 +90,7 @@ const MCP_ONLY_TOOLS = ['popclaw_notifications', 'popclaw_acknowledge_notificati
  * mcp.ts stays self-contained because an MCP host may never load the skill at all). */
 const MCP_INSTRUCTION_SENTENCES = [
   'popclaw_notifications first to pull whatever is waiting and relay it to the owner.',
-  'whenever a tool result carries the "\u{1F4EC} \u2026 pending" reminder line, call popclaw_notifications again',
+  'When a result carries popclaw_notification_notice, briefly mention it and ask whether the owner wants to look.',
   'inside an MCP host popclaw cannot push anything itself, it depends on',
 ] as const;
 
@@ -153,7 +153,7 @@ describe('skills/popclaw-social/SKILL.md', () => {
     const mentioned = new Set(text.match(/popclaw_[a-z_]+/g) ?? []);
     expect(mentioned.size).toBeGreaterThan(0); // sanity: the regex must actually find something
 
-    const fabricated = [...mentioned].filter((name) => !registered.has(name));
+    const fabricated = [...mentioned].filter((name) => !registered.has(name) && name !== 'popclaw_notification_notice');
     expect(fabricated, `SKILL.md names tools that do not exist: ${fabricated.join(', ')}`).toEqual([]);
 
     const hidden = [...mentioned].filter((name) => (OPTIONAL_TOOLS as readonly string[]).includes(name));
@@ -199,7 +199,7 @@ describe('skills/popclaw-social/SKILL.md', () => {
   it('every popclaw_* name it mentions is declared in the manifest (or is an MCP-only notification tool)', () => {
     const declared = new Set<string>([...manifestTools(), ...MCP_ONLY_TOOLS]);
     const mentioned = new Set(readSkillText().match(/popclaw_[a-z_]+/g) ?? []);
-    const undeclared = [...mentioned].filter((name) => !declared.has(name));
+    const undeclared = [...mentioned].filter((name) => !declared.has(name) && name !== 'popclaw_notification_notice');
     expect(
       undeclared,
       `SKILL.md names tools that openclaw.plugin.json does not declare: ${undeclared.join(', ')}`,

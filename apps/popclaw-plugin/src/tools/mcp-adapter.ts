@@ -1,3 +1,5 @@
+import { decorateToolNotice, offerToolNotice, type ToolNoticeContext } from '../notifier/tool-notice.js';
+import type { ContentBlock, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 /**
  * OpenClaw tool registrations → MCP. Pure translation, no I/O, no node:*, so
  * it is unit-testable without booting the server (importing `src/mcp.ts`
@@ -122,7 +124,7 @@ export function toMcpToolListing(tool: Pick<CollectedTool, 'name' | 'description
  * popclaw tool result → MCP content. Tools return `{ type:'text', text }`;
  * anything else is JSON-serialized rather than dropped (v1 rule).
  */
-export type McpContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
+export type McpContent = ContentBlock;
 /** The normal MCP catch path, with host-language formatting supplied by the
  * caller. A rejected business read must not become ordinary successful text. */
 export function toMcpToolError(text: string): { content: McpContent[]; isError: true } {
@@ -145,12 +147,14 @@ export function structuredToolResult(value: Record<string, unknown>): Structured
 
 /** Keep existing tool returns unchanged unless they explicitly use the shared
  * structured result shape. Callers may append content without mutating data. */
-export function toMcpToolResult(result: unknown): { content: McpContent[]; structuredContent?: Record<string, unknown> } {
-  const r = result as Partial<StructuredToolResult> | null | undefined;
-  if (Array.isArray(r?.content) && r.structuredContent && typeof r.structuredContent === 'object' && !Array.isArray(r.structuredContent)) {
-    return structuredToolResult(r.structuredContent);
-  }
-  return { content: toMcpContent(result) };
+export function toMcpToolResult(result: unknown): CallToolResult {
+  const r = result as Partial<CallToolResult> | null | undefined;
+  if (Array.isArray(r?.content)) return {...r, content: [...r.content]} as CallToolResult;
+  const legacy = result as {isError?: boolean; _meta?: Record<string, unknown>; details?: unknown} | null | undefined;
+  return {content: toMcpContent(result),
+    ...(legacy?.isError !== undefined ? {isError: legacy.isError} : {}),
+    ...(legacy?._meta ? {_meta: legacy._meta} : {}),
+    ...(legacy?.details !== undefined ? {details: legacy.details} : {})};
 }
 
 export function toMcpContent(result: unknown): McpContent[] {
@@ -158,4 +162,25 @@ export function toMcpContent(result: unknown): McpContent[] {
   const content: McpContent[] = [{ type: 'text', text: typeof r?.text === 'string' ? r.text : JSON.stringify(result ?? null) }];
   for (const img of r?.images ?? []) content.push({ type: 'image', data: img.data, mimeType: img.mimeType });
   return content;
+}
+
+/** One native final-result adapter, including tools that bypass guides/nudges. */
+export function withNativeToolNotice(api: ToolCollector['api'] | {registerTool: (tool: unknown, opts?: unknown) => void},
+  context: (signal?: AbortSignal) => Promise<ToolNoticeContext>): typeof api {
+  const wrap = (tool: unknown): unknown => {
+    const t = tool as Partial<CollectedTool> | null;
+    if (!t || typeof t.execute !== 'function' || typeof t.name !== 'string') return tool;
+    const execute = t.execute;
+    return {...t, execute: async (id: string, params: unknown, signal?: AbortSignal, ...rest: unknown[]) => {
+      const result = await (execute as (...args: unknown[]) => Promise<unknown>)(id, params, signal, ...rest);
+      return decorateToolNotice(t.name!, toMcpToolResult(result), async () => offerToolNotice(await context(signal)));
+    }};
+  };
+  return {...api, registerTool: (tool: unknown, opts?: unknown) => {
+    if (typeof tool !== 'function') return api.registerTool(wrap(tool), opts);
+    api.registerTool((ctx: unknown) => {
+      const resolved = (tool as (ctx: unknown) => unknown)(ctx);
+      return Array.isArray(resolved) ? resolved.map(wrap) : wrap(resolved);
+    }, opts);
+  }};
 }

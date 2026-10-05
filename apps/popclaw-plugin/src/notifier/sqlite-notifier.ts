@@ -1,3 +1,5 @@
+import { NOTICE_COOLDOWN_SECONDS, NOTICE_REPEAT_SECONDS } from './tool-notice-result.js';
+import type { ToolNoticeContext, ToolNoticeOffer } from './tool-notice.js';
 import type { HostDb } from '../host/host-db.js';
 import { NotificationDeliveryInactiveError, type Notifier, type CaptureNotificationDeliveryScope, type NotificationDeliveryBatch, type NotificationDeliveryScope } from './notifier.js';
 import type { NotificationLevel, NotificationKind, NotificationItem } from './types.js';
@@ -267,6 +269,57 @@ export class SqliteNotifier implements Notifier {
         ).changes) acknowledged.push(id);
       }
       return acknowledged;
+    });
+  }
+
+  hasNoticeFor(context: ToolNoticeContext): boolean {
+    if (!context.active()) return false;
+    this.bindConsumer(context.consumerId);
+    return this.db.queryAll<QueueRow>(`SELECT q.id, q.level, q.kind, q.payload_json, q.enqueued_at
+      FROM notification_queue q LEFT JOIN notification_receipts r ON r.notification_id = q.id AND r.consumer_id = ?
+      WHERE r.acknowledged_at IS NULL AND q.level IN ('L1','L2')
+      AND (r.notification_id IS NOT NULL OR q.id > (SELECT start_after_id FROM notification_consumers WHERE consumer_id = ?))` +
+      (context.nativePendingOnly ? ' AND q.delivered_at IS NULL AND (q.delivery_lease_until IS NULL OR q.delivery_lease_until <= ?)' : ''),
+      context.nativePendingOnly ? [context.consumerId, context.consumerId, this.nowSeconds()] : [context.consumerId, context.consumerId])
+      .some(row => context.eligible(this.toItem(row)));
+  }
+
+  /** Atomically offers only the displayed IDs. Unseen items are never held by
+   * the thirty-minute repeat gate; native delivery state remains untouched. */
+  offerNoticeFor(context: ToolNoticeContext, render: (items: NotificationItem[], counts: {L1: number; L2: number}) => string): ToolNoticeOffer {
+    if (!context.active()) return {pending: false};
+    return this.db.transaction(tx => {
+      this.bindConsumer(context.consumerId);
+      const now = this.nowSeconds();
+      const rows = tx.queryAll<QueueRow & {offered_at: number | null}>(
+        `SELECT q.id, q.level, q.kind, q.payload_json, q.enqueued_at, r.offered_at
+         FROM notification_queue q LEFT JOIN notification_receipts r
+         ON r.notification_id = q.id AND r.consumer_id = ?
+         WHERE r.acknowledged_at IS NULL AND q.level IN ('L1','L2')
+         AND (r.notification_id IS NOT NULL OR q.id > (SELECT start_after_id FROM notification_consumers WHERE consumer_id = ?))` +
+        (context.nativePendingOnly ? ' AND q.delivered_at IS NULL AND (q.delivery_lease_until IS NULL OR q.delivery_lease_until <= ?)' : '') +
+        ` ORDER BY CASE q.level WHEN 'L1' THEN 0 ELSE 1 END, q.enqueued_at, q.id`,
+        context.nativePendingOnly ? [context.consumerId, context.consumerId, now] : [context.consumerId, context.consumerId],
+      ).map(row => ({row, item: this.toItem(row)})).filter(({item}) => context.eligible(item));
+      if (!rows.length || !context.active()) return {pending: false};
+      const gate = tx.queryOne<{last_offered_at: number}>('SELECT last_offered_at FROM notification_notice_state WHERE consumer_id = ?', [context.consumerId]);
+      if (gate && now - gate.last_offered_at < NOTICE_COOLDOWN_SECONDS && now - gate.last_offered_at > -NOTICE_COOLDOWN_SECONDS) return {pending: true};
+      const ready = rows.filter(({row}) => !row.offered_at || now - row.offered_at >= NOTICE_REPEAT_SECONDS || now - row.offered_at <= -NOTICE_COOLDOWN_SECONDS);
+      ready.sort((a, b) => (a.item.level === 'L1' ? 0 : 1) - (b.item.level === 'L1' ? 0 : 1) ||
+        Number(!!a.row.offered_at) - Number(!!b.row.offered_at) || a.item.enqueuedAt - b.item.enqueuedAt || a.item.id - b.item.id);
+      const items = ready.slice(0, 3).map(({item}) => item);
+      if (!items.length) return {pending: true};
+      const counts = {L1: rows.filter(({item}) => item.level === 'L1').length, L2: rows.filter(({item}) => item.level === 'L2').length};
+      const text = render(items, counts);
+      if (!context.active() || items.some(item => !context.eligible(item))) throw new Error('NOTICE_INACTIVE');
+      for (const item of items) tx.execute(
+        `INSERT INTO notification_receipts (consumer_id, notification_id, offered_at) VALUES (?, ?, ?)
+         ON CONFLICT(consumer_id, notification_id) DO UPDATE SET offered_at = excluded.offered_at`,
+        [context.consumerId, item.id, now],
+      );
+      tx.execute(`INSERT INTO notification_notice_state (consumer_id, last_offered_at) VALUES (?, ?)
+        ON CONFLICT(consumer_id) DO UPDATE SET last_offered_at = excluded.last_offered_at`, [context.consumerId, now]);
+      return {pending: true, text};
     });
   }
 

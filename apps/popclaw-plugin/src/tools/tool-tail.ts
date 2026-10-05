@@ -6,7 +6,7 @@
 
 import { optionalWorldOffer } from '../onboarding/optional-world.js';
 import { ownerLang } from '../lexicon/owner-language.js';
-import { renderCopy } from '../lexicon/index.js';
+import { canAppendToolNotice, type ToolNoticeContext } from '../notifier/tool-notice.js';
 import { fileLastRun } from '../runtime/last-run.js';
 import type { MountedHouse } from '../onboarding/orchestrator.js';
 import { isDreamStale } from '../commands/status.js';
@@ -38,21 +38,6 @@ interface TailRuntime {
   readonly paths?: PopclawPaths;
   readonly houses?: () => readonly MountedHouse[];
   readonly houseStarted?: (slug: string) => boolean;
-}
-
-/**
- * The unread-pings line (spec §7): `📬 N pending replies`. **Does not mark as read** —
- * read-state only advances when `popclaw_show_pings` actually fetches that
- * batch (guards against "the data says delivered, but the owner never actually heard it").
- */
-async function unreadTailLine(runtime: RegisterToolsDeps['runtime']): Promise<string | null> {
-  try {
-    const rt = (await runtime()) as Pick<TailRuntime, 'replyPings'> | undefined;
-    const n = rt?.replyPings?.unreadCount() ?? 0;
-    return n > 0 ? renderCopy(ownerLang(), 'pings.tailLine', { n: String(n) }) : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -104,7 +89,7 @@ async function pickNudgeFor(
 /**
  * The single exit point for the tail (spec §4/§7): unread pings take priority,
  * the nudge only fires when no unread pings surfaced and gates ⑤⑥ both pass.
- * At most one tail per turn. Wraps all tools in one place, instead of writing
+ * Automatic notices use a sixty-second consumer cooldown, not a turn ID. Wraps all tools in one place, instead of writing
  * this out in each of the 36 execute functions. Any failure in the tail itself
  * is always swallowed: the prompt must never break the real work. Only a nudge
  * that's actually emitted gets recorded (`recordNudgeSent`) — a candidate that
@@ -121,6 +106,7 @@ export function withTail(
   api: RegisterToolsDeps['api'],
   runtime: RegisterToolsDeps['runtime'],
   runCommand?: RegisterToolsDeps['runCommand'],
+  noticeContext?: RegisterToolsDeps['getToolNoticeContext'],
 ): RegisterToolsDeps['api'] {
   /** One tool object with its execute tail-wrapped (non-tools pass through). */
   const wrapToolObject = (tool: unknown): unknown => {
@@ -137,9 +123,12 @@ export function withTail(
         const capturedArgs = typeof captureParameters === 'function'
           ? [args[0], captureParameters(args[1]), ...args.slice(2)] : args;
         const invoke = async (): Promise<unknown> => {
-        const result = await inner(...capturedArgs);
+        let result = await inner(...capturedArgs);
+        if (!canAppendToolNotice('', result)) return result;
+        let context: ToolNoticeContext | undefined;
+        try { context = await noticeContext?.(args[2] instanceof AbortSignal ? args[2] : undefined); } catch { /* notice unavailable */ }
         let text = (result as { text?: unknown } | null)?.text;
-        if (typeof text !== 'string') return result;
+        if (typeof text === 'string') {
         try {
           const rt = (await runtime()) as TailRuntime | undefined;
           const guides = await rt?.houseRuntime?.pendingHouseGuides();
@@ -147,10 +136,11 @@ export function withTail(
             text += '\n' + JSON.stringify({house_guide_contexts:guides});
             if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) text += '\n' + optionalWorldOffer(ownerLang());
           }
-          const unreadLine = await unreadTailLine(runtime);
+          const pendingNotice = context ? context.store.hasNoticeFor(context) : false;
+          const unreadLine = null;
           const nowSec = Math.floor(Date.now() / 1000);
           const pick =
-            !unreadLine && !isExcludedFromNudge(toolName) ? await pickNudgeFor(runtime, nowSec) : null;
+            !pendingNotice && !isExcludedFromNudge(toolName) ? await pickNudgeFor(runtime, nowSec) : null;
           const tail = composeTail({
             unreadLine,
             toolName,
@@ -161,10 +151,10 @@ export function withTail(
             const rt = (await runtime()) as TailRuntime | undefined;
             if (rt) await recordNudgeSent(rt.host, pick.key, nowSec);
           }
-          return { ...(result as object), text: tail ? `${text}\n\n${tail}` : text };
-        } catch {
-          return result;
+          result = { ...(result as object), text: tail ? `${text}\n\n${tail}` : text };
+        } catch { /* preserve business result */ }
         }
+        return result;
         };
         // Control commands must remain able to enable or disable a house.
         if (toolName === 'popclaw_house_login' || toolName === 'popclaw_house_logout') return invoke();

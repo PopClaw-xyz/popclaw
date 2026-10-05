@@ -128,6 +128,7 @@ describe('registerPopclawTools', () => {
       // it conditionally would leave `contracts.tools` declaring a tool the
       // agent cannot call, and the agent would improvise a link instead.
       'popclaw_house_entry_link',
+      'popclaw_notifications', 'popclaw_acknowledge_notifications',
     ];
     const names = tools.map((t) => t.name);
     for (const name of expected) {
@@ -290,6 +291,7 @@ describe('registerPopclawTools', () => {
       'popclaw_update_cadence',
       // house-entry-tools
       'popclaw_house_entry_link',
+      'popclaw_notifications', 'popclaw_acknowledge_notifications',
     ]);
   });
 
@@ -310,7 +312,7 @@ describe('registerPopclawTools', () => {
         typeof registerPopclawTools
       >[0]['getWorldDeps'],
     });
-    expect(tools.length).toBe(44);
+    expect(tools.length).toBe(46);
     expect(registered).toBe(tools.length);
   });
 
@@ -330,7 +332,7 @@ describe('registerPopclawTools', () => {
         typeof registerPopclawTools
       >[0]['getWorldDeps'],
     });
-    expect(tools.length).toBe(44);
+    expect(tools.length).toBe(46);
     expect(registered).toBe(tools.length);
   });
 
@@ -1394,14 +1396,14 @@ describe('registerPopclawTools', () => {
       return { tools, markRead };
     }
 
-    it('appends the unread tail to an unrelated tool, without marking read', async () => {
+    it('does not append the retired pings-only tail or mark read', async () => {
       const { tools, markRead } = registerWithPings(['e1', 'e2', 'e3']);
       const out = await findTool(tools, 'popclaw_show_marks').execute('c1', {});
-      expect(out.text).toContain('📬 3 条待回');
+      expect(out.text).not.toContain('📬 3 条待回');
       expect(markRead).not.toHaveBeenCalled();
       // agent 看到尾巴却没取 → 下次继续提示
       const again = await findTool(tools, 'popclaw_show_marks').execute('c1', {});
-      expect(again.text).toContain('📬 3 条待回');
+      expect(again.text).not.toContain('📬 3 条待回');
     });
 
     it('no unread → no tail', async () => {
@@ -1415,7 +1417,7 @@ describe('registerPopclawTools', () => {
       setOwnerLang('en', 'config');
       const { tools } = registerWithPings(['e1', 'e2', 'e3']);
       const out = await findTool(tools, 'popclaw_show_marks').execute('c1', {});
-      expect(out.text).toContain('📬 3 pending replies');
+      expect(out.text).not.toContain('📬 3 pending replies');
       setOwnerLang('zh-CN', 'config'); // restore file default for tests after this one
     });
 
@@ -1473,6 +1475,7 @@ describe('顺一句 tail（R1 spec §4）', () => {
     const { api, tools } = buildFakeApi();
     registerPopclawTools({
       api,
+      getToolNoticeContext: async () => ({store: {hasNoticeFor: () => unreadIds.length > 0}, active: () => true}) as any,
       runtime: vi.fn(async () => rt) as unknown as Parameters<typeof registerPopclawTools>[0]['runtime'],
     });
     return { tools, host };
@@ -1488,7 +1491,7 @@ describe('顺一句 tail（R1 spec §4）', () => {
   it('未读优先：有未读待回时不挂顺一句', async () => {
     const { tools } = registerWithSettledFacts(['e1']);
     const out = await findTool(tools, 'popclaw_show_marks').execute('c1', {});
-    expect(out.text).toContain('📬 1 条待回');
+    expect(out.text).not.toContain('📬 1 条待回');
     expect(out.text).not.toContain('顺一句');
   });
 

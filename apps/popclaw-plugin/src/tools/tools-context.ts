@@ -75,6 +75,11 @@ export interface WorldToolsDeps {
 }
 
 export interface RegisterToolsDeps {
+  /** Native roots decorate here; MCP roots decorate their final result instead. */
+  getToolNoticeContext?: (signal?: AbortSignal) => Promise<import('../notifier/tool-notice.js').ToolNoticeContext>;
+  nativeToolNotices?: boolean;
+  notificationTools?: boolean;
+
   api: {
     registerTool: (tool: unknown, opts?: unknown) => void;
     logger?: { info: (m: string) => void };
