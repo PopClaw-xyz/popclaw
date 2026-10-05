@@ -13,6 +13,7 @@ import {readParticipation} from '../../../src/runtime/house-lifecycle/participat
 import {localParticipationPort} from '../../../src/host/local-participation.js';
 import type {HouseParticipationReason, HouseParticipationAdmissionPort} from '../../../src/runtime/house-lifecycle/participation-admission.js';
 import {unstartedSessionlessHistory} from '../../../src/runtime/house-lifecycle/legacy-history.js';
+import {stageParticipationPlan} from '../../../src/runtime/house-lifecycle/participation-journal.js';
 import {houseReadAuthority} from '../../../src/identity/read-authority.js';
 import {makeRelationBindingPreparer, type PreparedRelationBinding} from '../../../src/social-graph/relation-binding.js';
 import type {HouseStore} from '../../../src/ingress/world-feed-store.js';
@@ -198,3 +199,28 @@ it.each(['extra-attempt', 'changed-own-digest'] as const)(
         .toEqual({state: 'not_committed', receipt_json: null});
     } finally { gate.resolve(); }
   });
+
+it.each(['{}', '{"origin":7}'])(
+  'refuses a retained journal with unknown intent and unprovable House ownership: %s', async planJson => {
+    const f = await fixture({start: false});
+    retainFailure(f, 'explicit_owner_join');
+    const current = retainFailure(f, 'initial_me_setup');
+    f.db.execute("UPDATE house_lifecycle_commands SET state='running',result_json=NULL WHERE request_id=?", [current.id]);
+    expect(unstartedSessionlessHistory(f.db, current.source, current.id)).toBe(true);
+    seedAttempt(f, 'unrelated-intent', 'unknown-operation');
+    f.db.execute('UPDATE house_participation_attempts SET plan_json=?', [planJson]);
+    expect(unstartedSessionlessHistory(f.db, current.source, current.id)).toBe(false);
+  });
+
+it('excludes an attempt positively assigned to another House and another intent', async () => {
+  const f = await fixture({start: false});
+  retainFailure(f, 'explicit_owner_join');
+  const current = retainFailure(f, 'initial_me_setup');
+  f.db.execute("UPDATE house_lifecycle_commands SET state='running',result_json=NULL WHERE request_id=?", [current.id]);
+  const source = f.port.capture({reason: 'explicit_owner_join', origin: 'https://other.invalid',
+    actorId: f.boot.popclawId, installationId: f.installationId})!;
+  stageParticipationPlan(f.db, source, {expectedParticipationJson: 'null', controlEvidenceJson: '{}',
+    manifestDigest: 'synthetic-manifest', bindingDigest: 'synthetic-binding', configurationDigest: 'synthetic-config',
+    ownerGeneration: 1, storageGeneration: 'synthetic-storage', beforeOpSeq: 0, afterOpSeq: 1, transitionDigest: 'synthetic-transition'});
+  expect(unstartedSessionlessHistory(f.db, current.source, current.id)).toBe(true);
+});

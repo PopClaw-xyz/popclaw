@@ -8,6 +8,7 @@ import type { HouseParticipationSource, HouseParticipationPlan } from './partici
 import { entryDigest } from './participation-journal.js';
 import { pinnedBinding } from '../../world/house-binding-pin.js';
 import { readVerifiedDeclaration } from '../../world/house-read-declaration.js';
+import { normalizeHouseOrigin } from './control-client.js';
 
 export function emptyControlState(row: ParticipationRow | null | undefined): row is ParticipationRow {
   return !!row && row.session_id === '' && row.ack_key_hex === '' && row.inbox_read_token === ''
@@ -116,11 +117,14 @@ export function unstartedSessionlessHistory(db: HostDb, source: HouseParticipati
         || r.sessionId !== '' || typeof r.errorCode !== 'string' || !UNSTARTED_CODES.has(r.errorCode)) return false;
     }
     if (!currentFound) return false;
-    const refs = [...intents];
-    // Include orphaned same-origin attempts as well as ALL operations of each
-    // retained logical intent. Malformed journal JSON fails closed in SQLite.
-    const attempts = db.queryAll<Record<string,unknown>>(`SELECT * FROM house_participation_attempts
-      WHERE original_intent_ref IN (${refs.map(() => '?').join(',')}) OR json_extract(plan_json,'$.origin')=?`,[...refs,origin]);
+    const attempts: Record<string,unknown>[] = [];
+    // Validate ownership before excluding other Houses: valid JSON without a
+    // canonical origin is still unknown history, never evidence of absence.
+    for (const a of db.queryAll<Record<string,unknown>>('SELECT * FROM house_participation_attempts')) {
+      const p = jsonObject(a.plan_json);
+      if (!p || typeof p.origin !== 'string' || normalizeHouseOrigin(p.origin) !== p.origin) return false;
+      if (intents.has(a.original_intent_ref as string) || p.origin === origin) attempts.push(a);
+    }
     if (!ownPlan) return attempts.length === 0;
     return attempts.length === 1 && attempts.every(a => a.attempt_ref === ownPlan.attemptRef
       && a.admission_request_key === ownPlan.admissionRequestKey && a.plan_digest === ownPlan.planDigest
