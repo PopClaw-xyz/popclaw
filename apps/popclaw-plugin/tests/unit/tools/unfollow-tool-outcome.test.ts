@@ -34,11 +34,13 @@ function setup(candidates: ResolveCandidate[] = [ELON]) {
     },
     logger: { info: vi.fn() },
   } as Parameters<typeof registerPopclawTools>[0]['api'];
+  const pendingHouseGuides = vi.fn(async () => []);
   const runtime = vi.fn(async () => ({
     boot: { popclawId: OWNER, loreHouseUrls: [] as string[] },
     socialGraph: { following: () => [{ popclawId: 'id_elon' }] },
     bondsStore: {},
     paths: { houseHandshakeFile: () => '/nonexistent/handshake.json' },
+    houseRuntime: { pendingHouseGuides },
   }));
   const resolve = vi.fn(async () => candidates);
   registerPopclawTools({
@@ -54,7 +56,7 @@ function setup(candidates: ResolveCandidate[] = [ELON]) {
       }) as never,
   });
   const tool = tools.find((t) => t.name === 'popclaw_unfollow')!;
-  return { unfollow: (name: string) => tool.execute('cid', { name }), runtime, resolve };
+  return { unfollow: (name: string) => tool.execute('cid', { name }), runtime, resolve, pendingHouseGuides };
 }
 
 const rerendered = (house?: string) =>
@@ -106,17 +108,15 @@ describe('popclaw_unfollow adapter: branches on the command outcome (R5-A1)', ()
     expect(r.text).toBe('✓ looks like success');
   });
 
-  it('call shape unchanged: one resolve, one command call with the owner id, runtime acquisitions include pending guide delivery', async () => {
+  it('call shape unchanged: one resolve, one command call with the owner id, and pending guides checked', async () => {
     command.mockResolvedValue({ text: '✓ x', house: undefined, outcome: { kind: 'accepted' } });
-    const { unfollow, runtime, resolve } = setup();
+    const { unfollow, pendingHouseGuides, resolve } = setup();
     await unfollow('#4f68bd');
     expect(resolve).toHaveBeenCalledTimes(1);
     expect(command).toHaveBeenCalledTimes(1);
     expect(command.mock.calls[0]![0]).toBe('id_elon');
     expect(command.mock.calls[0]![1]).toMatchObject({ ownPopclawId: OWNER });
-    // Measured at base 7e63b1e3 (person sources, both ownerPopclawId reads, the
-    // command's runtime()) plus the accepted pending-house-guide tail read.
-    expect(runtime).toHaveBeenCalledTimes(7);
+    expect(pendingHouseGuides).toHaveBeenCalledOnce();
   });
 
   it('owner resolved: refused before the runtime is acquired for the command', async () => {

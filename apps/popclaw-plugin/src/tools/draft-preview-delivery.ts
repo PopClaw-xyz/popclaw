@@ -42,7 +42,7 @@
  */
 
 import { ownerApprovalOriginRefusal, type OwnerApprovalOriginRefusal } from '../host/owner-approval.js';
-import { renderCopy } from '../lexicon/index.js';
+import { renderCopy, type Lang } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { getOrCreatePerProcess, resetSingletonForTest } from '../runtime/once.js';
 
@@ -346,26 +346,32 @@ export function previewDeliveryNote(outcome: PreviewDeliveryOutcome): string {
  * It lives here rather than in write-tools.ts because the feedback tool mints
  * drafts too (2026-09-21): one wording, so the doors cannot drift apart.
  */
-export const SEND_APPROVAL_DISCIPLINE =
+export function sendApprovalDiscipline(lang: Lang = ownerLang()): string {
+  return (
   'Before requesting approval, explain that sending requires a separate host confirmation. ' +
   'On OpenClaw, ask the owner to use an approval control only if the host offers it, or send the complete /approve command shown by the host, with its actual request ID and allow-once decision. ' +
   'On MCP, ask the owner to use that client\'s actual approval dialog; do not suggest OpenClaw commands. ' +
   'Never submit approval on the owner\'s behalf. ' +
-  'Ordinary chat replies such as "发", "Allow" or "Allow（放行）" do not approve a pending host request. ' +
+  renderCopy(lang, 'sendDraft.approval.ordinaryReplies') + ' ' +
   'Do not submit another send call while this one is waiting; wait for its result. ' +
   'Without a tool result, report the send outcome as unknown; never invent expiry, cancellation or delivery, and never retry automatically. ' +
   'Only an explicit failed tool result followed by a fresh owner request permits another attempt; never reuse an old approval. ' +
-  'Never tell the owner it was sent until this tool returns a successful send receipt.';
+  'Never tell the owner it was sent until this tool returns a successful send receipt.'
+  );
+}
 
-export const CONFIRM_DISCIPLINE =
+export function confirmDiscipline(lang: Lang = ownerLang()): string {
+  return (
   'Show the draft above to the owner word for word; ' +
   'only after the owner has explicitly said to send it, hand the draft_id above to popclaw_send_draft; never call it before that confirmation. ' +
   'Never shorten or omit the body. If the channel cannot show the complete draft, do not send it; explain the limitation and arrange a complete preview first. ' +
   'popclaw_send_draft asks the owner to approve this exact draft before sending. ' +
-  SEND_APPROVAL_DISCIPLINE;
+  sendApprovalDiscipline(lang)
+  );
+}
 
 /** preview + confirmation discipline + (when attempted) the honest delivery note. */
 export function draftResultText(preview: string, outcome: PreviewDeliveryOutcome): string {
   const note = previewDeliveryNote(outcome);
-  return preview + '\n' + CONFIRM_DISCIPLINE + (note ? `\n\n${note}` : '');
+  return preview + '\n' + confirmDiscipline() + (note ? `\n\n${note}` : '');
 }

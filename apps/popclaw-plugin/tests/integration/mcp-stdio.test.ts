@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { LocalHostDb } from '../../src/host/local-host-db.js';
 import { seedTrustedHouse } from '../helpers/seed-trusted-house.js';
 import { renderCopy } from '../../src/lexicon/index.js';
+import type { ToolNotice } from '../../src/notifier/tool-notice.js';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 /** Unroutable on purpose: every lore-house call must fail during this test. */
@@ -248,7 +249,8 @@ describe('popclaw MCP server over stdio', () => {
  * unread count must RIDE a normal tool result and the owner must be able to
  * pull the items. Both halves are asserted at the wire: the notice is its OWN
  * content block after the primary result (never concatenated), a clean queue
- * appends nothing, the tool drains, and stdout stays pure JSON-RPC throughout.
+ * appends nothing, reads preserve pending items until explicit ACK, and stdout
+ * stays pure JSON-RPC throughout.
  */
 describe('MCP unread piggyback + notifications tool', () => {
   let dataRoot: string;
@@ -268,10 +270,15 @@ describe('MCP unread piggyback + notifications tool', () => {
   });
 
   type Block = { type: string; text: string };
-  // The piggyback is identified by its pointer suffix, NOT by 📬 — the
-  // notifications tool's own body also opens with 📬.
+  const noticeOf = (block: Block): ToolNotice | null => {
+    if (block.type !== 'text') return null;
+    try {
+      const data = JSON.parse(block.text.split('\n').at(-1)!);
+      return data?.type === 'popclaw_notification_notice' ? data : null;
+    } catch { return null; }
+  };
   const hasPiggyback = (content: Block[]): boolean =>
-    content.some((b) => b.text.includes('调 popclaw_notifications 查看'));
+    content.some((b) => noticeOf(b) !== null);
 
   const callStatus = async (): Promise<Block[]> => {
     const res = await mcp.request('tools/call', { name: 'popclaw_check_status', arguments: {} });
@@ -307,7 +314,17 @@ describe('MCP unread piggyback + notifications tool', () => {
     // The notice is a SEPARATE trailing block — 2 L1 + 1 L2, L3 excluded.
     const notice = content[content.length - 1]!;
     expect(notice.type).toBe('text');
-    expect(notice.text).toBe('📬 2 条新私信/提及待看，1 条动态 —— 调 popclaw_notifications 查看');
+    expect(noticeOf(notice)).toMatchObject({
+      version: 1, type: 'popclaw_notification_notice',
+      counts: { L1: 2, L2: 1 }, more: 0, suggested_next: 'ask_owner',
+      items: [
+        { notification_id: 1, level: 'L1', kind: 'dm' },
+        { notification_id: 2, level: 'L1', kind: 'ranger_verify_done' },
+        { notification_id: 3, level: 'L2', kind: 'followed_you' },
+      ],
+    });
+    expect(content.filter((block) => noticeOf(block))).toHaveLength(1);
+    expect(notice.text).not.toContain('在吗');
     expect(content.length).toBeGreaterThan(1);
   }, 30_000);
 
@@ -316,9 +333,36 @@ describe('MCP unread piggyback + notifications tool', () => {
     const content = res.result?.['content'] as Block[];
     expect(content[0]?.text).toContain('私信');
     expect(content[0]?.text).toContain('新粉');
-    expect(hasPiggyback(content)).toBe(true);
+    // Explicit reads are not decorated or cooled down, and are not ACK.
+    expect(hasPiggyback(content)).toBe(false);
     const metadata = JSON.parse(content[0]!.text.split('\n').at(-1)!);
-    await mcp.request('tools/call', { name: 'popclaw_acknowledge_notifications', arguments: { notification_ids: metadata.notifications.map((n: { notification_id: number }) => n.notification_id) } });
+    expect(metadata.acknowledgement).toBe('explicit_tool_only');
+    const ids = metadata.notifications.map((n: { notification_id: number }) => n.notification_id);
+    expect(ids).toEqual([1, 2, 3]);
+    const again = await mcp.request('tools/call', { name: 'popclaw_notifications', arguments: {} });
+    const repeated = again.result?.['content'] as Block[];
+    expect(JSON.parse(repeated[0]!.text.split('\n').at(-1)!).notifications).toEqual(metadata.notifications);
+    const db = new LocalHostDb(socialDb());
+    try {
+      const states = () => db.queryAll<{ id: number; acknowledged_at: number | null; delivered_at: number | null }>(
+        `SELECT q.id, r.acknowledged_at, q.delivered_at FROM notification_queue q
+         JOIN notification_receipts r ON r.notification_id = q.id
+         WHERE r.consumer_id = ? AND q.level IN ('L1','L2') ORDER BY q.id`, [metadata.consumer_id]);
+      expect(states()).toEqual(ids.map((id: number) => ({ id, acknowledged_at: null, delivered_at: null })));
+      const ack = await mcp.request('tools/call', { name: 'popclaw_acknowledge_notifications', arguments: { notification_ids: ids } });
+      expect(ack.result?.['isError']).toBeFalsy();
+      const ackContent = ack.result?.['content'] as Block[];
+      expect(hasPiggyback(ackContent)).toBe(false);
+      expect(JSON.parse(ackContent[0]!.text)).toEqual({ consumer_id: metadata.consumer_id, acknowledged: ids });
+      expect(states()).toHaveLength(ids.length);
+      for (const row of states()) {
+        expect(row.acknowledged_at).toBeGreaterThan(0);
+        expect(row.delivered_at).toBeNull();
+      }
+    } finally { db.close(); }
+    const empty = await mcp.request('tools/call', { name: 'popclaw_notifications', arguments: {} });
+    const emptyContent = empty.result?.['content'] as Block[];
+    expect(JSON.parse(emptyContent[0]!.text.split('\n').at(-1)!).notifications).toEqual([]);
     expect(hasPiggyback(await callStatus())).toBe(false);
   }, 30_000);
 

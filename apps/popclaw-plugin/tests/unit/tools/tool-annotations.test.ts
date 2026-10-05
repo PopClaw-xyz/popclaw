@@ -98,7 +98,7 @@ const READ_LOOKING_WRITES = [
   'popclaw_show_inbox', // marks a message retrieved; resolve_message_id closes it
   'popclaw_show_pings', // marks the shown batch read
   'popclaw_show_dream_review', // marks the shown bond dynamics reported
-  'popclaw_notifications', // drains / acknowledges settled items
+  'popclaw_notifications', // records offered IDs; acknowledgement is a separate tool
   'popclaw_author_latest', // writes `person_asked` into the permanent social log
   'popclaw_newspaper', // mints candidate / publish ledger entries
   'popclaw_dream', // records the owner-language observation and mints a dream token
@@ -108,13 +108,14 @@ beforeEach(() => { resetOwnerApprovals(); });
 afterEach(() => { resetOwnerApprovals(); });
 
 describe('tool annotations table', () => {
-  it('has exactly one entry per tool either root can list, plus the MCP-only pair', () => {
+  it('has exactly one entry per tool either root can list', () => {
     const surface = new Set([...registerAs('mcp'), ...registerAs('native'), ...MCP_ONLY_TOOLS]);
     expect(Object.keys(TOOL_ANNOTATIONS).sort()).toEqual([...surface].sort());
   });
 
-  it('keeps all 52 shared tools in the OpenClaw manifest, including recovery, annotated', () => {
-    expect(declared).toHaveLength(52);
+  it('keeps the shared annotated tool set in the OpenClaw manifest, including recovery and notifications', () => {
+    const shared = Object.keys(TOOL_ANNOTATIONS).filter((name) => !MCP_ONLY_TOOLS.includes(name));
+    expect([...declared].sort()).toEqual(shared.sort());
     for (const name of declared) expect(toolAnnotations(name), name).toBeDefined();
     for (const name of MCP_ONLY_TOOLS) expect(declared).not.toContain(name);
   });

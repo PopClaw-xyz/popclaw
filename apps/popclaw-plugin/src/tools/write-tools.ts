@@ -35,7 +35,7 @@ import {
 import { resolvePostRef, type PostRefSources } from '../world/post-ref.js';
 import { type RegisterToolsDeps, type ToolsCtx } from './tools-context.js';
 import { ownerPopclawId, resolvePersonRef } from './person-sources.js';
-import { CONFIRM_DISCIPLINE, SEND_APPROVAL_DISCIPLINE, deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
+import { confirmDiscipline, sendApprovalDiscipline, deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
 import { consumeOwnerApproval, registerOwnerApprovalSubject } from '../host/owner-approval.js';
 import { REFUSE_REVIEW_COPY, SEND_DRAFT_TOOL, sendDraftApprovalSubject, sendDraftRefusalText } from './send-draft-subject.js';
 import { withDraftReview } from './draft-review.js';
@@ -138,7 +138,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
     description:
       'Draft a popclaw-native reply to a social-media post. Returns a draft preview and a draft_id. ' +
       BODY_OWNERSHIP +
-      CONFIRM_DISCIPLINE,
+      confirmDiscipline('en'),
     parameters: DraftReplySchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { platform: string; post_id: string; body: string };
@@ -212,7 +212,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       'To reply, first read popclaw_show_inbox with message_id, then set reply_to_message_id here to pin the sender and house. ' +
       'For a picture-only DM (a sticker/meme) just omit body entirely, no need to force a sentence. ' +
       BODY_OWNERSHIP +
-      CONFIRM_DISCIPLINE,
+      confirmDiscipline('en'),
     parameters: DraftMessageSchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { recipient?: string; reply_to_message_id?: number; house?: string; body?: string; attachment_path?: string; image_path?: string };
@@ -366,7 +366,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       'Use reply_to_event_id for a pure reply (hidden from follower feed); use quote_of_event_id ' +
       'for an embedded-quote post (shown in feed with original card).' +
       BODY_OWNERSHIP +
-      CONFIRM_DISCIPLINE,
+      confirmDiscipline('en'),
     parameters: PopclawDraftPostSchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { body: string; reply_to_event_id?: string; quote_of_event_id?: string };
@@ -502,7 +502,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       'draft_id is the id returned by any popclaw_draft_* tool — it already knows which kind it is sending. ' +
       'Calling this does NOT send: the host asks the owner about this draft and sends only on their answer, ' +
       'and the answer is bound to the exact recipient and text of that draft, so a draft that changed after they read it is refused. ' +
-      'Read back what it returns, word for word. ' + SEND_APPROVAL_DISCIPLINE,
+      'Read back what it returns, word for word. ' + sendApprovalDiscipline('en'),
     parameters: ConfirmDraftSchema,
     execute: async (callId: string, params: unknown) => {
       const { draft_id } = params as { draft_id: string };

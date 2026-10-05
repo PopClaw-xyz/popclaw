@@ -81,7 +81,9 @@ describe.each(['zh-CN', 'en-US'])('complete draft confirmation in %s', (language
     expect(result.text).toContain('only after the owner has explicitly said to send');
     // The real draft result must distinguish intent from the host decision,
     // before the model asks the owner to use an approval control.
-    expect(result.text).toContain('Ordinary chat replies such as "发", "Allow" or "Allow（放行）" do not approve');
+    expect(result.text).toContain(language === 'zh-CN'
+      ? '普通聊天回复“发”、“Allow”或“Allow（放行）”不能批准'
+      : 'Ordinary chat replies such as "send", "Allow" or "Allow (approve)" do not approve');
     expect(result.text).toContain('complete /approve command shown by the host');
     expect(result.text).toContain('Never submit approval on the owner\'s behalf');
     expect(result.text).toContain('Do not submit another send call while this one is waiting');

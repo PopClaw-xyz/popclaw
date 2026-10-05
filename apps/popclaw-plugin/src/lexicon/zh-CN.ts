@@ -1213,6 +1213,7 @@ export const ZH_CN: Lexicon = {
     'sendDraft.approval.escapedInvisibleShort': '\u2039U+XXXX\u203a＝隐形字符或原文 \u2039',
     'sendDraft.approval.previewedAt': '{when} 已推到你的预览',
     'sendDraft.approval.notPreviewed': '没推到你的预览',
+    'sendDraft.approval.ordinaryReplies': '普通聊天回复“发”、“Allow”或“Allow（放行）”不能批准等待中的宿主请求。',
     'sendDraft.refused.denied': '没有发出：主人没有批准（选了拒绝，或没勾选就提交了）。草稿还在——问清楚是照原样发还是要改什么，需要就重拟一份，再请他过目。',
     'sendDraft.refused.timeout': '没有发出：确认窗口在收到回答之前就关闭了。什么都没发，草稿还在。如果确认对话框还开着，现在点同意也不会发出——问主人要不要发，再重新发送一次。(reason: OWNER_APPROVAL_TIMED_OUT_BEFORE_ANSWER)',
     'sendDraft.refused.dialogCancelled': '没有发出：确认对话框没有回答就被关掉了，所以什么都没发。草稿还在——问主人要不要发，再重新发送一次。',

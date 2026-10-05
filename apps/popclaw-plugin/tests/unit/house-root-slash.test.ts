@@ -4,7 +4,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const seam = vi.hoisted(() => ({ runtime: vi.fn() }));
-vi.mock('../../src/runtime/once.js', () => ({ getOrCreatePerProcess: seam.runtime }));
+vi.mock('../../src/runtime/once.js', async (original) => {
+  const actual = await original<typeof import('../../src/runtime/once.js')>();
+  return {
+    ...actual,
+    getOrCreatePerProcess: (key: string, factory: () => unknown) =>
+      key === 'runtime' ? seam.runtime() : actual.getOrCreatePerProcess(key, factory),
+  };
+});
 vi.mock('../../src/lexicon/owner-language.js', async (original) => ({
   ...await original<typeof import('../../src/lexicon/owner-language.js')>(),
   ownerLang: () => 'en', observeOwnerText: vi.fn(),

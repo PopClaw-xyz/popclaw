@@ -64,7 +64,8 @@ const WRITE_REMOTE: PopclawToolAnnotations = { readOnlyHint: false, destructiveH
 const RETRACT_REMOTE: PopclawToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true };
 
 /** Listed by `src/mcp.ts` only: inside an MCP host PopClaw cannot push notices, so the agent pulls them. */
-export const MCP_ONLY_TOOLS = ['popclaw_notifications', 'popclaw_acknowledge_notifications'] as const;
+// Notifications and explicit acknowledgement are now shared with native hosts.
+export const MCP_ONLY_TOOLS: readonly string[] = [];
 
 export const TOOL_ANNOTATIONS: Readonly<Record<string, PopclawToolAnnotations>> = Object.freeze({
   // --- reads ---

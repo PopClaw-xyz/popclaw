@@ -1490,6 +1490,7 @@ export const EN: Lexicon = {
     'sendDraft.approval.escapedInvisibleShort': '\u2039U+XXXX\u203a = hidden char or literal \u2039',
     'sendDraft.approval.previewedAt': 'in your preview since {when}',
     'sendDraft.approval.notPreviewed': 'not sent to your preview',
+    'sendDraft.approval.ordinaryReplies': 'Ordinary chat replies such as "send", "Allow" or "Allow (approve)" do not approve a pending host request.',
     'sendDraft.refused.denied':
       'Not sent: the owner did not approve it (declined, or submitted without ticking the box). The draft is still here — ask them whether to send it as it is or what to change, redraft if needed, and offer it again.',
     'sendDraft.refused.timeout':
