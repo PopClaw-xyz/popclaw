@@ -406,10 +406,10 @@ export function gatewayRuntimePorts(input: {
         // install echo (the marker is only written back on a real delivery; an
         // undelivered alert retries on the next boot). Equally fire-and-forget:
         // one possibly-hanging channel delivery must not stall boot (ADR-0035).
-        integrityTask = (async () => {
+        void (async () => {
           try {
             const integrityFile = paths.dbIntegrityFile();
-            const findings = await runIntegrityChecksInProcess({
+            const scan = runIntegrityChecksInProcess({
               dbs: [
                 { label: 'social', path: localDatabasePath(host.db) ?? paths.socialDb() },
                 ...houseStores.map((h) => ({ label: `lorehouse:${h.slug}`, path: localDatabasePath(h.db) ?? paths.lorehouseDb(h.slug) })),
@@ -421,17 +421,24 @@ export function gatewayRuntimePorts(input: {
               onError: (label, err) =>
                 api.logger.warn(`popclaw: integrity check skipped [${label}]: ${String(err)}`),
             });
+            // Only the scanner owns a DB-drain resource. Owner-channel delivery
+            // stays fire-and-forget, as before; an unavailable channel must not
+            // hold shutdown after the child has closed its read handles.
+            integrityTask = scan.then(() => undefined, () => undefined)
+              .finally(() => { integrityTask = undefined; });
+            const findings = await scan;
             if (integrityAbort.signal.aborted || findings.length === 0) return;
             const text = integrityAlertText(findings, paths.backupsDir(), ownerLang());
             // The host's warn/error land on stderr → /dev/null; info is the
             // only channel proven to reach gateway.log (visible-logger.ts). This
             // line must leave a trace, so it goes straight to info.
             api.logger.info(`popclaw: ⚠️ DB INTEGRITY ALERT — ${text.replace(/\n/g, ' | ')}`);
-            if (await ownerNotifier!.deliverNow(text)) markIntegrityAnnounced(integrityFile, findings);
+            const delivered = await ownerNotifier!.deliverNow(text);
+            if (delivered && !integrityAbort.signal.aborted) markIntegrityAnnounced(integrityFile, findings);
           } catch (err) {
             api.logger.warn(`popclaw: integrity check failed (non-fatal): ${String(err)}`);
           }
-        })().finally(() => { integrityTask = undefined; });
+        })();
       },
       migrateLegacyFiles: ({ paths, marksStore }) => {
         // One-shot migration: retire favorites.jsonl → marks table (ADR-0019).
