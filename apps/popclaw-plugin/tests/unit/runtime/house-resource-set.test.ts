@@ -3,6 +3,32 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HouseGate } from '../../../src/runtime/house-lifecycle/manager.js';
 import type { HouseStore } from '../../../src/ingress/world-feed-store.js';
 import { createHouseStreamFactory } from '../../../src/runtime/house-lifecycle/resource-set.js';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
+import { popclaw } from '@popclaw/contracts';
+import { LocalHostDb } from '../../../src/host/local-host-db.js';
+import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
+import { ExecutionStoreCatalog } from '../../../src/host/execution-store.js';
+import { openWorldFeedStore } from '../../../src/ingress/world-feed-store.js';
+import { WorldFeedCache } from '../../../src/ingress/world-feed-cache.js';
+import { item } from '../../helpers/world-feed-cache.js';
+import { runMigrations } from '../../../src/host/migrations.js';
+import { InboxStore } from '../../../src/messaging/inbox-store.js';
+import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
+import { signDirectMessage } from '../../../src/messaging/sign-message.js';
+import { makeInboxOnMessage } from '../../../src/runtime/inbox-consumer.js';
+import { makeDmNotificationPolicy } from '../../../src/runtime/dm-notification-policy.js';
+import { SqliteNotifier } from '../../../src/notifier/sqlite-notifier.js';
+import { notifyOwnerNow, type OwnerNotifier } from '../../../src/notifier/owner-notifier.js';
+
+function syntheticSigner(seedByte: number) {
+  const seed = new Uint8Array(32).fill(seedByte);
+  const key = nacl.sign.keyPair.fromSeed(seed);
+  return new MasterKeySigner({ seed, ...key, popclawId: bs58.encode(key.publicKey) });
+}
 
 const mocks = vi.hoisted(() => ({ worlds: [] as any[], inboxes: [] as any[] }));
 vi.mock('../../../src/ingress/public-world-stream-client.js', () => ({
@@ -41,6 +67,106 @@ function options(overrides: Record<string, unknown> = {}) {
     isOfficialActor: () => true, ...overrides };
 }
 beforeEach(() => { mocks.worlds.length = 0; mocks.inboxes.length = 0; });
+
+describe('ordinary inbox with a protected legacy world cache', () => {
+  it.each(['image/png', 'audio/wav', 'text/plain'])('decrypts and queues %s mail without writing the old house DB', async mime => {
+    const root = mkdtempSync(join(tmpdir(), 'readonly-social-'));
+    const paths = new PopclawPaths(root);
+    const origin = 'https://house.example.test';
+    const slug = 'house-example-test';
+    const sender = syntheticSigner(161), recipient = syntheticSigner(14);
+    const senderId = await sender.popclawId(), recipientId = await recipient.popclawId();
+    const legacy = new LocalHostDb(paths.lorehouseDb(slug));
+    const oldCache = new WorldFeedCache({ db: legacy });
+    await oldCache.start();
+    oldCache.record(item({ platformPostId: 'old' }));
+    oldCache.recordInsertCursor('31');
+    legacy.execute('CREATE TABLE world_stream(seq INTEGER PRIMARY KEY, task_done INTEGER)');
+    legacy.execute('INSERT INTO world_stream VALUES(31,1)');
+    legacy.close();
+    const before = readFileSync(paths.lorehouseDb(slug));
+    const global = new LocalHostDb(join(root, 'social.db'));
+    runMigrations(global, resolve('migrations'));
+    const catalog = new ExecutionStoreCatalog({ db: global, paths, actorId: recipientId });
+    const house = await openWorldFeedStore(origin, paths, undefined, catalog);
+    const captured = gate(origin);
+    const inbox = new InboxStore(global);
+    const notifier = new SqliteNotifier(global);
+    const events: unknown[] = [];
+    const policy = makeDmNotificationPolicy({
+      inbox, notifier, graph: { following: () => [{ popclawId: senderId }] },
+      verdictOf: () => ({ blocked: false }), vipThreshold: 0, nameOf: () => 'Synthetic Sender',
+      gateForHouse: () => captured,
+    });
+    const consume = makeInboxOnMessage({
+      signer: recipient, inboxStore: inbox, dmMediaDir: () => join(root, 'media'),
+      socialLog: { record: event => { events.push(event); } }, info: () => {}, warn: () => {},
+      onPlainDm: ({ item }) => policy.handle(item),
+    });
+    const refresh = vi.fn(), ranger = vi.fn(), attach = vi.fn(async () => ({ ok: true }));
+    const resource = createHouseStreamFactory(options({
+      host: { db: global }, signer: recipient, recipientPopclawId: recipientId,
+      storeFor: async () => house, refresh, createRanger: ranger, attachRelations: attach,
+      onInbox: (h: HouseStore, _gate: HouseGate, dm: popclaw.event.IDirectMessage, bytes: Uint8Array, nickname: string) =>
+        consume(dm, h.slug, bytes, nickname),
+    })).open(captured);
+    try {
+      expect(house.cacheReadOnly).toBe(true);
+      expect(house.executionError).toContain('EXECUTION_MIGRATION_REQUIRED');
+      await vi.waitFor(() => expect(mocks.inboxes).toHaveLength(1));
+      expect(mocks.worlds).toHaveLength(0);
+      expect(refresh).not.toHaveBeenCalled();
+      expect(ranger).not.toHaveBeenCalled();
+      expect(attach).toHaveBeenCalledOnce();
+      const media = new Uint8Array([1, 2, 3, 4]);
+      const signed = await signDirectMessage(sender, {
+        toPopclawId: recipientId, body: 'PopClaw integration test', nickname: 'Synthetic Sender', ts: 1234,
+        media: { bytes: media, mime },
+      });
+      const payload = popclaw.identity.SignedPayload.decode(signed.signedPayloadBytes);
+      const env = popclaw.event.EventEnvelope.decode(payload.payload);
+      // The transport boundary alone is mocked; production decryption,
+      // persistence, replay dedupe and notification policy run below it.
+      for (let replay = 0; replay < 2; replay++) {
+        await mocks.inboxes[0].opts.onMessage(env.directMessage!, payload.payload, 'Synthetic Sender');
+      }
+      const rows = inbox.recent(10);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.body).toBe('PopClaw integration test');
+      expect(rows[0]!.hasMedia).toBe(true);
+      expect(Buffer.from(rows[0]!.envelopeBytes!)).toEqual(Buffer.from(payload.payload));
+      expect(readFileSync(rows[0]!.mediaPath!)).toEqual(Buffer.from(media));
+      expect(events).toHaveLength(1);
+      expect(global.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM notification_queue')!.n).toBe(1);
+      const delivery = vi.fn(async () => true);
+      const target = vi.fn(async () => ({ deliveryContext: { channel: 'telegram', to: 'synthetic-owner' } }));
+      expect(await notifyOwnerNow({
+        notifier, owner: { deliverNow: delivery } as unknown as OwnerNotifier,
+        resolveTarget: target, logger: { info: () => {}, warn: () => {} },
+      })).toBe('channel');
+      expect(target).toHaveBeenCalledOnce();
+      expect(delivery).toHaveBeenCalledOnce();
+      expect(delivery.mock.calls[0]).toBeDefined();
+      expect(house.cache.recent(10).map(row => row.platformPostId)).toEqual(['old']);
+      expect(house.cache.insertCursor()).toBe(31);
+      expect(house.db.queryAll('SELECT * FROM world_stream')).toEqual([{ seq: 31, task_done: 1 }]);
+      expect(readFileSync(paths.lorehouseDb(slug))).toEqual(before);
+      captured.abort.abort();
+      await resource.stop();
+      const late = await signDirectMessage(sender, {
+        toPopclawId: recipientId, body: 'Late synthetic mail', nickname: 'Synthetic Sender', ts: 1235,
+      });
+      const latePayload = popclaw.identity.SignedPayload.decode(late.signedPayloadBytes);
+      const lateEnv = popclaw.event.EventEnvelope.decode(latePayload.payload);
+      await mocks.inboxes[0].opts.onMessage(lateEnv.directMessage!, latePayload.payload, 'Synthetic Sender');
+      expect(inbox.recent(10)).toHaveLength(1);
+      expect(events).toHaveLength(1);
+    } finally {
+      await resource.stop(); house.db.close(); catalog.close(); global.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('shared per-house resource set', () => {
   it('opens both streams with the same captured gate and only tears down A', async () => {

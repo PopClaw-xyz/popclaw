@@ -143,7 +143,9 @@ export function registerWriteTools(ctx: ToolsCtx): void {
     socialToolFactory(deps.socialSendHost, (toolCtx: unknown) => ({
     name: 'popclaw_draft_reply',
     description:
-      'Draft a popclaw-native reply to a social-media post. Returns a draft preview and a draft_id. ' +
+      'Draft a reply to an external-platform post on X, Instagram, TikTok, or YouTube using its platform and post_id. ' +
+      'For a PopClaw-native post, use popclaw_draft_post with body and reply_to_event_id instead. ' +
+      'Returns a draft preview and a draft_id. ' +
       BODY_OWNERSHIP +
       confirmDiscipline('en'),
     parameters: DraftReplySchema,

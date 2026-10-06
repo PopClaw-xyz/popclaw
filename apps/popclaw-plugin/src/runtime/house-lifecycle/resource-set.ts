@@ -187,11 +187,14 @@ class HouseResourceSet implements PerHouseStreams {
 
   private async start(): Promise<void> {
     const house = await this.opts.storeFor(this.gate.origin);
-    if (!this.gate.isActive() || house.cacheReadOnly) return;
-    await this.refreshHandshake(house);
+    if (!this.gate.isActive()) return;
+    // A protected public cache does not own ordinary mail or relations:
+    // those commit in the global social store under this same live gate.
+    if (!house.cacheReadOnly) await this.refreshHandshake(house);
+    else this.opts.log?.(`house cache (${house.slug}): read-only; continuing ordinary inbox`);
     if (!this.gate.isActive()) return;
     const onContent = (item: popclaw.event.IWorldFeedItem, bytes?: Uint8Array, cursor?: string) => {
-      if (!this.gate.isActive()) return;
+      if (!this.gate.isActive() || house.cacheReadOnly) return;
       withAction(this.gate, () => {
         house.cache.record(item, bytes);
         if (cursor !== undefined) house.cache.recordInsertCursor(cursor);
@@ -208,7 +211,10 @@ class HouseResourceSet implements PerHouseStreams {
       // because those happen to BE Errors. Same describer the multi-house
       // inbox lane already uses (runtime/inbox-consumer.ts).
       onError: (err: unknown) => this.opts.log?.(`house stream (${house.slug}): ${describeSseError(err)}`) };
-    if (this.opts.publicV1Mode) {
+    if (house.cacheReadOnly) {
+      // No public/cache writer or execution-dependent receiver on this path.
+      // Execution readiness remains separate from ordinary inbox readiness.
+    } else if (this.opts.publicV1Mode) {
       // The independently captured resident public slot owns this transport.
       // A real business gate may still open its separate inbox below.
     } else if (this.opts.worldStreamMode) {
@@ -266,7 +272,7 @@ class HouseResourceSet implements PerHouseStreams {
     // Published before the first read, so a reset that arrives on the very
     // first connection can still be judged against a known serial.
     this.opts.onTransport?.(house, this.inbox);
-    if (!this.opts.publicV1Mode && this.opts.createRanger) {
+    if (!house.cacheReadOnly && !this.opts.publicV1Mode && this.opts.createRanger) {
       const ingress = this.opts.worldStreamMode ? this.world as PublicHouseReceiver : this.discovery!;
       this.ranger = this.opts.createRanger(house, this.gate, ingress);
     }
@@ -278,7 +284,7 @@ class HouseResourceSet implements PerHouseStreams {
     if (!this.gate.isActive()) return;
     if (this.ranger) await this.ranger.start();
     if (!this.gate.isActive()) return;
-    if (this.opts.refresh) {
+    if (!house.cacheReadOnly && this.opts.refresh) {
       this.refreshTimer = setInterval(() => { void this.track(() => this.refreshHandshake(house)); }, this.opts.refreshMs ?? 60_000);
       this.refreshTimer.unref?.();
     }

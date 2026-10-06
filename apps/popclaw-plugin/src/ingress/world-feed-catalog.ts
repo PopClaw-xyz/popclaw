@@ -229,7 +229,7 @@ export class WorldFeedCatalog implements WorldFeedReader, SnapshotSource {
 
   /**
    * Pull each house's live snapshot concurrently and merge. Whatever comes
-   * back lands straight into **that house's own** cache while we're at it
+   * back lands straight into **that house's own** writable cache while we're at it
    * (backstopping anything SSE missed, so attribution never gets crossed).
    * A single unreachable house only logs a one-line warning and doesn't take
    * the rest down; only throws if every house fails (the caller still needs
@@ -248,7 +248,7 @@ export class WorldFeedCatalog implements WorldFeedReader, SnapshotSource {
         continue;
       }
       for (const item of res.value) {
-        f.cache.record(item);
+        if (!f.cacheReadOnly) f.cache.record(item);
         const key = keyOf({
           eventId: typeof item.eventId === 'string' ? item.eventId : '',
           platform: typeof item.platform === 'string' ? item.platform : '',
