@@ -1364,6 +1364,9 @@ export const EN: Lexicon = {
     // Ordinary social-send boundaries and compatibility guidance.
     'socialSend.recipient': 'Recipient: {recipient}',
     'socialSend.sourcePreview': 'Source preview: {context}',
+    'socialSend.sourceAuthor': 'Source author: {author}',
+    'socialSend.replySource': 'Reply to message {id} (event {eventId})',
+    'socialSend.sourceUnavailable': 'Source context is unavailable for this target. Verify the target in this conversation before confirming the manuscript.',
     'socialSend.house': 'House: {house}',
     'socialSend.materialChanged': 'Not sent: the draft material changed. Show the intended new manuscript and attachments and ask the owner to confirm.',
     'socialSend.ownerRequired': 'Not sent: the current host invocation does not establish owner authority. Report the host limitation in this conversation; do not change routes or invent permission.',

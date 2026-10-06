@@ -56,6 +56,8 @@ it('two MCP processes: encrypted screenshot → durable handoff → full image �
   expect(sent).toContain('event_id:');
   expect(draft).toContain('CASE-IMG-1: fixed the Save spacing; please verify.');
   expect(draft).toContain(alice.id);
+  expect(draft).toContain(signed.eventId);
+  expect(draft).toContain('CASE-IMG-1: the Save button overlaps the warning.');
   expect(b.dialogs.length).toBe(dialogsBefore);
   const reply = [...relay.frames.values()].map((v) => popclaw.event.EventEnvelope.decode(v)).find((e) => e.actor?.popclawId === bob.id)!;
   expect(reply.directMessage?.toPopclawId).toBe(alice.id);

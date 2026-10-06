@@ -464,6 +464,7 @@ describe('C3: legacy full 64-hex ids', () => {
       reply_to_event_id: UNSEEN,
     });
     expect(draft.text).toMatch(/Draft reply post/);
+    expect(draft.text).toContain(renderCopy(ownerLang(), 'socialSend.sourceUnavailable'));
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
 
     const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);

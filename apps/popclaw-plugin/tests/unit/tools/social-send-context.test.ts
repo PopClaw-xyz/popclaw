@@ -37,6 +37,7 @@ function fixture(mode: 'native' | 'local-stdio' = 'native') {
     egress: {home: {slug: 'home'}, push, pushTo: async (_h: unknown, bytes: Uint8Array) => push(bytes)},
     bondsStore: {list: () => [{popclawId: recipient.id, nickname: 'Alice', remarkName: ''}]},
     knownFollowers: {allFollowerIds: () => [recipient.id]},
+    inboxStore: {get: () => ({fromPopclawId: recipient.id, eventId: 'cd'.repeat(32), houseSlug: 'home', body: 'Original incoming message'})},
     worldFeedCache: {lookup: () => ({handle: 'alice', authorPopclawId: recipient.id, houseSlug: 'home', textPreview: 'source'}),
       findFullEventId: () => ({ambiguous: []}), findByEventIdPrefix: () => ({item: null})},
   });
@@ -171,8 +172,17 @@ describe('material and root scope boundaries', () => {
       binding: {host: 'native', agentId: 'main', sessionId: 'session-a', sessionKey: 'agent:main:main', senderId: 'owner'}});
     await fx.call('popclaw_send_draft', {draft_id: 'invite-1'}); expect(sent).not.toHaveBeenCalled();
   });
+  it('shows the exact incoming message context before drafting a private reply', async () => {
+    const fx = fixture();
+    const result = await fx.call('popclaw_draft_message', {reply_to_message_id: 7, body: 'Reviewed private reply'});
+    expect(result.text).toContain('message 7');
+    expect(result.text).toContain('cd'.repeat(32));
+    expect(result.text).toContain('Original incoming message');
+    expect(result.text).toContain(fx.recipient.id);
+    expect(fx.pushed).toHaveLength(0);
+  });
   it('pins the post source house before its cached record changes', async () => {
-    const fx = fixture(), eventId = 'ab'.repeat(32), item = {houseSlug: 'original-house', textPreview: 'original source'};
+    const fx = fixture(), eventId = 'ab'.repeat(32), item = {houseSlug: 'original-house', textPreview: 'original source', handle: 'Original Author', authorPopclawId: fx.recipient.id};
     const runtime = await fx.runtime();
     Object.assign(runtime.worldFeedCache, {findByEventIdPrefix: () => ({item, ambiguous: []})});
     const pushedTo: unknown[] = [];
@@ -181,7 +191,11 @@ describe('material and root scope boundaries', () => {
     const api = {registerTool: (t: unknown, opts?: unknown) => definitions.set((opts as {name: string}).name, t)};
     registerWriteTools({api, runtime: async () => runtime, deps: {api, runtime: async () => runtime, socialSendHost: 'native'}, total: 4} as unknown as ToolsCtx);
     const call = (name: string, args: unknown) => (definitions.get(name) as {create(ctx: unknown): Tool}).create(turn()).execute('call', args);
-    const id = tokenOf(await call('popclaw_draft_post', {body: 'Reviewed quote', quote_of_event_id: eventId}));
+    const result = await call('popclaw_draft_post', {body: 'Reviewed quote', quote_of_event_id: eventId});
+    expect(result.text).toContain('Original Author');
+    expect(result.text).toContain(fx.recipient.id);
+    expect(result.text).toContain('original source');
+    const id = tokenOf(result);
     item.houseSlug = 'different-house';
     await call('popclaw_send_draft', {draft_id: id});
     expect(pushedTo).toEqual(['original-house']);

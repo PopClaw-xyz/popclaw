@@ -1125,6 +1125,9 @@ export const ZH_CN: Lexicon = {
     // 普通社交发送的调用边界与兼容提示。
     'socialSend.recipient': '发送对象：{recipient}',
     'socialSend.sourcePreview': '来源预览：{context}',
+    'socialSend.sourceAuthor': '来源作者：{author}',
+    'socialSend.replySource': '回复来信 {id}（事件 {eventId}）',
+    'socialSend.sourceUnavailable': '这条目标的来源上下文暂不可用。请在本聊天核对目标，再确认稿件。',
     'socialSend.house': '灯坊：{house}',
     'socialSend.materialChanged': '未发送：草稿内容或附件已改变。请展示原定的新稿件和附件，给主人确认。',
     'socialSend.ownerRequired': '未发送：当前宿主调用无法确认主人权限。请在本聊天说明宿主限制，不要更换路由或自行授予权限。',

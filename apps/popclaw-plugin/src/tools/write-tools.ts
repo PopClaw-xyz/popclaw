@@ -40,6 +40,12 @@ import { confirmDiscipline, sendResultDiscipline, deliverDraftPreview, draftResu
 import { sameSocialDraftBinding, socialDraftBinding, socialSendAssertion, socialToolFactory, withSocialSendInvocation } from '../host/social-send-context.js';
 import { peekDraftSnapshot } from './draft-store.js';
 const SEND_DRAFT_TOOL = 'popclaw_send_draft';
+/** Source context is a preview; the outbound manuscript remains complete. */
+function sourceExcerpt(value: string): string {
+  const points = [...value];
+  return points.slice(0, 200).join('') + (points.length > 200 ? '…' : '');
+}
+
 import { withDraftReview } from './draft-review.js';
 
 /**
@@ -188,7 +194,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         (snapshot.recipientLabel || snapshot.recipientId
           ? renderCopy(ownerLang(), 'socialSend.recipient', {recipient: [snapshot.recipientLabel, snapshot.recipientId].filter(Boolean).join(' ')}) + '\n' : '') +
         (snapshot.house ? renderCopy(ownerLang(), 'socialSend.house', {house: snapshot.house}) + '\n' : '') +
-        (replyItem?.textPreview ? renderCopy(ownerLang(), 'socialSend.sourcePreview', {context: replyItem.textPreview}) + '\n' : '') +
+        (replyItem?.textPreview ? renderCopy(ownerLang(), 'socialSend.sourcePreview', {context: sourceExcerpt(replyItem.textPreview)}) + '\n' : '') +
         `   "${snapshot.body}"\n\n` +
         `draft_id: ${token}`;
       const outcome = await deliverDraftPreview(toolCtx, preview);
@@ -228,8 +234,10 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       // Person resolution happens at draft time: the preview shows the owner name#sigil,
       // while the agent gets the full id. If resolution fails, no draft_id is issued — never
       // pretend it can be sent (honesty is a core principle).
-      const replySource = p.reply_to_message_id == null ? null : (await runtime()).inboxStore.get(p.reply_to_message_id);
-      if (p.reply_to_message_id != null && !replySource) throw new Error('Reply source does not exist');
+      const replyMessageId = p.reply_to_message_id;
+      const incoming = replyMessageId == null ? null : (await runtime()).inboxStore.get(replyMessageId);
+      const replySource = incoming ? {...incoming} : null;
+      if (replyMessageId != null && !replySource) throw new Error('Reply source does not exist');
       const recipient = p.recipient ?? replySource?.fromPopclawId;
       if (!recipient) throw new Error('Provide recipient or reply_to_message_id');
       const person = await resolvePersonRef(recipient, deps);
@@ -345,6 +353,8 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const preview =
         `${renderCopy(draftLang, 'draft.message.title', { who: formatPerson(pinned, draftLang) })}\n` +
         (snapshot.house ? `${renderCopy(draftLang, 'socialSend.house', { house: snapshot.house })}\n` : '') +
+        (replySource ? renderCopy(draftLang, 'socialSend.replySource', {id: String(replyMessageId), eventId: replySource.eventId ?? renderCopy(draftLang, 'draft.review.file.none')}) + '\n' : '') +
+        (replySource?.body ? renderCopy(draftLang, 'socialSend.sourcePreview', {context: sourceExcerpt(replySource.body)}) + '\n' : '') +
         `${bodyLine}${attach}${unverifiedWarning(pinned, draftLang)}${advice}\n` +
         `draft_id: ${token}`;
       const outcome = await deliverDraftPreview(toolCtx, preview);
@@ -477,6 +487,11 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         `   body:        "${snapshot.body}"`,
         targetLine,
         ...(snapshot.house ? [renderCopy(ownerLang(), 'socialSend.house', {house: snapshot.house})] : []),
+        ...(source?.handle || source?.authorPopclawId ? [renderCopy(ownerLang(), 'socialSend.sourceAuthor', {
+          author: [source.handle, source.authorPopclawId].filter(Boolean).join(' '),
+        })] : []),
+        ...(source?.textPreview ? [renderCopy(ownerLang(), 'socialSend.sourcePreview', {context: sourceExcerpt(source.textPreview)})] : []),
+        ...(targetId && (!source?.textPreview || !(source.handle || source.authorPopclawId)) ? [renderCopy(ownerLang(), 'socialSend.sourceUnavailable')] : []),
         `   draft_id: ${token}`,
       ].join('\n');
       const outcome = await deliverDraftPreview(toolCtx, preview);
