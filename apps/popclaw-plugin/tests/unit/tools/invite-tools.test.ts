@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerPopclawTools } from '../../../src/tools/register-tools.js';
 import { _draftsForTest, expiredDraftText, makeDraftToken, putDraft } from '../../../src/tools/draft-store.js';
-import { sendDraftApproved } from '../../helpers/owner-approval-script.js';
+import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { renderCopy } from '../../../src/lexicon/index.js';
 
@@ -56,7 +56,7 @@ function makeFx(opts: { taskId?: string | undefined } = {}) {
 function toolsOf(runtime: Parameters<typeof registerPopclawTools>[0]['runtime']) {
   const { api, tools } = buildFakeApi();
   // The MCP dep shape: no world/onboarding getters, no inboundMediaDirs, wallet off.
-  registerPopclawTools({ api, runtime });
+  registerPopclawTools({socialSendHost: 'local-stdio',  api, runtime });
   const find = (name: string) => {
     const t = tools.find((x) => x.name === name);
     if (!t) throw new Error(`${name} was not registered`);
@@ -248,7 +248,7 @@ describe('popclaw_invite (preview → confirm)', () => {
 
     // Even with the owner willing to approve, the wrong door stays shut: an
     // invite token carries no send snapshot, so there is nothing to approve.
-    const wrongDoor = await sendDraftApproved(find('popclaw_send_draft').execute, token);
+    const wrongDoor = await sendDraftConfirmed(find('popclaw_send_draft').execute, token);
 
     expect(fx.initiate).not.toHaveBeenCalled();
     expect(wrongDoor.text).toContain(expiredDraftText(token));

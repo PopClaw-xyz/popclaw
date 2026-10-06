@@ -165,6 +165,14 @@ export function withTail(
   return {
     ...api,
     registerTool: (tool: unknown, opts?: unknown) => {
+      const descriptor = tool as {contextVersion?: number; create?: (ctx: unknown) => unknown};
+      if (descriptor?.contextVersion === 2 && typeof descriptor.create === 'function') {
+        api.registerTool({...descriptor, create: (ctx: unknown) => {
+          const resolved = descriptor.create!(ctx);
+          return Array.isArray(resolved) ? resolved.map(wrapToolObject) : wrapToolObject(resolved);
+        }}, opts);
+        return;
+      }
       if (typeof tool !== 'function') {
         api.registerTool(wrapToolObject(tool), opts);
         return;

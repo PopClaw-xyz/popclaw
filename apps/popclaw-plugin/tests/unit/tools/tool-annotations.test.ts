@@ -156,7 +156,7 @@ describe('tool annotations table', () => {
       (name) => (consumeOwnerApproval(name, {}, 'annotation-probe') as { reason?: string }).reason !== 'SUBJECT_NOT_REGISTERED',
     );
     // The three subjects that exist today; the probe itself must be live.
-    expect(gated.sort()).toEqual(['popclaw_house_reconfirm', 'popclaw_send_draft', 'popclaw_world_invoke']);
+    expect(gated.sort()).toEqual(['popclaw_house_reconfirm', 'popclaw_world_invoke']);
     for (const name of gated) {
       expect(toolAnnotations(name)?.readOnlyHint, name).toBe(false);
       expect(toolAnnotations(name)?.openWorldHint, name).toBe(true);

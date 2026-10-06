@@ -7,7 +7,7 @@ import { registerWriteTools } from '../../../src/tools/write-tools.js';
 import type { ToolsCtx } from '../../../src/tools/tools-context.js';
 import { _draftsForTest, makeDraftToken, putDraft, takeDraft } from '../../../src/tools/draft-store.js';
 import { ActionInactiveError, assertActionActive, assertHouseActionActive, withAction, withHouseActions } from '../../../src/runtime/house-lifecycle/action-context.js';
-import { sendDraftApproved } from '../../helpers/owner-approval-script.js';
+import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
 
 afterEach(() => _draftsForTest.clear());
 
@@ -48,24 +48,38 @@ async function setup(origin?: string) {
   // host passes the session context); resolve it the way the host does.
   const api = {
     registerTool: (tool: unknown) => {
-      const resolved = typeof tool === 'function' ? (tool as (ctx: unknown) => Tool)({ agentId: 'test' }) : (tool as Tool);
+      const context = {agentId: 'test', sessionKey: 'agent:test:fixture', sessionId: 'fixture', senderIsOwner: true, assertInvocationCurrent: () => {}};
+      const descriptor = tool as {contextVersion?: number; create?: (ctx: unknown) => Tool};
+      const resolved = typeof tool === 'function' ? tool(context) : descriptor?.contextVersion === 2 ? descriptor.create!(context) : (tool as Tool);
       tools.set(resolved.name, resolved);
     },
   };
   registerWriteTools({ api, runtime, deps: { api, runtime }, total: 4 } as unknown as ToolsCtx);
   const call = (name: string, params: unknown) => tools.get(name)!.execute('test', params);
-  // Confirming now means the OWNER approving this exact draft through the
-  // owner-approval seam and the tool body then running — the model handing a
-  // draft_id back on its own sends nothing (tools/send-draft-subject.ts).
+  // The harness represents prior ordinary-chat review and confirmation; it
+  // does not prove human content consent.
   const confirm = (preview: { text: string }) => {
     const token = preview.text.match(/draft_id: (\S+)/)?.[1];
     expect(token).toBeTruthy();
-    return sendDraftApproved((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token!);
+    return sendDraftConfirmed((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token!);
   };
   return { recipient, post, source, pushed, lookup, houseOf, call, confirm, home, setHouse: (house: string | undefined) => { messageHouse = house; } };
 }
 
 describe('draft destination and action generation', () => {
+  it('shows the reply recipient and source, and pins fallback home before conversation review', async () => {
+    const fx = await setup();
+    Reflect.deleteProperty(fx.post, 'houseSlug');
+    const draft = await fx.call('popclaw_draft_reply', {platform: 'x', post_id: 'p1', body: 'Reviewed reply'});
+    expect(draft.text).toContain(fx.recipient);
+    expect(draft.text).toContain('Author A');
+    expect(draft.text).toContain('Original post');
+    expect(draft.text).toContain('house-home');
+    fx.home.slug = 'different-home';
+    await fx.confirm(draft);
+    expect(fx.pushed.map(p => p.house)).toEqual(['house-home']);
+  });
+
   it('new DM ignores the recipient history and pins home before approval', async () => {
     const fx = await setup();
     const draft = await fx.call('popclaw_draft_message', { recipient: fx.recipient, body: 'Approved message' });

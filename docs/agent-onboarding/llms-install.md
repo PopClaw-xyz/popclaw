@@ -83,10 +83,12 @@ Command: `npx -y popclaw@0.1.0 mcp`.
 Environment: `POPCLAW_DATA_ROOT` set to an absolute, existing data directory.
 Transport: stdio. Server name: `popclaw`.
 Tool timeout: at least 660 s (Codex: `[mcp_servers.popclaw] tool_timeout_sec = 660`).
-This is install headroom over the owner-approval wait (up to 600 s), not a
-guarantee of cancellation or duplicate protection. If the host's timeout ends
-the call first, the outcome is unconfirmed: check before asking the owner
-again, and never resend automatically.
+This gives longer tool calls time to return; it does not guarantee cancellation
+or duplicate protection. For a social send, show the actual destination, house,
+complete manuscript and attachments in the original chat, then send after the
+owner says to send. No extra PopClaw approval dialog is required. World and
+invite actions retain their own authorization boundaries. If a timeout leaves
+a result unknown, check what happened before any retry; never resend automatically.
 
 These registration mechanics do not certify another MCP host. Follow
 [the host guide](../hosts.md#other-mcp-hosts) and keep unrecorded combinations

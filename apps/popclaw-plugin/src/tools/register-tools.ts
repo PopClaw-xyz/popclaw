@@ -99,7 +99,7 @@ function countRegistrations(deps: RegisterToolsDeps): number {
       // hint keeps the pass free of side effects (a world-invoke factory binds
       // native authority to the host's real context the moment it resolves).
       const hinted = (opts as { name?: unknown } | undefined)?.name;
-      if (typeof tool === 'function' && typeof hinted === 'string') {
+      if (typeof hinted === 'string' && (typeof tool === 'function' || (tool as {contextVersion?: number})?.contextVersion === 2)) {
         count += 1;
         return;
       }

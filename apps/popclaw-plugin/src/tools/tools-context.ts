@@ -75,6 +75,10 @@ export interface WorldToolsDeps {
 }
 
 export interface RegisterToolsDeps {
+  /** Trusted root mode. Missing mode stays native and fails closed. */
+  socialSendHost?: import('../host/social-send-context.js').SocialSendHost;
+  /** Hosted-only trusted current connection/purpose; missing context denies sending. */
+  getHostedSocialInvocation?: import('../host/social-send-context.js').HostedSocialContext;
   /** Native roots decorate here; MCP roots decorate their final result instead. */
   getToolNoticeContext?: (signal?: AbortSignal) => Promise<import('../notifier/tool-notice.js').ToolNoticeContext>;
   nativeToolNotices?: boolean;

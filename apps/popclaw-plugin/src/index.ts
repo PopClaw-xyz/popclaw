@@ -4,7 +4,6 @@ import { ownerConfirmedWorldInvoke, worldDeclaredActionParameters } from './runt
 import type { createOpenClawWorldExecution } from './host/openclaw-world-execution.js';
 import { nativeWorldInvoke } from './host/openclaw-owner-approval.js';
 import { registerOpenClawOwnerApprovalHooks } from './host/openclaw-owner-approval-hooks.js';
-import { openClawApprovalSetup } from './host/openclaw-approval-setup.js';
 import { getRuntimeConfigSnapshot } from 'openclaw/plugin-sdk/runtime-config-snapshot';
 import { createLazyRuntime } from './runtime/lazy-runtime.js';
 import { createDrainingService } from './runtime/draining-service.js';
@@ -398,8 +397,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
 
     // The owner-approval seam's OpenClaw backend (before_tool_call asks the
     // owner; after_tool_call only reports) — host/openclaw-owner-approval-hooks.ts.
-    const approvalSetup = openClawApprovalSetup(api);
-    registerOpenClawOwnerApprovalHooks(api, approvalSetup);
+    registerOpenClawOwnerApprovalHooks(api);
 
     // Gateway shutdown: hand back the SSE connections and SQLite handles
     // (`deactivate` is its deprecated alias, removed 2026-08-16 — don't use
@@ -748,9 +746,8 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       handler: async (ctx: PluginCommandContext) => {
         const parsed = parseArgs(ctx.args);
         const command = parsed.positional[0];
-        // Native command identity is compared to a previously host-verified
-        // owner turn. Model tool parameters cannot accept this proposal.
-        if (command === 'approvals') return approvalSetup.command(parsed.positional.slice(1), ctx);
+        // Retired route preparation is a read-only compatibility response.
+        if (command === 'approvals') return {text: renderCopy(ownerLang(), 'socialSend.approvalsRetired')};
         if (!command || command === 'help' || !(command in SUBCOMMANDS) || parsed.flags['help']) {
           return routeSubcommand(SUBCOMMANDS, {args: {positional: parsed.positional, flags: parsed.flags}});
         }
@@ -797,10 +794,6 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
         const result = await routeSubcommand(SUBCOMMANDS, {
           args: { positional: parsed.positional, flags: parsed.flags },
         });
-        if (command === 'doctor' || command === 'start') {
-          const approvalStatus = await approvalSetup.command([], ctx);
-          return { ...result, text: `${result.text}\n\n${approvalStatus.text}` };
-        }
         return result;
       },
     });
@@ -821,6 +814,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     // wiring (same source, same criteria).
     // The runtime() lexical closure is the lazy ignition path in register().
     toolsRegisteredCount = registerPopclawTools({
+      socialSendHost: 'native',
       nativeToolNotices: true,
       getToolNoticeContext: async signal => { const rt = await runtime(); return runtimeToolNoticeContext(rt, `native:${rt.boot.popclawId}`, signal, true); },
       api: api as unknown as Parameters<typeof registerPopclawTools>[0]['api'],

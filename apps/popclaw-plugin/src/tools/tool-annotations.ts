@@ -114,7 +114,7 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, PopclawToolAnnotations>> 
   popclaw_onboarding_skip: WRITE_LOCAL_OPEN, // advances the walkthrough; the next act may read the houses
 
   // --- writes that reach the outside world ---
-  popclaw_send_draft: WRITE_REMOTE, // behind the owner-approval seam
+  popclaw_send_draft: WRITE_REMOTE, // after manuscript confirmation in the original conversation
   popclaw_follow: WRITE_REMOTE,
   popclaw_unfollow: RETRACT_REMOTE,
   popclaw_mark: WRITE_REMOTE, // public +1, signed by the owner

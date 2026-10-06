@@ -34,9 +34,7 @@ import { runPopclawFeedbackCommand } from '../../../src/commands/popclaw-feedbac
 import { runPopclawMessageCommand } from '../../../src/commands/popclaw-message.js';
 import { deriveSigil } from '../../../src/invite/sigil.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
-import { sendDraftApproved } from '../../helpers/owner-approval-script.js';
-import { describeSendDraft } from '../../../src/tools/send-draft-subject.js';
-import { renderCopy } from '../../../src/lexicon/index.js';
+import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
 
 beforeAll(() => setOwnerLang('en', 'config'));
 afterAll(() => setOwnerLang('zh-CN', 'config'));
@@ -98,7 +96,9 @@ function setup(over: { homeGuide?: string | null; otherGuide?: string } = {}) {
   const tools = new Map<string, Tool>();
   const api = {
     registerTool: (tool: unknown) => {
-      const resolved = typeof tool === 'function' ? (tool as (ctx: unknown) => Tool)({ agentId: 'test' }) : (tool as Tool);
+      const context = {agentId: 'test', sessionKey: 'agent:test:fixture', sessionId: 'fixture', senderIsOwner: true, assertInvocationCurrent: () => {}};
+      const descriptor = tool as {contextVersion?: number; create?: (ctx: unknown) => Tool};
+      const resolved = typeof tool === 'function' ? tool(context) : descriptor?.contextVersion === 2 ? descriptor.create!(context) : (tool as Tool);
       tools.set(resolved.name, resolved);
     },
   };
@@ -114,7 +114,7 @@ function setup(over: { homeGuide?: string | null; otherGuide?: string } = {}) {
   const confirm = (draft: { text: string }): Promise<{ text: string }> => {
     const token = draft.text.match(/draft_id: (\S+)/)?.[1];
     expect(token, 'the draft must carry a draft_id').toBeTruthy();
-    return sendDraftApproved((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token!);
+    return sendDraftConfirmed((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token!);
   };
   const recipientOf = (bytes: Uint8Array): string => {
     const signed = popclaw.identity.SignedPayload.decode(bytes);
@@ -124,7 +124,7 @@ function setup(over: { homeGuide?: string | null; otherGuide?: string } = {}) {
     call,
     confirm,
     confirmId: (token: string): Promise<{ text: string }> =>
-      sendDraftApproved((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token),
+      sendDraftConfirmed((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token),
     pushed,
     push,
     pushTo,
@@ -174,21 +174,11 @@ describe('popclaw_feedback produces a draft, never a delivery', () => {
     expect(sent.text).toContain('need feedback sent, encrypted');
   });
 
-  // The prompt's house frame must not read as a route. The house named is the
-  // one whose guide.md DECLARES the contact; which house relays the letter is
-  // read live inside the send and this approval does not bind it.
-  it('the approval prompt names the declaring house, not a route', async () => {
+  it('the original-chat preview names the declaring house and contact', async () => {
     const fx = setup();
-    const draft = await fx.call('popclaw_feedback', { kind: 'need', body: 'batch postcards' });
-    const token = draft.text.match(/draft_id: (\S+)/)![1]!;
-
-    const described = describeSendDraft({ draft_id: token });
-    expect(described.kind).toBe('ask');
-    if (described.kind !== 'ask') return;
-
-    const joined = described.description.join('\n');
-    expect(joined).toContain(renderCopy('en', 'sendDraft.approval.declaringHouse', { house: 'home-house-9000' }));
-    expect(joined).not.toContain(renderCopy('en', 'sendDraft.approval.house', { house: 'home-house-9000' }));
+    const draft = await fx.call('popclaw_feedback', {kind: 'need', body: 'batch postcards'});
+    expect(draft.text).toContain('home-house-9000');
+    expect(draft.text).toContain('batch postcards');
   });
 
   it('a draft is single-use: confirming twice sends once', async () => {

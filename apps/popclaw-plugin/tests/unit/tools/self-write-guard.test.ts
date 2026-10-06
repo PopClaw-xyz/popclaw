@@ -78,7 +78,7 @@ function setup(extraRuntime: Record<string, unknown> = {}) {
   runMigrations(db, MIGRATIONS);
   const bondsStore = new BondsStore(db, () => 1000);
 
-  registerPopclawTools({
+  registerPopclawTools({socialSendHost: 'local-stdio',
     api,
     runtime: (async () => ({
       boot: { popclawId: OWNER, nickname: OWNER_NAME, loreHouseUrl: 'http://lh.example', webBaseUrl: 'https://popclaw.me', signer: {} },
@@ -343,7 +343,7 @@ describe('the owner does not shadow a stranger whose name is a prefix', () => {
       logger: { info: vi.fn() },
     } as Parameters<typeof registerPopclawTools>[0]['api'];
     const declareFollow = vi.fn(async () => undefined);
-    registerPopclawTools({
+    registerPopclawTools({socialSendHost: 'local-stdio',
       api,
       runtime: (async () => ({
         boot: { popclawId: OWNER, nickname: OWNER_NAME, loreHouseUrl: 'http://lh.example', webBaseUrl: 'https://popclaw.me' },

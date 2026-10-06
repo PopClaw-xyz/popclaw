@@ -26,7 +26,7 @@ import { BondsStore } from '../../../src/bonds/bonds-store.js';
 import { makeNameChain } from '../../../src/identity/person-name.js';
 import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
 import { deriveSigil } from '../../../src/invite/sigil.js';
-import { sendDraftApproved } from '../../helpers/owner-approval-script.js';
+import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
 import * as gather from '../../../src/newspaper/gather-materials.js';
 
 vi.mock('../../../src/newspaper/gather-materials.js', async (importOriginal) => {
@@ -66,7 +66,7 @@ async function setup() {
   const notifier = new SqliteNotifier(host.db);
   const nameOf = makeNameChain({ bond: (id) => bondsStore.get(id) });
   const collector = makeToolCollector();
-  registerPopclawTools({
+  registerPopclawTools({socialSendHost: 'local-stdio',
     api: {
       ...collector.api,
       registerTool: (tool: unknown, opts?: unknown) =>
@@ -106,7 +106,7 @@ describe('the owner renames, then acts through the tools (same process)', () => 
     await persistNickname(host, NEW_NAME, 'owner');
     const draft = await find('popclaw_draft_post').execute('d', { body: 'hello world' });
     const token = draft.text.match(/draft_id: (post-\d+)/)![1]!;
-    await sendDraftApproved(find('popclaw_send_draft').execute, token);
+    await sendDraftConfirmed(find('popclaw_send_draft').execute, token);
     expect(pushed).toHaveLength(1);
     expect(decode(pushed[0]!).actor?.nickname).toBe(NEW_NAME);
   });
@@ -128,7 +128,7 @@ describe('naming the other person through the tools', () => {
     const draft = await find('popclaw_draft_message').execute('d', { recipient: PEER, body: 'hi' });
     expect(draft.text).toContain(`${PEER_NAME}#${deriveSigil(PEER)}`);
     const token = draft.text.match(/draft_id: (message-\d+)/)![1]!;
-    const sent = await sendDraftApproved(find('popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(find('popclaw_send_draft').execute, token);
     expect(sent.text).toContain(`${PEER_NAME}#${deriveSigil(PEER)}`);
   });
 
@@ -225,7 +225,7 @@ describe('popclaw_set_name refuses a name the config cannot hold, with no side e
 
   it('the world guide does not send an onboarding naming answer to popclaw_set_name', () => {
     const collector = makeToolCollector();
-    registerPopclawTools({
+    registerPopclawTools({socialSendHost: 'local-stdio',
       api: collector.api as Parameters<typeof registerPopclawTools>[0]['api'],
       runtime: vi.fn() as unknown as Parameters<typeof registerPopclawTools>[0]['runtime'],
       getWorldDeps: (async () => ({})) as unknown as Parameters<typeof registerPopclawTools>[0]['getWorldDeps'],

@@ -1093,25 +1093,14 @@ export const ZH_CN: Lexicon = {
     // 两者不是同一个聊天时，不该发生的是推预览——批准按钮出现在主人私聊里，
     // 从来不能证明之前的全文也在那个私聊里
     //（2026-09-21T20:09Z 裁定，tools/draft-preview-delivery.ts）。
-    'draft.preview.forwardingDisabled':
-      '全文预览没有发送：这台宿主尚未开启插件审批转发（{reason}），无法发起本次宿主确认。一次预览投递也没有发起。'
-      + '完整草稿在本次工具输出里。请主人或宿主管理员将审批转发配置到经核实的主人私聊。'
-      + '普通聊天里的“好的”不能替代绑定本次调用的宿主一次性批准。草稿可能在配置完成前超过有效期。',
-    'draft.preview.notTheOwnerApprovalChat':
-      '全文预览没有发送：这个聊天不是宿主会向主人征求批准的那个聊天（{reason}），'
-      + '把草稿推到这里，可能把私密正文送到主人以外的人眼前，所以一次投递也没有发起。'
-      + '完整草稿就在上面这段工具输出里——请你自己在主人能批准的那个聊天里，逐字拿给主人看。'
-      + '调用 popclaw_send_draft 之前，仍然必须有主人明确的确认。',
     'draft.message.emptyBody': '这封信是空的：给句话（body），或者给张图（image_path），至少要有一样。',
     'draft.message.attach': '   📎 附件：{name}（{size}）\n',
     'draft.message.imageOnly': '   （纯图，无正文）\n',
     // 长草稿的只读审阅副本（src/tools/draft-review.ts）。入口放在草稿工具结果里：
     // 智能体先把链接那一行原样发给主人，再请他审批。点链接即打开文件。
-    'draft.review.entry':
-      '这份草稿太长，确认框里读不全。把下一行原样发给主人，等他说发再调用 popclaw_send_draft：\n{link}',
+    'draft.review.entry': '完整稿件：{link}。请在本聊天看稿后确认发送。',
     'draft.review.linkText': '审阅草稿 {id} \u2014 全文',
-    'draft.review.writeFailed':
-      '这份草稿的审阅副本没能写出来，主人没法读全，所以批不了。重新拟一份。',
+    'draft.review.writeFailed': '未能写入可选看稿文件。请在原聊天展示本工具结果中的完整稿件。',
     'draft.review.file.heading': '# PopClaw 草稿审阅副本（只读；不会从这个文件发出任何东西）',
     'draft.review.file.header': '草稿：{id}\n发给：{to}\n灯坊：{house}\n附件：{attachments}\n正文：{chars} 字，摘要 {digest}',
     'draft.review.file.none': '（无）',
@@ -1125,22 +1114,7 @@ export const ZH_CN: Lexicon = {
       + 'draft_id 只能用一次（发出即作废），草稿 30 分钟后自动过期。\n'
       + '重新调一次对应的 popclaw_draft_* 工具拟一份新草稿，请主人确认，再发。',
     // -------------------------------------------------------------------
-    // popclaw_send_draft 的主人授权提示，以及没拿到授权时这个工具回给模型的
-    // 话（tools/send-draft-subject.ts）。
-    //
-    // 这句提示是模型的草稿与一封真发出去的信之间最后一道关，所以收信人、
-    // 灯坊、附件、正文都要写实，不写"摘要"。下面的拒绝语按原因分家：
-    // "这台宿主没法问主人""不是主人自己的那轮""草稿变过了"是三个不同的
-    // 下一步，合成一句就等于把该做什么藏起来了。
-    // -------------------------------------------------------------------
-    'sendDraft.kind.dm': '私信',
-    'sendDraft.kind.reply': '回帖',
-    'sendDraft.kind.post': '帖子',
-    'sendDraft.kind.feedback': '反馈信',
-    // MCP 宿主上主人批准对话框唯一的输入项。刻意写成通用措辞：接缝服务所有
-    // 登记方，自带标签的登记方显示它自己的。勾选框声明 `default: false`，没碰过
-    // 就回 false，算拒绝（Claude Code 2.1.283 / codex-cli 0.157.1，2026-09-27；
-    // 见 `buildApprovalDialog`）。
+    // 仍需审批的操作共用的主人确认文案。
     'ownerApproval.confirm.title': '批准这次操作',
     'ownerApproval.confirm.description': '批准上面描述的这一次操作。拒绝或取消则什么都不会发生。',
     // world 动作的 MCP 确认对话框里唯一的输入项（host/mcp-owner-authorization.ts）。
@@ -1148,151 +1122,15 @@ export const ZH_CN: Lexicon = {
     'world.action.approval.confirm': '执行此动作',
     'world.action.approval.timedOut': '确认窗口在收到回答之前就关闭了，什么都没有执行。如果确认对话框还开着，现在点同意也不会执行这个动作——问主人，再重新发起一次',
     'world.action.approval.confirmDescription': '执行上面描述的这一次世界动作（ref {ref}）。拒绝或取消则什么都不会发生。',
-    // 列宽预算。批准提示的每一行最多 64 显示列（send-draft-subject.ts 的
-    // `MAX_ROW_COLUMNS`），表头行超了就拒绝而不是截断。其中几行还要和另一条
-    // 事实共用一行，所以每句都必须留足余量——是刻意写短，不是随手砍。
-    'sendDraft.approval.title': '这条{kind}要发吗？',
-    // 信太长，装不进确认框，唯一一份完整原稿是草稿工具自己在这台宿主记录里的
-    // 输出。标题是确认框正文的第一行，宿主折叠其余部分时也看得见，所以「先去读」
-    // 这句放在标题里——顺手点确认的人也还会看见它。
-    'sendDraft.approval.titleReadAbove': '这条{kind}要发吗？先读完上方的全文',
-    'sendDraft.approval.to': '发给：{who}',
-    'sendDraft.approval.house': '灯坊 {house}',
-    // 只用于反馈信：这里写的是「声明这位联系人的那座坊」。信最终由哪座坊转
-    // 递，是发送时现查的，不在这次授权绑定的范围里，所以这行不能写得像路由。
-    'sendDraft.approval.declaringHouse': '联系人由 {house} 声明',
-    'sendDraft.approval.target': '回复 {target}',
-    'sendDraft.approval.attachments': '附件 {count} 个 {names}',
-    'sendDraft.approval.bodyWhole': '正文 {chars} 字，全文：',
-    'sendDraft.approval.bodyOpening': '正文 {chars} 字，开头：',
-    // 全文在审阅副本里的草稿用的精简确认框：副本的摘要与文件名、完整路径（链接没转达时兜底），
-    // 以及确认框下那一行。
-    'sendDraft.approval.reviewDigest': '正文摘要 {digest} \u00b7 审阅文件 {name}',
-    'sendDraft.approval.reviewPath': '审阅文件路径：{path}',
-    'sendDraft.approval.reviewHint': '全文：上方链接的审阅文件（草稿 {id}，{digest}）',
-    'sendDraft.approval.bodyMore': '［……］',
-    // 把主人送到原稿那一行，和草稿编号、正文长度共用一行：编号就是工具输出里
-    // 那个 `draft_id:`，主人靠它找到该展开哪一段；长度是他核对展开的那份用的。
-    // 措辞只说「这里没有全文、全文在哪」，绝不说他已经看过。
-    'sendDraft.approval.bodyLength': '{chars} 字',
-    // 草稿编号，单独一行；指针布局在指针行里自带编号，其余布局都有这一行。
-    'sendDraft.approval.draftId': '草稿：{id}',
-    // MCP 确认框里那唯一一个输入项。
-    // 按种类分：对话框第一行上，引用的一行帖子和私信只差一个 `> ` 前缀。
-    'sendDraft.approval.confirm.post': '勾选＝愿意发布此帖子；Accept＝提交',
-    'sendDraft.approval.confirm.reply': '勾选＝愿意发布此回帖；Accept＝提交',
-    'sendDraft.approval.confirm.dm': '勾选＝愿意发送此私信；Accept＝提交',
-    'sendDraft.approval.confirm.feedback': '勾选＝愿意发送此反馈信；Accept＝提交',
-    'sendDraft.approval.fullTextHint': '草稿 {id} 全文在上方；Claude Code：ctrl+o，按 g 到开头，ctrl+o 返回',
-    // 整封信已经是对话框第一行时用这一句：改稿的路径，只按它真实的样子说——
-    // Decline 什么都不发、草稿保留，主人说改什么，新版本会重新给他看、重新问。
-    'sendDraft.approval.changeHint': 'Decline：不发送，草稿保留。说要改什么，再批准新版本。',
-    // 信不能在第一行看全时：Decline 的含义和全文指引并成一行，带真实编号，
-    // 三个键（含 ctrl+o 返回）都在；超过 80 列就只用 fullTextHint。
-    'sendDraft.approval.declineAndFullText': 'Decline 留稿不发；{id} 全文：Claude Code ctrl+o，g 到顶，ctrl+o 返回',
-    'sendDraft.approval.bodyInToolOutput': '全文在上方，展开工具输出',
-    // 提示本身就带着整封信时（每个 MCP 对话框）用这两句。第一句在任何宿主上都成立；
-    // Claude Code 2.1.283 只显示 elicitation 消息开头、展不开（探针 v3–v3.2），
-    // 所以另加一段标明是 Claude Code 的：ctrl+o 打开对话记录（在末尾），g 到顶，
-    // ctrl+o 回到这张表单——全文在草稿工具的输出里。80 列以内带真实编号；
-    // 放不下 Decline 那句，整句不加。
-    'sendDraft.approval.wholeHere': '草稿 {id} 全文在上方；Claude Code：ctrl+o，g 到顶，ctrl+o 返回',
-    // 对话记录里没有草稿工具的输出时：ctrl+o 打不开什么，所以不带 Claude Code 那段，
-    // Decline 的含义放得下。
-    'sendDraft.approval.wholeHereOnlyAndDecline': '草稿 {id} 全文在上方；Decline＝不发，留稿',
-    'sendDraft.approval.wholeHereOnly': '草稿 {id} 全文在上方',
-    // 行内标记，放在引用的结尾那行前面：两头之间的正文没有显示，必须说出来，
-    // 不能让两段摘录读起来像一封连续的信。
-    'sendDraft.approval.bodySkipped': '［……］',
-    'sendDraft.approval.noBody': '无正文，只有附件',
-    // 只有下面那段文字确实被渲染过时才加这一行。主人读到的是转写，不是字符
-    // 本身；不说这句就等于替它多声明了一分。
-    'sendDraft.approval.escapedInvisible':
-      '下面的 \u2039U+XXXX\u203a＝不显示的字符，或正文里的 \u2039',
-    // 同一句话的短版：五行的指针布局腾不出一行时，和别的行共用一行。
-    'sendDraft.approval.escapedInvisibleShort': '\u2039U+XXXX\u203a＝隐形字符或原文 \u2039',
-    'sendDraft.approval.previewedAt': '{when} 已推到你的预览',
-    'sendDraft.approval.notPreviewed': '没推到你的预览',
-    'sendDraft.approval.ordinaryReplies': '普通聊天回复“发”、“Allow”或“Allow（放行）”不能批准等待中的宿主请求。',
-    'sendDraft.refused.denied': '没有发出：主人没有批准（选了拒绝，或没勾选就提交了）。草稿还在——问清楚是照原样发还是要改什么，需要就重拟一份，再请他过目。',
-    'sendDraft.refused.timeout': '没有发出：确认窗口在收到回答之前就关闭了。什么都没发，草稿还在。如果确认对话框还开着，现在点同意也不会发出——问主人要不要发，再重新发送一次。(reason: OWNER_APPROVAL_TIMED_OUT_BEFORE_ANSWER)',
-    'sendDraft.refused.dialogCancelled': '没有发出：确认对话框没有回答就被关掉了，所以什么都没发。草稿还在——问主人要不要发，再重新发送一次。',
-    'sendDraft.refused.answerUnreadable': '没有发出：主人回答了，但这台宿主返回的回答 PopClaw 读不懂，所以什么都没发。草稿还在——再问一次；如果反复出现，把这台宿主的问题报上来。',
-    'sendDraft.refused.dialogFailed': '没有发出：确认对话框在收到回答之前出错了（和宿主的连接断了，或宿主报了错），所以什么都没发。草稿还在——等宿主恢复后再问主人一次。',
-    'sendDraft.refused.callEnded': '没有发出：确认对话框还开着的时候，这次调用被取消了，所以什么都没发。如果对话框还在，现在点同意也不会发出。草稿还在——问主人要不要发，再重新发送一次。',
-    'sendDraft.refused.noApprovalSurface':
-      '没有发出：这台宿主没有办法请主人确认发送，而 popclaw 不会只凭你说一句就发。' +
-      '把这件事告诉主人，请他自己发——草稿还在。',
-    'sendDraft.refused.notOwnerTurn':
-      '没有发出：这一轮不是主人本人在直接跟你说话，确认没法递到他面前。' +
-      '请主人在他自己跟你的会话里说一次；草稿还在。',
-    'sendDraft.refused.notWired': '没有发出：这台宿主上的发送确认还没接上。告诉主人；草稿还在。',
-    // SUBJECT_CHANGED 的另一半：草稿根本已经不在了，没有什么"变过"——那样说
-    // 会让 agent 去找一处根本没人改过的改动。
-    'sendDraft.refused.noLongerThere':
-      '没有发出：那份草稿已经不在了——要么过期，要么被新的草稿顶掉了。' +
-      '重新拟一份，给主人看过，再问一次。',
-    'sendDraft.refused.changed':
-      '没有发出：这份草稿已经不是主人确认过的那一份了——他看过之后，收信人或正文变了。' +
-      '重新拟一份，给他看过，再问一次。',
-    'sendDraft.refused.alreadyUsed': '没有发出：那次确认已经用掉了。一次确认只发一次；重新拟一份，再请主人确认。',
-    'sendDraft.refused.noCallIdentity': '没有发出：这台宿主没给这次调用身份，确认无法绑到它上面。告诉主人；草稿还在。',
-    'sendDraft.refused.otherCall': '没有发出：主人确认的是另一次调用，不是这一次。别重试——请主人为这一次再确认一遍。',
-    'sendDraft.refused.tooLongUnseen':
-      '没有发出：这台宿主上从来没有完整显示过这份草稿——它没推到主人的预览，也没有哪次草稿工具把全文写进自己的输出里，' +
-      '而正文又长到放不进确认提示，主人只能在读不到全文的情况下点确认。' +
-      '重新调用草稿工具，让全文原样显示出来，再请主人在那里读完并确认。',
-    // 主人看的审阅副本不见了或内容变了。
-    'sendDraft.refused.reviewCopyChanged':
-      '没有发出：审阅副本变了或不见了——重新生成审阅（重拟一份），请主人读新的副本再批准。',
-    // 起草时审阅副本就没写出来，主人从来没有东西可读。
-    'sendDraft.refused.reviewNotWritten':
-      '没有发出：这份草稿的审阅副本没能写出来，主人没法读全。什么都没发；重新拟一份试试。',
-    // 只管头几行：收信人、灯坊、附件名。正文是转写不是拒绝，所以走到这里就是
-    // 「这封信要去哪儿」没法如实告诉主人。
-    'sendDraft.refused.notShowable':
-      '没有发出：这份草稿的收信人、灯坊或附件名里有在屏幕上什么都不显示的字符，' +
-      '没法如实告诉主人它会去哪儿。用纯文本重新写清收信人，再拟一份。',
-    // 超的是确认预览的显示预算，不是信本身：不说信不合法或太大发不出，也不因此要求改短。
-    'sendDraft.refused.previewOverBudget':
-      '没有发出：这份草稿的确认预览超过了确认对话框的显示预算，所以没有显示，也什么都没发。草稿还在。告诉主人；他可以自己发。',
-    'sendDraft.refused.tooLongToShow':
-      '没有发出：这份草稿没法在确认提示里完整显示。跟主人一起把它改短，或者请他自己发。',
-    'sendDraft.refused.cannotShow':
-      '没有发出：这份草稿没能给主人看到，所以没有任何东西被确认过。你自己把草稿给他看，再问怎么办。',
-    // 整个路由家族一句话：宿主不会把这次确认递到这次调用所在的聊天里。具体是
-    // 路由的哪一环这么判的，由后面的原因码带着；这里要说清的两件事是「不是这个
-    // 聊天」和「拿它跟配置里的那个对一对」。绝不能顺口给一条绕开确认的路——那样
-    // 的话，卡住的人第一个找到的就是它。
-    'approvalSetup.required': '消息仍是草稿。OpenClaw 需要准备审批通知路径。准备后，当前完整会话中所有插件的审批通知都会转发到已核实的主人私聊，原始渠道可能不再收到这些通知。这不会批准或发送这封消息。若同意这项路径变更，请发送 {command}。准备完成后，再回复一句普通消息即可让原草稿进入独立的一次性发送确认。准备确认五分钟内有效；草稿保留原有效期。',
-    'approvalSetup.untrusted': '没有发出。审批准备需要宿主核实的唯一主人、当前 Telegram 或飞书私聊，以及明确的账号和会话绑定。请完成 OpenClaw 正常主人设置或配对；若目标冲突，请宿主管理员处理。草稿保留至原有效期。普通聊天中的同意不能替代宿主批准。',
-    'approvalSetup.cannotApprove': '没有发出。当前飞书账号已停用，或其审批权限不允许此主人批准。准备流程没有修改这些权限。请宿主管理员通过 OpenClaw 正常账号管理处理权限冲突后，再请求发送现有草稿。原草稿保留原有效期。',
-    'approvalSetup.unsupported': '没有发出。当前渠道的自动准备尚未实现。请打开已认证的 OpenClaw Control UI，选择同一 agent，请求“发送现有草稿 {draft}”。无需重填收件人或正文，也无需编辑 JSON。在原生提示中核对完整收件人和正文，再作单次批准。请保持 OpenClaw 运行；原草稿保留原有效期。若没有主人审批提示，请停止并报告，不改走其他发送路径。',
-    'approvalSetup.invalid': '准备确认对当前身份、账号、会话或草稿已失效。没有发出。若原草稿仍有效，请再次请求发送原草稿以获得新的准备确认。过期或已取走的草稿需要重新起草并重新取得一次性批准。',
-    'approvalSetup.failed': '审批准备失败，或宿主配置已发生变化。没有发出，也没有尝试其他配置写入途径。草稿保留原有效期。请宿主管理员解决配置或写入失败后，再次请求发送原草稿。',
-    'approvalSetup.loading': '审批路径已保存，但尚未核实当前运行态已应用。没有发出。OpenClaw 完成配置加载后，请发送 {command} 再次检查准备状态。此操作不会再次写配置、启动 agent 回合或批准发送。就绪后，请按提示回复普通消息以继续原草稿。',
-    'approvalSetup.ready': '当前会话的宿主审批路径已就绪。没有发出。本次准备命令不会启动 agent 回合：请回复普通消息“继续发送草稿 {draft}”，再进入独立的原生一次性确认。无需重述收件人或正文；原草稿保留原有效期。',
-    'approvalSetup.statusMissing': '安装完成不代表私信发送已就绪：宿主尚未配置插件审批通知路径。请在已核实的 Telegram 或飞书主人私聊中请求发送草稿，以审阅一次准备确认。其他渠道的自动准备尚未实现，可使用已认证的 OpenClaw Control UI 并选择同一 agent。每次发送仍需独立的原生一次性批准。',
-    'approvalSetup.statusConfigured': '宿主已有显式插件审批配置，系统会保留它。每次发送仍会核实当前主人回合的运行态路径，并请求原生一次性批准；安装或这项状态检查不能证明私信发送已就绪。',
-    'sendDraft.refused.forwardingDisabled':
-      '没有发出：这台宿主尚未开启插件审批转发，无法发起本次宿主确认。'
-      + '请主人或宿主管理员将审批转发配置到经核实的主人私聊。'
-      + '普通聊天里的“好的”不能替代绑定本次调用的宿主一次性批准。草稿未被取走，但可能在配置完成前超过有效期。',
-    'sendDraft.refused.notTheApprovalChat':
-      '没有发出：这个聊天不是宿主配置里用来请主人确认的那个聊天，确认没法递到他面前。' +
-      '告诉主人，请他把配置里的审批目标和这个聊天对一对——草稿还在。',
-    'sendDraft.refused.noOwnerConfigured':
-      '没有发出：这台宿主在这条频道上没有配置主人名单，谁都不会被认成主人，确认也就无从问起。' +
-      '请主人去配上；草稿还在。',
-    // 面向机器，各语言刻意一模一样：agent、主人、事后翻记录的人，要搜的是同一
-    // 个串。它跟在那句话后面，不替代那句话。
-    'sendDraft.refused.reasonCode': '(reason: {reason})',
-
-    // -------------------------------------------------------------------
-    // C3 short-reference reply resolution
-    // (world/post-ref.ts + write-tools.ts popclaw_draft_post). 唯一匹配才放
-    // 行；缺失/歧义/非法/异站一律点名拒绝，绝不挑第一个。
-    // -------------------------------------------------------------------
+    // 普通社交发送的调用边界与兼容提示。
+    'socialSend.recipient': '发送对象：{recipient}',
+    'socialSend.sourcePreview': '来源预览：{context}',
+    'socialSend.house': '灯坊：{house}',
+    'socialSend.materialChanged': '未发送：草稿内容或附件已改变。请展示原定的新稿件和附件，给主人确认。',
+    'socialSend.ownerRequired': '未发送：当前宿主调用无法确认主人权限。请在本聊天说明宿主限制，不要更换路由或自行授予权限。',
+    'socialSend.conversationChanged': '未发送：这份草稿属于另一个会话。请在本聊天准备原定稿件，给主人看稿确认。',
+    'socialSend.reviewChanged': '未发送：看稿副本已改变或丢失。请展示原定稿件的新副本，给主人确认。',
+    'socialSend.approvalsRetired': '私信、回复和发帖只需在本聊天看稿确认一次，无需准备 PopClaw 审批路由。现有宿主审批配置未改动。',
     'draft.postref.notHex':
       '⚠️ 这不是有效的帖子引用（{ref}）：需要完整 64 位十六进制 event_id、至少 6 位的短 id、或本站 /post/ 链接。',
     'draft.postref.tooShort': '⚠️ 短 id 太短：至少要 6 位十六进制（收到：{ref}）。',

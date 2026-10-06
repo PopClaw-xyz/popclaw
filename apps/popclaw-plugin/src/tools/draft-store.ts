@@ -29,7 +29,7 @@ import { renderCopy, type Lang } from '../lexicon/index.js';
 // the process-level singleton from `getOrCreatePerProcess('runtime')`
 // (index.ts) — the old instance's closure still resolves to the same
 // sqlite/egress.
-type DraftEntry = { fn: () => Promise<{ text: string }>; at: number; snapshot: DraftSnapshot | null };
+type DraftEntry = { fn: () => Promise<{ text: string }>; at: number; snapshot: DraftSnapshot | null; contentDigest?: string };
 const draftStore = (): Map<string, DraftEntry> =>
   getOrCreatePerProcess('drafts', () => new Map<string, DraftEntry>());
 
@@ -54,7 +54,7 @@ export function draftDigest(value: string | Uint8Array): string {
  * THE BYTES, not the path. A path is not content: a draft that carried one
  * had its file re-read at send time, so the file the owner approved and the
  * file that went out were the same only by luck — swapping it in between
- * changed nothing the owner could see and nothing the approval bound. Holding
+ * changed nothing in the recorded manuscript. Holding
  * the bytes makes "what is sent is what was approved" true by construction
  * rather than by a comparison that can be skipped.
  *
@@ -81,7 +81,7 @@ export interface DraftPreviewSnapshot {
   /** `unknown` is the only status under which anything plausibly reached the
    *  owner; `unavailable` means nothing was attempted and `failed` means the
    *  attempt threw (draft-preview-delivery.ts states why none of the three is
-   *  a receipt). An approval prompt must not claim more than this. */
+   *  a receipt). The agent must not claim more than this. */
   readonly status: PreviewDeliveryStatus;
   /** Epoch ms at which that attempt finished. */
   readonly at: number;
@@ -98,7 +98,7 @@ export interface DraftPreviewSnapshot {
  * push is never even attempted and this is the ONLY place the complete letter
  * ever appears.
  *
- * Not a read receipt, and the approval prompt built on it must not read as
+ * Not a read receipt, and the agent must not describe it as
  * one: the host may fold the output behind a keystroke, and it may cut a
  * result that exceeds its own size cap (real hardware: a newspaper payload was
  * truncated mid-way at 64k weighted characters). It says the plugin emitted
@@ -117,12 +117,13 @@ export interface DraftToolOutputSnapshot {
  * The owner approves CONTENT, not a token. A draft id is a handle: it says
  * nothing about the recipient or the words, and on its own it let the model
  * mint a draft and confirm its own draft (real hardware, 2026-09-21). So the
- * table now carries the content beside the closure, the closure sends from
- * this object rather than from the tool's parameters, and the owner-approval
- * seam canonicalizes THIS — which is what makes "the draft changed after the
- * owner read it" a refusal rather than a race nobody can see.
+ * table carries the content beside the closure. The closure sends this frozen
+ * content; a digest also checks mutable attachment buffers before consumption.
+ * Conversation review and confirmation remain the agent's responsibility.
  */
 export interface DraftSnapshot {
+  /** Stable root/session identity; never a drafting-turn invocation capability. */
+  readonly binding?: import('../host/social-send-context.js').SocialDraftBinding | null;
   readonly kind: DraftContentKind;
   /** The recipient's popclaw_id, for the kinds addressed to a person. */
   readonly recipientId?: string;
@@ -149,10 +150,9 @@ export interface DraftSnapshot {
  * The owner's read-only review copy of a long draft (`draft-review.ts`).
  *
  * `needed` is the one decision — made at mint by `needsReviewCopy` on this
- * snapshot, in `lang` — that says both "a review file was written" and "the
- * MCP dialog is the compact one". `file` is what was written: its absolute
- * path and the SHA-256 of its bytes at write time. The file is never read
- * back as content; it is only re-hashed before an approval is honoured.
+ * snapshot. `file` records the optional copy's absolute path and SHA-256.
+ * The file is never read back as send content; it is only re-hashed before
+ * sending to detect a changed copy.
  */
 export interface DraftReviewSnapshot {
   readonly needed: boolean;
@@ -191,6 +191,18 @@ export function draftReviewFiles(): DraftReviewFiles | null { return reviewHolde
 function dropReviewCopy(entry: DraftEntry | undefined): void {
   const path = entry?.snapshot?.review?.file?.path;
   if (path) reviewHolder().files?.remove(path);
+}
+
+function contentDigest(snapshot: DraftSnapshot): string {
+  return draftDigest(JSON.stringify({kind: snapshot.kind, recipientId: snapshot.recipientId,
+    recipientLabel: snapshot.recipientLabel, house: snapshot.house, target: snapshot.target,
+    body: snapshot.body, binding: snapshot.binding,
+    attachments: snapshot.attachments.map(a => ({name: a.name, mime: a.mime, bytes: draftDigest(a.bytes)}))}));
+}
+/** Read-only integrity check on the frozen material, including actual bytes. */
+export function draftContentIsCurrent(token: string): boolean {
+  const entry = draftStore().get(token);
+  return !!entry?.snapshot && entry.contentDigest === contentDigest(entry.snapshot);
 }
 
 /** Deep-frozen so neither the tool that built it nor anything downstream can
@@ -242,7 +254,7 @@ export type DraftKind = 'reply' | 'message' | 'post' | 'invite' | 'house-entry';
  * the token prefix above. A feedback letter is parked under the `message`
  * prefix because it is an outbound DM and must go through the DM door, but
  * "a letter to this lore-house's contact" is what the owner is approving, and
- * an approval prompt that called it a DM would be telling them less than it
+ * a preview that called it only a DM would be telling them less than it
  * knows. Every kind that can reach `popclaw_send_draft` is listed here.
  */
 export type DraftContentKind = 'dm' | 'reply' | 'post' | 'feedback';
@@ -335,8 +347,7 @@ export function makeDraftToken(kind: DraftKind): string {
  * is optional only because the two narrow doors that do NOT go through
  * `popclaw_send_draft` (`popclaw_invite`, `popclaw_house_entry`) have their own
  * confirm tools and nothing to show. A send-kind draft parked without one is
- * unapprovable — `peekDraftSnapshot` returns null, the subject canonicalizes to
- * its unknown sentinel, and nothing is sent. Fail closed, never fall through.
+ * unavailable — `peekDraftSnapshot` returns null and nothing is sent.
  */
 export function putDraft(
   token: string,
@@ -349,6 +360,7 @@ export function putDraft(
     fn: captureActionContext(fn),
     at: now,
     snapshot: snapshot ? freezeSnapshot(snapshot) : null,
+    contentDigest: snapshot ? contentDigest(snapshot) : undefined,
   });
   sweepExpired(drafts, now);
   evictOverflow(drafts, kindOf(token));
@@ -425,19 +437,18 @@ export function verifyDraftReview(token: string): 'ok' | 'none' | 'changed' {
   const review = peekDraftSnapshot(token)?.review;
   if (!review?.needed) return 'none';
   const files = reviewHolder().files;
-  if (!review.file || !files) return 'changed';
+  // An optional copy that could not be written leaves the complete tool-result
+  // review available. A copy that existed and is now unverifiable must refuse.
+  if (!review.file) return 'none';
+  if (!files) return 'changed';
   return files.sha256(review.file.path) === review.file.sha256 ? 'ok' : 'changed';
 }
 
 /**
  * Read a live draft's snapshot without spending it.
  *
- * Total and side-effect free by contract: the owner-approval subject's
- * `canonicalize` runs through here twice per call — once when the prompt is
- * built and once when the tool body consumes the answer — and either a throw
- * or a consume on that path would turn a granted approval into a crash or into
- * a draft that vanished before it was sent. Missing, expired, or parked
- * without a snapshot all answer null.
+ * Inspection never consumes a draft. Expired entries are swept; missing or
+ * parked-without-snapshot entries answer null.
  */
 export function peekDraftSnapshot(token: string): DraftSnapshot | null {
   const drafts = draftStore();

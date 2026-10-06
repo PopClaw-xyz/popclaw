@@ -18,10 +18,9 @@ import {
   type OwnerApprovalSubjectDescriptor,
 } from '../../../src/host/owner-approval.js';
 import {
-  OWNER_APPROVAL_ANSWERED_AFTER_TIMEOUT, OWNER_APPROVAL_TIMED_OUT_BEFORE_ANSWER, OWNER_APPROVAL_TIMEOUT_BOUNDS,
+  OWNER_APPROVAL_ANSWERED_AFTER_TIMEOUT, OWNER_APPROVAL_TIMEOUT_BOUNDS,
   OWNER_APPROVAL_TIMEOUT_ENV, createMcpOwnerApproval, ownerApprovalTimeoutFromEnv,
 } from '../../../src/host/mcp-owner-approval.js';
-import { sendDraftRefusalText } from '../../../src/tools/send-draft-subject.js';
 import { renderCopy } from '../../../src/lexicon/index.js';
 
 const TOOL = 'demo_send';
@@ -143,123 +142,24 @@ describe('an approval that arrives after the window closed', () => {
   });
 });
 
-describe('what the owner reads when the window closed first', () => {
-  it.each(['en', 'zh-CN'] as const)('names the reason and says approving now will not send (%s)', (lang) => {
-    const text = sendDraftRefusalText({ decision: 'timeout' }, 'd_1', lang);
-    // The named reason, in the same frame every other refusal uses.
-    expect(text.endsWith(renderCopy(lang, 'sendDraft.refused.reasonCode',
-      { reason: OWNER_APPROVAL_TIMED_OUT_BEFORE_ANSWER }))).toBe(true);
-    // The clause that prevents the silent drop: the dialog may still be open.
-    expect(text).toContain(lang === 'en'
-      ? 'If the approval dialog is still open, approving it now will not send'
-      : '如果确认对话框还开着，现在点同意也不会发出');
-    expect(text).toContain(lang === 'en' ? 'Nothing was sent' : '什么都没发');
-    expect(text).toContain(lang === 'en' ? 'the draft is still here' : '草稿还在');
-  });
-});
-
-/**
- * EACH ENDING, THROUGH TO THE WORDS THE AGENT RELAYS. The backend decides the
- * ending, the seam carries it, `sendDraftRefusalText` picks the sentence. Only
- * our own window closing may say "the window closed"; each other ending has
- * its own sentence and its own reason code, and none of them sends.
- */
-describe('how a dialog ended, as the owner is told it', () => {
-  /** `'window'` = the fake host never answers; only our own timer ends it. */
-  async function endAndRender(ending: unknown, signal?: AbortSignal) {
-    const elicitInput = vi.fn(async (_form: unknown, options: { signal: AbortSignal }) => {
-        if (ending === 'window') {
-          return await new Promise((_resolve, reject) => {
-            options.signal.addEventListener('abort', () => reject(options.signal.reason));
-          });
-        }
-        if (ending instanceof Error) throw ending;
-        return ending;
-      });
-    const box = { current: {
-      elicitInput,
-      getClientCapabilities: () => ({ elicitation: { form: {} } }),
-      getClientVersion: () => ({ name: 'claude-code', version: '0' }),
-    } as never };
-    const approvals = createMcpOwnerApproval({ server: box, logger: { warn: () => {} }, elicitTimeoutMs: 20 });
-    let sent = false;
-    let text = '';
-    await approvals.aroundDispatch(TOOL, { draft: 1 }, 'mcp_20', signal, async () => {
-      const outcome = consumeOwnerApproval(TOOL, { draft: 1 }, 'mcp_20');
-      if (outcome.decision === 'approved') { sent = true; return; }
-      text = sendDraftRefusalText(outcome, 'd_1', 'en');
-    });
-    // One dialog per call, whatever the ending: nothing asks again on its own.
-    expect(elicitInput).toHaveBeenCalledTimes(1);
-    return { sent, text };
-  }
-  const code = (reason: string) => renderCopy('en', 'sendDraft.refused.reasonCode', { reason });
-  const timeoutCopy = renderCopy('en', 'sendDraft.refused.timeout');
-
-  it('our own window closing: the timeout copy, OWNER_APPROVAL_TIMED_OUT_BEFORE_ANSWER', async () => {
-    const r = await endAndRender('window');
-    expect(r.sent).toBe(false);
-    expect(r.text).toBe(timeoutCopy);
-    expect(r.text).toContain(`(reason: ${OWNER_APPROVAL_TIMED_OUT_BEFORE_ANSWER})`);
-  });
-
-  it('a cancel: "closed without an answer", OWNER_CONFIRMATION_CANCELLED', async () => {
-    const r = await endAndRender({ action: 'cancel', content: { confirm: true } });
-    expect(r.sent).toBe(false);
-    expect(r.text).toBe(`${renderCopy('en', 'sendDraft.refused.dialogCancelled')} ${code('OWNER_CONFIRMATION_CANCELLED')}`);
-    expect(r.text).toContain('closed without an answer');
-    expect(r.text).not.toContain('window closed');
-  });
-
-  it('an answer the SDK refused against the form: OWNER_CONFIRMATION_ANSWER_INVALID', async () => {
-    const r = await endAndRender(new McpError(ErrorCode.InvalidParams, 'content does not match requested schema'));
-    expect(r.sent).toBe(false);
-    expect(r.text).toBe(`${renderCopy('en', 'sendDraft.refused.answerUnreadable')} ${code('OWNER_CONFIRMATION_ANSWER_INVALID')}`);
-    expect(r.text).toContain('could not read');
-  });
-
+describe('non-social approval failure reasons', () => {
   it.each([
-    ['a dropped connection', new McpError(ErrorCode.ConnectionClosed, 'Connection closed')],
-    ['a transport failure', new Error('write EPIPE')],
-    ['a malformed action', { action: 'something-else' }],
-  ])('%s: "the approval dialog failed", OWNER_CONFIRMATION_FAILED', async (_name, ending) => {
-    const r = await endAndRender(ending);
-    expect(r.sent).toBe(false);
-    expect(r.text).toBe(`${renderCopy('en', 'sendDraft.refused.dialogFailed')} ${code('OWNER_CONFIRMATION_FAILED')}`);
-    expect(r.text).not.toContain('window closed');
-  });
-
-  it('a host abort the SDK reports as -32001 is NOT our window closing: OWNER_CONFIRMATION_INACTIVE', async () => {
-    const aborted = new AbortController(); aborted.abort('host cancelled the tool call');
-    const r = await endAndRender(new McpError(ErrorCode.RequestTimeout, 'host cancelled the tool call'), aborted.signal);
-    expect(r.sent).toBe(false);
-    expect(r.text).toBe(`${renderCopy('en', 'sendDraft.refused.callEnded')} ${code('OWNER_CONFIRMATION_INACTIVE')}`);
-  });
-
-  it('an RequestTimeout that is neither our window nor a host abort (the SDK backstop): OWNER_CONFIRMATION_FAILED', async () => {
-    const r = await endAndRender(new McpError(ErrorCode.RequestTimeout, 'Request timed out'));
-    expect(r.sent).toBe(false);
-    expect(r.text).toContain(code('OWNER_CONFIRMATION_FAILED'));
-  });
-
-  it('a client that goes away after dispatch, before the dialog: APPROVAL_SURFACE_ABSENT ("this host cannot ask")', async () => {
-    // Connected when the root reads the surface; gone by the time the dialog
-    // would be sent — the gap `elicit` guards. Nothing is ever asked.
-    let reads = 0;
-    const elicitInput = vi.fn();
-    const box = { current: {
-      elicitInput, getClientVersion: () => ({ name: 'claude-code', version: '0' }),
-      getClientCapabilities: () => (reads++ === 0 ? { elicitation: { form: {} } } : {}),
-    } as never };
-    const approvals = createMcpOwnerApproval({ server: box });
-    let text = '';
-    await approvals.aroundDispatch(TOOL, { draft: 1 }, 'mcp_21', undefined, async () => {
-      const outcome = consumeOwnerApproval(TOOL, { draft: 1 }, 'mcp_21');
-      expect(outcome).toEqual({ decision: 'unavailable', reason: 'APPROVAL_SURFACE_ABSENT' });
-      if (outcome.decision !== 'approved') text = sendDraftRefusalText(outcome, 'd_1', 'en');
+    [{action: 'cancel'}, 'OWNER_CONFIRMATION_CANCELLED'],
+    [new McpError(ErrorCode.InvalidParams, 'bad form'), 'OWNER_CONFIRMATION_ANSWER_INVALID'],
+    [new McpError(ErrorCode.ConnectionClosed, 'closed'), 'OWNER_CONFIRMATION_FAILED'],
+    [new Error('write EPIPE'), 'OWNER_CONFIRMATION_FAILED'],
+    [{action: 'invalid'}, 'OWNER_CONFIRMATION_FAILED'],
+  ])('preserves the precise backend reason without dispatching an effect', async (ending, reason) => {
+    const elicitInput = vi.fn(async () => {if (ending instanceof Error) throw ending; return ending;});
+    const server = {current: {elicitInput, getClientCapabilities: () => ({elicitation: {form: {}}})} as never};
+    const backend = createMcpOwnerApproval({server});
+    let sends = 0;
+    await backend.aroundDispatch(TOOL, {draft: 1}, 'mcp_reason', undefined, async () => {
+      const outcome = consumeOwnerApproval(TOOL, {draft: 1}, 'mcp_reason');
+      expect(outcome).toEqual({decision: 'unavailable', reason});
+      if (outcome.decision === 'approved') sends++;
     });
-    expect(elicitInput).not.toHaveBeenCalled();
-    expect(text).toBe(`${renderCopy('en', 'sendDraft.refused.noApprovalSurface')} ${code('APPROVAL_SURFACE_ABSENT')}`);
+    expect(sends).toBe(0); expect(elicitInput).toHaveBeenCalledTimes(1);
   });
 });
 

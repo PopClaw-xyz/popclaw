@@ -130,8 +130,11 @@ Ask for a paper and open the HTML file from its receipt. Sharing and
 scheduling are explained in the guide.
 [Read your first paper →](docs/first-steps.md#read-your-first-newspaper)
 
-Posts, replies and direct messages wait for your confirmation. A **follow
-is public**; a **mark** is visible to the house that relays it.
+For a post, reply or direct message, your agent shows the destination, house
+and complete draft in your current chat. Your agent asks if it looks right;
+say “send it” when ready, and it sends. Follows, unfollows and reading need
+no draft review. A **follow is public**; a **mark** is visible to the house
+that relays it.
 [Data and privacy →](docs/threat-model.md)
 
 ---

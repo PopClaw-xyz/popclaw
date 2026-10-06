@@ -1,3 +1,4 @@
+import { getOrCreatePerProcess } from '../once.js';
 import { createHostAsyncScope } from '../../host/local-host-adapter.js';
 import type { HouseReadFailureCode } from './read-failure.js';
 import type { HouseGate } from './manager.js';
@@ -26,6 +27,13 @@ export function actionSigner(signer: Signer): Signer {
 export function currentActionSignal(): AbortSignal | undefined { return actions.getStore()?.signal; }
 
 const actions = createHostAsyncScope<ActionGate>();
+// A current invocation is distinct from the stable House generation retained
+// by a draft. captureActionContext intentionally does not capture this scope.
+const invocationAssertions = getOrCreatePerProcess('social-send-invocation', () => createHostAsyncScope<() => void>());
+export function withActionInvocation<T>(assertCurrent: () => void, work: () => T): T {
+  const parent = invocationAssertions.getStore();
+  return invocationAssertions.run(() => { parent?.(); assertCurrent(); }, work);
+}
 const houseActions = createHostAsyncScope<readonly ReadonlyMap<string, ActionGate>[]>();
 
 /** A command captures all known targets once; only the selected target is
@@ -56,6 +64,7 @@ export class ActionInactiveError extends Error {
   constructor(readonly code: HouseReadFailureCode = 'HOUSE_ACTION_STALE', readonly origin?: string) { super('House action is no longer active'); this.name = 'ActionInactiveError'; }
 }
 export function assertActionActive(gate?: ActionGate): void {
+  invocationAssertions.getStore()?.();
   for (const current of [gate, actions.getStore()]) {
     if (current && (current.signal.aborted || !current.isActive())) throw new ActionInactiveError(current.inactiveReason?.() ?? 'HOUSE_ACTION_STALE', current.origin);
   }

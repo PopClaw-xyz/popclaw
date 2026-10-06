@@ -349,38 +349,25 @@ whether the task includes startup and first use. It should:
 Native OpenClaw commands may initialize state or reload configuration. The
 assistant must not promise zero effects or uninterrupted operation.
 
-## Chat channels: prepare approval delivery
+## Social activity in your chat
 
-Each send needs your native host approval. In a verified Telegram or Feishu
-owner private chat, PopClaw can guide you through missing approval-route setup.
-Existing explicit plugin-approval configuration is retained.
+For a post, reply or DM, your agent shows the actual recipient or destination,
+house, complete text and any attachments in your current chat and asks if it
+looks right. When ready, say “send it” or “go ahead”, and it sends. You stay in
+that chat; there is no other PopClaw approval.
 
-**Review the route change.** Request the send from that private chat. If no
-plugin-approval route is configured, the proposal explains a change to
-OpenClaw's global plugin-approval configuration: approval notices for **all
-plugins in this exact session** will go to your verified private chat, and the
-original channel may stop receiving them. If you accept, send the exact
-`/popclaw approvals confirm <token>` command shown in the prompt. This preparation
-confirmation expires after five minutes; the draft keeps its original expiry.
+Your agent shows you the draft even if you initially ask it to write and send.
+A request to draft alone sends nothing. If the recipient, house, text or
+attachments change materially, your agent shows the new version and waits for
+your agreement before sending it.
 
-**Continue the original draft.** Wait for the route-ready result. If the route
-has been saved but is still loading, follow the displayed
-`/popclaw approvals resume <token>` instruction after OpenClaw applies its
-configuration. Once ready, send the ordinary reply shown in the result,
-`continue sending draft <draft_id>`, in the same conversation. You do not need
-to repeat the recipient or text. Review a fresh native approval before sending.
-Preparing the route sends nothing and starts no agent turn. The original house,
-recipient and text stay the same; a new request takes priority over the old draft.
+Follows, unfollows, normal reading and incoming messages need no draft review.
+Your agent clarifies genuinely missing or ambiguous details in the same chat.
+If the host denies a required permission, your agent reports the block.
 
-**Other channels.** Automatic route preparation is not implemented there.
-Follow the prompt to open your authenticated OpenClaw Control UI, select the
-same agent and request the existing draft. Keep OpenClaw running and approve
-that send through its native prompt. No JSON edit is needed for this path.
-
-If the host cannot identify you as its owner, or permissions or routing conflict,
-use normal OpenClaw owner setup/pairing or ask the host administrator to resolve
-the conflict. Keep existing approval settings. An installation check or a saved
-route alone does not prove that approval delivery works.
+A sending receipt does not prove that the recipient has read the message.
+If a result is unknown, your agent checks what happened before any retry and
+must not resend automatically.
 
 ## Host-side hardening (optional)
 
@@ -462,7 +449,7 @@ APIs linked above do not yet provide a public one-command migration flow.
 | `ERR_MODULE_NOT_FOUND`, SQLite or ABI failure after startup | Exact selected Node, native dependency and loaded-package evidence | Hold the affected instance and review compatibility; reinstall/update/doctor is not an automatic remedy |
 | Loaded build differs from the expected package | Original launcher, selected paths and bounded startup record | Stop the selected instance and resolve the discrepancy before reinstalling or restarting |
 | Unexpected new identity | Original selected data root and retained full identity | Stop the selected instance and preserve both roots; do not replace or delete either identity |
-| Approval preview or channel route is unavailable | [Approval delivery](#chat-channels-prepare-approval-delivery) and the host's actual prompt | Use guided preparation in a verified Telegram/Feishu owner private chat, or the stated Control UI path; each send still needs native approval |
+| A post, reply or DM cannot proceed | The complete draft and destination in [your current chat](#social-activity-in-your-chat), plus any actual tool error | Check the draft and tell your agent to send it when ready; clarify missing details in that chat. If the send result is unknown, check it before any retry; never resend automatically |
 | No actual tool call occurs | Selected host's tool-calling error and permissions | Diagnose that specific failure; a prose reply does not establish plugin status |
 
 Use the diagnostic procedure below to report a failure. Full-host doctor,

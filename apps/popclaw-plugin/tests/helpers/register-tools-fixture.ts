@@ -161,14 +161,11 @@ export function buildFakeApi(toolCtx: Record<string, unknown> = {}) {
     // which read toolCtx.sessionKey to tell the dedicated workshop session from the
     // owner's chat). Factories are resolved with a fake tool context.
     registerTool: (tool: unknown, _opts?: unknown) => {
-      const resolved =
-        typeof tool === 'function'
-          ? (tool as (ctx: unknown) => unknown)({
-              agentId: 'main-agent',
-              config: { fake: true },
-              ...toolCtx,
-            })
-          : tool;
+      const context = {agentId: 'main-agent', config: {fake: true}, sessionKey: 'agent:main:fixture',
+        sessionId: 'fixture-session', senderIsOwner: true, assertInvocationCurrent: () => {}, ...toolCtx};
+      const descriptor = tool as {contextVersion?: number; create?: (ctx: unknown) => unknown};
+      const resolved = typeof tool === 'function' ? tool(context)
+        : descriptor?.contextVersion === 2 ? descriptor.create!(context) : tool;
       if (Array.isArray(resolved)) resolved.forEach((t) => push(t as { name?: string; execute?: unknown }));
       else push(resolved as { name?: string; execute?: unknown });
     },

@@ -1,141 +1,157 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-import { test } from 'node:test';
-import { build } from 'esbuild';
+import {mkdtempSync,mkdirSync,readFileSync,realpathSync,symlinkSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {createRequire} from 'node:module';
+import {dirname,join,resolve} from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {test} from 'node:test';
+import {createHash} from 'node:crypto';
 
-// Independent bundles reproduce the host loading hooks and tools separately.
-// The actual SDK wrapper/broker and actual send tool run; only the final sender
-// is synthetic. No product runtime, remote service, or real approval is used.
-test('native approval survives separate module loads without widening grants', async () => {
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-  const sdk = realpathSync(join(root, 'node_modules/openclaw'));
-  assert.equal(JSON.parse(readFileSync(join(sdk, 'package.json'))).version, '2026.9.8');
-  const box = realpathSync(mkdtempSync(join(tmpdir(), 'popclaw-native-approval-')));
-  symlinkSync(join(root, 'node_modules'), join(box, 'node_modules'), 'dir');
-  process.env.HOME = join(box, 'home');
-  process.env.OPENCLAW_STATE_DIR = join(box, 'state');
-  process.env.OPENCLAW_CONFIG_PATH = join(box, 'state/openclaw.json');
-  process.env.POPCLAW_DATA_ROOT = join(box, 'popclaw');
-  mkdirSync(process.env.HOME); mkdirSync(process.env.OPENCLAW_STATE_DIR);
-  writeFileSync(process.env.OPENCLAW_CONFIG_PATH, '{}');
-  const spec = file => JSON.stringify(join(root, 'src', file));
-  const entry = `
-    import {registerWriteTools} from ${spec('tools/write-tools.ts')};
-    import {putDraft,noteDraftToolOutput,peekDraftSnapshot} from ${spec('tools/draft-store.ts')};
-    export * from ${spec('host/owner-approval.ts')};
-    export {registerOpenClawOwnerApprovalHooks} from ${spec('host/openclaw-owner-approval-hooks.ts')};
+// Run from scripts/tests, or pass the absolute plugin package as argv[2].
+// Official SDK loader and resolver execute unchanged. The isolated host supplies
+// synthetic admitted-run/owner facts; only the final social sender is replaced.
+// This fixture does not verify actual channel authentication or human review.
+test('pinned native SDK registers v2 social tools and retains current confirmation authority', async () => {
+  const root=resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)),'../..'));
+  const require=createRequire(join(root,'package.json'));
+  const {build}=require('esbuild');
+  const sdk=realpathSync(join(root,'node_modules/openclaw'));
+  assert.equal(JSON.parse(readFileSync(join(sdk,'package.json'))).version,'2026.9.8');
+  const inputFiles=['host/social-send-context.ts','tools/write-tools.ts','tools/register-tools.ts','tools/tool-tail.ts','tools/mcp-adapter.ts','tools/draft-store.ts','runtime/house-lifecycle/action-context.ts'];
+  const hashInputs=()=>Object.fromEntries(inputFiles.map(file=>[file,createHash('sha256').update(readFileSync(join(root,'src',file))).digest('hex')]));
+  const sourceSha256=hashInputs();
+  const box=realpathSync(mkdtempSync(join(tmpdir(),'popclaw-social-sdk-')));
+  symlinkSync(join(root,'node_modules'),join(box,'node_modules'),'dir');
+  // Never consult a live user's host configuration or data.
+  const env={...process.env,HOME:join(box,'home'),OPENCLAW_STATE_DIR:join(box,'state'),OPENCLAW_CONFIG_PATH:join(box,'state/openclaw.json'),POPCLAW_DATA_ROOT:join(box,'popclaw')};
+  for(const name of ['HOME','OPENCLAW_STATE_DIR','POPCLAW_DATA_ROOT']) mkdirSync(env[name]);
+  writeFileSync(env.OPENCLAW_CONFIG_PATH,'{}');
+  Object.assign(process.env,env);
+  globalThis.fetch=async()=>{throw Error('fixture forbids network');};
+  const spec=file=>JSON.stringify(join(root,'src',file));
+  const entry=`
+    import {registerPopclawTools} from ${spec('tools/register-tools.ts')};
+    import {putDraft,peekDraftSnapshot,noteDraftToolOutput} from ${spec('tools/draft-store.ts')};
+    import {assertActionActive} from ${spec('runtime/house-lifecycle/action-context.ts')};
+    import {makeToolCollector} from ${spec('tools/mcp-adapter.ts')};
     export {peekDraftSnapshot};
-    export function makeSendTool() {
-      const tools=[]; const runtime=async()=>{throw Error('runtime must not boot');};
-      const api={registerTool(tool){tools.push(tool);}};
-      registerWriteTools({api,runtime,deps:{api,runtime},total:4});
-      return tools.find(t=>t.name==='popclaw_send_draft');
+    export function register(api) {
+      const runtime=async()=>({egress:{home:{slug:'house-synthetic'},capturePlan:()=>({egress:{},targets:[]})}});
+      return registerPopclawTools({api,runtime,socialSendHost:'native',nativeToolNotices:true,
+        getToolNoticeContext:async()=>{throw Error('isolated fixture has no notification store');}});
     }
-    export function seed(id,sent,body='Synthetic native approval fixture.') {
-      putDraft(id,async()=>{sent();return {text:'synthetic sender completed'};},
-        {kind:'dm',recipientId:'synthetic-recipient',recipientLabel:'Synthetic recipient',
-         house:'house-synthetic',body,attachments:[],preview:null,output:null});
-      noteDraftToolOutput(id,body);
+    export function replaceSender(id,beforeEffect,effect) {
+      const snapshot=peekDraftSnapshot(id); if(!snapshot) throw Error('missing real draft');
+      putDraft(id,async()=>{await beforeEffect();assertActionActive();effect();return {text:'synthetic sender completed'};},snapshot);
+      noteDraftToolOutput(id,'Synthetic fixture manuscript');
+    }
+    export function collectNativeAsMcp() {
+      const {tools,api}=makeToolCollector(); const runtime=async()=>({});
+      registerPopclawTools({api,runtime,socialSendHost:'native'});
+      return tools.find(t=>t.name==='popclaw_send_draft');
     }`;
-  await build({ stdin: { contents: entry, resolveDir: root, loader: 'ts' },
-    absWorkingDir: root, tsconfig: join(root, 'tsconfig.json'), outfile: join(box, 'a.mjs'),
-    bundle: true, platform: 'node', format: 'esm', target: 'node22',
-    external: ['openclaw', 'openclaw/*', 'better-sqlite3', 'bindings', 'file-uri-to-path'],
-    banner: { js: "import {createRequire as __fixtureRequire} from 'node:module';const require=__fixtureRequire(import.meta.url);" },
-  });
-  writeFileSync(join(box, 'b.mjs'), readFileSync(join(box, 'a.mjs')));
-  const a = await import(pathToFileURL(join(box, 'a.mjs')));
-  const b = await import(pathToFileURL(join(box, 'b.mjs')));
-  const sdkModule = prefix => {
-    const files = readdirSync(join(sdk, 'dist')).filter(name => name.startsWith(prefix) && name.endsWith('.mjs'));
-    assert.equal(files.length, 1, `one official SDK module for ${prefix}`);
-    return import(pathToFileURL(join(sdk, 'dist', files[0])));
+  await build({stdin:{contents:entry,resolveDir:root,loader:'ts'},absWorkingDir:root,tsconfig:join(root,'tsconfig.json'),outfile:join(box,'a.mjs'),bundle:true,platform:'node',format:'esm',target:'node24',external:['openclaw','openclaw/*','better-sqlite3','bindings','file-uri-to-path'],banner:{js:"import {createRequire as __fixtureRequire} from 'node:module';const require=__fixtureRequire(import.meta.url);"}});
+  writeFileSync(join(box,'b.mjs'),readFileSync(join(box,'a.mjs')));
+  const a=await import(pathToFileURL(join(box,'a.mjs'))),b=await import(pathToFileURL(join(box,'b.mjs')));
+  const pluginId='popclaw-social-fixture',plugin=join(box,'fixture-plugin-b'),pluginA=join(box,'fixture-plugin-a');
+  mkdirSync(plugin);mkdirSync(pluginA);
+  const manifest=JSON.parse(readFileSync(join(root,'openclaw.plugin.json')));
+  writeFileSync(join(plugin,'openclaw.plugin.json'),JSON.stringify({id:pluginId,name:'Social SDK fixture',version:'1.0.0',contracts:{tools:manifest.contracts.tools},configSchema:{type:'object',properties:{},additionalProperties:false}}));
+  writeFileSync(join(plugin,'package.json'),JSON.stringify({name:pluginId,version:'1.0.0',type:'module',openclaw:{extensions:['./index.mjs']}}));
+  writeFileSync(join(plugin,'index.mjs'),`import {register} from ${JSON.stringify(pathToFileURL(join(box,'b.mjs')).href)};export default {id:${JSON.stringify(pluginId)},register};`);
+  for(const file of ['openclaw.plugin.json','package.json'])writeFileSync(join(pluginA,file),readFileSync(join(plugin,file)));
+  writeFileSync(join(pluginA,'index.mjs'),`import {register} from ${JSON.stringify(pathToFileURL(join(box,'a.mjs')).href)};export default {id:${JSON.stringify(pluginId)},register};`);
+  const sdkImport=file=>import(pathToFileURL(join(sdk,'dist',file)));
+  const loader=await sdkImport('loader-runtime-load-DCwhg2IV.mjs');
+  const resolver=await sdkImport('tools-CL6qlaud.mjs');
+  const errors=[],logger={info(){},warn(){},error(m){errors.push(m);},debug(){}};
+  const config={plugins:{enabled:true,allow:[pluginId],load:{paths:[plugin]},entries:{[pluginId]:{enabled:true}}}};
+  const acquisition=await loader.t({config,env,workspaceDir:join(box,'workspace'),onlyPluginIds:[pluginId],toolDiscovery:true,runtimeSideEffects:false,logger});
+  const configA={...config,plugins:{...config.plugins,load:{paths:[pluginA]}}};
+  const acquisitionA=await loader.t({config:configA,env,workspaceDir:join(box,'workspace-a'),onlyPluginIds:[pluginId],toolDiscovery:true,runtimeSideEffects:false,logger});
+  let sends=0;
+  const cases=[];
+  const context={config,workspaceDir:join(box,'workspace'),agentId:'main',sessionId:'synthetic-session',sessionKey:'agent:main:synthetic',requesterSenderId:'synthetic-owner',senderIsOwner:true,logger};
+  const resolveTools=(assertInvocationCurrent,extra={})=>resolver.i({context,env,runtimeRegistry:acquisition.registry,toolAllowlist:[pluginId],assertInvocationCurrent,...extra});
+  const resolveDraftTools=(assertInvocationCurrent,extra={})=>resolver.i({context:{...context,config:configA,workspaceDir:join(box,'workspace-a')},env,runtimeRegistry:acquisitionA.registry,toolAllowlist:[pluginId],assertInvocationCurrent,...extra,
+    ...extra.context?{context:{...extra.context,config:configA,workspaceDir:join(box,'workspace-a')}}:{}});
+  const tool=(tools,name)=>{const t=tools.find(t=>t.name===name);assert.ok(t,`${name} resolved from official registry; errors=${JSON.stringify(errors)}`);return t;};
+  const guard=()=>{let current=true;return {assert(){if(!current)throw Error('synthetic admitted turn closed');},close(){current=false;}};};
+  const draft=async(g=guard(),extra={})=>{
+    const tools=resolveDraftTools(()=>g.assert(),extra);
+    const result=await tool(tools,'popclaw_draft_post').execute('fixture:draft',{body:'Synthetic manuscript reviewed in original chat.'});
+    const text=result.text ?? result.content?.find(x=>x.type==='text')?.text;
+    const id=text?.match(/draft_id: (\S+)/)?.[1];assert.ok(id,text);
+    return {id,g,tools};
   };
-  const host = await sdkModule('agent-tools.before-tool-call-');
-  const embedded = await sdkModule('embedded-mode-');
-  const hooks = await import(pathToFileURL(join(sdk, 'dist/plugins/hook-runner-global.js')));
-  embedded.n(true);
-  const broker = new host.Y(); host.Z(broker);
-  let decision = 'allow-once', beforeDecision = () => {}, sent = 0;
-  const countSend = () => sent++;
-  const events = [], reports = [];
-  broker.subscribe(event => {
-    events.push(event);
-    if (event.event === 'plugin.approval.requested') queueMicrotask(() => {
-      beforeDecision(); broker.resolve(event.payload.id, decision);
-    });
-  });
-  function install(module) {
-    const registry = { plugins: [{ id: 'popclaw' }], hooks: [], typedHooks: [], trustedToolPolicies: [] };
-    module.registerOpenClawOwnerApprovalHooks({
-      on(hookName, handler) { registry.typedHooks.push({ pluginId: 'popclaw', hookName, handler }); },
-      logger: { info() {}, warn(message) { reports.push(message); }, error(message) { reports.push(message); } },
-    });
-    hooks.initializeGlobalHookRunner(registry);
-  }
-  const ctx = { agentId: 'main', sessionKey: 'agent:main:synthetic', sessionId: 'synthetic-session',
-    runId: 'synthetic-run', config: {}, requester: { channel: 'tui', senderId: 'owner', senderIsOwner: true } };
-  const native = (tool, call, draft, context = ctx, signal) =>
-    host.l(tool, context).execute(call, { draft_id: draft }, signal);
+  const send=(tools,id)=>tool(tools,'popclaw_send_draft').execute('fixture:confirm',{draft_id:id});
+  const sentText=result=>result.text ?? result.content?.find(x=>x.type==='text')?.text;
   try {
-    a.resetOwnerApprovals(); b.resetOwnerApprovals();
-    const toolA = a.makeSendTool(), toolB = b.makeSendTool();
-    install(a); a.seed('message-same', countSend);
-    assert.equal((await native(toolA, 'native:same', 'message-same')).text, 'synthetic sender completed');
-    install(b); a.seed('message-cross', countSend);
-    assert.equal((await native(toolA, 'native:cross', 'message-cross')).text, 'synthetic sender completed');
-    assert.equal(sent, 2);
-    assert.equal(a.peekDraftSnapshot('message-cross'), null);
-    assert.equal(reports.some(line => line.includes('granted and never consumed')), false);
-    assert.match((await toolA.execute('native:cross', { draft_id: 'message-cross' })).text, /ALREADY_CONSUMED/);
-    assert.equal(sent, 2);
+    const record=acquisition.registry.plugins.find(p=>p.id===pluginId);assert.ok(record,JSON.stringify(acquisition.registry.diagnostics));
+    const names=['popclaw_draft_reply','popclaw_draft_message','popclaw_draft_post','popclaw_send_draft','popclaw_feedback'];
+    for(const name of names)assert.equal(acquisition.registry.tools.find(t=>t.names.includes(name))?.contextVersion,2,name);
+    assert.equal(acquisition.registry.diagnostics.filter(d=>d.level==='error').length,0,JSON.stringify(acquisition.registry.diagnostics));
+    assert.equal(acquisitionA.registry.diagnostics.filter(d=>d.level==='error').length,0,JSON.stringify(acquisitionA.registry.diagnostics));
+    cases.push('official loader accepts current v2 descriptors including full registration/tail path');
 
-    a.seed('message-wrong-call', countSend);
-    const request = await b.ownerApprovalBeforeToolCall({ toolName: toolA.name,
-      toolCallId: 'native:bound', params: { draft_id: 'message-wrong-call' } }, ctx);
-    assert.ok(request); request.requireApproval.onResolution('allow-once');
-    assert.match((await native(toolA, 'native:other-session', 'message-wrong-call', {
-      ...ctx, sessionId: 'other-session', sessionKey: 'agent:other:synthetic',
-      requester: { ...ctx.requester, senderIsOwner: false },
-    })).text, /ORIGIN_NOT_OWNER_DIRECT/);
-    assert.match((await toolA.execute('native:other-call', { draft_id: 'message-wrong-call' })).text, /CALL_MISMATCH/);
-    assert.equal(sent, 2);
-    assert.equal((await toolA.execute('native:bound', { draft_id: 'message-wrong-call' })).text, 'synthetic sender completed');
+    const first=await draft();
+    // Module A owns the deferred closure; B owns all SDK-registered tools.
+    a.replaceSender(first.id,async()=>{},()=>sends++);first.g.close();
+    await assert.rejects(send(first.tools,first.id),/turn closed/);assert.equal(sends,0);assert.ok(b.peekDraftSnapshot(first.id));
+    const confirmation=guard();
+    assert.equal(sentText(await send(resolveTools(()=>confirmation.assert()),first.id)),'synthetic sender completed');assert.equal(sends,1);
+    assert.equal(a.peekDraftSnapshot(first.id),null);
+    cases.push('stale drafting turn rejected; fresh confirmation sends cross-bundle draft exactly once');
+    assert.notEqual(sentText(await send(resolveTools(()=>confirmation.assert()),first.id)),'synthetic sender completed');assert.equal(sends,1);
 
-    decision = 'deny'; a.seed('message-denied', countSend);
-    await assert.rejects(native(toolA, 'native:deny', 'message-denied'), /Denied by user/);
-    assert.equal(sent, 3); assert.ok(a.peekDraftSnapshot('message-denied'));
-    decision = 'allow-once'; a.seed('message-changed', countSend);
-    beforeDecision = () => a.seed('message-changed', countSend, 'Different synthetic content.');
-    assert.match((await native(toolA, 'native:changed', 'message-changed')).text, /SUBJECT_CHANGED/);
-    assert.equal(sent, 3); beforeDecision = () => {};
-    const abort = new AbortController(); a.seed('message-cancelled', countSend);
-    beforeDecision = () => abort.abort(new DOMException('Synthetic run closed', 'AbortError'));
-    await assert.rejects(native(toolA, 'native:cancel', 'message-cancelled', ctx, abort.signal), /cancelled|closed/i);
-    assert.equal(sent, 3); assert.ok(a.peekDraftSnapshot('message-cancelled')); beforeDecision = () => {};
+    const stale=await draft();a.replaceSender(stale.id,async()=>{},()=>sends++);
+    const staleConfirmation=guard(),staleTools=resolveTools(()=>staleConfirmation.assert());staleConfirmation.close();
+    await assert.rejects(send(staleTools,stale.id),/turn closed/);assert.equal(sends,1);assert.ok(a.peekDraftSnapshot(stale.id));
+    cases.push('closed confirmation before execute rejects without consuming draft/effect');
 
-    // A departing module owns only its records. A late answer cannot revive
-    // its removed call, while the other module's current pending call survives.
-    install(a); a.seed('message-old', countSend);
-    const old = await a.ownerApprovalBeforeToolCall({ toolName: toolA.name, toolCallId: 'native:old',
-      params: { draft_id: 'message-old' } }, ctx);
-    install(b); b.seed('message-live', countSend);
-    const live = await b.ownerApprovalBeforeToolCall({ toolName: toolB.name, toolCallId: 'native:live',
-      params: { draft_id: 'message-live' } }, ctx);
-    assert.ok(old); assert.ok(live);
-    a.resetOwnerApprovals(); a.makeSendTool();
-    old.requireApproval.onResolution('allow-once'); live.requireApproval.onResolution('allow-once');
-    assert.notEqual((await toolA.execute('native:old', { draft_id: 'message-old' })).text, 'synthetic sender completed');
-    assert.equal((await toolB.execute('native:live', { draft_id: 'message-live' })).text, 'synthetic sender completed');
-    assert.equal(sent, 4);
+    const mid=await draft();const midConfirmation=guard();
+    a.replaceSender(mid.id,async()=>{await Promise.resolve();midConfirmation.close();},()=>sends++);
+    await assert.rejects(send(resolveTools(()=>midConfirmation.assert()),mid.id),/turn closed/);assert.equal(sends,1);
+    cases.push('confirmation revoked after await reaches module A final action guard; no effect');
 
-    console.log(JSON.stringify({ sdk: '2026.9.8', box, syntheticSends: sent,
-      nativeApprovalRequests: events.filter(e => e.event === 'plugin.approval.requested').length }));
-  } finally {
-    broker.stop(); host.X(broker); embedded.n(false); hooks.resetGlobalHookRunner();
-    a.resetOwnerApprovals(); b.resetOwnerApprovals();
-  }
+    const absent=await draft();a.replaceSender(absent.id,async()=>{},()=>sends++);
+    await assert.rejects(send(resolveTools(undefined),absent.id),/authority is unavailable outside an admitted run or request/);assert.equal(sends,1);
+    const collector=await b.collectNativeAsMcp().execute('fixture:missing',{draft_id:absent.id});
+    assert.match(sentText(collector),/does not establish owner authority|无法确认主人权限/);assert.equal(sends,1);assert.ok(a.peekDraftSnapshot(absent.id));
+    cases.push('native with no admitted context rejects; contextless collector cannot select stdio authority');
+
+    const ownerRevoked=await draft();a.replaceSender(ownerRevoked.id,async()=>{},()=>sends++);
+    const ownerTools=resolveTools(()=>confirmation.assert());context.senderIsOwner=false;
+    assert.match(sentText(await send(ownerTools,ownerRevoked.id)),/does not establish owner authority|无法确认主人权限/);
+    assert.equal(sends,1);assert.ok(a.peekDraftSnapshot(ownerRevoked.id));context.senderIsOwner=true;
+    cases.push('SDK and wrapper retain live owner getter; owner revocation rejects existing tool');
+
+    // Actual SDK continuation issuance, run ownership and caller scope. No
+    // handwritten ownerContinuation is passed to the official tool resolver.
+    const runs=await sdkImport('agent-run-registry-BDW3IRlF.mjs');
+    const callers=await sdkImport('gateway-caller-context-DQ2iIITl.mjs');
+    const cron=await sdkImport('cron-creator-authority-context-D-BVNJXy.mjs');
+    const runId='synthetic-continuation-run',instance={runId,instanceId:'synthetic-continuation-instance'};
+    const continuationGuard=guard(),ownerGuard=guard();
+    const authority=runs.i(instance,()=>continuationGuard.assert());
+    runs.y(runId,{agentId:context.agentId,sessionKey:context.sessionKey,sessionId:context.sessionId});
+    const scope=cron.u(runId,{kind:'unknown'},undefined,()=>{continuationGuard.assert();return true;},undefined,{senderId:context.requesterSenderId,channel:'tui',accountId:'synthetic-account',isCurrent(){try{ownerGuard.assert();return true;}catch{return false;}}});
+    const caller={agentId:context.agentId,sessionKey:context.sessionKey,approvalAuthority:authority,operationalRunInstance:instance,receiptAuthority:()=>runs.A(authority)};
+    await callers.c(caller,()=>cron.f(scope,async()=>{
+      const ownerContinuation=cron.o({runId,agentId:context.agentId,sessionKey:context.sessionKey,sessionId:context.sessionId});
+      assert.ok(ownerContinuation,'official SDK must issue continuation');assert.equal(ownerContinuation.isCurrent(),true);
+      const continuationContext={...context,senderIsOwner:false,requesterSenderId:'untrusted-route'};
+      const extra={context:continuationContext,ownerContinuation};
+      const d=await draft(guard(),extra);a.replaceSender(d.id,async()=>{},()=>sends++);
+      assert.equal(a.peekDraftSnapshot(d.id).binding.senderId,context.requesterSenderId);
+      assert.equal(sentText(await send(resolveTools(undefined,extra),d.id)),'synthetic sender completed');assert.equal(sends,2);
+      const revoked=await draft(guard(),extra);a.replaceSender(revoked.id,async()=>{},()=>sends++);
+      const tools=resolveTools(undefined,extra);ownerGuard.close();assert.equal(ownerContinuation.isCurrent(),false);
+      await assert.rejects(send(tools,revoked.id),/Requester owner identity is no longer active/);assert.equal(sends,2);assert.ok(a.peekDraftSnapshot(revoked.id));
+      cases.push('SDK-issued owner continuation overrides untrusted route identity; revocation rejects live tools');
+    }));
+    runs.C(authority);
+    assert.deepEqual(hashInputs(),sourceSha256,'fixture inputs changed during execution; rerun on a fixed candidate');
+    console.log(JSON.stringify({sdk:'2026.9.8',node:process.version,box,syntheticSends:sends,registeredTools:acquisition.registry.tools.length,draftingRegistryTools:acquisitionA.registry.tools.length,sourceSha256,cases,errors,boundaries:['synthetic local host admission/owner facts; no actual channel authentication or human review','synthetic final sender; no product signer/egress/network/real IM','official SDK modules imported unchanged; no descriptor/context logic mocked']}));
+  } finally {await acquisitionA.release();await acquisition.release();}
 });

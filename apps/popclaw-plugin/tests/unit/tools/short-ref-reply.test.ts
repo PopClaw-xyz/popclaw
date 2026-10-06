@@ -30,7 +30,7 @@ import { registerWriteTools } from '../../../src/tools/write-tools.js';
 import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
 import type { MasterKey } from '../../../src/identity/keystore.js';
 import { _draftsForTest } from '../../../src/tools/draft-store.js';
-import { sendDraftApproved } from '../../helpers/owner-approval-script.js';
+import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
 import {
   _observedPostIdsForTest,
   rememberObservedPostIds,
@@ -174,7 +174,7 @@ function setup(o: {
     },
   } as Parameters<typeof registerPopclawTools>[0]['api'];
 
-  registerPopclawTools({ api, runtime, getWorldDeps: async () => worldDeps });
+  registerPopclawTools({socialSendHost: 'local-stdio',  api, runtime, getWorldDeps: async () => worldDeps });
   return { tools, pushed };
 }
 
@@ -225,7 +225,7 @@ function setupWithCache(cache: WorldFeedCache): { tools: ReturnType<typeof setup
     egress: { push: async () => ({ status: 200, eventId: 'deadbeef' }) },
     worldFeedCache: cache,
   }));
-  registerPopclawTools({
+  registerPopclawTools({socialSendHost: 'local-stdio',
     api,
     runtime: runtime as unknown as Parameters<typeof registerPopclawTools>[0]['runtime'],
     // The draft path never needs world deps here; the world tools simply
@@ -271,7 +271,7 @@ describe('C3: author_latest short link → draft_post reply → send_draft', () 
     expect(draft.text).toMatch(/Draft reply post/);
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
 
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/已回复/);
     // The receipt's "→ #<target10>" proves the short ref resolved to FULL_A.
     expect(sent.text).toContain(`#${SHORT_A}`);
@@ -293,7 +293,7 @@ describe('C3: author_latest short link → draft_post reply → send_draft', () 
     expect(draft.text).toMatch(/Draft reply post/);
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
 
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/已回复/);
     expect(pushedPrevEventId(pushed[0]!)).toBe(FULL_A);
   });
@@ -307,7 +307,7 @@ describe('C3: author_latest short link → draft_post reply → send_draft', () 
       reply_to_event_id: SHORT_A,
     });
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/已回复/);
   });
 
@@ -322,7 +322,7 @@ describe('C3: author_latest short link → draft_post reply → send_draft', () 
     expect(draft.text).toMatch(/Draft quote post/);
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
 
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/已引用/);
     expect(pushedPrevEventId(pushed[0]!)).toBe(FULL_A);
   });
@@ -466,7 +466,7 @@ describe('C3: legacy full 64-hex ids', () => {
     expect(draft.text).toMatch(/Draft reply post/);
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
 
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/已回复/);
     expect(pushedPrevEventId(pushed[0]!)).toBe(UNSEEN);
   });
@@ -480,7 +480,7 @@ describe('C3: legacy full 64-hex ids', () => {
       reply_to_event_id: `${WEB}/post/${UNSEEN}`,
     });
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/已回复/);
     expect(pushedPrevEventId(pushed[0]!)).toBe(UNSEEN);
   });
@@ -505,7 +505,7 @@ describe('C3: mutual exclusion and the confirm gate', () => {
     expect(draft.text).toMatch(/Draft reply post/);
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
 
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/只能二选一/);
     expect(pushed).toHaveLength(0);
   });
@@ -521,8 +521,8 @@ describe('C3: mutual exclusion and the confirm gate', () => {
     expect(draft.text).not.toMatch(/draft_id/);
 
     // Nothing was parked behind any token — a blind send finds nothing.
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, 'post-999');
-    expect(sent.text).toBe(`${renderCopy(ownerLang(), 'draft.expiredToken', { token: 'post-999' })} (reason: SUBJECT_REFUSED/DRAFT_UNKNOWN_OR_EXPIRED)`);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, 'post-999');
+    expect(sent.text).toBe(renderCopy(ownerLang(), 'draft.expiredToken', { token: 'post-999' }));
     expect(pushed).toHaveLength(0);
   });
 });
@@ -656,7 +656,7 @@ describe('C3 r17: runtime failure is unverifiable (tool-initialization layer)', 
     registerWriteTools({
       api,
       runtime: runtime as Parameters<typeof registerWriteTools>[0]['runtime'],
-      deps: {} as Parameters<typeof registerWriteTools>[0]['deps'],
+      deps: {socialSendHost: 'local-stdio'} as Parameters<typeof registerWriteTools>[0]['deps'],
       total: 4,
     });
     return { tools };
@@ -715,7 +715,7 @@ describe('C3 r17: runtime failure is unverifiable (tool-initialization layer)', 
       reply_to_event_id: SHORT_A,
     });
     const token = ok.text.match(/draft_id: (post-[0-9]+)/)![1]!;
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/已回复/);
 
     // recovered, cache holds a COLLIDING B → explicit ambiguity refusal
@@ -741,11 +741,11 @@ describe('C3 r17: runtime failure is unverifiable (tool-initialization layer)', 
     });
     expect(draft.text).toMatch(/Draft reply post/);
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1]!;
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
     expect(sent.text).toMatch(/已回复/);
   });
 
-  it('③-b runtime throws but the ref is a full 64-hex → legacy path unaffected (drafts, sends)', async () => {
+  it('③-b runtime throws with a full 64-hex → no draft is parked without a frozen route', async () => {
     const { tools } = setupWriteTools(
       vi.fn(async () => {
         throw new Error('runtime not up');
@@ -753,10 +753,9 @@ describe('C3 r17: runtime failure is unverifiable (tool-initialization layer)', 
     );
     const UNSEEN = '9'.repeat(64);
 
-    const draft = await findTool(tools, 'popclaw_draft_post').execute('cid', {
+    await expect(findTool(tools, 'popclaw_draft_post').execute('cid', {
       body: 'ack',
       reply_to_event_id: UNSEEN,
-    });
-    expect(draft.text).toMatch(/Draft reply post/);
+    })).rejects.toThrow('runtime not up');
   });
 });

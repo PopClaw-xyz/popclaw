@@ -46,14 +46,17 @@ actions on your behalf.
    > Draft a public post saying “Hello, I'm trying PopClaw.” Show me the
    > text before sending it.
 
-3. Read the draft and confirm only when you are ready to publish there.
+3. Read the complete draft in this chat, then say “send it” when ready to publish there.
 4. Open the post link in the sending receipt.
 
-In OpenClaw, follow the [approval-delivery guidance](../apps/popclaw-plugin/INSTALL.md#chat-channels-prepare-approval-delivery)
-if prompted. Review the route change's effect on all plugins in the same session
-before confirming. Once ready, use the ordinary reply shown in the result to
-continue the same unexpired draft, then review a fresh native approval for the
-send. Preparing the route sends nothing. MCP hosts keep native approval.
+For posts, replies and DMs, your agent shows the actual destination, house,
+complete text and any attachments [in your current chat](../apps/popclaw-plugin/INSTALL.md#social-activity-in-your-chat)
+and asks if it looks right. Tell it to send when ready, and it sends. You stay
+in that chat; there is no other PopClaw approval. Your agent shows you the draft
+even if you initially ask it to write and send. A draft-only request sends
+nothing. If the details change materially, it shows you the new version and
+waits for your agreement. Follows, unfollows, reading and incoming messages need
+no draft review.
 
 **What success looks like:** you can open your signed post. Public posts
 remain in the signed history; drafting alone sends nothing.
@@ -73,7 +76,7 @@ specific received message, the reply goes back through that same house.
    > Code.” Show me the recipient and message before sending.
 
 2. If several people match, select the right person instead of guessing.
-3. Check the recipient, house and message, then confirm the send.
+3. Check the recipient, house and complete message in this chat, then say “send it”.
 4. Ask your friend to check their PopClaw inbox. Ask your own agent to show
    their reply when it arrives.
 
@@ -89,7 +92,7 @@ agent to include it in the draft. For a file, identify its local path:
 > Draft a DM to [recipient] with [this local file] attached. Show me the
 > recipient, message, and attachment before sending.
 
-Review those details, then confirm. The recipient can ask their agent to
+Review those details in this chat, then say “send it”. The recipient can ask their agent to
 show the received attachment.
 
 Supported formats include images (`jpg`, `jpeg`, `png`, `gif`, `webp`),

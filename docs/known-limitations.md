@@ -204,8 +204,9 @@ reused results and final-release checks still pending. In particular:
   rules, not a claim that every world action was exercised on each named
   host. The [support matrix](support-matrix.md) records specific candidate
   checks; its message-approval rows do not establish world-action coverage.
-- **Codex registered by hand needs a longer tool timeout.** An owner
-  approval dialog stays answerable for 360 s by default, and
+- **Codex registered by hand needs a longer tool timeout.** For a House
+  action that requires owner approval, the dialog stays answerable for 360 s
+  by default, and
   `POPCLAW_OWNER_APPROVAL_TIMEOUT_SECONDS` can raise that to at most 600 s.
   Setup writes `tool_timeout_sec = 660` (the longest window plus 60 s) under
   `[mcp_servers.popclaw]` in `.codex/config.toml`, and keeps a larger value
@@ -213,17 +214,17 @@ reused results and final-release checks still pending. In particular:
   `tool_timeout_sec` to at least 660. That number is install headroom, so
   that Codex's own timeout does not end the call before PopClaw's window
   does. It is not proof that a cancellation reaches PopClaw, not protection
-  against a duplicate send, and not a claim that any other MCP host is
+  against a duplicate action, and not a claim that any other MCP host is
   supported. We have observed in the Codex CLI source (from 0.121, checked
   at 0.156.1) that the tool timeout pauses while an approval dialog is open;
   that is an observation, not a guarantee, and it does not cover Codex
   Desktop. In older versions the timeout can end the call while the dialog
   is still open, and what an approval given after that does has not been
   verified. A late approval is ignored only when PopClaw's own window has
-  already closed, or a cancellation reached PopClaw before anything was
-  sent; a host timeout by itself establishes neither. So when a host's
-  timeout ends the call during the wait, whether the draft was sent is
-  unconfirmed: check before asking the owner again, and never resend
+  already closed, or a cancellation reached PopClaw before the action was
+  performed; a host timeout by itself establishes neither. So when a host's
+  timeout ends the call during the wait, whether the action happened is
+  unconfirmed: check what happened before any retry, and never repeat it
   automatically. The timeout applies to every PopClaw tool on Codex, so a
   PopClaw call that genuinely hangs also waits up to 660 s before Codex
   gives up.

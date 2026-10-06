@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerPopclawTools } from '../../../src/tools/register-tools.js';
-import { sendDraftApproved } from '../../helpers/owner-approval-script.js';
+import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
 import { _draftsForTest } from '../../../src/tools/draft-store.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { runPopclawMessageCommand } from '../../../src/commands/popclaw-message.js';
@@ -22,17 +22,14 @@ const cases = [
   { name: 'popclaw_draft_post', params: { body }, sender: runPopclawPostCommand, positional: [body] },
 ];
 
-/**
- * A body this long cannot fit inside the host's approval prompt, so the owner
- * reads it through the trusted draft preview and the approval binds THAT
- * delivery (send-draft-subject.ts). The collector therefore resolves the tool
- * factories with the host 8.2 delivery capability the long-content path really
- * depends on — resolving them with `{}` would be testing a host on which a
- * 4 KB letter cannot be approved at all.
- */
+/** Full text remains in the original-chat tool result, including long bodies.
+ * Native factories receive synthetic host identity and current-call facts;
+ * this fixture does not prove that a person read or confirmed the manuscript. */
 function ownerDeliveringCollector(): { tools: Array<{ name: string; execute(id: string, params: unknown): Promise<{ text: string }> }>; api: { registerTool(tool: unknown): void; logger: { info(m: string): void } } } {
   const tools: Array<{ name: string; execute(id: string, params: unknown): Promise<{ text: string }> }> = [];
   const toolCtx = {
+    agentId: 'main',
+    assertInvocationCurrent: () => {},
     sessionKey: 'agent:main:tui:owner',
     sessionId: 'sess-fixture',
     requesterSenderId: 'tui:owner',
@@ -44,7 +41,8 @@ function ownerDeliveringCollector(): { tools: Array<{ name: string; execute(id: 
     tools,
     api: {
       registerTool: (tool: unknown) => {
-        const resolved = typeof tool === 'function' ? (tool as (ctx: unknown) => unknown)(toolCtx) : tool;
+        const descriptor = tool as {contextVersion?: number; create?: (ctx: unknown) => unknown};
+        const resolved = typeof tool === 'function' ? tool(toolCtx) : descriptor?.contextVersion === 2 ? descriptor.create!(toolCtx) : tool;
         for (const t of Array.isArray(resolved) ? resolved : [resolved]) {
           const candidate = t as { name?: unknown; execute?: unknown };
           if (typeof candidate?.name === 'string' && typeof candidate.execute === 'function') {
@@ -78,16 +76,10 @@ describe.each(['zh-CN', 'en-US'])('complete draft confirmation in %s', (language
     const result = await draftTool.execute('draft', params) as { text: string };
     expect(result.text).toContain(body);
     expect(result.text).toContain('END😀');
-    expect(result.text).toContain('only after the owner has explicitly said to send');
-    // The real draft result must distinguish intent from the host decision,
-    // before the model asks the owner to use an approval control.
-    expect(result.text).toContain(language === 'zh-CN'
-      ? '普通聊天回复“发”、“Allow”或“Allow（放行）”不能批准'
-      : 'Ordinary chat replies such as "send", "Allow" or "Allow (approve)" do not approve');
-    expect(result.text).toContain('complete /approve command shown by the host');
-    expect(result.text).toContain('Never submit approval on the owner\'s behalf');
-    expect(result.text).toContain('Do not submit another send call while this one is waiting');
-    expect(result.text).toContain('Without a tool result, report the send outcome as unknown');
+    expect(result.text).toContain('confirms in ordinary chat');
+    expect(result.text).toContain('original conversation');
+    expect(result.text).toContain('never retry automatically');
+    expect(result.text).not.toMatch(/\/approve|allow-once|Control UI/);
     if (name === 'popclaw_draft_message') {
       expect(result.text).toContain(language === 'zh-CN' ? '📝 私信草稿：' : '📝 Draft DM to ');
       expect(result.text).toContain('Recipient Fixture#');
@@ -97,12 +89,11 @@ describe.each(['zh-CN', 'en-US'])('complete draft confirmation in %s', (language
     const draftId = result.text.match(/draft_id:\s*(\S+)/)?.[1];
     expect(draftId).toBeTruthy();
     const sendTool = collector.tools.find((t) => t.name === 'popclaw_send_draft')!;
-    // The owner approving this exact draft is now part of what confirmation
-    // means; handing the id back on its own sends nothing.
-    await sendDraftApproved(sendTool.execute, draftId!);
+    // The harness represents prior ordinary-chat review and confirmation.
+    await sendDraftConfirmed(sendTool.execute, draftId!);
     expect(sender).toHaveBeenCalledOnce();
     expect(vi.mocked(sender).mock.calls[0]?.[0].positional).toEqual(positional);
-    await sendDraftApproved(sendTool.execute, draftId!);
+    await sendDraftConfirmed(sendTool.execute, draftId!);
     expect(sender).toHaveBeenCalledOnce();
   });
 });

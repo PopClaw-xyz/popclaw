@@ -17,9 +17,9 @@ it('document/audio byte delivery is supported, but MCP returns only a local path
   const alice = await seedIdentity(join(root, 'alice'), relay.url, 'Attachment Reporter');
   const bob = await seedIdentity(join(root, 'bob'), relay.url, 'Attachment Developer');
   relay.identities.add(alice.id); relay.identities.add(bob.id);
-  // The letter is only sent because the owner answered the root's approval
-  // dialog — the same dialog a real Claude Code / Codex client renders.
-  const sender = await connectMcp(alice.root, 'audit:sender', { answerApprovals: 'approve' }); cleanup.push(() => sender.close());
+  // The harness invokes send after representing ordinary-chat manuscript
+  // review and confirmation. It does not prove an actual person's consent.
+  const sender = await connectMcp(alice.root, 'audit:sender'); cleanup.push(() => sender.close());
   const receiver = await connectMcp(bob.root, 'audit:receiver'); cleanup.push(() => receiver.close());
   await sender.call('popclaw_show_inbox'); await receiver.call('popclaw_show_inbox');
   // These are opaque synthetic transport fixtures, not evidence of document
@@ -31,9 +31,9 @@ it('document/audio byte delivery is supported, but MCP returns only a local path
     const token = /draft_id: (\S+)/.exec(draft)?.[1]; expect(token).toBeTruthy();
     const dialogsBefore = sender.dialogs.length;
     expect(text(await sender.call('popclaw_send_draft', { draft_id: token }))).toContain('event_id:');
-    // Green because an owner answer exists, never because anything was skipped.
-    expect(sender.dialogs.length).toBe(dialogsBefore + 1);
-    expect(sender.dialogs.at(-1)!.shown).toContain(`AUDIT-${ext}`);
+    expect(draft).toContain(`AUDIT-${ext}`);
+    expect(draft).toContain(bob.id);
+    expect(sender.dialogs.length).toBe(dialogsBefore);
     let id: number | undefined;
     for (let i = 0; i < 100; i++) {
       const list = JSON.parse(text(await receiver.call('popclaw_show_inbox', { limit: 100 })));

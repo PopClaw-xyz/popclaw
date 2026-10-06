@@ -11,7 +11,7 @@ import bs58 from 'bs58';
 import { InMemoryHostAdapter } from '../../../src/host/host-adapter.in-memory.js';
 import { registerPopclawTools, OPTIONAL_TOOLS } from '../../../src/tools/register-tools.js';
 import { _draftsForTest } from '../../../src/tools/draft-store.js';
-import { sendDraftApproved } from '../../helpers/owner-approval-script.js';
+import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
 import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
 import { runMigrations } from '../../../src/host/migrations.js';
 import { BondsStore } from '../../../src/bonds/bonds-store.js';
@@ -445,10 +445,10 @@ describe('registerPopclawTools', () => {
     registerPopclawTools({ api, runtime: makeMockRuntime() });
 
     const sendTool = findTool(tools, 'popclaw_send_draft');
-    const r = await sendDraftApproved(sendTool.execute, 'nope');
+    const r = await sendDraftConfirmed(sendTool.execute, 'nope');
     // Through the lexicon since 2026-09-22, so this file's pinned zh-CN lane
     // is what it must come back in.
-    expect(r.text).toBe(`${renderCopy(ownerLang(), 'draft.expiredToken', { token: 'nope' })} (reason: SUBJECT_REFUSED/DRAFT_UNKNOWN_OR_EXPIRED)`);
+    expect(r.text).toBe(`${renderCopy(ownerLang(), 'draft.expiredToken', { token: 'nope' })}`);
   });
 
   // 认人（ADR-0028 修订）：DM 工具的 recipient 收人用形式，草稿时就翻译成完整 id。
@@ -479,7 +479,7 @@ describe('registerPopclawTools', () => {
 
     // 发出回执与草稿同款人话（不是裸 id）。
     const token = draft.text.match(/draft_id: (message-[0-9]+)/)![1];
-    const sent = await sendDraftApproved(sendTool.execute, token!);
+    const sent = await sendDraftConfirmed(sendTool.execute, token!);
     expect(sent.text).toContain(`Blackfeather#${sigil}`);
     expect(sent.text).toContain(recipientId);
   });
@@ -555,7 +555,7 @@ describe('registerPopclawTools', () => {
     expect(draft.text).toMatch(/draft_id: message-/);
 
     const token = draft.text.match(/draft_id: (message-[0-9]+)/)![1];
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token!);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
     expect(sent.text).toContain('📎 附件：cat.png');
 
     expect(fx.push).toHaveBeenCalledOnce();
@@ -583,7 +583,7 @@ describe('registerPopclawTools', () => {
     });
     expect(draft.text).not.toContain('附图');
     const token = draft.text.match(/draft_id: (message-[0-9]+)/)![1];
-    await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token!);
+    await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
 
     const sp = popclaw.identity.SignedPayload.decode(fx.push.mock.calls[0]![0]);
     const payload = sp.payload;
@@ -613,7 +613,7 @@ describe('registerPopclawTools', () => {
     expect(draft.text).toMatch(/draft_id: message-/);
 
     const token = draft.text.match(/draft_id: (message-[0-9]+)/)![1];
-    const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token!);
+    const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
     expect(sent.text).toContain('📎 附件：meme.gif');
     expect(sent.text.toLowerCase()).not.toMatch(/usage/);
 
@@ -859,7 +859,7 @@ describe('registerPopclawTools', () => {
     const m = draft.text.match(/draft_id: (post-[0-9]+)/);
     expect(m).toBeTruthy();
 
-    const sent = await sendDraftApproved(sendTool.execute, m![1]!);
+    const sent = await sendDraftConfirmed(sendTool.execute, m![1]!);
     expect(sent.text).toMatch(/已发帖 #[0-9a-f]{10}/);
   });
 
@@ -878,7 +878,7 @@ describe('registerPopclawTools', () => {
     const m = draft.text.match(/draft_id: (post-[0-9]+)/);
     expect(m).toBeTruthy();
 
-    const sent = await sendDraftApproved(sendTool.execute, m![1]!);
+    const sent = await sendDraftConfirmed(sendTool.execute, m![1]!);
     expect(sent.text).toMatch(/已回复/);
   });
 
@@ -897,7 +897,7 @@ describe('registerPopclawTools', () => {
     const m = draft.text.match(/draft_id: (post-[0-9]+)/);
     expect(m).toBeTruthy();
 
-    const sent = await sendDraftApproved(sendTool.execute, m![1]!);
+    const sent = await sendDraftConfirmed(sendTool.execute, m![1]!);
     expect(sent.text).toMatch(/已引用/);
   });
 
@@ -924,17 +924,8 @@ describe('registerPopclawTools', () => {
     const second = buildFakeApi();
     modB.registerPopclawTools({ api: second.api, runtime: makeMockRuntime() });
 
-    // The owner approves through the RELOADED instance's own seam: approval
-    // bookkeeping is module state and does not survive a reload, while the
-    // draft table is process state and must — which is the whole point here.
-    const seamB = await import('../../../src/host/owner-approval.js');
-    seamB.setOwnerApprovalSurface(true);
+    // The normal later owner turn sends without a second host approval.
     const callRef = 'reload-send';
-    const request = await seamB.ownerApprovalBeforeToolCall(
-      { toolName: 'popclaw_send_draft', params: { draft_id: token }, toolCallId: callRef },
-      { toolCallId: callRef, requester: { channel: 'tui', senderId: 'owner-fixture', senderIsOwner: true } },
-    );
-    request!.requireApproval.onResolution('allow-once');
 
     const sent = await findTool(second.tools, 'popclaw_send_draft').execute(callRef, { draft_id: token });
     // The fresh module instance has its own owner-language state, so it speaks the default (en).
@@ -965,9 +956,9 @@ describe('registerPopclawTools', () => {
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1];
     const sendTool = findTool(tools, 'popclaw_send_draft');
 
-    expect((await sendDraftApproved(sendTool.execute, token!)).text).toMatch(/已发帖 #/);
-    const again = await sendDraftApproved(sendTool.execute, token!);
-    expect(again.text).toBe(`${renderCopy(ownerLang(), 'draft.expiredToken', { token: token! })} (reason: SUBJECT_REFUSED/DRAFT_UNKNOWN_OR_EXPIRED)`);
+    expect((await sendDraftConfirmed(sendTool.execute, token!)).text).toMatch(/已发帖 #/);
+    const again = await sendDraftConfirmed(sendTool.execute, token!);
+    expect(again.text).toBe(`${renderCopy(ownerLang(), 'draft.expiredToken', { token: token! })}`);
     // Whatever the lane, the sentence has to say the id is spent.
     expect(again.text).toMatch(/single-use|只能用一次/);
   });
@@ -986,8 +977,8 @@ describe('registerPopclawTools', () => {
       const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1];
 
       nowSpy.mockReturnValue(t0 + 30 * 60 * 1000 + 1);
-      const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token!);
-      expect(sent.text).toBe(`${renderCopy(ownerLang(), 'draft.expiredToken', { token: token! })} (reason: SUBJECT_REFUSED/DRAFT_UNKNOWN_OR_EXPIRED)`);
+      const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
+      expect(sent.text).toBe(`${renderCopy(ownerLang(), 'draft.expiredToken', { token: token! })}`);
       // Actionable in either lane: how long it lived, and what to call next.
       expect(sent.text).toMatch(/30 minutes|30 分钟/);
       expect(sent.text).toContain('popclaw_draft_');
@@ -1027,7 +1018,7 @@ describe('registerPopclawTools', () => {
     const m = (draft.text as string).match(/draft_id: (post-[0-9]+)/);
     expect(m).toBeTruthy();
 
-    const sent = await sendDraftApproved(sendTool.execute, m![1]!);
+    const sent = await sendDraftConfirmed(sendTool.execute, m![1]!);
     expect(sent.text).toMatch(/只能二选一/);
   });
 
@@ -1685,7 +1676,7 @@ describe('popclaw_note_taste', () => {
       expect(draft.text).toContain('卡在哪里：没有这个工具'); // 和信的原文
 
       const token = draft.text.match(/draft_id: (\S+)/)![1];
-      const sent = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token!);
+      const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
 
       expect(push).toHaveBeenCalledTimes(1); // 走的就是普通私信那条路（签名+加密）
       expect(sent.text).toContain('bug 反馈已加密送出');
@@ -1734,7 +1725,7 @@ describe('popclaw_note_taste', () => {
       // 信封大小只有签名那一刻才量得出来，所以这个诚实报错出现在确认之后
       // （和 popclaw_draft_message 的正文一样）—— 两步都零外发。
       const token = draft.text.match(/draft_id: (\S+)/)![1];
-      const r = await sendDraftApproved(findTool(tools, 'popclaw_send_draft').execute, token!);
+      const r = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
 
       expect(push).not.toHaveBeenCalled(); // zero egress — nothing partially delivered
       expect(r.text).toContain('公开协议信封的大小上限');

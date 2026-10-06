@@ -133,6 +133,8 @@ async function main(): Promise<void> {
 
   const { api, tools } = makeToolCollector((m) => logger.info({}, m));
   registerPopclawTools({
+    // This root is single-owner local stdio. Hosted must use its own caller binding.
+    socialSendHost: 'local-stdio',
     notificationTools: false,
     getToolNoticeContext: async signal => runtimeToolNoticeContext(await runtime(), notificationConsumerId(), signal),
     api,

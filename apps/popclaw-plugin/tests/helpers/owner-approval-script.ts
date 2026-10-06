@@ -58,17 +58,12 @@ export const scriptOwnerApproval = (toolName: string, params: unknown, callRef: 
 let calls = 0;
 export const nextCallRef = (prefix = 'call'): string => `${prefix}-${++calls}`;
 
-/**
- * The owner approving one `popclaw_send_draft` call, then that call running —
- * the two halves a host performs around one send. Tests that predate the gate
- * used to call the tool directly; this is what that now means, and it goes
- * through the seam rather than round it.
- */
-export async function sendDraftApproved(
+/** The fixture represents ordinary chat confirmation before invoking the
+ * tool. It is not a server-observed proof of human content consent. */
+export async function sendDraftConfirmed(
   execute: (callId: string, params: unknown) => Promise<{ text: string }>,
   draftId: string,
 ): Promise<{ text: string }> {
   const callRef = nextCallRef('send-draft');
-  await scriptOwnerApproval('popclaw_send_draft', { draft_id: draftId }, callRef);
   return execute(callRef, { draft_id: draftId });
 }

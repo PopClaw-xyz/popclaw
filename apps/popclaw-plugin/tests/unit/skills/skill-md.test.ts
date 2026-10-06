@@ -41,6 +41,7 @@ function buildFakeApi() {
 function fullRegisteredToolNames(): string[] {
   const { api, tools } = buildFakeApi();
   registerPopclawTools({
+    socialSendHost: 'local-stdio',
     api,
     runtime: (async () => ({})) as unknown as Parameters<typeof registerPopclawTools>[0]['runtime'],
     inboundMediaDirs: [tmpdir()],

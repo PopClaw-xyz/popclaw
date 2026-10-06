@@ -1,33 +1,8 @@
-/**
- * A long draft's READ-ONLY REVIEW COPY: the owner's way to read the whole
- * letter before a short approval dialog asks about it.
- *
- * Why it exists: a 975-character letter put whole into the MCP approval
- * dialog reached the Codex desktop app starting at its third paragraph, with
- * no way to scroll back to the recipient or the opening (2026-09-28, D2-1
- * R2). A plain Markdown link to an absolute path, posted in the chat, opens a
- * file in that app's side panel, where the owner can read top, middle and
- * bottom and return (probe 1, 2026-09-28). So a draft too long for a compact
- * dialog gets a file, a link in the draft tool's result for the agent to
- * post, and a compact dialog that names the file.
- *
- * WHERE: only on a root that injects `DraftReviewFiles` — today the MCP root.
- * The native OpenClaw root injects nothing, so it never writes a copy, never
- * shows a link and never gets the compact dialog; its prompts are unchanged.
- * The decision is the root's, never a tool parameter's.
- *
- * WHAT: generated here, from the frozen snapshot, by the plugin. The model
- * never writes it. It is never read back as content: the send always uses the
- * snapshot, and the file is only re-hashed before an approval is honoured
- * (`verifyDraftReview`). It is never attached to the outgoing message.
- *
- * NOTHING UNTRUSTED RENDERS. Every value from outside (recipient label, house,
- * attachment names, the body) sits inside a fenced code block whose backtick
- * fence is longer than any backtick run in what it encloses, so no Markdown,
- * link, image or HTML can form from it. Header values additionally have any
- * character that paints nothing (line breaks included) escaped to a visible
- * `‹U+XXXX›`, so a value cannot add a header line of its own.
- */
+/** Optional read-only manuscript copies for hosts that open local chat links.
+ * Copies are generated from the frozen snapshot and never become send content.
+ * Their hash is checked before sending. Full tool-result review remains the
+ * original-chat path; no approval dialog or different channel is required.
+ * Untrusted values stay inside safely sized code fences. */
 import nacl from 'tweetnacl';
 import { hasInvisibleCharacter } from '../host/owner-approval.js';
 import { kb } from '../messaging/dm-media.js';
@@ -37,7 +12,11 @@ import {
   draftDigest, noteDraftReview, peekDraftSnapshot, setDraftReviewFiles,
   type DraftReviewFiles, type DraftSnapshot,
 } from './draft-store.js';
-import { needsReviewCopy } from './send-draft-subject.js';
+/** A convenience review copy for long manuscripts; unrelated to approval
+ * dialog budgets. The complete original-chat tool result remains available. */
+export function needsReviewCopy(snapshot: DraftSnapshot): boolean {
+  return [...snapshot.body].length > 400 || snapshot.body.split('\n').length > 20;
+}
 
 /** Why a root's review directory is not used, for the log only. */
 export const REVIEW_PATH_NOT_SHOWABLE = 'REVIEW_PATH_NOT_SHOWABLE';
@@ -130,7 +109,7 @@ export function withDraftReview(token: string, text: string, source: DraftReview
   // paints nothing: an ideographic or no-break space, a zero-width joiner in
   // an emoji folder name) or that breaks the link's angle-bracket form (`<`,
   // `>`) is treated exactly like one that could not be created: no copy, no
-  // decision recorded, and the draft keeps the whole-text dialog. The reason
+  // decision recorded, and the draft keeps its complete tool result. The reason
   // goes to the log, never to the owner as a refusal.
   if (hasInvisibleCharacter(files.dir) || /[<>]/.test(files.dir)) {
     files.note?.(REVIEW_PATH_NOT_SHOWABLE);
@@ -139,7 +118,7 @@ export function withDraftReview(token: string, text: string, source: DraftReview
   const snapshot = peekDraftSnapshot(token);
   if (!snapshot) return text;
   const lang = ownerLang();
-  const needed = needsReviewCopy(snapshot, token, lang);
+  const needed = needsReviewCopy(snapshot);
   if (!needed) {
     noteDraftReview(token, { needed: false, lang, file: null });
     return text;

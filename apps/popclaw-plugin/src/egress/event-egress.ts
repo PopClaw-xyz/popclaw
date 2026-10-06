@@ -1,3 +1,5 @@
+import { assertActionActive } from '../runtime/house-lifecycle/action-context.js';
+
 export interface PushResult {
   readonly status: number;
   /**
@@ -96,6 +98,7 @@ export function pushRouted<R>(
   houseSlug: string | undefined,
   bytes: Uint8Array,
 ): Promise<R> {
+  assertActionActive();
   return egress.pushTo ? egress.pushTo(houseSlug, bytes) : egress.push(bytes);
 }
 

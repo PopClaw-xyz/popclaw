@@ -1,3 +1,4 @@
+import { rethrowActionCancellation } from '../runtime/house-lifecycle/action-context.js';
 /**
  * /popclaw post [<body>] [--reply <event_id> | --quote <event_id>] <body>
  *
@@ -142,6 +143,7 @@ export async function runPopclawPostCommand(
       nickname: deps.nickname,
     });
   } catch (err) {
+    rethrowActionCancellation(err);
     return { text: failureText('/popclaw post', err) };
   }
 
@@ -157,6 +159,7 @@ export async function runPopclawPostCommand(
   try {
     pushResult = await pushRouted(deps.egress, targetHouse, signed.signedPayloadBytes);
   } catch (err) {
+    rethrowActionCancellation(err);
     return { text: failureText('/popclaw post', err) };
   }
 

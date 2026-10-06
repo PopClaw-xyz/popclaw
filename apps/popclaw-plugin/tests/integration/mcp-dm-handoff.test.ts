@@ -24,9 +24,9 @@ it('two MCP processes: encrypted screenshot → durable handoff → full image �
   const bob = await seedIdentity(join(tmp, 'bob'), relay.url, 'Test Developer');
   relay.identities.add(alice.id); relay.identities.add(bob.id);
   const a = await connectMcp(alice.root, 'claude:reporter'); cleanups.push(() => a.close());
-  // Bob's client answers the root's owner-approval dialog; the reply below is
-  // sent because of that answer and for no other reason.
-  const b = await connectMcp(bob.root, 'codex:developer', { answerApprovals: 'approve' }); cleanups.push(() => b.close());
+  // The harness represents original-chat review and confirmation before send;
+  // no separate elicitation is required and no human reading is proved.
+  const b = await connectMcp(bob.root, 'codex:developer'); cleanups.push(() => b.close());
   const secondHost = await connectMcp(bob.root, 'claude:developer'); cleanups.push(() => secondHost.close());
   await b.call('popclaw_show_inbox'); await a.call('popclaw_show_inbox');
   await secondHost.call('popclaw_show_inbox');
@@ -54,9 +54,9 @@ it('two MCP processes: encrypted screenshot → durable handoff → full image �
   const dialogsBefore = b.dialogs.length;
   const sent = text(await b.call('popclaw_send_draft', { draft_id: token! }));
   expect(sent).toContain('event_id:');
-  // The owner was shown this exact letter and said yes once.
-  expect(b.dialogs.length).toBe(dialogsBefore + 1);
-  expect(b.dialogs.at(-1)!.shown).toContain('CASE-IMG-1');
+  expect(draft).toContain('CASE-IMG-1: fixed the Save spacing; please verify.');
+  expect(draft).toContain(alice.id);
+  expect(b.dialogs.length).toBe(dialogsBefore);
   const reply = [...relay.frames.values()].map((v) => popclaw.event.EventEnvelope.decode(v)).find((e) => e.actor?.popclawId === bob.id)!;
   expect(reply.directMessage?.toPopclawId).toBe(alice.id);
   expect(reply.prevEventId).toBe(signed.eventId);

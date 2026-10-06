@@ -11,6 +11,7 @@ import { ownerLang, setOwnerLang, failureText } from '../lexicon/owner-language.
 import { renderCopy, type Lang } from '../lexicon/index.js';
 import { isValidTz, setOwnerTz } from '../time/time-context.js';
 import type { NameChain } from '../identity/person-name.js';
+import { socialDraftBinding, socialToolFactory } from '../host/social-send-context.js';
 import { runPopclawFeedbackCommand, type FeedbackDraftPlan } from '../commands/popclaw-feedback.js';
 import { hostDbSlug } from '../ingress/host-slug.js';
 import type { Signer } from '../identity/signer.js';
@@ -67,7 +68,7 @@ function feedbackDraftPreview(plan: FeedbackDraftPlan, token: string, lang: Lang
 }
 
 /**
- * The same letter, as the owner-approval seam binds it: recipient, the house
+ * The complete letter for original-chat review: recipient, the house
  * whose contact that is, the complete text, and the health report riding
  * along — the report as BYTES, not as a path, for the reason
  * `DraftAttachmentSnapshot` gives: a path re-read at send time is not what the
@@ -96,7 +97,7 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
   // command existed at the time). This goes through the exact same command and the exact
   // same DM path as `/popclaw feedback`, and the receipt is relayed through word for word.
   api.registerTool(
-    (toolCtx: unknown) => ({
+    socialToolFactory(deps.socialSendHost, (toolCtx: unknown) => ({
     name: 'popclaw_feedback',
     description:
       "Draft product feedback only when the owner asks; never call it on your own initiative. Report errors and blockers " +
@@ -187,8 +188,8 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
             // outbound DM and must clear the DM door, but what the owner is
             // asked to approve is a letter — so the snapshot says so, and it
             // carries the same recipient, house and complete text the preview
-            // below shows (send-draft-subject.ts binds this, not the id).
-            putDraft(token, send, feedbackSnapshot(plan, attachment));
+            // below shows; the id is only an internal lookup handle.
+            putDraft(token, send, {...feedbackSnapshot(plan, attachment), binding: socialDraftBinding(deps.socialSendHost, toolCtx)});
             const preview = feedbackDraftPreview(plan, token, ownerLang());
             const outcome = await deliverDraftPreview(toolCtx, preview);
             noteDraftPreview(token, preview, outcome.status);
@@ -204,7 +205,7 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
       );
       return { type: 'text' as const, text: reply.text };
     },
-    }),
+    }), deps.getHostedSocialInvocation),
     { name: 'popclaw_feedback' },
   );
 

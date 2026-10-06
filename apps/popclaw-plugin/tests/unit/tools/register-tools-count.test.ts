@@ -39,7 +39,9 @@ function register(deps: Partial<Parameters<typeof registerPopclawTools>[0]>) {
     registerTool: (tool: unknown) => {
       // Same two shapes register-tools.test.ts handles: plain object, or a
       // factory `(toolCtx) => toolDef` (the newspaper tools).
-      const resolved = typeof tool === 'function' ? (tool as (ctx: unknown) => unknown)({ agentId: 'main-agent', config: {} }) : tool;
+      const descriptor = tool as {contextVersion?: number; create?: (ctx: unknown) => unknown};
+      const context = {agentId: 'main-agent', config: {}};
+      const resolved = typeof tool === 'function' ? tool(context) : descriptor?.contextVersion === 2 ? descriptor.create!(context) : tool;
       if (Array.isArray(resolved)) resolved.forEach(push);
       else push(resolved);
     },

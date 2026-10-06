@@ -1,3 +1,4 @@
+import { rethrowActionCancellation } from '../runtime/house-lifecycle/action-context.js';
 /**
  * /popclaw message <to_popclaw_id> "<body>"
  *
@@ -192,6 +193,7 @@ export async function runPopclawMessageCommand(
       ...(media ? { media: { bytes: media.bytes, mime: media.mime } } : {}),
     });
   } catch (err) {
+    rethrowActionCancellation(err);
     // The public envelope's fail-closed size cap is a protocol fact, not a
     // bad recipient: surface it as what it is instead of a key complaint.
     if (String(err).includes('WIRE_LIMIT')) {

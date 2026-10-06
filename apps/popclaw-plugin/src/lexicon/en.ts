@@ -1326,23 +1326,6 @@ export const EN: Lexicon = {
     'draft.presend.notFollowingYou':
       '   💡 They do not follow you yet — the letter still reaches their inbox, but it will not ' +
       'interrupt them, so they have to go looking. To be seen sooner: follow them, or ask them to follow you.\n',
-    // The one preview push this plugin makes goes down the turn's own chat,
-    // and the approval prompt goes wherever the host routes it. When those are
-    // not the same chat, the push is the one that must not happen — an approve
-    // button in the owner's private chat never proved the full text before it
-    // was also there (ruling 2026-09-21T20:09Z, tools/draft-preview-delivery.ts).
-    'draft.preview.forwardingDisabled':
-      'Direct preview delivery: not sent. This host has not enabled plugin approval forwarding ({reason}), '
-      + 'so it cannot request the owner’s approval for this call. No preview delivery was attempted. '
-      + 'The complete draft is in this tool output. Ask the owner or host administrator to configure '
-      + 'approval forwarding to a verified private chat with the owner. Agreement in chat does not replace '
-      + 'the host’s one-time approval bound to this call. The draft may expire before configuration is ready.',
-    'draft.preview.notTheOwnerApprovalChat':
-      'Direct preview delivery: not sent. This chat is not the chat this host would ask the owner '
-      + 'for approval in ({reason}), so pushing the draft here could put its private body in front '
-      + 'of someone who is not the owner. Nothing was attempted. The complete draft is in this tool '
-      + 'output above — show it to the owner word for word yourself, in a chat they can approve from. '
-      + "The owner's explicit confirmation before popclaw_send_draft is still required.",
     'draft.message.emptyBody':
       'This message is empty. Give it a body or an image (image_path) — one of the two.',
     'draft.message.attach': '   📎 attached: {name} ({size})\n',
@@ -1350,12 +1333,9 @@ export const EN: Lexicon = {
     // A long draft's read-only review copy (src/tools/draft-review.ts). The
     // entry goes in the draft tool's result: the agent posts the link line to
     // the owner before asking for approval. The link opens the file.
-    'draft.review.entry':
-      'This draft is too long to read in the approval dialog. Post the next line to the owner exactly as written, ' +
-      'then wait for them to say send before calling popclaw_send_draft:\n{link}',
+    'draft.review.entry': 'Full manuscript review: {link}. Read it in this conversation before confirming send.',
     'draft.review.linkText': 'Review draft {id} \u2014 full text',
-    'draft.review.writeFailed':
-      'The review copy of this draft could not be written, so the owner has no way to read it in full; it will not be approvable. Draft it again.',
+    'draft.review.writeFailed': 'The optional review file could not be written. Show the complete manuscript from this tool result in the original conversation.',
     'draft.review.file.heading': '# PopClaw draft review copy (read-only; nothing is sent from this file)',
     'draft.review.file.header': 'draft: {id}\nto: {to}\nhouse: {house}\nattachments: {attachments}\ntext: {chars} chars, digest {digest}',
     'draft.review.file.none': '(none)',
@@ -1370,27 +1350,7 @@ export const EN: Lexicon = {
       + "draft_id is single-use (it's voided once sent), and a draft auto-expires after 30 minutes.\n"
       + 'Call the matching popclaw_draft_* tool again to make a new draft, confirm with the owner, then send.',
     // -------------------------------------------------------------------
-    // The owner-approval prompt for popclaw_send_draft, and the sentences
-    // the tool returns when that approval did not happen
-    // (tools/send-draft-subject.ts).
-    //
-    // The prompt is the LAST thing between a model's draft and a real
-    // outbound message, so it names the recipient, the house, the
-    // attachments and the text — never a summary of them. The refusals
-    // below are one per reason family on purpose: "arrange an approval
-    // surface", "ask in your own session" and "the draft changed" are three
-    // different next moves, and a shared sentence would hide which.
-    // -------------------------------------------------------------------
-    'sendDraft.kind.dm': 'DM',
-    'sendDraft.kind.reply': 'reply',
-    'sendDraft.kind.post': 'post',
-    'sendDraft.kind.feedback': 'feedback letter',
-    // The one input of the owner-approval dialog on an MCP host. Generic on
-    // purpose: the seam serves any registrant, and one that supplies its own
-    // label ("Tick = willing to publish this post; Accept submits") shows that
-    // instead. The box is declared `default: false`, so an untouched one comes
-    // back false and is a refusal (Claude Code 2.1.283 / codex-cli 0.157.1,
-    // 2026-09-27; see `buildApprovalDialog`).
+    // Shared owner-confirmation copy for actions that still require approval.
     'ownerApproval.confirm.title': 'Approve this action',
     'ownerApproval.confirm.description': 'Approves the action described above, once. Decline or cancel and nothing happens.',
     // The one input of the MCP confirmation dialog for a world action
@@ -1401,201 +1361,15 @@ export const EN: Lexicon = {
     'world.action.approval.timedOut':
       'the approval window closed before an answer arrived; nothing was done. If the approval dialog is still open, approving it now will not run the action — ask the owner, then request it again',
     'world.action.approval.confirmDescription': 'Runs the world action described above, once (ref {ref}). Decline or cancel and nothing happens.',
-    // COLUMN BUDGET. The approval rows are composed to at most 64 display
-    // columns each (send-draft-subject.ts `MAX_ROW_COLUMNS`), and a header row
-    // over that is refused rather than cut. Several of these share a row with
-    // another fact, so each frame stays well inside — terse on purpose.
-    'sendDraft.approval.title': 'Send this {kind}?',
-    // The letter is too long for the box, and the only complete copy is the
-    // draft tool's own output in this host's transcript. The title is the
-    // first line of the dialog's message, visible even when a host folds the
-    // rest, so "go and read it" belongs there.
-    'sendDraft.approval.titleReadAbove': 'Send this {kind}? Read the full text above first.',
-    'sendDraft.approval.to': 'To: {who}',
-    'sendDraft.approval.house': 'house: {house}',
-    // A feedback letter only: the house named here is the one whose guide.md
-    // declares the contact. Which house RELAYS the letter is read live inside
-    // the send and is not bound by this approval, so the frame must not read
-    // as a route.
-    'sendDraft.approval.declaringHouse': 'contact declared by: {house}',
-    'sendDraft.approval.target': 'replying to: {target}',
-    'sendDraft.approval.attachments': 'attached: {count} — {names}',
-    'sendDraft.approval.bodyWhole': 'Text ({chars} chars), in full:',
-    'sendDraft.approval.bodyOpening': 'Text ({chars} chars), opening:',
-    // The compact dialog of a draft whose full text is in its review copy:
-    // what that copy is (its digest and file name, then its full path, as a
-    // fallback if the link was not relayed), and the one line under the box.
-    'sendDraft.approval.reviewDigest': 'text digest: {digest} \u00b7 review file: {name}',
-    'sendDraft.approval.reviewPath': 'review file path: {path}',
-    'sendDraft.approval.reviewHint': 'Full text: the review file linked above (draft {id}, {digest})',
-    'sendDraft.approval.bodyMore': ' […]',
-    // The row that sends the owner to the manuscript, shared three ways with
-    // the draft id and the length — the id is what the tool result prints as
-    // `draft_id:`, so it is how they find the right output to expand, and the
-    // length is what they check the copy they expand against. Wording is
-    // honest about what is NOT here: it never says they have seen it.
-    'sendDraft.approval.bodyLength': '{chars} chars',
-    // The draft's number, on its own row, in every layout but the pointer one
-    // (which carries it inside its pointer row).
-    'sendDraft.approval.draftId': 'draft: {id}',
-    // The one input of the MCP confirmation dialog for a draft: what ticking
-    // it means, and what Accept does. Consent is still Accept with it ticked.
-    // By kind, because on the dialog's first line a quoted one-line post and a
-    // DM differ only by the `> ` prefix. At most 64 code points each.
-    'sendDraft.approval.confirm.post': 'Tick = willing to publish this post; Accept submits',
-    'sendDraft.approval.confirm.reply': 'Tick = willing to publish this reply; Accept submits',
-    'sendDraft.approval.confirm.dm': 'Tick = willing to send this DM; Accept submits',
-    'sendDraft.approval.confirm.feedback': 'Tick = willing to send this feedback letter; Accept submits',
-    // One line, every MCP host, inside 80 display columns with the real draft
-    // id; Claude Code is named inside the sentence, never branched on. Its
-    // transcript view opens at the TAIL (probe v3.2), so the line says to go
-    // to the top; only keys the probe verified are named (ctrl+o, g).
-    'sendDraft.approval.fullTextHint': 'Full draft {id} is above. Claude Code: ctrl+o, g to top, ctrl+o back',
-    // The same line when the whole letter is already the dialog's first line:
-    // the change path, and only as it really runs — Decline sends nothing and
-    // keeps the draft, the owner says what to change, a new version is shown
-    // and asked about afresh. Nothing reopens or sends by itself.
-    'sendDraft.approval.changeHint': 'Decline: not sent, draft kept. Say what to change; approve the new version.',
-    // Decline's meaning and the full-text pointer in one line, for a letter
-    // that is not whole on the first line. Keeps all three keys, `ctrl+o back`
-    // included. Used only when it fits 80 columns with the real id; otherwise
-    // `fullTextHint` alone.
-    'sendDraft.approval.declineAndFullText': 'Decline=unsent,kept. Full {id}: Claude Code ctrl+o, g top, ctrl+o back',
-    'sendDraft.approval.bodyInToolOutput': 'full text: expand the output above',
-    // The same line when the prompt itself carries the whole letter (every MCP
-    // dialog). The first sentence holds on every host. Claude Code 2.1.283
-    // shows only the start of an elicitation message and cannot expand it
-    // (probes v3-v3.2), so a clause labelled as Claude Code's says how to
-    // read the draft tool's full output in the transcript: ctrl+o opens it at
-    // the tail, g goes to the top, ctrl+o returns to this form. Same 80-column
-    // rule with the real id; no room is left for Decline's clause, so it is
-    // dropped whole, as `fullTextHint` alone already drops it.
-    'sendDraft.approval.wholeHere': 'Draft {id} in full above. Claude Code: ctrl+o, g top, ctrl+o back',
-    // The same, when the draft tool's output is NOT in the transcript: ctrl+o
-    // would open nothing, so no Claude Code clause, and Decline's meaning fits.
-    'sendDraft.approval.wholeHereOnlyAndDecline': 'Draft {id} in full above. Decline = not sent, draft kept.',
-    'sendDraft.approval.wholeHereOnly': 'Draft {id} in full above.',
-    // Inline, inside the quoted ending row: text between the two ends is not
-    // shown, and the prompt has to say so rather than let two fragments read
-    // as one continuous letter.
-    'sendDraft.approval.bodySkipped': '[…]',
-    'sendDraft.approval.noBody': 'No text, attachment only.',
-    // One trusted row, added only when the text below it had to be rendered.
-    // The owner is reading an escape, not the character itself, and a prompt
-    // that did not say so would be quietly claiming more than it knows.
-    'sendDraft.approval.escapedInvisible':
-      '\u2039U+XXXX\u203a = a character that shows nothing, or a literal \u2039',
-    // The same statement, short enough to share a row when the five-row
-    // pointer layout has no row left to give it.
-    'sendDraft.approval.escapedInvisibleShort': '\u2039U+XXXX\u203a = hidden char or literal \u2039',
-    'sendDraft.approval.previewedAt': 'in your preview since {when}',
-    'sendDraft.approval.notPreviewed': 'not sent to your preview',
-    'sendDraft.approval.ordinaryReplies': 'Ordinary chat replies such as "send", "Allow" or "Allow (approve)" do not approve a pending host request.',
-    'sendDraft.refused.denied':
-      'Not sent: the owner did not approve it (declined, or submitted without ticking the box). The draft is still here — ask them whether to send it as it is or what to change, redraft if needed, and offer it again.',
-    'sendDraft.refused.timeout':
-      'Not sent: the approval window closed before an answer arrived. Nothing was sent, and the draft is still here. ' +
-      'If the approval dialog is still open, approving it now will not send — ask the owner whether to send it, then call this again. ' +
-      '(reason: OWNER_APPROVAL_TIMED_OUT_BEFORE_ANSWER)',
-    'sendDraft.refused.dialogCancelled':
-      'Not sent: the approval dialog was closed without an answer, so nothing was sent. The draft is still here — ask the owner whether to send it, then call this again.',
-    'sendDraft.refused.answerUnreadable':
-      'Not sent: the owner answered, but this host returned the answer in a form PopClaw could not read, so nothing was sent. ' +
-      'The draft is still here — ask again, and report the host if it repeats.',
-    'sendDraft.refused.dialogFailed':
-      'Not sent: the approval dialog failed before an answer arrived (the connection to the host dropped or the host reported an error), so nothing was sent. ' +
-      'The draft is still here — ask the owner again once the host is reachable.',
-    'sendDraft.refused.callEnded':
-      'Not sent: this call was cancelled while the approval dialog was open, so nothing was sent. ' +
-      'If the dialog is still showing, approving it now will not send. The draft is still here — ask the owner whether to send it, then call this again.',
-    'sendDraft.refused.noApprovalSurface':
-      'Not sent: this host has no way to ask the owner to approve a send, and popclaw will not send on your say-so. ' +
-      'Tell the owner, and ask them to send it themselves — the draft is still here.',
-    'sendDraft.refused.notOwnerTurn':
-      'Not sent: this turn is not the owner speaking to you directly, so the approval cannot be put in front of them. ' +
-      'Ask the owner to say it in their own session with you; the draft is still here.',
-    'sendDraft.refused.notWired':
-      'Not sent: owner approval for sending is not wired up on this host. Tell the owner; the draft is still here.',
-    // The other half of SUBJECT_CHANGED: the draft is simply not there any
-    // more, so nothing about it "changed" — saying so would send the agent
-    // hunting for an edit nobody made.
-    'sendDraft.refused.noLongerThere':
-      'Not sent: that draft is no longer available — it expired, or newer drafts replaced it. ' +
-      'Make a fresh draft, show it to the owner, and ask again.',
-    'sendDraft.refused.changed':
-      'Not sent: this draft is no longer the one the owner approved — its recipient or its text changed after they read it. ' +
-      'Make a fresh draft, show it to them, and ask again.',
-    'sendDraft.refused.alreadyUsed':
-      'Not sent: that approval has already been used. Each approval sends once; make a fresh draft and ask the owner again.',
-    'sendDraft.refused.noCallIdentity':
-      'Not sent: this host gave the call no identity, so an approval cannot be tied to it. Tell the owner; the draft is still here.',
-    'sendDraft.refused.otherCall':
-      'Not sent: the owner approved a different call, not this one. Do not retry — ask the owner to confirm again for this attempt.',
-    'sendDraft.refused.tooLongUnseen':
-      'Not sent: the complete draft was never shown on this host — it did not reach the owner\'s preview, no draft tool ' +
-      'put the whole text in its own output here, and it is too long for the approval prompt, so the owner would be ' +
-      'approving words they have no way to read. Run the draft tool again so the complete text is shown in full, ' +
-      'then ask the owner to read it there and approve.',
-    // The review copy the owner was pointed at is gone or its bytes changed.
-    'sendDraft.refused.reviewCopyChanged':
-      'Not sent: the review copy changed or is gone \u2014 regenerate the review (draft it again) and ask the owner to read the new copy and approve.',
-    // The review copy could not be written when the draft was made, so there
-    // was never anything for the owner to read.
-    'sendDraft.refused.reviewNotWritten':
-      'Not sent: the review copy of this draft could not be written, so the owner had nothing to read it in full. Nothing was sent; try drafting it again.',
-    // Header rows only: the recipient, the house, the attachment names. The
-    // body is escaped instead of refused, so reaching this means the
-    // DESTINATION could not be shown honestly.
-    'sendDraft.refused.notShowable':
-      'Not sent: the recipient, lore-house or attachment name on this draft contains characters that show nothing on screen, ' +
-      'so the owner cannot be told truthfully where it would go. Draft it again addressed in plain text.',
-    // The approval PREVIEW is over the dialog's display budget. Says nothing
-    // about the letter being invalid or too big to send, and does not ask
-    // for it to be shortened on that ground.
-    'sendDraft.refused.previewOverBudget':
-      'Not sent: the approval preview for this draft is larger than the approval dialog\'s display budget, so it was not shown and nothing was sent. The draft is kept. Tell the owner; they can send it themselves.',
-    'sendDraft.refused.tooLongToShow':
-      'Not sent: this draft cannot be shown whole in the approval prompt. Shorten it with the owner, or ask them to send it themselves.',
-    'sendDraft.refused.cannotShow':
-      'Not sent: the owner could not be shown this draft, so nothing was approved. Show them the draft yourself and ask how to proceed.',
-    // The whole route family in one sentence: the host would not have put this
-    // approval into the chat the call came from. WHICH part of the routing said
-    // so is what the reason code carries; the two facts a person needs here are
-    // "not this chat" and "compare it with the configured one". It must never
-    // suggest a way round the approval — there is none, and this is the first
-    // place someone stuck would go looking for one.
-    'approvalSetup.required': 'The message is still a draft. OpenClaw needs an approval notification route. Preparing it will forward approval notices for ALL plugins in this exact session to your verified owner private chat; the original channel may no longer receive those notices. It does not approve or send this message. To accept this route change, send {command}. After preparation, one ordinary reply will continue the original draft for a separate one-time send confirmation. This preparation expires in five minutes; the draft keeps its original expiry.',
-    'approvalSetup.untrusted': 'Nothing was sent. Approval preparation needs one host-verified owner in the current Telegram or Feishu private chat, with an unambiguous account and session binding. Complete normal OpenClaw owner setup/pairing or ask the host administrator to resolve the route conflict. The draft remains available until its original expiry. Do not replace host approval with ordinary chat consent.',
-    'approvalSetup.cannotApprove': 'Nothing was sent. This Feishu account is disabled or its current approval permissions do not allow this owner to approve. Preparation did not change those permissions. Ask the host administrator to resolve the account permission conflict through normal OpenClaw account management, then request the existing draft again. The original draft keeps its original expiry.',
-    'approvalSetup.unsupported': 'Nothing was sent. Automatic preparation for this channel is not implemented. Open your authenticated OpenClaw Control UI, select the same agent, and request "send existing draft {draft}". You do not need to re-enter the recipient or body, or edit JSON. Review the complete recipient and body in the native prompt and approve once there. Keep OpenClaw running: the original draft retains its original expiry. If the owner approval prompt is unavailable, stop and report that; do not send through another route.',
-    'approvalSetup.invalid': 'Preparation is no longer valid for this identity, account, session, or draft. Nothing was sent. If the original draft still exists, request its send again to obtain a new preparation confirmation. An expired or consumed draft needs a new draft and a new one-time approval.',
-    'approvalSetup.failed': 'Approval preparation failed or the host configuration changed. Nothing was sent and no alternative configuration write was attempted. The draft retains its original expiry. Request the original draft again after the host administrator resolves the configuration or write failure.',
-    'approvalSetup.loading': 'The route was saved, but its active routing is not yet verified. Nothing was sent. After OpenClaw finishes applying its configuration, send {command} to check preparation again. This command does not write the configuration again, start an agent turn, or approve sending. Once ready, follow its instruction to reply and continue the original draft.',
-    'approvalSetup.ready': 'The host approval route is ready for this session. Nothing was sent. This preparation command does not start an agent turn: reply with the ordinary message "continue sending draft {draft}" to request a separate native one-time confirmation. You do not need to repeat the recipient or body. The original draft keeps its original expiry.',
-    'approvalSetup.statusMissing': 'Installation does not make private sending ready: no host plugin approval forwarding route is configured. In a verified Telegram or Feishu owner private chat, request sending your draft to review one preparation confirmation. Automatic preparation for other channels is not implemented; use your authenticated OpenClaw Control UI with the same agent. Each send will still need its own native one-time approval.',
-    'approvalSetup.statusConfigured': 'Host plugin approval forwarding has an explicit configuration. It will be preserved. Each send verifies the active route for that exact owner turn and still needs a native one-time approval; installation or this status check does not prove that private sending is ready.',
-    'sendDraft.refused.forwardingDisabled':
-      'Not sent: this host has not enabled plugin approval forwarding, so it cannot request the owner’s approval for this call. '
-      + 'Ask the owner or host administrator to configure approval forwarding to a verified private chat with the owner. '
-      + 'Agreement in chat does not replace the host’s one-time approval bound to this call. '
-      + 'The draft was not consumed; it may expire before configuration is ready.',
-    'sendDraft.refused.notTheApprovalChat':
-      'Not sent: this chat is not the chat the host is configured to ask the owner in, so the approval could not be put in front of them. ' +
-      'Tell the owner, and ask them to compare the configured approval target with this chat — the draft is still here.',
-    'sendDraft.refused.noOwnerConfigured':
-      'Not sent: this host has no owner list configured on this channel, so nobody can be recognised as the owner and no approval can be asked for. ' +
-      'Tell the owner to configure it; the draft is still here.',
-    // Machine-facing, and identical in every locale on purpose: the agent, the
-    // owner and whoever reads the transcript afterwards all need the SAME
-    // string to search for. It rides beside the sentence, never instead of it.
-    'sendDraft.refused.reasonCode': '(reason: {reason})',
-
-    // -------------------------------------------------------------------
-    // C3 short-reference reply resolution
-    // (world/post-ref.ts + write-tools.ts popclaw_draft_post). Unique match
-    // only; absence/ambiguity/malformed/cross-site are each named and
-    // refused — never pick the first match.
-    // -------------------------------------------------------------------
+    // Ordinary social-send boundaries and compatibility guidance.
+    'socialSend.recipient': 'Recipient: {recipient}',
+    'socialSend.sourcePreview': 'Source preview: {context}',
+    'socialSend.house': 'House: {house}',
+    'socialSend.materialChanged': 'Not sent: the draft material changed. Show the intended new manuscript and attachments and ask the owner to confirm.',
+    'socialSend.ownerRequired': 'Not sent: the current host invocation does not establish owner authority. Report the host limitation in this conversation; do not change routes or invent permission.',
+    'socialSend.conversationChanged': 'Not sent: this draft belongs to a different conversation. Prepare the intended manuscript here and ask the owner to review it.',
+    'socialSend.reviewChanged': 'Not sent: the manuscript review copy changed or is missing. Show a fresh copy of the intended manuscript and ask the owner to confirm it.',
+    'socialSend.approvalsRetired': 'Ordinary messages, replies and posts use one manuscript review and confirmation in this conversation. No PopClaw approval route setup is needed. Existing host approval settings were not changed.',
     'draft.postref.notHex':
       '⚠️ Not a valid post reference ({ref}): expected a full 64-hex event_id, a short id of at least 6 hex chars, or a /post/ link from this web base.',
     'draft.postref.tooShort': '⚠️ Short id too short: at least 6 hex chars (got: {ref}).',

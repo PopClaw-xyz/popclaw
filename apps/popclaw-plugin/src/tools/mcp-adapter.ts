@@ -68,8 +68,10 @@ export function makeToolCollector(log: (m: string) => void = () => {}): ToolColl
       // sessionKey — resolved with an empty context, which the newspaper tools
       // read as "not a workshop session" and treat exactly as before.
       registerTool: (tool: unknown) => {
-        const resolved =
-          typeof tool === 'function' ? (tool as (ctx: unknown) => unknown)({}) : tool;
+        const descriptor = tool as {contextVersion?: number; create?: (ctx: unknown) => unknown};
+        // Native descriptors can be listed here, but {} conveys no authority.
+        const resolved = typeof tool === 'function' ? (tool as (ctx: unknown) => unknown)({})
+          : descriptor?.contextVersion === 2 && typeof descriptor.create === 'function' ? descriptor.create({}) : tool;
         if (Array.isArray(resolved)) resolved.forEach(push);
         else push(resolved);
       },
@@ -177,6 +179,13 @@ export function withNativeToolNotice(api: ToolCollector['api'] | {registerTool: 
     }};
   };
   return {...api, registerTool: (tool: unknown, opts?: unknown) => {
+    const descriptor = tool as {contextVersion?: number; create?: (ctx: unknown) => unknown};
+    if (descriptor?.contextVersion === 2 && typeof descriptor.create === 'function') {
+      return api.registerTool({...descriptor, create: (ctx: unknown) => {
+        const resolved = descriptor.create!(ctx);
+        return Array.isArray(resolved) ? resolved.map(wrap) : wrap(resolved);
+      }}, opts);
+    }
     if (typeof tool !== 'function') return api.registerTool(wrap(tool), opts);
     api.registerTool((ctx: unknown) => {
       const resolved = (tool as (ctx: unknown) => unknown)(ctx);
