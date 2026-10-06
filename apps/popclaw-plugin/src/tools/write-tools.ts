@@ -15,7 +15,7 @@ import { normalizeHouseOrigin } from '../runtime/house-lifecycle/control-client.
 import { assertHouseActionActive } from '../runtime/house-lifecycle/action-context.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
-import { formatPerson, unresolvedText } from '../identity/person-resolver.js';
+import { formatPerson, unresolvedText, displayNickname } from '../identity/person-resolver.js';
 import { loadDmAttachment, kb } from '../messaging/dm-media.js';
 import { runPopclawReplyCommand } from '../commands/popclaw-reply.js';
 import { runPopclawMessageCommand } from '../commands/popclaw-message.js';
@@ -160,6 +160,8 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         houseSlug: item.houseSlug || draftRuntime.egress?.home?.slug,
         actorVerified: item.actorVerified?.map(verified => ({ ...verified })),
       } : null;
+      const replyName = replyItem
+        ? displayNickname(draftRuntime.nameOf?.(replyItem.authorPopclawId ?? '')) || displayNickname(replyItem.handle) : '';
       const token = makeDraftToken('reply');
       // The snapshot, not `p`: the model still holds the parameters object it
       // passed in, and everything the closure reads off it at send time is
@@ -168,7 +170,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'reply',
         ...(replyItem?.authorPopclawId ? { recipientId: replyItem.authorPopclawId } : {}),
-        ...(replyItem?.handle ? { recipientLabel: `@${replyItem.handle}` } : {}),
+        ...(replyName ? { recipientLabel: `@${replyName}` } : {}),
         ...(replyItem?.houseSlug ? { house: replyItem.houseSlug } : {}),
         target: `${p.platform}:${p.post_id}`,
         body: String(p.body ?? '').trim(),
@@ -294,7 +296,12 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const token = makeDraftToken('message');
       // The person resolved above is the person this letter is bound to. A
       // frozen copy, because the object itself is handed back to the closure.
-      const pinned = Object.freeze({ ...person });
+      const pinned = Object.freeze({
+        ...person,
+        nickname: replySource
+          ? displayNickname(rt.nameOf?.(person.popclawId, replySource.senderNickname) ?? replySource.senderNickname) || person.nickname
+          : person.nickname,
+      });
       const snapshot: DraftSnapshot = {
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'dm',
@@ -488,7 +495,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         targetLine,
         ...(snapshot.house ? [renderCopy(ownerLang(), 'socialSend.house', {house: snapshot.house})] : []),
         ...(source?.handle || source?.authorPopclawId ? [renderCopy(ownerLang(), 'socialSend.sourceAuthor', {
-          author: [source.handle, source.authorPopclawId].filter(Boolean).join(' '),
+          author: [displayNickname(draftRuntime.nameOf?.(source.authorPopclawId)) || displayNickname(source.handle), source.authorPopclawId].filter(Boolean).join(' '),
         })] : []),
         ...(source?.textPreview ? [renderCopy(ownerLang(), 'socialSend.sourcePreview', {context: sourceExcerpt(source.textPreview)})] : []),
         ...(targetId && (!source?.textPreview || !(source.handle || source.authorPopclawId)) ? [renderCopy(ownerLang(), 'socialSend.sourceUnavailable')] : []),

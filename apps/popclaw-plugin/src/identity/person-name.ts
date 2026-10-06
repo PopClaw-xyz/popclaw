@@ -19,7 +19,7 @@
  * `displayPerson` only handles "how to display" (`nickname#sigil` / `#sigil`);
  * this file handles "where the name comes from".
  */
-import { displayPerson } from './person-resolver.js';
+import { displayPerson, displayNickname } from './person-resolver.js';
 
 /** The two bond-book fields relevant to "what to call them". */
 export interface BondNames {
@@ -51,7 +51,7 @@ export function makeNameChain(src: {
   houseOfficialName?: (popclawId: string) => string | undefined;
 }): NameChain {
   return (popclawId, serverName) => {
-    if (!popclawId) return (serverName ?? '').trim();
+    if (!popclawId) return displayNickname(serverName);
     // A db lookup going sideways (runtime not up / sqlite hiccup) must never
     // let one line of address take down the whole render.
     let bond: BondNames | null | undefined;
@@ -63,8 +63,8 @@ export function makeNameChain(src: {
     return (
       (bond?.remarkName ?? '').trim() ||
       (bond?.nickname ?? '').trim() ||
-      (serverName ?? '').trim() ||
-      (src.handleFromFeed?.(popclawId) ?? '').trim() ||
+      displayNickname(serverName) ||
+      displayNickname(src.handleFromFeed?.(popclawId)) ||
       houseNameOf(src, popclawId) ||
       ''
     );

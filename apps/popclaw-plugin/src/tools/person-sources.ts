@@ -8,6 +8,8 @@ import {
   personSourcesFrom,
   type PersonSources,
   type PersonResolution,
+  type KnownPerson,
+  displayNickname,
 } from '../identity/person-resolver.js';
 import type { NameChain } from '../identity/person-name.js';
 import type { RegisterToolsDeps } from './tools-context.js';
@@ -40,6 +42,7 @@ export async function buildPersonSources(deps: RegisterToolsDeps): Promise<Perso
   let follows: ReadonlyArray<{ popclawId: string }> = [];
   let followers: readonly string[] = [];
   let authors: readonly string[] = [];
+  let authorNames: readonly KnownPerson[] = [];
   // Writing back needs the **live** store (the read was a snapshot, the write can't be); skip the write-back if it's unavailable.
   let learn: ((id: string, nickname: string) => void) | undefined;
   // Which name to **display** once someone is resolved: the single name chain (alias overrides the lore-house-supplied self-reported name).
@@ -53,6 +56,10 @@ export async function buildPersonSources(deps: RegisterToolsDeps): Promise<Perso
     follows = rt?.socialGraph?.following?.() ?? [];
     followers = rt?.knownFollowers?.allFollowerIds?.() ?? [];
     authors = rt?.worldFeedCache?.authorIds?.() ?? [];
+    authorNames = authors.map(popclawId => ({
+      popclawId,
+      nickname: displayNickname(rt?.worldFeedCache?.byAuthor?.(popclawId, 1)[0]?.handle),
+    })).filter(p => p.nickname !== '');
     const fill = rt?.bondsStore?.fillNickname;
     if (fill) learn = (id, nickname) => void fill.call(rt!.bondsStore, id, nickname);
     nameOf = rt?.nameOf;
@@ -66,6 +73,7 @@ export async function buildPersonSources(deps: RegisterToolsDeps): Promise<Perso
     follows: () => follows,
     followers: () => followers,
     feedAuthors: () => authors,
+    feedNames: () => authorNames,
     ...(self ? { self: () => self } : {}),
     ...(learn ? { learn } : {}),
     ...(nameOf ? { nameOf } : {}),
