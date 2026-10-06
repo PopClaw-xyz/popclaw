@@ -1,22 +1,8 @@
-/**
- * OwnerSession — captures the owner's most-recent OpenClaw delivery target (from
- * the `/popclaw` command context) so background L1 notifications can reach the
- * exact channel the owner was last active on.
- *
- * Two parts, both captured at command time:
- *   - sessionKey:       stable host key (M0.2-confirmed; sessionId is ephemeral).
- *   - deliveryContext:  the routable address {channel, to, accountId?, threadId?}.
- *
- * Why both: `runtime.system.enqueueSystemEvent` queues a line for `sessionKey`,
- * but the heartbeat that surfaces it needs an explicit deliveryContext to ROUTE
- * to a visible channel (mirrors OpenClaw's own restart-sentinel / cron wakes).
- * Without it the line is queued but never rendered (the M1.4 live-test bug).
- *
- * ponytail: in-memory last-value. Persist across restart only if a later
- * milestone needs notifications to survive a host bounce.
- */
+/** The last trusted owner channel, captured from a command or SDK tool
+ * invocation. The in-memory fallback complements the persisted first-channel
+ * pin; it never changes an explicit notification target. */
 
-/** Routable delivery address derived from the command context. */
+/** Routable delivery address derived from trusted host context. */
 export interface OwnerDeliveryContext {
   readonly channel?: string;
   readonly to?: string;

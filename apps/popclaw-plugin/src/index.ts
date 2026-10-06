@@ -34,6 +34,7 @@ import {
   noteInboundTurn,
   routingStats,
 } from './routing/stats.js';
+import { withOpenClawNotifyRoute } from './host/openclaw-notify-route.js';
 import { createOpenClawHostAdapter } from './host/openclaw-host-adapter.js';
 import type { SubagentSurface } from './newspaper/dedicated-session.js';
 import { PopclawPaths } from './host/popclaw-paths.js';
@@ -769,9 +770,8 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
         // (captureIfUnset never overwrites an existing pin). Awaited, not
         // fire-and-forget, so `notify-here` — dispatched below — can't race the
         // capture and get its explicit pin clobbered by the auto one.
-        // Agent-tool invocations are NOT covered: popclaw registers tools as
-        // plain objects via api.registerTool, and only the factory form
-        // (OpenClawPluginToolFactory) receives a ctx carrying deliveryContext.
+        // Ordinary tools capture their SDK owner route through the native
+        // registration adapter below; commands retain this direct capture.
         const sessionKey = ctx.sessionKey;
         const deliveryContext = {
           channel: ctx.channel,
@@ -824,7 +824,8 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       socialSendHost: 'native',
       nativeToolNotices: true,
       getToolNoticeContext: async signal => { const rt = await runtime(); return runtimeToolNoticeContext(rt, `native:${rt.boot.popclawId}`, signal, true); },
-      api: api as unknown as Parameters<typeof registerPopclawTools>[0]['api'],
+      api: withOpenClawNotifyRoute(
+        api as unknown as Parameters<typeof registerPopclawTools>[0]['api'], runtime, message => api.logger.warn(message)),
       runtime,
       runCommand: async work => (await runtime()).houseRuntime.runCommand(work),
       getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, recovery: rt.houseRuntime.recovery, lang: ownerLang,

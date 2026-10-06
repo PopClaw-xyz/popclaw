@@ -192,9 +192,8 @@ export function gatewayRuntimePorts(input: {
     delivery: {
       kind: 'push',
       open: ({ notifier, houses, paths, ownerNotifyTargetStore }) => {
-        // ownerSession captures the owner's sessionKey (set in the command handler)
-        // so background L1 pushes target the owner's last active channel via
-        // runtime.system.
+        // Commands and normal SDK owner tools capture the same last-active
+        // session and route for direct background L1 channel delivery.
         const ownerSession = new OwnerSession();
         // Delivery target precedence: pinned channel → in-memory routable
         // last-active → null (defer to inbox-on-next-interaction).
