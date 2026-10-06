@@ -265,3 +265,13 @@ describe('WorldFeedCatalog.fetchSnapshot — 各坊快照并发拉', () => {
     await expect(new WorldFeedCatalog([a, b]).fetchSnapshot({ limit: 10 })).rejects.toThrow('boom-a');
   });
 });
+
+
+it('tags a live readonly snapshot with its actual source house without persisting or trusting a remote tag', async () => {
+  const incoming = {...item({platform: 'popclaw', platformPostId: 'ab'.repeat(32), eventId: 'ab'.repeat(32)}), houseSlug: 'remote-spoof'};
+  const source = await house('actual-parent-house', [incoming]);
+  const record = vi.spyOn(source.cache, 'record');
+  const tagged = await new WorldFeedCatalog([{...source, cacheReadOnly: true}]).fetchSnapshot({limit: 1});
+  expect(tagged[0]).toMatchObject({houseSlug: 'actual-parent-house'});
+  expect(record).not.toHaveBeenCalled(); expect(incoming.houseSlug).toBe('remote-spoof');
+});

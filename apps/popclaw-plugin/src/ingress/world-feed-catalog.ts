@@ -46,6 +46,9 @@ export interface HouseFeed extends Omit<HouseStore, 'db'> {
   readonly snapshot: SnapshotSource;
 }
 
+/** Local provenance, assigned by the catalog rather than supplied by a peer. */
+export type HouseSnapshotItem = popclaw.event.IWorldFeedItem & {readonly houseSlug: string};
+
 export interface WorldFeedCatalogOptions {
   /** A one-line warning (with the slug) when a given house can't be pulled from. Omit = silent. */
   readonly warn?: (msg: string) => void;
@@ -235,9 +238,9 @@ export class WorldFeedCatalog implements WorldFeedReader, SnapshotSource {
    * the rest down; only throws if every house fails (the caller still needs
    * to see that "the feed is down").
    */
-  async fetchSnapshot(q: WorldFeedQuery): Promise<popclaw.event.IWorldFeedItem[]> {
+  async fetchSnapshot(q: WorldFeedQuery): Promise<HouseSnapshotItem[]> {
     const settled = await Promise.allSettled(this.feeds.map((f) => f.snapshot.fetchSnapshot(q)));
-    const out: popclaw.event.IWorldFeedItem[] = [];
+    const out: HouseSnapshotItem[] = [];
     const seen = new Set<string>();
     let firstErr: unknown;
     for (const [idx, res] of settled.entries()) {
@@ -256,7 +259,7 @@ export class WorldFeedCatalog implements WorldFeedReader, SnapshotSource {
         });
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push(item);
+        out.push({...item, houseSlug: f.slug});
       }
     }
     if (firstErr !== undefined && out.length === 0 && settled.every((r) => r.status === 'rejected')) {

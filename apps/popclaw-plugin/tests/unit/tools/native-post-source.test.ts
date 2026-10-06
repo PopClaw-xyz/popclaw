@@ -4,13 +4,19 @@ import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { popclaw } from '@popclaw/contracts';
 import { registerWriteTools } from '../../../src/tools/write-tools.js';
+import { registerWorldTools } from '../../../src/tools/world-tools.js';
 import type { ToolsCtx } from '../../../src/tools/tools-context.js';
 import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
 import { _draftsForTest, peekDraftSnapshot } from '../../../src/tools/draft-store.js';
-import { _observedPostIdsForTest, rememberObservedPostIds } from '../../../src/world/post-ref.js';
+import { _observedPostIdsForTest, rememberObservedPostIds, resolvePostRefWithSource, type PostRefCache } from '../../../src/world/post-ref.js';
 import { HouseRuntime } from '../../../src/runtime/house-lifecycle/house-runtime.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { verifyInboundEnvelope } from '../../../src/ingress/verify-envelope.js';
+import { canonicalizeEnvelope } from '../../../src/protocol/public-envelope.js';
+import { cidFromCanonical } from '@popclaw/algorithms';
+import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
+import { WorldFeedCache } from '../../../src/ingress/world-feed-cache.js';
+import { WorldFeedCatalog } from '../../../src/ingress/world-feed-catalog.js';
 
 const ID = 'abcdef1234' + 'a'.repeat(54), ROOT = 'b'.repeat(64);
 const WEB = 'https://fixture.invalid';
@@ -46,11 +52,12 @@ async function fixture() {
   // the lifecycle gate and configured HTTP peer are synthetic test fixtures.
   const houseRuntime = Object.assign(Object.create(HouseRuntime.prototype) as HouseRuntime, {
     opts: {fetch: globalThis.fetch},
+    capturePublicReadTargets: () => plan.targets,
     publicReadGate: (input: string) => ({origin: input, signal: new AbortController().signal, isActive: () => active}),
   });
   const pushed: Array<{house: string | undefined; bytes: Uint8Array}> = [];
   const pushTo = async (house: string | undefined, bytes: Uint8Array) => {pushed.push({house, bytes}); return {status: 200};};
-  const cache = {findFullEventId: () => ({full: null, ambiguous: [] as string[]}),
+  const cache: Required<PostRefCache> = {findFullEventId: () => ({full: null, ambiguous: [] as string[]}),
     findByEventIdPrefix: () => ({item: null, ambiguous: [] as string[]})};
   const plan = {targets: [{slug: 'house-parent', origin}], egress: {push: (bytes: Uint8Array) => pushTo('house-parent', bytes), pushTo}};
   const runtime = async () => ({boot: {signer: owner, nickname: 'Owner', webBaseUrl: WEB},
@@ -69,9 +76,19 @@ async function fixture() {
   }};
   registerWriteTools({api, runtime, deps: {api, runtime}, total: 4} as unknown as ToolsCtx);
   const call = (name: string, params: unknown) => tools.get(name)!.execute('fixture-call', params);
-  return {call, requests, pushed, cache, plan, author, origin, setPayload: (v: unknown) => {payload = v;}, setStatus: (n: number) => {status = n;}, redirect: () => {redirect = true;}, retire: () => {active = false;}};
+  return {api, runtime, call, requests, pushed, cache, plan, author, origin, setPayload: (v: unknown) => {payload = v;}, setStatus: (n: number) => {status = n;}, redirect: () => {redirect = true;}, retire: () => {active = false;}};
 }
 const draftId = (r: {text: string}) => /draft_id: (\S+)/.exec(r.text)?.[1];
+
+async function observedParent() {
+  const author = signer(22), authorId = await author.popclawId();
+  const body = ('Already read complete parent ' + 'long full body '.repeat(100)).trim();
+  const env = {actor: {popclawId: authorId, nickname: 'Already read author'}, post: {blocks: [{content: body}]}};
+  const canonical = canonicalizeEnvelope(env), eventId = cidFromCanonical(canonical);
+  const envelope = popclaw.event.EventEnvelope.encode({...env, eventId, signature: await author.sign(canonical)}).finish();
+  return {platform: 'popclaw', platformPostId: eventId, eventId, authorPopclawId: authorId,
+    textPreview: 'Short preview', houseSlug: 'house-parent', envelope, body};
+}
 
 describe('native link to exact parent manuscript', () => {
   it('resolves a first-seen short URL and freezes exact parent context before one native confirmation', async () => {
@@ -217,4 +234,105 @@ describe('source resolution across captured houses', () => {
     expect(r.text).toContain('Cached author'); expect(r.text).toContain('Cached parent body');
     expect(peekDraftSnapshot(draftId(r)!)!.target).toBe(`reply:${ID}`); expect(f.requests).toEqual([]);
   });
+});
+
+
+it('keeps the already-read trusted native parent context when a later query is unavailable', async () => {
+  const f = await fixture();
+  const observed = await observedParent();
+  rememberObservedPostIds([observed]);
+  f.setStatus(503);
+  const r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: `${WEB}/post/${observed.eventId.slice(0,10)}`});
+  expect(draftId(r)).toBeTruthy();
+  expect(peekDraftSnapshot(draftId(r)!)!.target).toBe(`reply:${observed.eventId}`);
+  expect(r.text).toContain('Already read author'); expect(r.text).toContain('Already read complete parent');
+  expect(r.text).toContain('house-parent'); expect(f.requests).toEqual([]); expect(f.pushed).toEqual([]);
+});
+
+it('carries a readonly catalog snapshot through author_latest into a full parent draft without another GET', async () => {
+  const f = await fixture(), observed = await observedParent(), db = new InMemoryHostDb();
+  try {
+    const cache = new WorldFeedCache({db});
+    await cache.start();
+    const catalog = new WorldFeedCatalog([{slug: 'house-parent', baseUrl: f.origin, dbPath: ':memory:', cache, cacheReadOnly: true,
+      snapshot: {fetchSnapshot: async () => [{...observed, houseSlug: 'remote-spoof'}]}}]);
+    vi.spyOn(f.cache, 'findFullEventId').mockImplementation(prefix => catalog.findFullEventId(prefix));
+    vi.spyOn(f.cache, 'findByEventIdPrefix').mockImplementation(prefix => catalog.findByEventIdPrefix(prefix) as never);
+    const deps = {api: f.api, runtime: f.runtime, getWorldDeps: async () => ({webBaseUrl: WEB, snapshotClient: catalog,
+      guideClient: {fetchGuideText: async () => null}, summaryClient: {fetchSummary: async () => null},
+      resolveClient: {resolve: async () => [{popclawId: f.author, nickname: 'Already read author'}]}})};
+    registerWorldTools({api: f.api, runtime: f.runtime, deps, total: 4} as unknown as ToolsCtx);
+    const read = await f.call('popclaw_author_latest', {name: f.author, count: 3});
+    expect(read.text).toContain(`${WEB}/post/${observed.eventId.slice(0,10)}`);
+    expect(cache.recent(10)).toEqual([]);
+    const source = await resolvePostRefWithSource(observed.eventId.slice(0,10), {cache: catalog, mountedHouseSlugs: ['house-parent']});
+    expect(source).toMatchObject({ok: true, source: {textPreview: observed.body, houseSlug: 'house-parent', authorPopclawId: f.author}});
+    f.setStatus(503);
+    const preview = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: `${WEB}/post/${observed.eventId.slice(0,10)}`});
+    expect(peekDraftSnapshot(draftId(preview)!)!.target).toBe(`reply:${observed.eventId}`);
+    expect(preview.text).toContain('Already read author'); expect(preview.text).toContain('house-parent');
+    expect(f.requests).toEqual([]); expect(f.pushed).toEqual([]);
+  } finally {db.close();}
+});
+
+it.each(['mirror', 'no-envelope', 'wrong-id', 'wrong-author', 'bad-signature', 'no-house'])(
+  'does not treat %s snapshot metadata as a complete trusted parent', async variant => {
+    const f = await fixture(), observed = await observedParent();
+    if (variant === 'mirror') observed.platform = 'x';
+    if (variant === 'no-envelope') observed.envelope = new Uint8Array();
+    if (variant === 'wrong-id') observed.eventId = ID;
+    if (variant === 'wrong-author') observed.authorPopclawId = await signer(23).popclawId();
+    if (variant === 'bad-signature') observed.envelope[observed.envelope.length - 1] = observed.envelope[observed.envelope.length - 1]! ^ 1;
+    if (variant === 'no-house') observed.houseSlug = '';
+    rememberObservedPostIds([observed]); f.setStatus(503);
+    const r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: observed.platformPostId.slice(0,10)});
+    expect(draftId(r)).toBeUndefined(); expect(f.requests).toHaveLength(1); expect(f.pushed).toEqual([]);
+  });
+
+it('keeps the first trusted relay house and freezes source context through one confirmation', async () => {
+  const f = await fixture(), observed = await observedParent();
+  rememberObservedPostIds([observed]);
+  rememberObservedPostIds([{...observed, houseSlug: 'house-second'}]);
+  vi.spyOn(f.cache, 'findFullEventId').mockReturnValue({full: observed.eventId, ambiguous: []});
+  vi.spyOn(f.cache, 'findByEventIdPrefix').mockReturnValue({item: {eventId: observed.eventId, authorPopclawId: f.author,
+    handle: 'New display name', textPreview: 'Already read complete parent', houseSlug: 'house-second'}, ambiguous: []} as never);
+  const preview = await f.call('popclaw_draft_post', {body: 'Reviewed reply', reply_to_event_id: observed.eventId.slice(0,10)});
+  const token = draftId(preview)!; expect(token).toBeTruthy();
+  expect(peekDraftSnapshot(token)!.house).toBe('house-parent');
+  observed.houseSlug = 'mutated'; observed.envelope.fill(0);
+  f.plan.targets.splice(0);
+  await f.call('popclaw_send_draft', {draft_id: token});
+  await f.call('popclaw_send_draft', {draft_id: token});
+  expect(f.pushed).toHaveLength(1); expect(f.pushed[0]!.house).toBe('house-parent');
+  const sent = verifyInboundEnvelope(popclaw.identity.SignedPayload.decode(f.pushed[0]!.bytes).payload);
+  expect(sent.prevEventId).toBe(observed.eventId); expect(f.requests).toEqual([]);
+});
+
+it.each(['author', 'body'])('refuses a conflicting cached %s instead of replacing the observed parent', async variant => {
+  const f = await fixture(), observed = await observedParent(); rememberObservedPostIds([observed]);
+  vi.spyOn(f.cache, 'findFullEventId').mockReturnValue({full: observed.eventId, ambiguous: []});
+  vi.spyOn(f.cache, 'findByEventIdPrefix').mockReturnValue({item: {eventId: observed.eventId,
+    authorPopclawId: variant === 'author' ? 'different-author' : f.author, handle: 'Cached',
+    textPreview: variant === 'body' ? 'Different body' : observed.body, houseSlug: 'house-parent'}, ambiguous: []} as never);
+  const preview = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: observed.eventId.slice(0,10)});
+  expect(draftId(preview)).toBeUndefined(); expect(f.requests).toEqual([]); expect(f.pushed).toEqual([]);
+});
+
+it('refuses an observed source removed from the current mounted houses', async () => {
+  const f = await fixture(), observed = await observedParent(); rememberObservedPostIds([observed]);
+  f.plan.targets.splice(0);
+  const r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: observed.eventId.slice(0,10)});
+  expect(draftId(r)).toBeUndefined(); expect(f.requests).toEqual([]); expect(f.pushed).toEqual([]);
+});
+
+it('still refuses unreadable cache and colliding IDs despite a complete observed source', async () => {
+  const f = await fixture(), observed = await observedParent(); rememberObservedPostIds([observed]);
+  vi.spyOn(f.cache, 'findFullEventId').mockImplementation(() => {throw new Error('UNREADABLE');});
+  let r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: observed.eventId.slice(0,10)});
+  expect(draftId(r)).toBeUndefined(); expect(f.requests).toEqual([]);
+  vi.restoreAllMocks();
+  rememberObservedPostIds([{platform: 'popclaw', platformPostId: observed.eventId.slice(0,10)+'c'.repeat(54)}]);
+  f.setStatus(503);
+  r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: observed.eventId.slice(0,10)});
+  expect(draftId(r)).toBeUndefined(); expect(f.pushed).toEqual([]);
 });

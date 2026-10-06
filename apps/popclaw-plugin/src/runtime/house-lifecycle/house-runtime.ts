@@ -947,6 +947,19 @@ export class HouseRuntime {
     return gate.isActive() ? undefined : gate.inactiveReason?.() ?? 'HOUSE_ACTION_STALE';
   }
 
+  /** Capture this read's joined scope, without filtering trust or HTTP failures.
+   * Retained connecting/left rows still belong to lifecycle history and egress. */
+  capturePublicReadTargets(): readonly {readonly slug: string; readonly origin: string; readonly assertCurrent: () => void}[] {
+    if (this.stopped) throw new Error('HOUSE_RUNTIME_STOPPED');
+    return this.opts.db.transaction(() => this.egress.capturePlan().targets.flatMap(target => {
+      if (!target.origin) throw new Error('HOUSE_READ_TARGET_ORIGIN_MISSING');
+      const row = readParticipation(this.opts.db, target.origin);
+      if (row?.desired !== 'enabled' || row.phase !== 'connected') return [];
+      const gate = this.publicReadGate(target.origin);
+      return [Object.freeze({slug: target.slug, origin: target.origin, assertCurrent: () => assertActionActive(gate)})];
+    }));
+  }
+
   houseReadFetch(input: string): typeof globalThis.fetch {
     const origin = normalizeHouseOrigin(input);
     return async (url, init) => {

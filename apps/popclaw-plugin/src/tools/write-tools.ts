@@ -400,10 +400,12 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         try { rt = await runtime(); }
         catch { refSources = {cacheUnreachable: true}; }
         refSources ??= {webBaseUrl: rt?.boot?.webBaseUrl, cache: rt?.worldFeedCache};
-        const targets = rt?.egress?.capturePlan?.().targets;
         const houses = rt?.houseRuntime;
+        const targets = houses?.capturePublicReadTargets?.() ?? rt?.egress?.capturePlan?.().targets;
+        if (targets) refSources = {...refSources, mountedHouseSlugs: targets.map(target => target.slug)};
         const lookup = targets && houses?.houseReadFetch
-          ? (prefix: string) => lookupThreadPost(prefix, targets, origin => houses.houseReadFetch(origin)) : undefined;
+          ? (prefix: string) => lookupThreadPost(prefix, targets, origin => houses.houseReadFetch(origin),
+            failure => api.logger?.info(`popclaw: native parent lookup refused ${JSON.stringify(failure)}`)) : undefined;
         return resolvePostRefWithSource(raw, refSources, lookup, draftLang);
       };
       let replyTo: string | undefined;
