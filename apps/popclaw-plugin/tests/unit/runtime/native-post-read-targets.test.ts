@@ -6,6 +6,12 @@ import {lookupThreadPost, type NativePostLookupFailure} from '../../../src/world
 import {resolvePostRefWithSource, _observedPostIdsForTest} from '../../../src/world/post-ref.js';
 import type {Signer} from '../../../src/identity/signer.js';
 import {refusingReadAuthorityFor} from '../../helpers/read-authority.js';
+import nacl from 'tweetnacl';
+import bs58 from 'bs58';
+import {popclaw} from '@popclaw/contracts';
+import {cidFromCanonical} from '@popclaw/algorithms';
+import {canonicalizeEnvelope} from '../../../src/protocol/public-envelope.js';
+import {rememberObservedPostIds} from '../../../src/world/post-ref.js';
 
 const ME = 'https://me.invalid', WORLD = 'https://world.invalid', OLD = 'http://127.0.0.1:48190';
 const ID = 'abcdeffeed' + 'a'.repeat(54);
@@ -86,4 +92,20 @@ it('records a decode failure without parent content or exception text', async ()
   expect(await f.lookup()).toEqual({ok: false, reason: 'unavailable'});
   expect(f.failures).toContainEqual({origin: ME, houseSlug: 'me-invalid', stage: 'decode'});
   expect(JSON.stringify(f.failures)).not.toContain('private exception text');
+});
+
+it.each(['pin', 'lease', 'replacement'])('refuses the observed no-GET source when its captured %s changes', async change => {
+  const f = fixture(), key = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(51)), author = bs58.encode(key.publicKey);
+  const env = {actor: {popclawId: author, nickname: 'Observed author'}, post: {blocks: [{content: 'Complete observed body'}]}};
+  const canonical = canonicalizeEnvelope(env), eventId = cidFromCanonical(canonical);
+  const envelope = popclaw.event.EventEnvelope.encode({...env, eventId, signature: nacl.sign.detached(canonical, key.secretKey)}).finish();
+  rememberObservedPostIds([{platform: 'popclaw', platformPostId: eventId, eventId, authorPopclawId: author, envelope, houseSlug: 'me-invalid'}]);
+  const targets = f.targets();
+  if (change === 'pin') f.setPin('cd'.repeat(32));
+  if (change === 'lease') f.db.execute('UPDATE house_participation SET lease_expires_at=1 WHERE house_origin=?', [ME]);
+  if (change === 'replacement') f.db.execute('UPDATE house_participation SET op_seq=op_seq+2 WHERE house_origin=?', [ME]);
+  const sources = {mountedHouseSlugs: targets.map(t => t.slug),
+    assertSourceCurrent: (slug: string) => targets.find(t => t.slug === slug)!.assertCurrent()};
+  expect(await resolvePostRefWithSource(eventId.slice(0,10), sources, f.lookup, 'en')).toMatchObject({ok: false});
+  expect(f.fetch).not.toHaveBeenCalled();
 });

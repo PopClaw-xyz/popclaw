@@ -178,6 +178,8 @@ export interface PostRefSources {
   readonly publicEventIds?: readonly string[];
   /** The draft's current captured mounts, when the runtime supplies them. */
   readonly mountedHouseSlugs?: readonly string[];
+  /** Recheck the original source gate even when no new HTTP read is needed. */
+  readonly assertSourceCurrent?: (houseSlug: string) => void;
 }
 
 export type PostRefResolution = { ok: true; eventId: string } | { ok: false; text: string };
@@ -352,9 +354,13 @@ export async function resolvePostRefWithSource(
       const known = observed.get(resolution.eventId);
       if (!known || (sources.mountedHouseSlugs && !sources.mountedHouseSlugs.includes(known.houseSlug!))
         || (source && (source.eventId !== known.eventId || source.authorPopclawId !== known.authorPopclawId
-          || !known.textPreview.startsWith(source.textPreview)))) {
+          // The relay's first-block preview retains whitespace; the decoded
+          // full post trims it for display. Compare the same display form.
+          || !known.textPreview.trim().startsWith(source.textPreview.trim())))) {
         return {ok: false, text: renderCopy(lang, 'draft.postref.publicUnavailable')};
       }
+      try { sources.assertSourceCurrent?.(known.houseSlug!); }
+      catch { return {ok: false, text: renderCopy(lang, 'draft.postref.publicUnavailable')}; }
       return {...resolution, source: {...known}};
     }
   }

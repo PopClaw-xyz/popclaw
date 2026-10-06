@@ -80,14 +80,16 @@ async function fixture() {
 }
 const draftId = (r: {text: string}) => /draft_id: (\S+)/.exec(r.text)?.[1];
 
-async function observedParent() {
+async function observedParent(bodyOverride?: string, secondText?: string) {
   const author = signer(22), authorId = await author.popclawId();
-  const body = ('Already read complete parent ' + 'long full body '.repeat(100)).trim();
-  const env = {actor: {popclawId: authorId, nickname: 'Already read author'}, post: {blocks: [{content: body}]}};
+  const body = bodyOverride ?? ('Already read complete parent ' + 'long full body '.repeat(100)).trim();
+  const env = {actor: {popclawId: authorId, nickname: 'Already read author'},
+    post: {blocks: [{content: body}, ...(secondText === undefined ? [] : [{content: secondText}])]}};
   const canonical = canonicalizeEnvelope(env), eventId = cidFromCanonical(canonical);
   const envelope = popclaw.event.EventEnvelope.encode({...env, eventId, signature: await author.sign(canonical)}).finish();
   return {platform: 'popclaw', platformPostId: eventId, eventId, authorPopclawId: authorId,
-    textPreview: 'Short preview', houseSlug: 'house-parent', envelope, body};
+    textPreview: 'Short preview', houseSlug: 'house-parent', envelope,
+    body: secondText === undefined ? body : `${body}\n${secondText}`};
 }
 
 describe('native link to exact parent manuscript', () => {
@@ -316,6 +318,28 @@ it.each(['author', 'body'])('refuses a conflicting cached %s instead of replacin
     textPreview: variant === 'body' ? 'Different body' : observed.body, houseSlug: 'house-parent'}, ambiguous: []} as never);
   const preview = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: observed.eventId.slice(0,10)});
   expect(draftId(preview)).toBeUndefined(); expect(f.requests).toEqual([]); expect(f.pushed).toEqual([]);
+});
+
+it.each([
+  {label: 'leading whitespace', body: ' \n  Signed parent ' + 'complete body '.repeat(100)},
+  {label: 'Unicode and multiple TEXT blocks', body: ' \n Signed parent ' + '😀'.repeat(300), second: 'Second full block'},
+  {label: 'blank first TEXT block', body: ' '.repeat(300), second: 'Signed parent from second block'},
+  {label: 'short first TEXT block', body: ' \n Signed parent   ', second: 'Second full block'},
+])('accepts the real untrimmed relay preview for $label', async ({body, second}) => {
+  const f = await fixture(), observed = await observedParent(body, second);
+  const db = new InMemoryHostDb();
+  try {
+    const cache = new WorldFeedCache({db}); await cache.start();
+    cache.record({...observed, textPreview: Array.from(body).slice(0,280).join('')});
+    const catalog = new WorldFeedCatalog([{slug: 'house-parent', baseUrl: f.origin, dbPath: ':memory:', cache,
+      snapshot: {fetchSnapshot: async () => []}}]);
+    vi.spyOn(f.cache, 'findFullEventId').mockImplementation(prefix => catalog.findFullEventId(prefix));
+    vi.spyOn(f.cache, 'findByEventIdPrefix').mockImplementation(prefix => catalog.findByEventIdPrefix(prefix));
+    rememberObservedPostIds([observed]);
+    const preview = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: observed.eventId.slice(0,10)});
+    expect(draftId(preview)).toBeTruthy(); expect(preview.text).toContain('Signed parent');
+    expect(f.requests).toEqual([]); expect(f.pushed).toEqual([]);
+  } finally {db.close();}
 });
 
 it('refuses an observed source removed from the current mounted houses', async () => {

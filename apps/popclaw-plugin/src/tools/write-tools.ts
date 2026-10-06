@@ -402,7 +402,12 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         refSources ??= {webBaseUrl: rt?.boot?.webBaseUrl, cache: rt?.worldFeedCache};
         const houses = rt?.houseRuntime;
         const targets = houses?.capturePublicReadTargets?.() ?? rt?.egress?.capturePlan?.().targets;
-        if (targets) refSources = {...refSources, mountedHouseSlugs: targets.map(target => target.slug)};
+        if (targets) refSources = {...refSources, mountedHouseSlugs: targets.map(target => target.slug),
+          assertSourceCurrent: slug => {
+            const target = targets.find(item => item.slug === slug);
+            if (!target) throw new Error('HOUSE_READ_SOURCE_NOT_MOUNTED');
+            if ('assertCurrent' in target && typeof target.assertCurrent === 'function') target.assertCurrent();
+          }};
         const lookup = targets && houses?.houseReadFetch
           ? (prefix: string) => lookupThreadPost(prefix, targets, origin => houses.houseReadFetch(origin),
             failure => api.logger?.info(`popclaw: native parent lookup refused ${JSON.stringify(failure)}`)) : undefined;
