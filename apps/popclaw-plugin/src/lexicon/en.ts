@@ -1373,6 +1373,9 @@ export const EN: Lexicon = {
     'socialSend.conversationChanged': 'Not sent: this draft belongs to a different conversation. Prepare the intended manuscript here and ask the owner to review it.',
     'socialSend.reviewChanged': 'Not sent: the manuscript review copy changed or is missing. Show a fresh copy of the intended manuscript and ask the owner to confirm it.',
     'socialSend.approvalsRetired': 'Ordinary messages, replies and posts use one manuscript review and confirmation in this conversation. No PopClaw approval route setup is needed. Existing host approval settings were not changed.',
+    'draft.postref.publicUnavailable': 'The post could not be checked right now. Try again shortly.',
+    'draft.postref.publicAmbiguous': 'This short reference matches more than one post. Use a more specific post link.',
+    'draft.postref.publicNotFound': 'Post not found. Check the post link.',
     'draft.postref.notHex':
       '⚠️ Not a valid post reference ({ref}): expected a full 64-hex event_id, a short id of at least 6 hex chars, or a /post/ link from this web base.',
     'draft.postref.tooShort': '⚠️ Short id too short: at least 6 hex chars (got: {ref}).',

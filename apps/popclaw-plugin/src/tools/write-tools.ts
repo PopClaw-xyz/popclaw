@@ -33,7 +33,8 @@ import {
   type DraftAttachmentSnapshot,
   type DraftSnapshot,
 } from './draft-store.js';
-import { resolvePostRef, type PostRefSources } from '../world/post-ref.js';
+import { resolvePostRefWithSource, type PostRefSources, type PostRefWithSource } from '../world/post-ref.js';
+import { lookupThreadPost, type NativePostSource } from '../world/thread-post-source.js';
 import { type RegisterToolsDeps, type ToolsCtx } from './tools-context.js';
 import { ownerPopclawId, resolvePersonRef } from './person-sources.js';
 import { confirmDiscipline, sendResultDiscipline, deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
@@ -384,67 +385,46 @@ export function registerWriteTools(ctx: ToolsCtx): void {
     name: 'popclaw_draft_post',
     description:
       'Draft a popclaw-native post (root, reply, or quote). Returns a draft preview + draft_id. ' +
-      'Use reply_to_event_id for a pure reply (hidden from follower feed); use quote_of_event_id ' +
+      'Pass the public /post/ link or visible short id in reply_to_event_id; the tool resolves the exact parent and previews its author, text and house. Use it for a pure reply (hidden from follower feed); use quote_of_event_id ' +
       'for an embedded-quote post (shown in feed with original card).' +
       BODY_OWNERSHIP +
       confirmDiscipline('en'),
     parameters: PopclawDraftPostSchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { body: string; reply_to_event_id?: string; quote_of_event_id?: string };
-      // C3: reply/quote references may arrive in the short
-      // human form popclaw_author_latest prints (a bare short id or a
-      // <webBaseUrl>/post/<short> link). Resolve them to the full 64-hex at
-      // DRAFT time, unique-or-refuse from trusted sources only — a refusal
-      // issues no draft_id, so the owner is never asked to confirm a reply
-      // whose target could not be pinned down (failing only after the
-      // confirmation would be the worst possible order of events; same rule
-      // as the DM attachment check above). Legacy full 64-hex ids pass
-      // straight through, exactly as before.
       const draftLang = ownerLang();
       let refSources: PostRefSources | undefined;
-      const resolveRef = async (raw: string): Promise<string | { text: string }> => {
-        if (refSources === undefined) {
-          try {
-            const rt = (await runtime()) as {
-              boot?: { webBaseUrl?: string };
-              worldFeedCache?: PostRefSources['cache'];
-            };
-            refSources = { webBaseUrl: rt?.boot?.webBaseUrl, cache: rt?.worldFeedCache };
-          } catch {
-            // r17 (Codex): a runtime() throw is NOT "a host with no cache"
-            // (the lenient unwired case) — it is "the cache cannot be
-            // checked right now": the local cache may hold a colliding id
-            // that is invisible, exactly like r15's unreadable case. The
-            // short-ref leg must refuse (resolvePostRef's cacheUnreachable),
-            // never sign off the observed mapping alone. Full 64-hex refs
-            // never reach this branch's failure — they pass through without
-            // any source. Deliberately NOT memoized beyond this one tool
-            // call: the next draft re-fetches runtime, so a recovered
-            // runtime is honored on the spot (failure does not stick).
-            refSources = { cacheUnreachable: true };
-          }
-        }
-        const r = resolvePostRef(raw, refSources, draftLang);
-        return r.ok ? r.eventId : { text: r.text };
+      let resolvedSource: NativePostSource | null = null;
+      const resolveRef = async (raw: string): Promise<PostRefWithSource> => {
+        let rt: Awaited<ReturnType<typeof runtime>> | undefined;
+        try { rt = await runtime(); }
+        catch { refSources = {cacheUnreachable: true}; }
+        refSources ??= {webBaseUrl: rt?.boot?.webBaseUrl, cache: rt?.worldFeedCache};
+        const targets = rt?.egress?.capturePlan?.().targets;
+        const houses = rt?.houseRuntime;
+        const lookup = targets && houses?.houseReadFetch
+          ? (prefix: string) => lookupThreadPost(prefix, targets, origin => houses.houseReadFetch(origin)) : undefined;
+        return resolvePostRefWithSource(raw, refSources, lookup, draftLang);
       };
       let replyTo: string | undefined;
       let quoteOf: string | undefined;
       if (p.reply_to_event_id) {
         const r = await resolveRef(p.reply_to_event_id);
-        if (typeof r !== 'string') return { type: 'text' as const, text: r.text };
-        replyTo = r;
+        if (!r.ok) return { type: 'text' as const, text: r.text };
+        replyTo = r.eventId;
+        resolvedSource = r.source;
       }
       if (p.quote_of_event_id) {
         const r = await resolveRef(p.quote_of_event_id);
-        if (typeof r !== 'string') return { type: 'text' as const, text: r.text };
-        quoteOf = r;
+        if (!r.ok) return { type: 'text' as const, text: r.text };
+        quoteOf = r.eventId;
+        resolvedSource = r.source;
       }
       // Resolve the source and the home egress once. A later feed refresh or
       // a changed home must not redirect the manuscript the owner reviewed.
       const draftRuntime = await runtime();
       const targetId = replyTo ?? quoteOf;
-      const found = targetId ? draftRuntime?.worldFeedCache?.findByEventIdPrefix?.(targetId).item : null;
-      const source = found ? {...found} : null;
+      const source = resolvedSource ? {...resolvedSource} : null;
       const pinnedEgress = draftRuntime?.egress?.capturePlan?.().egress ?? draftRuntime?.egress;
       const house = source?.houseSlug ?? draftRuntime?.egress?.home?.slug;
       const token = makeDraftToken('post');

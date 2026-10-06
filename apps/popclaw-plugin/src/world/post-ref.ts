@@ -21,8 +21,9 @@
  *     lore-house while the local cache can be EMPTY, so searching only the
  *     local cache cannot close this loop. A URL counts only when it points at
  *     the trusted web base (the same `boot.webBaseUrl` the links are printed
- *     with); cross-site URLs are refused, never fetched — this module does no
- *     network access at all. External-platform post ids are never treated as
+ *     with); cross-site URLs are refused, never fetched. The draft-time
+ *     resolver may query the existing trusted public thread projection through
+ *     an injected read lane when source context is missing. External ids are never treated as
  *     popclaw event ids (mirror rows are filtered out before remembering).
  *   - full 64-hex ids pass through unchanged (legacy calls keep working).
  */
@@ -30,6 +31,7 @@
 import { getOrCreatePerProcess, resetSingletonForTest } from '../runtime/once.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { renderCopy, type Lang } from '../lexicon/index.js';
+import type { NativePostSource, PublicPostLookup } from './thread-post-source.js';
 
 /** Minimum hex chars for a bare short reference — the same bar as the /popclaw post CLI's prefix lookup. */
 const MIN_PREFIX_CHARS = 6;
@@ -109,6 +111,7 @@ export function rememberObservedPostIds(items: readonly ObservedPostItem[]): voi
 /** The local-cache seam, duck-typed so partial test wiring degrades to "no cache source" instead of throwing. */
 export interface PostRefCache {
   findFullEventId?(prefix: string): { full: string | null; ambiguous: string[] };
+  findByEventIdPrefix?(prefix: string): { item: NativePostSource | null; ambiguous: string[] };
 }
 
 export interface PostRefSources {
@@ -130,6 +133,8 @@ export interface PostRefSources {
    * source that was never asked.
    */
   readonly cacheUnreachable?: boolean;
+  /** Exact ids returned by the existing trusted public thread query. */
+  readonly publicEventIds?: readonly string[];
 }
 
 export type PostRefResolution = { ok: true; eventId: string } | { ok: false; text: string };
@@ -219,6 +224,9 @@ function resolveShortHex(
   for (const fulls of observedMap().values()) {
     for (const id of fulls) if (id.startsWith(hex)) candidates.add(id);
   }
+  for (const id of sources.publicEventIds ?? []) {
+    if (/^[0-9a-f]{64}$/.test(id) && id.startsWith(hex)) candidates.add(id);
+  }
   if (candidates.size === 1) return { ok: true, eventId: [...candidates][0]! };
   if (candidates.size === 0) {
     return { ok: false, text: renderCopy(lang, 'draft.postref.absent', { ref: display }) };
@@ -245,7 +253,7 @@ export function resolvePostRef(
   sources: PostRefSources,
   lang: Lang = ownerLang(),
 ): PostRefResolution {
-  const ref = raw.trim();
+  const ref = raw.trim().replace(/^#(?=[0-9a-f]+$)/, '');
 
   // Legacy wire form: unchanged behavior, and deliberately NO source check —
   // a full id the owner typed by hand works even when no source holds it.
@@ -271,4 +279,46 @@ export function resolvePostRef(
     return resolveShortHex(hex, sources, lang, ref);
   }
   return resolveShortHex(ref, sources, lang, ref);
+}
+
+
+export type PostRefWithSource =
+  | {readonly ok: true; readonly eventId: string; readonly source: NativePostSource | null}
+  | {readonly ok: false; readonly text: string};
+
+/** Fill a missing source at draft time; the normal send path freezes it. */
+export async function resolvePostRefWithSource(
+  raw: string,
+  sources: PostRefSources,
+  lookupPublic?: (prefix: string) => Promise<PublicPostLookup>,
+  lang: Lang = ownerLang(),
+): Promise<PostRefWithSource> {
+  const resolution = resolvePostRef(raw, sources, lang);
+  const ref = raw.trim().replace(/^#(?=[0-9a-f]+$)/, '');
+  const prefix = /^[a-z][a-z0-9+.-]*:\/\//i.test(ref)
+    ? sources.webBaseUrl ? trustedPostUrlHex(ref, sources.webBaseUrl) : null : ref;
+  // Malformed/cross-site references never reach any network lookup.
+  if (!prefix || !/^[0-9a-f]{6,64}$/.test(prefix)) return resolution.ok ? {...resolution, source: null} : resolution;
+  if (prefix.length < 64 && (sources.cacheUnreachable || lookupCache(sources.cache, prefix).kind === 'unreadable')) return {ok: false, text: renderCopy(lang, 'draft.postref.cacheUnreadable', {ref})};
+  let source: NativePostSource | null = null;
+  if (resolution.ok) {
+    try { source = sources.cache?.findByEventIdPrefix?.(resolution.eventId).item ?? null; }
+    catch { return {ok: false, text: renderCopy(lang, 'draft.postref.cacheUnreadable', {ref})}; }
+  }
+  if (resolution.ok && source?.houseSlug && source.authorPopclawId && typeof source.textPreview === 'string') return {...resolution, source: {...source}};
+  // Partial/legacy roots retain their original no-network resolution behavior.
+  if (!lookupPublic) return resolution.ok ? {...resolution, source: source ? {...source} : null} : resolution;
+  const result = await lookupPublic(prefix);
+  const legacyFull = /^[0-9a-f]{64}$/.test(ref);
+  if (!result.ok && resolution.ok && legacyFull) return {...resolution, source: source ? {...source} : null};
+  if (!result.ok) return {ok: false, text: renderCopy(lang,
+    result.reason === 'ambiguous' ? 'draft.postref.publicAmbiguous' : 'draft.postref.publicUnavailable')};
+  const final = resolvePostRef(raw, {...sources, publicEventIds: result.sources.map(s => s.eventId)}, lang);
+  if (!final.ok) return result.sources.length === 0 && !resolution.ok
+    ? {ok: false, text: renderCopy(lang, 'draft.postref.publicNotFound')} : final;
+  const found = result.sources.find(s => s.eventId === final.eventId && s.houseSlug === source?.houseSlug)
+    ?? result.sources.find(s => s.eventId === final.eventId);
+  if (!found) return resolution.ok && legacyFull ? {...resolution, source: source ? {...source} : null}
+    : {ok: false, text: renderCopy(lang, 'draft.postref.publicNotFound')};
+  return {...final, source: {...found}};
 }

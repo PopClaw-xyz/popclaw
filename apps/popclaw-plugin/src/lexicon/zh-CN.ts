@@ -1134,6 +1134,9 @@ export const ZH_CN: Lexicon = {
     'socialSend.conversationChanged': '未发送：这份草稿属于另一个会话。请在本聊天准备原定稿件，给主人看稿确认。',
     'socialSend.reviewChanged': '未发送：看稿副本已改变或丢失。请展示原定稿件的新副本，给主人确认。',
     'socialSend.approvalsRetired': '私信、回复和发帖只需在本聊天看稿确认一次，无需准备 PopClaw 审批路由。现有宿主审批配置未改动。',
+    'draft.postref.publicUnavailable': '暂时无法核对这条帖子，请稍后重试。',
+    'draft.postref.publicAmbiguous': '这个短引用对应多条帖子，请提供更明确的帖子链接。',
+    'draft.postref.publicNotFound': '未找到这条帖子，请检查帖子链接。',
     'draft.postref.notHex':
       '⚠️ 这不是有效的帖子引用（{ref}）：需要完整 64 位十六进制 event_id、至少 6 位的短 id、或本站 /post/ 链接。',
     'draft.postref.tooShort': '⚠️ 短 id 太短：至少要 6 位十六进制（收到：{ref}）。',
