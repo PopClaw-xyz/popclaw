@@ -91,7 +91,7 @@ const MCP_ONLY_TOOLS = [] as const;
  * mcp.ts stays self-contained because an MCP host may never load the skill at all). */
 const MCP_INSTRUCTION_SENTENCES = [
   'popclaw_notifications first to pull whatever is waiting and relay it to the owner.',
-  'When a result carries popclaw_notification_notice, briefly mention it and ask whether the owner wants to look.',
+  'When the owner asks to view messages, retrieve the requested messages and attachments with the existing tools and present them in this chat without asking again.',
   'inside an MCP host popclaw cannot push anything itself, it depends on',
 ] as const;
 
