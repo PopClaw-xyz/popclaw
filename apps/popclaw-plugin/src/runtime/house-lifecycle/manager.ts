@@ -525,6 +525,9 @@ export class HouseLifecycleManager {
     // after every await, and commitLocalLogin only applies when the row
     // still matches it (CAS) — cross-process changes abort this login too.
     const baseline = readParticipation(this.db, origin);
+    if (!direct && baseline?.desired !== 'enabled') {
+      return { scope: 'local_installation', origin, status: 'connecting', sessionId: '' };
+    }
     const baselineSeq = baseline?.op_seq ?? 0;
     const baselineDesired = baseline?.desired ?? 'disabled';
     const intentUnchanged = () => {
@@ -1152,8 +1155,9 @@ export class HouseLifecycleManager {
     await Promise.all(rows.map(row => this.renewHouse(row.house_origin)));
   }
 
-  /** Recover only undecided network attempts or our own expired session.
-   * A definitive rejection (in particular EXECUTOR_BUSY) never starts a
+  /** Recover only undecided network attempts or our own expired session,
+   * including a verified LEASE_EXPIRED renewal of that session.
+   * Other definitive rejections (in particular EXECUTOR_BUSY) never start a
    * background takeover loop; the owner must explicitly request login again. */
   async resumeEnabledSessions(): Promise<void> {
     if (this.stopped || this.pauseController.signal.aborted) return;
@@ -1213,7 +1217,14 @@ export class HouseLifecycleManager {
       if (ack.verified && ack.outcome === OUTCOME.Rejected) {
         const code = ERROR_CODE_NAMES[ack.errorCode] ?? `CODE_${ack.errorCode}`;
         fenced = true;
-        tx.execute("UPDATE house_participation SET phase = 'reconnecting', remote_status = 'error', remote_error = ? WHERE house_origin = ?", [`renew rejected: ${code}`, origin]);
+        // The original ENTER remains confirmed history, not live authority.
+        // Only this verified expiry may use the existing expired-session
+        // recovery selector; all other rejections keep its stop boundary.
+        const expired = ack.errorCode === 7 && !ack.sessionActive
+          && !this.localLogoutFences.has(origin) && !houseBindingBlocked(tx, origin)
+          && !houseRecoveryHeld(tx, origin) && storageDatabasePathAllowed(tx, 'execution');
+        tx.execute('UPDATE house_participation SET phase = ?, remote_status = ?, remote_error = ? WHERE house_origin = ?',
+          [expired ? 'connecting' : 'reconnecting', expired ? 'confirmed' : 'error', `renew rejected: ${code}`, origin]);
         return false;
       }
       if (!ack.verified || ack.outcome !== OUTCOME.Renewed || ack.errorCode !== 0

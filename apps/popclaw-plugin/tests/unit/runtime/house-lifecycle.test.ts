@@ -25,6 +25,7 @@ import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
 import { verifyBrowserEntryToken } from '../../helpers/browser-entry-verifier.js';
 import {
   ensureHouseLifecycleSchema,
+  commitLocalLogout,
   markEnterOutcome,
   readParticipation,
 } from '../../../src/runtime/house-lifecycle/participation-store.js';
@@ -1549,6 +1550,153 @@ describe('session renewal', () => {
       houseRevision: 5, leaseExpiresAt: now + 90, serverCommittedAt: now, inboxReadToken: 'renew-token', ...extra,
     }));
   }
+  it('resumes enabled intent after a verified RENEW lease-expiry rejection', async () => {
+    const { clock, ff, manager } = await setup();
+    const oldGate = manager.gateFor(ORIGIN);
+    let reply!: () => void; let sent!: () => void;
+    const sending = new Promise<void>(r => { sent = r; });
+    ff.respond(call => new Promise<Response>(r => {
+      const req = decodeRequest(call.body!);
+      reply = () => r(renewalAck(req, clock.value / 1000, {
+        outcome: 7, errorCode: 7, sessionActive: false, sessionId: '', inboxReadToken: '',
+      }));
+      sent();
+    }));
+    try {
+      // Dispatch under the live lease; the response crosses its deadline.
+      clock.value += 80_000;
+      const renewal = manager.renewHouse(ORIGIN); await sending;
+      clock.value += 15_000; reply();
+      expect(await renewal).toBe(false);
+      expect(readParticipation(db, ORIGIN)?.desired).toBe('enabled');
+      expect(readParticipation(db, ORIGIN)?.remote_error).toContain('LEASE_EXPIRED');
+      expect(oldGate.isActive()).toBe(false);
+      ff.calls.length = 0;
+      ff.respond(call => call.url.endsWith('/v1/manifest') ? manifestResponse()
+        : enterAckFor(decodeRequest(call.body!), 'fresh-after-expiry', 6));
+      clock.value += 1_000;
+      await manager.resumeEnabledSessions();
+      const enters = ff.calls.filter(call => call.body && Number(decodeRequest(call.body).operation) === 1);
+      expect(enters).toHaveLength(1);
+      expect(Number(decodeRequest(enters[0]!.body!).opSeq)).toBe(2);
+      expect(readParticipation(db, ORIGIN)?.session_id).toBe('fresh-after-expiry');
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(true);
+      expect(oldGate.isActive()).toBe(false);
+    } finally { manager.stopHost(); await manager.waitForQuiet(); }
+  });
+  it.each([3, 4, 6, 8, 999])('does not resume after another verified RENEW rejection (%s)', async errorCode => {
+    const { clock, ff, manager } = await setup();
+    ff.respond(call => renewalAck(decodeRequest(call.body!), clock.value / 1000,
+      { outcome: 7, errorCode, sessionActive: false, sessionId: '', inboxReadToken: '' }));
+    try {
+      expect(await manager.renewHouse(ORIGIN)).toBe(false);
+      const calls = ff.calls.length;
+      clock.value += 120_000;
+      await manager.resumeEnabledSessions(); await manager.renewDueSessions();
+      expect(ff.calls).toHaveLength(calls);
+      expect(readParticipation(db, ORIGIN)?.desired).toBe('enabled');
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(false);
+    } finally { manager.stopHost(); await manager.waitForQuiet(); }
+  });
+  it('a lease-expiry rejection arriving after peer logout cannot revive participation', async () => {
+    const { clock, ff, manager } = await setup();
+    let reply!: () => void; let sent!: () => void;
+    const sending = new Promise<void>(r => { sent = r; });
+    ff.respond(call => new Promise<Response>(r => {
+      const req = decodeRequest(call.body!);
+      reply = () => r(renewalAck(req, clock.value / 1000,
+        { outcome: 7, errorCode: 7, sessionActive: false, sessionId: '' }));
+      sent();
+    }));
+    const peer = newManager(db, ff.fetch);
+    try {
+      const renewal = manager.renewHouse(ORIGIN); await sending;
+      // Stop only the peer's network worker; its local-first logout still commits.
+      peer.stopHost(); await peer.logoutHouse(ORIGIN);
+      clock.value += 120_000; reply(); await renewal;
+      const calls = ff.calls.length;
+      await manager.resumeEnabledSessions(); await manager.renewDueSessions();
+      expect(ff.calls).toHaveLength(calls);
+      expect(readParticipation(db, ORIGIN)?.desired).toBe('disabled');
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(false);
+    } finally { peer.stopHost(); manager.stopHost(); await Promise.all([peer.waitForQuiet(), manager.waitForQuiet()]); }
+  });
+  it('peer logout during expiry recovery discovery prevents the fresh ENTER', async () => {
+    const { clock, ff, manager } = await setup();
+    ff.respond(call => renewalAck(decodeRequest(call.body!), clock.value / 1000,
+      { outcome: 7, errorCode: 7, sessionActive: false, sessionId: '' }));
+    await manager.renewHouse(ORIGIN); clock.value += 120_000;
+    let reply!: () => void; let sent!: () => void;
+    const discovering = new Promise<void>(r => { sent = r; });
+    ff.respond(call => {
+      if (call.url.endsWith('/v1/manifest')) return new Promise<Response>(r => { reply = () => r(manifestResponse()); sent(); });
+      throw new Error('unexpected control after logout');
+    });
+    const peer = newManager(db, ff.fetch);
+    try {
+      const recovery = manager.resumeEnabledSessions();
+      await Promise.race([discovering, recovery.then(() => { throw new Error('expiry recovery did not discover'); })]);
+      peer.stopHost(); await peer.logoutHouse(ORIGIN); reply(); await recovery;
+      expect(ff.calls.filter(call => call.body && Number(decodeRequest(call.body).operation) === 1)).toHaveLength(0);
+      expect(readParticipation(db, ORIGIN)?.desired).toBe('disabled');
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(false);
+    } finally { peer.stopHost(); manager.stopHost(); await Promise.all([peer.waitForQuiet(), manager.waitForQuiet()]); }
+  });
+  it('logout committed before the background login baseline cannot become fresh login intent', async () => {
+    let now = CLOCK_MS, logoutAtBaseline = false;
+    const ff = fakeFetch();
+    ff.respond(call => call.url.endsWith('/v1/manifest') ? manifestResponse()
+      : enterAckFor(decodeRequest(call.body!), 'baseline-session', 5));
+    const manager = new HouseLifecycleManager({ db, signer, installationId: 'install-test', fetch: ff.fetch,
+      clock: () => now, configuredPinFor: () => {
+        if (logoutAtBaseline) {
+          logoutAtBaseline = false;
+          // Another root user commits logout after recovery reserved work,
+          // before the background login captures its own durable baseline.
+          commitLocalLogout(db, ORIGIN, 'install-test', 'peer-logout-before-baseline', now / 1000, HOUSE_PUBKEY_HEX);
+        }
+        return HOUSE_PUBKEY_HEX;
+      } });
+    try {
+      await manager.loginHouse(ORIGIN);
+      db.execute('UPDATE house_participation SET lease_expires_at=?, renew_after=0', [now / 1000 + 90]);
+      now += 120_000; ff.calls.length = 0; logoutAtBaseline = true;
+      await manager.resumeEnabledSessions();
+      expect(logoutAtBaseline).toBe(false);
+      expect(ff.calls).toHaveLength(0);
+      expect(readParticipation(db, ORIGIN)?.desired).toBe('disabled');
+      expect(readParticipation(db, ORIGIN)?.op_seq).toBe(2);
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(false);
+    } finally { manager.stopHost(); await manager.waitForQuiet(); }
+  });
+  it('resumes saved enabled intent after a file-backed restart offline for eight days', async () => {
+    const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+    const { LocalHostDb } = await import('../../../src/host/local-host-db.js');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'popclaw-offline-expiry-'));
+    const file = path.join(root, 'participation.db');
+    let saved = new LocalHostDb(file), now = CLOCK_MS;
+    const ff = fakeFetch();
+    ff.respond(call => call.url.endsWith('/v1/manifest') ? manifestResponse()
+      : enterAckFor(decodeRequest(call.body!), 'initial-session', 5));
+    const start = () => new HouseLifecycleManager({ db: saved, signer, installationId: 'install-test', fetch: ff.fetch, clock: () => now });
+    let manager = start();
+    try {
+      await manager.loginHouse(ORIGIN);
+      saved.execute('UPDATE house_participation SET lease_expires_at=?, renew_after=?', [now / 1000 + 90, now / 1000 + 30]);
+      manager.stopHost(); await manager.waitForQuiet(); saved.close();
+      now += 8 * 86400 * 1000; saved = new LocalHostDb(file); manager = start(); manager.seedLegacyHouse(ORIGIN);
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(false);
+      ff.calls.length = 0;
+      ff.respond(call => call.url.endsWith('/v1/manifest') ? manifestResponse()
+        : enterAckFor(decodeRequest(call.body!), 'reopened-session', 6));
+      await manager.resumeEnabledSessions();
+      expect(ff.calls.filter(call => call.body && Number(decodeRequest(call.body).operation) === 1)).toHaveLength(1);
+      expect(readParticipation(saved, ORIGIN)?.desired).toBe('enabled');
+      expect(readParticipation(saved, ORIGIN)?.session_id).toBe('reopened-session');
+      expect(readParticipation(saved, ORIGIN)?.op_seq).toBe(2);
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(true);
+    } finally { manager.stopHost(); await manager.waitForQuiet(); saved.close(); fs.rmSync(root, { recursive: true, force: true }); }
+  });
   it('renews on persisted cadence with pinned session/fence, without discovery or generation rotation', async () => {
     const { clock, ff, manager } = await setup();
     const gate = manager.gateFor(ORIGIN);
