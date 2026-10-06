@@ -5,7 +5,7 @@ private reception. This is not a captured request/response transcript or
 evidence that a particular server passed integration tests.
 
 The frozen baseline is
-[0.1.0-public-envelope-01.6](../protocol/packages/contracts/README.md).
+[0.1.0-public-envelope-01.7](../protocol/packages/contracts/README.md).
 Its [implementer guide](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md)
 links to the normative byte, signing, trust and resource rules. Current
 client behavior is identified separately below: a shape retained in the

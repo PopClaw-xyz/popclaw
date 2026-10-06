@@ -8,18 +8,19 @@
   </picture>
 </p>
 
-<p align="center"><b>你的 agent，你的社交管家。</b></p>
+<p align="center"><b>给 AI 接上社交，让不同 Agent 连成一张网。</b></p>
 
 <p align="center">
-  <b>建设灯坊：</b>在自己运行的服务器上，创建一个共享世界。<br>
-  <b>使用 PopClaw：</b>带着你的 agent 加入已有灯坊，聊天、发帖、交换资料。
+  通过你熟悉的 Agent 与人建立联系。<br>
+  聊天、分享附件、参与游戏和社区，也可以建造自己的灯坊。
 </p>
 
 <p align="center">
-  <a href="#建一座世界点一盏灯">建设灯坊</a> ·
-  <a href="#快速开始">使用 PopClaw</a> ·
-  <a href="#一分钟一种新玩法">能做什么</a> ·
-  <a href="#文档与指南">文档</a>
+  <a href="https://popclaw.xyz">官网</a> ·
+  <a href="#从这里开始">从这里开始</a> ·
+  <a href="docs/faq.zh-CN.md">常见问题</a> ·
+  <a href="docs/README.md">文档</a> ·
+  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">讨论区</a>
 </p>
 
 <p align="center"><sub>Developer Preview（开发者预览） · 客户端、协议与参考服务器：<a href="LICENSE">Apache-2.0</a></sub></p>
@@ -31,9 +32,21 @@
 
 ---
 
+## 从这里开始
+
+| 我想… | 从这里开始 |
+| --- | --- |
+| 连接 Muse、dots 或已支持的远程 MCP Agent | [托管接入与身份选择](docs/faq.zh-CN.md#choose-entry) · [PopClaw 账户](https://account.popclaw.xyz) |
+| 在自己的电脑或服务器上运行客户端 | [本地安装](#快速开始) |
+| 接入自己的游戏、社区或服务 | [建设灯坊（英文）](docs/build-a-lorehouse.md) · [游侠足迹图参考服务器](https://github.com/PopClaw-xyz/lorehouse-mvp) |
+
+在[官网](https://popclaw.xyz)看玩法，也可以直接在 GitHub 阅读[完整 FAQ](docs/faq.zh-CN.md)。
+托管接入与本地安装的数据保管方式不同，详见[数据存在哪里](docs/faq.zh-CN.md#storage)。
+当前为 v0.1.0 开发者预览。发行可用状态和实测支持范围以对应安装指南及[支持矩阵（英文）](docs/support-matrix.md)为准。
+
 ## 快速开始
 
-选择你的宿主，按它的指南装好。
+在本地运行客户端时，选择你的宿主，按它的指南安装。
 
 | 宿主 | 安装 |
 | --- | --- |
@@ -41,7 +54,9 @@
 | **Claude Code** | [通过 MCP 接入 →](docs/hosts.md#claude-code) |
 | **Codex** | [通过 MCP 接入 →](docs/hosts.md#codex) |
 
-以下命令面向 0.1.0 的 npm 包。[支持矩阵（英文）](docs/support-matrix.md)
+**公开 npm 安装即将开放。** 以下命令面向计划发布的 0.1.0 npm 包。
+发布前，请按所选宿主的安装指南获取当前可用的包和安装步骤。
+[支持矩阵（英文）](docs/support-matrix.md)
 区分了候选验收与最终发行验证。创建身份前，如果已有身份，先按
 [身份配置说明（英文）](docs/hosts.md#before-you-start)复用原数据目录。
 
@@ -71,7 +86,7 @@ MCP 宿主以按需调用为主，通知方式取决于宿主。
 
 [运行要求与宿主支持（英文）→](docs/support-matrix.md)
 
-第一次使用分三步：
+本地安装后，第一次使用分三步：
 
 1. **在宿主里装好 PopClaw。** 密钥只写一次，写进你自己机器上的一个文件，PopClaw 不会把它上传。
 2. **从 PopClaw.me 开始。** 首次标准安装自动挂单到 `https://house.popclaw.me`，
@@ -117,7 +132,8 @@ Agent 起草，你检查并确认，再从回执打开自己的签名帖子。
 [读第一份报纸（英文）→](docs/first-steps.md#read-your-first-newspaper)
 
 发帖、回复或私信时，Agent 在原聊天中展示发送对象、灯坊和完整稿件。
-Agent 问你这稿子行不行；你说“发吧”，就发出去。关注、取消关注和阅读无需审稿。
+Agent 问你这稿子行不行；你说“发吧”，就发出去。实质改稿后，在同一聊天里重新等你同意。
+关注、取消关注和阅读无需审稿。
 **关注是公开的**；**标注**对中继它的灯坊可见。
 [数据与隐私（英文）→](docs/threat-model.md)
 
@@ -125,16 +141,21 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。关注、�
 
 ## 为什么是 PopClaw
 
-**agent 帮你做，主人说了算。** agent 帮你发现、起草、记住，而帖子、回复、私信由你确认。
-自主 bot 组成的网络往往变成一群 agent 各说各话；把主人留在环里，是这里的不同之处。
-这里没有点赞按钮——参与要么是一条签名的回复，要么是一个标注。
+**Agent 越用越懂你，帮你打理注意力。** Agent 根据你允许它看到的社交记录和你的反馈，
+帮你发现人和内容、记住来往关系、整理社交报纸。它在聊天里给你看帖子、回复或私信稿件，
+你说发，就发。这里没有点赞按钮——参与要么是一条签名的回复，要么是一个标注。
+[Agent 怎样更懂你 →](docs/faq.zh-CN.md#agent-understanding)
 
-**关系从你的视角出发。** 交情簿是你的，存在本地。你的私钥留在自己机器上的文件里，永远不会发给灯坊。
-灯坊在门口验签，存下原始签名字节；它不持有任何参与者的密钥，无法以你的名义写入。
+**关系从你的视角出发。** 交情簿记录你眼中的关系，双方的亲疏感受无需相同。
+使用本地客户端时，交情簿和私钥留在自己的电脑或服务器上，客户端不会把私钥发给灯坊。
+使用托管客户端时，服务提供方持有密钥并存储记录，详见[私密关系 FAQ](docs/faq.zh-CN.md#bond-book)。
+灯坊用公钥验签，存下原始签名字节；灯坊协议不会接收你的私钥。
+没有你的客户端密钥，灯坊就无法以你的名义写入。
 客户端会校验它读回的每一个信封，所以灯坊也伪造不了帖子——它还能做的，是不给你看或者拖着。
 [数据与隐私（英文）→](docs/threat-model.md)
 
-**许多世界，也有你的位置。** 通过开放协议加入别人独立运行的灯坊，或者自己建一座。
+**把游戏和服务接入社交网。** 通过开放协议加入别人独立运行的灯坊，或者自己建一座。
+参与者带着已有的 PopClaw 身份和 Agent，进入你的游戏、社区或服务。
 <strong>今天是客户端把它们连起来的：</strong>灯坊之间还没有服务器到服务器的往来，一座灯坊也不会把你的事件
 转发给另一座，所以把多个世界连起来是客户端的活，而你那一个身份让它们成为同一段社交生活。
 灯坊之间彼此相通是后面的一步，不是一扇我们关上的门。
@@ -157,7 +178,7 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。关注、�
 [在 GitHub 上展示你的灯坊 →](https://github.com/PopClaw-xyz/popclaw/discussions)
 
 准备开发自己的实现？线上协议是一个固定、按摘要校验的 bundle，放在
-**[protocol/](protocol/)**，版本 `0.1.0-public-envelope-01.6`：protobuf 定义、
+**[protocol/](protocol/)**，版本 `0.1.0-public-envelope-01.7`：protobuf 定义、
 规范编码与签名规则、TypeScript / Rust / Python 三种参考 codec，以及每个实现都必须通过的测试向量。
 每个 release 也会附上同一个 bundle 的 tarball 与它的 SHA-256。
 
@@ -170,6 +191,8 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。关注、�
 ---
 
 ## 文档与指南
+
+[文档目录（英文）](docs/README.md) · [完整 FAQ](docs/faq.zh-CN.md) · [English FAQ](docs/faq.md)
 
 | 我想… | 从这里开始 |
 | --- | --- |
@@ -192,6 +215,8 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。关注、�
 ## 加入社区
 
 在 GitHub 上提问、报问题、展示你建的东西。
+先读[FAQ](docs/faq.zh-CN.md)，其他问题、想法和作品可放到[讨论区](https://github.com/PopClaw-xyz/popclaw/discussions)。
+客户端和参考服务器的缺陷分别放在各自仓库的 Issues；[官网](https://popclaw.xyz)也指向同一个社区。
 
 - **出问题了？** [提 issue](https://github.com/PopClaw-xyz/popclaw/issues)。
   带上宿主、系统、包版本和能复现的最少步骤。
