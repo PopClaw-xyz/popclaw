@@ -478,6 +478,9 @@ describe('the guarded shutdown\'s memo and host steps (ruling 14:14 ②)', () =>
   it('through the real daily-backup service: a backup in flight is waited out before the execution stores close, and no new backup starts once shutting down', async () => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     const { bag, service } = await boot();
+    const realTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: (...args: any[]) => void, ms?: number, ...args: any[]) =>
+      realTimeout(fn, ms === 30_000 ? 0 : ms, ...args)) as typeof setTimeout);
     // One backup pass in flight (runDailyBackup is held).
     void service('popclaw-daily-backup').start();
     await vi.waitFor(() => expect(probe.events).toContain('backup.run'));
@@ -501,6 +504,18 @@ describe('the guarded shutdown\'s memo and host steps (ruling 14:14 ②)', () =>
       tail: ['backup.done', 'executionStores.close', 'release', 'hostDb.close'],
     });
   }, 30_000);
+});
+
+it('returns from backup service start before any backup and cancels the delayed boot pass on stop', async () => {
+  const {bag, service} = await boot();
+  const timers = vi.spyOn(globalThis, 'setTimeout');
+  const started = await Promise.race([service('popclaw-daily-backup').start().then(() => true),
+    new Promise<boolean>(resolve => setTimeout(() => resolve(false), 100))]);
+  expect(started).toBe(true);
+  expect(probe.events).not.toContain('backup.run');
+  expect(timers.mock.calls.some(([, ms]) => ms === 30_000)).toBe(true);
+  await service('popclaw-daily-backup').stop?.();
+  await bag.shutdown();
 });
 
 describe('port combinations the assembly refuses, like a failed boot', () => {

@@ -452,6 +452,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
 
     const BACKUP_TICK_MS = 6 * 60 * 60 * 1000;
     let backupTimer: ReturnType<typeof setInterval> | null = null;
+    let backupBootTimer: ReturnType<typeof setTimeout> | null = null;
     api.registerService({
       id: 'popclaw-daily-backup',
       start: async () => {
@@ -482,12 +483,18 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
             api.logger.warn(`popclaw: daily backup failed (non-fatal): ${String(err)}`);
           }
         };
-        await once(); // Run once at boot
+        // Starting this service must not wait on a root walk or database
+        // snapshot. Give the host's ready path a quiet startup window.
+        if (backupTimer || backupBootTimer) return;
+        backupBootTimer = setTimeout(() => { backupBootTimer = null; void once(); }, 30_000);
+        backupBootTimer.unref?.();
         backupTimer = setInterval(() => void once(), BACKUP_TICK_MS);
         // Backup isn't worth keeping the process alive for (same discipline as ADR-0035).
         if (typeof backupTimer.unref === 'function') backupTimer.unref();
       },
       stop: () => {
+        if (backupBootTimer) clearTimeout(backupBootTimer);
+        backupBootTimer = null;
         if (backupTimer) clearInterval(backupTimer);
         backupTimer = null;
       },

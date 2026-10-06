@@ -1,3 +1,4 @@
+import { localDatabasePath } from '../../host/local-host-db.js';
 import { houseBindingBlocked } from '../../world/house-recovery-fence.js';
 import { storageDatabasePathAllowed } from '../../host/storage-maintenance.js';
 /** Same-data-root request/reply IPC. SQLite is the transport, so commands
@@ -75,9 +76,17 @@ export interface HouseCommandBusOptions {
   log?: (message: string) => void;
 }
 
+// Notifications are hints only: SQLite remains the durable transport. Other
+// processes and epoch takeovers are covered by the bounded idle timer.
+const localWakeups = new Map<string | HostDb, Set<() => void>>();
+
 export class HouseCommandBus implements HouseCommandPort {
   private readonly stoppedSignal = new AbortController();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private started = false;
+  private idleDelay = 0;
+  private readonly wakeKey: string | HostDb;
+  private readonly onWake = () => { if (this.started) this.wake(); };
   private readonly executions = new Map<string, Promise<void>>();
   private readonly origins = new Set<string>();
   private readonly callers = new Set<Promise<unknown>>();
@@ -86,6 +95,7 @@ export class HouseCommandBus implements HouseCommandPort {
   constructor(private readonly opts: HouseCommandBusOptions) {
     this.pollMs = opts.pollMs ?? 50;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
+    this.wakeKey = localDatabasePath(opts.db) ?? opts.db;
     opts.db.execute(`CREATE TABLE IF NOT EXISTS house_lifecycle_commands (
       request_id TEXT PRIMARY KEY, kind TEXT NOT NULL, house_origin TEXT NOT NULL,
       baseline_seq INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
@@ -98,13 +108,39 @@ export class HouseCommandBus implements HouseCommandPort {
       }
     });
     opts.db.execute('CREATE INDEX IF NOT EXISTS house_commands_pending ON house_lifecycle_commands(state, created_at)');
+    const listeners = localWakeups.get(this.wakeKey) ?? new Set<() => void>();
+    listeners.add(this.onWake);
+    localWakeups.set(this.wakeKey, listeners);
   }
 
   start(): void {
-    if (this.timer || this.stoppedSignal.signal.aborted) return;
-    this.pump();
-    this.timer = setInterval(() => this.pump(), this.pollMs);
+    if (this.started || this.stoppedSignal.signal.aborted) return;
+    this.started = true;
+    this.wake();
+  }
+
+  private schedule(): void {
+    if (!this.started || this.stoppedSignal.signal.aborted) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      const activity = this.pump();
+      this.idleDelay = activity ? this.pollMs : Math.min(1_000, Math.max(this.pollMs, this.idleDelay * 2));
+      this.schedule();
+    }, this.idleDelay);
     this.timer.unref?.();
+  }
+
+  private wake(): void {
+    if (this.stoppedSignal.signal.aborted) return;
+    this.idleDelay = this.pollMs;
+    this.pump();
+    this.schedule();
+  }
+
+  private notifyLocal(): void {
+    if (!this.started) this.pump();
+    for (const wake of localWakeups.get(this.wakeKey) ?? []) wake();
   }
 
   loginHouse(input: string, authority?: import('./manager.js').LoginAuthority): Promise<LoginResult> {
@@ -163,7 +199,7 @@ export class HouseCommandBus implements HouseCommandPort {
     });
     if (!enqueued) return this.pushFailure(operationId, 409, 'house participation is not active', 'STALE_OPERATION');
     try {
-      this.pump();
+      this.notifyLocal();
       const result = await this.wait<CommandPushResult>(operationId);
       if (result) return result;
       // stop() still awaits this continuation before the caller may close SQLite.
@@ -235,7 +271,11 @@ export class HouseCommandBus implements HouseCommandPort {
    * drain before closing SQLite. No completion callback touches a stopped DB. */
   async stop(): Promise<void> {
     this.stoppedSignal.abort();
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
+    this.started = false;
+    const listeners = localWakeups.get(this.wakeKey);
+    listeners?.delete(this.onWake);
+    if (!listeners?.size) localWakeups.delete(this.wakeKey);
     this.timer = null;
     await Promise.allSettled([...this.executions.values(), ...this.callers]);
   }
@@ -248,7 +288,7 @@ export class HouseCommandBus implements HouseCommandPort {
         (request_id, kind, house_origin, baseline_seq, created_at, running_epoch, effect_json) VALUES (?,?,?,?,?,?,?)`,
       [requestId, kind, origin, baseline, Date.now(), expectedEpoch?.holder ? expectedEpoch.generation : null, source ? JSON.stringify({participationSource:source}) : null]);
     });
-    this.pump();
+    this.notifyLocal();
   }
 
   /** Track the entire public call, including timeout fallbacks after polling. */
@@ -276,11 +316,11 @@ export class HouseCommandBus implements HouseCommandPort {
     return undefined;
   }
 
-  private pump(): void {
-    if (!storageDatabasePathAllowed(this.opts.db, 'execution')) return;
-    if (this.stoppedSignal.signal.aborted) return;
+  private pump(): boolean {
+    if (!storageDatabasePathAllowed(this.opts.db, 'execution')) return false;
+    if (this.stoppedSignal.signal.aborted) return false;
     const epoch = this.opts.authority.captureEpoch();
-    if (epoch === null) return;
+    if (epoch === null) return false;
     try {
       // A claimed push may already have reached a non-idempotent remote
       // consumer. Epoch takeover records uncertainty instead of replaying it.
@@ -337,10 +377,11 @@ export class HouseCommandBus implements HouseCommandPort {
                 WHERE request_id = ? AND state = 'running' AND running_epoch = ?`, [row.request_id, epoch]);
             });
           } catch (retryError) { this.opts.log?.(row.kind === 'push' ? `lifecycle IPC push result persistence failed: ${row.request_id}` : `lifecycle IPC retry persistence failed: ${String(retryError)}`); }
-        }).finally(() => { this.executions.delete(row.request_id); this.origins.delete(row.house_origin); });
+        }).finally(() => { this.executions.delete(row.request_id); this.origins.delete(row.house_origin); this.idleDelay = this.pollMs; this.schedule(); });
         this.executions.set(row.request_id, task);
       }
-    } catch (err) { this.opts.log?.(`lifecycle IPC poll failed: ${String(err)}`); }
+      return rows.length > 0;
+    } catch (err) { this.opts.log?.(`lifecycle IPC poll failed: ${String(err)}`); return false; }
   }
 
   private async execute(row: CommandRow, epoch: number): Promise<void> {

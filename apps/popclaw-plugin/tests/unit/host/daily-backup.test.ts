@@ -19,9 +19,11 @@ function fixture(){
  return {paths,db,actorId:'synthetic',installationId:null,codeVersion:'test',date:'2026-09-08',keep:1};
 }
 describe('routine component backup retention',()=>{
- it('publishes distinct same-day sets instead of overwriting a previous complete set',async()=>{
-  const f=fixture();await runDailyBackup(f);await runDailyBackup(f);
-  const sets=readdirSync(f.paths.backupsDir());expect(sets).toHaveLength(2);
+ it('reuses a verified same-day set without copying the live root again',async()=>{
+  const f=fixture();await runDailyBackup(f);
+  f.db.execute('CREATE TABLE after_backup(value TEXT)');
+  await runDailyBackup(f);
+  const sets=readdirSync(f.paths.backupsDir());expect(sets).toHaveLength(1);
   for(const set of sets)expect(verifyStorageBackup(join(f.paths.backupsDir(),set)).consistency).toBe('component-snapshots');
  });
  it('refuses a missing required durable table without deleting the last good backup',async()=>{

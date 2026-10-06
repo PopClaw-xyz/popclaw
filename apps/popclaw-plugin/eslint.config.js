@@ -39,6 +39,9 @@ export default tseslint.config(
       // integrity state are their whole job, not incidental IO.
       'src/host/sentinels.ts',
       'src/host/integrity-check.ts',
+      'src/host/integrity-probes.ts',
+      'src/host/integrity-process.ts',
+      'src/host/integrity-worker.ts',
       // collect.ts is the doctor feature's designated IO boundary — the
       // deliberate pure/impure split puts every file/log read here so that
       // bundle.ts (the redaction logic, the real privacy boundary) stays a
@@ -72,6 +75,9 @@ export default tseslint.config(
       'src/host/local-host-adapter.ts',
       'src/host/sentinels.ts',
       'src/host/integrity-check.ts',
+      'src/host/integrity-probes.ts',
+      'src/host/integrity-process.ts',
+      'src/host/integrity-worker.ts',
       'src/diagnostics/collect.ts',
       'src/main.ts',
       'src/index.ts',

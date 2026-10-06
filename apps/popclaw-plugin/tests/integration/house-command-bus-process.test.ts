@@ -33,14 +33,17 @@ it('a real reader process sends a command to the only owner process over shared 
   const owner = child(dbPath, 'owner'); let reader: ReturnType<typeof child> | undefined;
   try {
     const ready = await within(owner.message); expect(ready.ready).toBe(true);
+    await new Promise(resolve => setTimeout(resolve, 2200)); // owner reaches its maximum idle delay
+    const started = performance.now();
     reader = child(dbPath, 'reader');
     const reply = await within(reader.message); expect(await within(reader.exited)).toBe(0);
     expect(reply.readerPid).not.toBe(ready.pid);
+    const idleWakeMs = performance.now() - started; expect(idleWakeMs).toBeLessThan(2000);
     expect(reply.result).toMatchObject({ status: 'connected', sessionId: `executor-${ready.pid}` });
     const db = new LocalHostDb(dbPath);
     try {
       expect(db.queryAll('SELECT pid, role FROM fixture_executions')).toEqual([{ pid: ready.pid, role: 'owner' }]);
-      console.log('HOUSE_COMMAND_REAL_PROCESSES', JSON.stringify({ ownerPid: ready.pid, readerPid: reply.readerPid, executor: reply.result.sessionId, commands: db.queryOne('SELECT count(*) AS count FROM house_lifecycle_commands') }));
+      console.log('HOUSE_COMMAND_REAL_PROCESSES', JSON.stringify({ idleWakeMs, ownerPid: ready.pid, readerPid: reply.readerPid, executor: reply.result.sessionId, commands: db.queryOne('SELECT count(*) AS count FROM house_lifecycle_commands') }));
     } finally { db.close(); }
   } finally {
     if (reader) await stop(reader.process, reader.exited);

@@ -20,7 +20,7 @@ const coordinator: HouseCommandPort = {
   logoutHouse: async () => { throw new Error('not part of this component fixture'); },
   getHouseStatus: async () => { throw new Error('not part of this component fixture'); },
 };
-const bus = new HouseCommandBus({ db, coordinator, pollMs: 10, timeoutMs: 5000, authority: {
+const bus = new HouseCommandBus({ db, coordinator, timeoutMs: 5000, authority: {
   captureEpoch: () => lease.isOwnerNow() ? lease.knownGeneration() : null,
   isEpochCurrent: epoch => lease.isGenerationCurrent(epoch),
 } });

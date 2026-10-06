@@ -109,9 +109,8 @@ export const RESIDENT_SERVICES: readonly ResidentService[] = [
     },
   },
   {
-    // A six-hourly local file copy. `runDailyBackup` always writes a NEW
-    // component set (host/daily-backup.ts has no "already done today" check),
-    // so "daily" only means daily in a process that outlives a day.
+    // A delayed startup pass plus a six-hourly check. A verified complete
+    // component set for the owner's current day skips recopying the root.
     id: 'popclaw-daily-backup',
     starter: null,
     roots: {

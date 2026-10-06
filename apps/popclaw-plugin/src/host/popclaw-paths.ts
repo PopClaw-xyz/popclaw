@@ -147,6 +147,13 @@ export class PopclawPaths {
     return false;
   }
 
+  /** Historic snapshots made beside a known database. Keep the accepted names
+   * explicit; arbitrary SQLite files still require classification. */
+  isLegacyDatabaseBackup(absolutePath: string): boolean {
+    const original = absolutePath.replace(/\.bak(?:-pre-ghost-purge-\d{8}-\d{4})?$/, '');
+    return original !== absolutePath && this.isDatabaseFile(original);
+  }
+
   tasteDir(): string { return join(this.root, 'vault', 'taste'); }
   /**
    * `--feedback` layout-taste notes. **A signal given by the owner's own hand = the precious

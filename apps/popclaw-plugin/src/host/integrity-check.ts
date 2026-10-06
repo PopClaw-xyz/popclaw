@@ -24,7 +24,8 @@
  * of PR#384), so those heuristics are pure false positives here.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { inspectIntegrityDatabase } from './integrity-probes.js';
+export { schemaFingerprint } from './integrity-probes.js';
 import { dirname } from 'node:path';
 import type { HostDb } from './host-db.js';
 import { renderCopy, type Lang } from '../lexicon/index.js';
@@ -56,14 +57,6 @@ export interface IntegrityFinding {
  * excluded: sentinels.ts rebuilds it on demand, so counting it would make the
  * first boot after an upgrade report itself.
  */
-export function schemaFingerprint(db: HostDb): string {
-  const rows = db.queryAll<{ type: string; name: string }>(
-    "SELECT type, name FROM sqlite_master WHERE name <> '_READ_THIS_FIRST' ORDER BY type, name",
-  );
-  const h = createHash('sha256');
-  for (const r of rows) h.update(`${r.type} ${r.name}\n`);
-  return h.digest('hex').slice(0, 16);
-}
 
 /**
  * Should a fingerprint change be alerted? Pure, and tested on its own because it
@@ -96,31 +89,6 @@ function writeIntegrityState(file: string, state: IntegrityState): void {
 
 /** The three probes for one DB. A throwing handle is the caller's problem to
  *  swallow — a closed/broken DB must never brick boot. */
-function inspect(db: HostDb): {
-  fingerprint: string;
-  problems: Array<{ kind: IntegrityKind; key: string; detail: string }>;
-} {
-  const problems: Array<{ kind: IntegrityKind; key: string; detail: string }> = [];
-
-  const quick = db
-    .queryAll<Record<string, string>>('PRAGMA quick_check(1)')
-    .map((r) => String(Object.values(r)[0] ?? ''))
-    .filter((v) => v !== 'ok');
-  if (quick.length > 0) {
-    problems.push({ kind: 'quick_check', key: 'quick_check', detail: quick.join('; ') });
-  }
-
-  const fk = db.queryAll<Record<string, unknown>>('PRAGMA foreign_key_check');
-  if (fk.length > 0) {
-    problems.push({
-      kind: 'foreign_key_check',
-      key: 'foreign_key_check',
-      detail: `${fk.length} dangling foreign-key row(s)`,
-    });
-  }
-
-  return { fingerprint: schemaFingerprint(db), problems };
-}
 
 export interface IntegrityCheckDeps {
   readonly dbs: ReadonlyArray<{ label: string; db: HostDb }>;
@@ -137,38 +105,33 @@ export interface IntegrityCheckDeps {
  * boot).
  */
 export function runIntegrityChecks(deps: IntegrityCheckDeps): IntegrityFinding[] {
+  const results = deps.dbs.map(({label, db}) => {
+    try { return {label, result: inspectIntegrityDatabase(db)}; }
+    catch (err) { deps.onError?.(label, err); return {label}; }
+  });
+  return recordIntegrityResults(deps, results);
+}
+
+export function recordIntegrityResults(deps: Pick<IntegrityCheckDeps, 'stateFile' | 'build'>,
+  results: ReadonlyArray<{label: string; result?: ReturnType<typeof inspectIntegrityDatabase>}>,
+): IntegrityFinding[] {
   const state = readIntegrityState(deps.stateFile);
   const next: IntegrityState = { ...state };
   const findings: IntegrityFinding[] = [];
-
-  for (const { label, db } of deps.dbs) {
-    let result: ReturnType<typeof inspect>;
-    try {
-      result = inspect(db);
-    } catch (err) {
-      deps.onError?.(label, err);
-      continue;
-    }
+  for (const {label, result} of results) {
+    if (!result) continue;
     const previous = state[label];
     const problems = [...result.problems];
     if (isSchemaDrift(previous, result.fingerprint, deps.build)) {
-      problems.push({
-        kind: 'schema_drift',
-        key: `schema_drift:${result.fingerprint}`,
-        detail: `${previous!.fingerprint} → ${result.fingerprint} under build ${deps.build}`,
-      });
+      problems.push({kind: 'schema_drift', key: `schema_drift:${result.fingerprint}`,
+        detail: `${previous!.fingerprint} → ${result.fingerprint} under build ${deps.build}`});
     }
-    next[label] = {
-      fingerprint: result.fingerprint,
-      build: deps.build,
-      ...(previous?.announced ? { announced: previous.announced } : {}),
-    };
+    next[label] = {fingerprint: result.fingerprint, build: deps.build,
+      ...(previous?.announced ? {announced: previous.announced} : {})};
     for (const p of problems) {
-      if (previous?.announced === p.key) continue; // already told the owner about this one
-      findings.push({ label, kind: p.kind, key: p.key, detail: p.detail });
+      if (previous?.announced !== p.key) findings.push({label, ...p});
     }
   }
-
   writeIntegrityState(deps.stateFile, next);
   return findings;
 }

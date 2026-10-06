@@ -20,6 +20,7 @@ import { execSync } from 'node:child_process';
 import { chmodSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { buildIntegrityWorker } from './build-integrity-worker.mjs';
 import { buildSchemaWorker } from './build-schema-worker.mjs';
 import { collectBundleLicenses } from './bundle-licenses.mjs';
 
@@ -47,6 +48,7 @@ const builtAt = new Date(Date.now() + 8 * 3600 * 1000)
   .replace('T', ' ');
 const BUILD_STAMP = `${version} ${builtAt}+08 ${gitDescribe()}`;
 const schemaWorker = await buildSchemaWorker();
+const integrityWorker = await buildIntegrityWorker();
 
 const shared = {
   bundle: true,
@@ -84,6 +86,7 @@ const shared = {
   define: {
     __POPCLAW_BUILD__: JSON.stringify(BUILD_STAMP),
     __POPCLAW_SCHEMA_WORKER_SOURCE__: JSON.stringify(schemaWorker.source),
+    __POPCLAW_INTEGRITY_WORKER_SOURCE__: JSON.stringify(integrityWorker.source),
   },
 };
 
@@ -172,7 +175,7 @@ chmodSync(resolve(root, 'dist/bundled/prepare-native-world.js'), 0o755);
 // workspace-internal inputs are not part of the closure. The vendored
 // smol-toml license rides along byte-exact.
 const licensed = collectBundleLicenses({
-  metafiles: [schemaWorker.metafile, ...entryResults.map((r) => r.metafile)],
+  metafiles: [schemaWorker.metafile, integrityWorker.metafile, ...entryResults.map((r) => r.metafile)],
   baseDir: root,
   licensesDir: resolve(root, 'dist/bundled/licenses'),
   vendored: [{ label: 'smol-toml@vendored', file: resolve(root, 'src/setup/vendor/smol-toml.LICENSE') }],

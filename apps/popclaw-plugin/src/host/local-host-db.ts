@@ -360,6 +360,11 @@ export const STATEMENT_CACHE_CAPACITY = 64;
  * the loser wait instead of throwing SQLITE_BUSY mid-tool-call. No external lock.
  * (Network filesystems are the exception — SQLite's own advice, not ours.)
  */
+/** A local scheduling hint; generic HostDb implementations need no disk path. */
+export function localDatabasePath(db: HostDb): string | undefined {
+  return db instanceof LocalHostDb ? db.databasePath : undefined;
+}
+
 export class LocalHostDb implements HostDb {
   private readonly handle: DatabaseType;
   private closed = false;
@@ -374,6 +379,9 @@ export class LocalHostDb implements HostDb {
   private statementHits = 0;
   private statementMisses = 0;
   private readonly filePath: string;
+  get databasePath(): string | undefined {
+    return this.filePath === ':memory:' ? undefined : databaseKey(this.filePath);
+  }
   private registeredAs: string | undefined;
 
   /**

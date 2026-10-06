@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, lstatSync, realpathSync, mkdirSync, readdirSync, readFileSync, readSync, writeFileSync, renameSync, chmodSync, openSync, fsyncSync, closeSync } from 'node:fs';
+import { copyFileSync, rmSync, existsSync, lstatSync, realpathSync, mkdirSync, readdirSync, readFileSync, readSync, writeFileSync, renameSync, chmodSync, openSync, fsyncSync, closeSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { verifyExecutionPartition, type ExecutionCatalogRow } from './execution-store.js';
 import { LocalHostDb, assertNoLiveDatabaseDescriptor, hasOpenDatabaseConnection } from './local-host-db.js';
@@ -138,96 +138,103 @@ export async function createStorageBackup(options: {
   // Not members: the backups themselves, and draft review copies — plaintext
   // letters that live only as long as their draft (tools/draft-review.ts) and
   // may be deleted mid-walk. A persistent set must not keep them.
-  const sources = listFiles(paths.rootDir(), paths.rootDir(), [paths.backupsDir(), paths.draftReviewDir()]);
-  const manifest: StorageBackupManifest = {
-    version: 1, setId, sourceRoot: resolve(paths.rootDir()), actorId: options.actorId,
-    installationId: options.installationId, codeVersion: options.codeVersion,
-    consistency: maintenance ? 'quiescent-set' : 'component-snapshots',
-    maintenanceEpoch: maintenance?.epoch ?? null, ...(options.day ? {day: options.day} : {}), files: [],
-  };
-  for (const source of sources) {
-    maintenance?.assertCurrent();
-    if (/(?:-wal|-shm|-journal)$/.test(source) && existsSync(source.replace(/(?:-wal|-shm|-journal)$/, ''))) continue;
-    // Our own restore's half-written temporaries, skipped by name next to the
-    // sidecars above and for the same reason: they are this module's own
-    // artefacts, not members. A restore interrupted between the copy and the
-    // rename leaves `<file>.<epoch>.restore-tmp` behind (restoreStorageBackup
-    // below); for a database member that is a partial SQLite image under a name
-    // the layout does not know, so it is worth nothing in a set — the finished
-    // file it was becoming is captured from its own path — and it is the one
-    // shape of unclassified database this code can produce itself, which the
-    // refusal below would otherwise turn on us.
-    //
-    // NOT a claim that such a leftover is reachable while backups run. It is
-    // not: an unfinished restore leaves the root in `mode: 'maintenance'` with
-    // a `.restore-reservation` (restoreStorageBackup below), and
-    // assertStorageBootstrap (host/storage-maintenance.ts) refuses to boot on
-    // exactly that state at every entry point, so the backup service never
-    // starts there; a resumed restore must reuse the same epoch and therefore
-    // overwrites the leftover and renames it away. This is one regex beside an
-    // existing skip, not a cleanup sweep.
-    if (RESTORE_TEMPORARY.test(source)) continue;
-    const path = relative(paths.rootDir(), source).split(sep).join('/');
-    const destination = join(directory, 'files', path);
-    mkdirSync(resolve(destination, '..'), {recursive: true, mode: 0o700});
-    // Which members are databases is decided from the CONTROLLED LAYOUT
-    // (PopclawPaths.isDatabaseFile), plus anything this process currently has
-    // open — never by reading the file. This walk runs inside the resident
-    // gateway over its OWN live data root, so the
-    // `readFileSync(source).subarray(0,16)` magic-number sniff that used to
-    // stand here opened a plain-fs descriptor on every live database under the
-    // root, and closing it dropped this process's POSIX locks on all of them.
-    // That is how a resident gateway ends up writing into an unlinked
-    // write-ahead log (local-host-db.ts has the mechanism; measured: the
-    // social, execution-partition and house-cache databases had all lost their
-    // locks while OpenClaw's own databases outside the root kept theirs).
-    //
-    // The set's coverage is unchanged: every member is still captured,
-    // databases still through the online backup API, and the manifest is still
-    // verified before it is published.
-    const sqlite = paths.isDatabaseFile(source) || hasOpenDatabaseConnection(source);
-    let tables: Record<string, number> | undefined;
-    if (sqlite) {
-      // A member the layout calls a database and which will not open or snapshot
-      // as one is a refusal, never a quiet fallback to a byte copy. (SQLite
-      // reads no header at open, so "this is not a database" surfaces from the
-      // backup call; both legs carry the same name.)
-      let db: LocalHostDb | undefined;
-      try {
-        db = new LocalHostDb(source, {readOnly: true});
-        await db.snapshotTo(destination);
-      } catch (error) { throw new Error(`BACKUP_DATABASE_UNREADABLE: ${path}`, {cause: error}); }
-      finally { db?.close(); }
-      const snapshot = new LocalHostDb(destination, {readOnly: true});
-      try {
-        tables = Object.fromEntries(snapshot.queryAll<{name: string}>("SELECT name FROM sqlite_master WHERE type='table'")
-          .map(row => [row.name, snapshot.queryOne<{n: number}>(`SELECT count(*) AS n FROM ${quoteSqlIdentifier(row.name)}`)!.n]));
-      } finally { snapshot.close(); }
-    } else {
-      assertNoLiveDatabaseDescriptor(source, 'copy');
-      copyFileSync(source, destination);
-      // Only now ask what it actually was — of the COPY, a dead file no
-      // connection is coordinating, so reading it coordinates with nothing. An
-      // unclassified member that turns out to hold a database is refused here
-      // instead of shipping as a plain byte copy of something that needed the
-      // backup API. The layout makes the decision; this is the check on it.
-      if (looksLikeSqlite(destination)) throw new Error(`BACKUP_UNCLASSIFIED_DATABASE: ${path}`);
+  try {
+    const sources = listFiles(paths.rootDir(), paths.rootDir(), [paths.backupsDir(), paths.draftReviewDir()]);
+    const manifest: StorageBackupManifest = {
+      version: 1, setId, sourceRoot: resolve(paths.rootDir()), actorId: options.actorId,
+      installationId: options.installationId, codeVersion: options.codeVersion,
+      consistency: maintenance ? 'quiescent-set' : 'component-snapshots',
+      maintenanceEpoch: maintenance?.epoch ?? null, ...(options.day ? {day: options.day} : {}), files: [],
+    };
+    for (const source of sources) {
+      maintenance?.assertCurrent();
+      if (/(?:-wal|-shm|-journal)$/.test(source) && existsSync(source.replace(/(?:-wal|-shm|-journal)$/, ''))) continue;
+      // Our own restore's half-written temporaries, skipped by name next to the
+      // sidecars above and for the same reason: they are this module's own
+      // artefacts, not members. A restore interrupted between the copy and the
+      // rename leaves `<file>.<epoch>.restore-tmp` behind (restoreStorageBackup
+      // below); for a database member that is a partial SQLite image under a name
+      // the layout does not know, so it is worth nothing in a set — the finished
+      // file it was becoming is captured from its own path — and it is the one
+      // shape of unclassified database this code can produce itself, which the
+      // refusal below would otherwise turn on us.
+      //
+      // NOT a claim that such a leftover is reachable while backups run. It is
+      // not: an unfinished restore leaves the root in `mode: 'maintenance'` with
+      // a `.restore-reservation` (restoreStorageBackup below), and
+      // assertStorageBootstrap (host/storage-maintenance.ts) refuses to boot on
+      // exactly that state at every entry point, so the backup service never
+      // starts there; a resumed restore must reuse the same epoch and therefore
+      // overwrites the leftover and renames it away. This is one regex beside an
+      // existing skip, not a cleanup sweep.
+      if (RESTORE_TEMPORARY.test(source)) continue;
+      const path = relative(paths.rootDir(), source).split(sep).join('/');
+      const destination = join(directory, 'files', path);
+      mkdirSync(resolve(destination, '..'), {recursive: true, mode: 0o700});
+      // Which members are databases is decided from the CONTROLLED LAYOUT
+      // (PopclawPaths.isDatabaseFile), plus anything this process currently has
+      // open — never by reading the file. This walk runs inside the resident
+      // gateway over its OWN live data root, so the
+      // `readFileSync(source).subarray(0,16)` magic-number sniff that used to
+      // stand here opened a plain-fs descriptor on every live database under the
+      // root, and closing it dropped this process's POSIX locks on all of them.
+      // That is how a resident gateway ends up writing into an unlinked
+      // write-ahead log (local-host-db.ts has the mechanism; measured: the
+      // social, execution-partition and house-cache databases had all lost their
+      // locks while OpenClaw's own databases outside the root kept theirs).
+      //
+      // The set's coverage is unchanged: every member is still captured,
+      // databases still through the online backup API, and the manifest is still
+      // verified before it is published.
+      const sqlite = paths.isDatabaseFile(source) || paths.isLegacyDatabaseBackup(source) || hasOpenDatabaseConnection(source);
+      let tables: Record<string, number> | undefined;
+      if (sqlite) {
+        // A member the layout calls a database and which will not open or snapshot
+        // as one is a refusal, never a quiet fallback to a byte copy. (SQLite
+        // reads no header at open, so "this is not a database" surfaces from the
+        // backup call; both legs carry the same name.)
+        let db: LocalHostDb | undefined;
+        try {
+          db = new LocalHostDb(source, {readOnly: true});
+          await db.snapshotTo(destination);
+        } catch (error) { throw new Error(`BACKUP_DATABASE_UNREADABLE: ${path}`, {cause: error}); }
+        finally { db?.close(); }
+        const snapshot = new LocalHostDb(destination, {readOnly: true});
+        try {
+          tables = Object.fromEntries(snapshot.queryAll<{name: string}>("SELECT name FROM sqlite_master WHERE type='table'")
+            .map(row => [row.name, snapshot.queryOne<{n: number}>(`SELECT count(*) AS n FROM ${quoteSqlIdentifier(row.name)}`)!.n]));
+        } finally { snapshot.close(); }
+      } else {
+        assertNoLiveDatabaseDescriptor(source, 'copy');
+        copyFileSync(source, destination);
+        // Only now ask what it actually was — of the COPY, a dead file no
+        // connection is coordinating, so reading it coordinates with nothing. An
+        // unclassified member that turns out to hold a database is refused here
+        // instead of shipping as a plain byte copy of something that needed the
+        // backup API. The layout makes the decision; this is the check on it.
+        if (looksLikeSqlite(destination)) throw new Error(`BACKUP_UNCLASSIFIED_DATABASE: ${path}`);
+      }
+      assertNoLiveDatabaseDescriptor(destination, 'fsync');
+      const fd = openSync(destination, 'r');
+      try { fsyncSync(fd); } finally { closeSync(fd); }
+      chmodSync(destination, 0o400);
+      manifest.files.push({path, sqlite, sha256: fileSha256(destination), ...(tables ? {tables} : {})});
+      options.failpoint?.(`copied:${path}`);
     }
-    assertNoLiveDatabaseDescriptor(destination, 'fsync');
-    const fd = openSync(destination, 'r');
-    try { fsyncSync(fd); } finally { closeSync(fd); }
-    chmodSync(destination, 0o400);
-    manifest.files.push({path, sqlite, sha256: fileSha256(destination), ...(tables ? {tables} : {})});
-    options.failpoint?.(`copied:${path}`);
+    maintenance?.assertCurrent();
+    options.failpoint?.('before-manifest');
+    publishStorageJson(join(directory, 'manifest.pending.json'), manifest);
+    verifyStorageBackup(directory, 'manifest.pending.json');
+    maintenance?.assertCurrent();
+    publishStorageJson(join(directory, 'manifest.json'), manifest);
+    chmodSync(join(directory, 'manifest.json'), 0o400);
+    return {directory, manifest};
+  } catch (error) {
+    // This call exclusively owns this random set directory. Earlier complete
+    // sets and historic incomplete evidence are never cleanup candidates.
+    if (!existsSync(join(directory, 'manifest.json'))) rmSync(directory, {recursive: true, force: true});
+    throw error;
   }
-  maintenance?.assertCurrent();
-  options.failpoint?.('before-manifest');
-  publishStorageJson(join(directory, 'manifest.pending.json'), manifest);
-  verifyStorageBackup(directory, 'manifest.pending.json');
-  maintenance?.assertCurrent();
-  publishStorageJson(join(directory, 'manifest.json'), manifest);
-  chmodSync(join(directory, 'manifest.json'), 0o400);
-  return {directory, manifest};
 }
 
 

@@ -15,6 +15,7 @@
  * and so is the register-scope state the root keeps (the L2 slots, the
  * storage-shutdown flag, the backup tasks).
  */
+import { localDatabasePath } from './local-host-db.js';
 import { localParticipationPort, type LocalSetupEvidence } from './local-participation.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { getRuntimeConfigSnapshot } from 'openclaw/plugin-sdk/runtime-config-snapshot';
@@ -25,7 +26,8 @@ import { createOpenClawWorldExecution } from './openclaw-world-execution.js';
 import { createWorldOwnerApproval } from './openclaw-owner-approval.js';
 import { resetOwnerApprovals } from './owner-approval.js';
 import { ensureSentinelReadmes } from './sentinels.js';
-import { runIntegrityChecks, markIntegrityAnnounced, integrityAlertText } from './integrity-check.js';
+import { markIntegrityAnnounced, integrityAlertText } from './integrity-check.js';
+import { runIntegrityChecksInProcess } from './integrity-process.js';
 import { recordBuildOnBoot, readLastBuild, markBuildAnnounced } from '../runtime/last-build.js';
 import { decideInstallNotice } from '../runtime/install-notice.js';
 import { appendSocialLog } from '../social-log/social-log.js';
@@ -105,6 +107,8 @@ export function gatewayRuntimePorts(input: {
   // The owner notifier the push leg opens; the install notice and the
   // integrity alert (both after the leg, by the assembly's order) deliver through it.
   let ownerNotifier: RuntimeOwnerNotifier | undefined;
+  const integrityAbort = new AbortController();
+  let integrityTask: Promise<void> | undefined;
   // MVP presenter: log the card. Real interactive card delivery is via
   // registerInteractiveHandler's response payload + the OpenClaw
   // interactive runtime; the orchestrator also returns the card's text
@@ -284,6 +288,7 @@ export function gatewayRuntimePorts(input: {
       // memoized: the rejected promise would make the failure permanent for
       // the life of the process. Synchronously, before the drain begins.
       beforeFailedBootCleanup: () => {
+        integrityAbort.abort();
         root.l2.clear();
         clearPerProcess('runtime');
       },
@@ -401,20 +406,22 @@ export function gatewayRuntimePorts(input: {
         // install echo (the marker is only written back on a real delivery; an
         // undelivered alert retries on the next boot). Equally fire-and-forget:
         // one possibly-hanging channel delivery must not stall boot (ADR-0035).
-        void (async () => {
+        integrityTask = (async () => {
           try {
             const integrityFile = paths.dbIntegrityFile();
-            const findings = runIntegrityChecks({
+            const findings = await runIntegrityChecksInProcess({
               dbs: [
-                { label: 'social', db: host.db },
-                ...houseStores.map((h) => ({ label: `lorehouse:${h.slug}`, db: h.db })),
+                { label: 'social', path: localDatabasePath(host.db) ?? paths.socialDb() },
+                ...houseStores.map((h) => ({ label: `lorehouse:${h.slug}`, path: localDatabasePath(h.db) ?? paths.lorehouseDb(h.slug) })),
               ],
+              signal: integrityAbort.signal,
+              onMeasured: ({pid, results}) => api.logger.info(`popclaw: integrity process ${pid}: ${results.map(row => `${row.label}=${row.elapsedMs.toFixed(1)}ms`).join(', ')}`),
               stateFile: integrityFile,
               build,
               onError: (label, err) =>
                 api.logger.warn(`popclaw: integrity check skipped [${label}]: ${String(err)}`),
             });
-            if (findings.length === 0) return;
+            if (integrityAbort.signal.aborted || findings.length === 0) return;
             const text = integrityAlertText(findings, paths.backupsDir(), ownerLang());
             // The host's warn/error land on stderr → /dev/null; info is the
             // only channel proven to reach gateway.log (visible-logger.ts). This
@@ -424,7 +431,7 @@ export function gatewayRuntimePorts(input: {
           } catch (err) {
             api.logger.warn(`popclaw: integrity check failed (non-fatal): ${String(err)}`);
           }
-        })();
+        })().finally(() => { integrityTask = undefined; });
       },
       migrateLegacyFiles: ({ paths, marksStore }) => {
         // One-shot migration: retire favorites.jsonl → marks table (ADR-0019).
@@ -445,9 +452,9 @@ export function gatewayRuntimePorts(input: {
         }
       },
       guardedShutdown: {
-        markStorageShuttingDown: () => root.markStorageShuttingDown(),
+        markStorageShuttingDown: () => { integrityAbort.abort(); root.markStorageShuttingDown(); },
         resetOwnerApprovals: () => resetOwnerApprovals(),
-        snapshotStorageBackups: () => root.snapshotStorageBackups(),
+        snapshotStorageBackups: () => [...root.snapshotStorageBackups(), ...(integrityTask ? [integrityTask] : [])],
       },
       afterShutdown: () => {
         // Hand back what outlives this lifecycle. `openclaw gateway restart`

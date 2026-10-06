@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -83,4 +83,26 @@ it('a backlog at a stalled house does not prevent another house command from exe
   a.start();
   try { expect(await other).toMatchObject({ status: 'connected', origin: 'https://other.invalid' }); }
   finally { release(); await b.stop(); await a.stop(); await Promise.all(backlog); }
+});
+
+
+it('backs off empty owner pumps but wakes same-process owners immediately', async () => {
+  const { ownerDb, readerDb } = setup();
+  let captures = 0;
+  const authority = { captureEpoch: () => { captures++; return 1; }, isEpochCurrent: () => true };
+  const a = new HouseCommandBus({ db: ownerDb, coordinator: port(async () => connected()), authority });
+  const b = new HouseCommandBus({ db: readerDb, coordinator: port(async () => { throw new Error('reader executed'); }), authority: noOwner });
+  resources.push(() => a.stop(), () => b.stop());
+  const reads = vi.spyOn(ownerDb, 'queryAll');
+  const writes = vi.spyOn(ownerDb, 'execute');
+  const single = vi.spyOn(ownerDb, 'queryOne');
+  a.start(); b.start();
+  await new Promise(r => setTimeout(r, 2200));
+  console.log('IDLE_PUMPS', captures, 'DB_CALLS', reads.mock.calls.length + writes.mock.calls.length + single.mock.calls.length);
+  expect(captures).toBeLessThanOrEqual(8);
+  const started = performance.now();
+  expect(await b.loginHouse(origin)).toMatchObject(connected());
+  const elapsed = performance.now() - started;
+  console.log('LOCAL_WAKE_MS', elapsed);
+  expect(elapsed).toBeLessThan(150);
 });
