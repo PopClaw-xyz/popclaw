@@ -158,11 +158,11 @@ vi.mock('../../../src/runtime/last-build.js', async (orig) => {
     readLastBuild: (...args: Parameters<typeof real.readLastBuild>) => g('install.readLastBuild', () => real.readLastBuild(...args)),
   };
 });
-vi.mock('../../../src/host/integrity-check.js', async (orig) => {
-  const real = await orig<typeof import('../../../src/host/integrity-check.js')>();
-  const { gatedSync: g } = await import('../../helpers/root-order-gate.js');
-  return { ...real, runIntegrityChecks: (...args: Parameters<typeof real.runIntegrityChecks>) =>
-    g('integrity.run', () => real.runIntegrityChecks(...args)) };
+vi.mock('../../../src/host/integrity-process.js', async (orig) => {
+  const real = await orig<typeof import('../../../src/host/integrity-process.js')>();
+  const { gatedAsync: g } = await import('../../helpers/root-order-gate.js');
+  return { ...real, runIntegrityChecksInProcess: (...args: Parameters<typeof real.runIntegrityChecksInProcess>) =>
+    g('integrity.run', () => real.runIntegrityChecksInProcess(...args)) };
 });
 vi.mock('../../../src/bonds/backfill-follows.js', async (orig) => {
   const real = await orig<typeof import('../../../src/bonds/backfill-follows.js')>();
@@ -555,6 +555,9 @@ describe('C3 pin 5 — gateway-only phase work at its anchors (ruling §4)', () 
     const cleanup = probe.events.slice(probe.events.indexOf(`fault:${label}`) + 1);
     const after = { slots: ownerTurn(root), memo: MEMO_KEY in globalThis };
     if (failed) await rescue(); else await root.stop();
+    if (label === 'integrity.run') {
+      expect(root.logs).toContainEqual(expect.stringContaining(`integrity check failed (non-fatal): Error: ${C3_FORCED_FAILURE}`));
+    }
     expect({
       faultFired: probe.events.includes(`fault:${label}`),
       outcome: failed ? 'fails' : 'swallowed',
