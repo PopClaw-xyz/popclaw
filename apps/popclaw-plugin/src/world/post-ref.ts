@@ -309,7 +309,7 @@ export async function resolvePostRefWithSource(
   // Partial/legacy roots retain their original no-network resolution behavior.
   if (!lookupPublic) return resolution.ok ? {...resolution, source: source ? {...source} : null} : resolution;
   const result = await lookupPublic(prefix);
-  const legacyFull = /^[0-9a-f]{64}$/.test(ref);
+  const legacyFull = prefix.length === 64;
   if (!result.ok && resolution.ok && legacyFull) return {...resolution, source: source ? {...source} : null};
   if (!result.ok) return {ok: false, text: renderCopy(lang,
     result.reason === 'ambiguous' ? 'draft.postref.publicAmbiguous' : 'draft.postref.publicUnavailable')};

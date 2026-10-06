@@ -108,6 +108,7 @@ describe('native link to exact parent manuscript', () => {
 describe('public target lookup boundaries', () => {
   it.each([ID.slice(0,10), '#'+ID.slice(0,10)])('accepts visible short form %s without an internal ID', async ref => {
     const f = await fixture(); const r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: ref});
+    expect(draftId(r)).toBeTruthy();
     expect(peekDraftSnapshot(draftId(r)!)!.target).toBe(`reply:${ID}`);
     expect(r.text).toContain('Exact parent text');
   });
@@ -157,9 +158,13 @@ describe('public target lookup boundaries', () => {
     const r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: ID.slice(0,10)});
     expect(draftId(r)).toBeUndefined(); expect(f.requests).toEqual([]);
   });
-  it('retains explicit full-ID legacy drafts when the projection is absent', async () => {
-    const f = await fixture(); f.setStatus(404);
-    const r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: ID});
+  it.each([
+    {ref: ID, status: 404}, {ref: ID, status: 503},
+    {ref: `${WEB}/post/${ID}`, status: 404}, {ref: `${WEB}/post/${ID}`, status: 503},
+  ])('retains explicit full-ID legacy draft $ref for HTTP $status', async ({ref, status}) => {
+    const f = await fixture(); f.setStatus(status);
+    const r = await f.call('popclaw_draft_post', {body: 'reply', reply_to_event_id: ref});
+    expect(draftId(r)).toBeTruthy();
     expect(peekDraftSnapshot(draftId(r)!)!.target).toBe(`reply:${ID}`);
     expect(r.text).toContain('context is unavailable'); expect(f.pushed).toEqual([]);
   });
