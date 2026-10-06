@@ -127,6 +127,7 @@ function norm(s: string): string {
 export function localCandidates(
   q: { sigil?: string; name?: string },
   sources: PersonSources,
+  allowFoldedNames = false,
 ): ResolveCandidate[] {
   const sigilOf = sources.sigilOf ?? deriveSigil;
   const me = sources.self?.();
@@ -147,7 +148,7 @@ export function localCandidates(
       // the derived sigil, every Latin nickname in the bond book would be
       // missed, reproducing the original DM incident the moment the
       // lore-house goes down.
-      if (sigilOf(p.popclawId).startsWith(q.sigil) || normalizeSigilInput(p.nickname) === q.sigil) {
+      if (sigilOf(p.popclawId).startsWith(q.sigil) || (allowFoldedNames && normalizeSigilInput(p.nickname) === q.sigil)) {
         add(p.popclawId, p.nickname);
       }
     }
@@ -168,7 +169,7 @@ export function localCandidates(
   // name, not a fragment of it.
   if (me?.popclawId) {
     const matched = q.sigil
-      ? sigilOf(me.popclawId).startsWith(q.sigil) || normalizeSigilInput(me.nickname) === q.sigil
+      ? sigilOf(me.popclawId).startsWith(q.sigil) || (allowFoldedNames && normalizeSigilInput(me.nickname) === q.sigil)
       : Boolean(q.name) && me.nickname !== '' && norm(me.nickname) === norm(q.name!);
     if (matched) add(me.popclawId, me.nickname);
   }
@@ -199,9 +200,13 @@ export function localCandidates(
  */
 export function localFirst(
   sources: PersonSources,
+  input?: string,
 ): (q: { sigil?: string; name?: string }) => Promise<ResolveCandidate[] | null> {
+  // Only a bare name may fold into a sigil-shaped token. Explicit hashes
+  // and full IDs must never let somebody's nickname replace that key.
+  const allowFoldedNames = input !== undefined && !input.includes('#') && !looksLikeBase58Id(input.trim());
   return async (q) => {
-    const local = localCandidates(q, sources);
+    const local = localCandidates(q, sources, allowFoldedNames);
     if (local.length > 0) return local;
     const remote = await sources.house(q);
     if (remote && sources.learn) {
@@ -322,7 +327,7 @@ export async function resolvePerson(
     return { kind: 'invalid', reason: renderCopy(lang, 'person.mustSayWho') };
   }
   const sigilOf = sources.sigilOf ?? deriveSigil;
-  const r = await resolveFollowTarget(ref, localFirst(sources));
+  const r = await resolveFollowTarget(ref, localFirst(sources, ref));
   switch (r.kind) {
     case 'lantern':
       return { kind: 'notFound', ref, lanternDown: true };

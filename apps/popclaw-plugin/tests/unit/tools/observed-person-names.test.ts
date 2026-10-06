@@ -166,6 +166,18 @@ describe('observed names through real local cache connections', () => {
     expect(await resolvePersonRef('Owner Exact', fx.b.deps)).toMatchObject({ kind: 'resolved', popclawId: ME });
     expect(await resolvePersonRef('Blackfeather', fx.b.deps)).toMatchObject({ kind: 'resolved', popclawId: LEE });
   });
+
+  it.each(['hash', 'name-hash', 'full-id'])('never lets an observed name replace an explicit identity key (%s)', async kind => {
+    const fx = await pair();
+    fx.cacheA.record(frame(23, deriveSigil(OTHER), 100));
+    const ref = kind === 'hash' ? `#${deriveSigil(OTHER)}`
+      : kind === 'name-hash' ? `Other#${deriveSigil(OTHER)}` : OTHER;
+    fx.b.house.mockResolvedValue([{
+      popclawId: OTHER, nickname: 'Other', sigil: deriveSigil(OTHER), profiles: [],
+    }] as never);
+    expect(await resolvePersonRef(ref, fx.b.deps)).toMatchObject({ kind: 'resolved', popclawId: OTHER, sigil: deriveSigil(OTHER) });
+    expect(fx.b.house).toHaveBeenCalled();
+  });
 });
 
 describe('namecard display keeps public identity and publication evidence', () => {
