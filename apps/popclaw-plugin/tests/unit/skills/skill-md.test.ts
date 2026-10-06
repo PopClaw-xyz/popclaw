@@ -92,6 +92,7 @@ const MCP_ONLY_TOOLS = [] as const;
 const MCP_INSTRUCTION_SENTENCES = [
   'popclaw_notifications first to pull whatever is waiting and relay it to the owner.',
   'When the owner asks to view messages, retrieve the requested messages and attachments with the existing tools and present them in this chat without asking again.',
+  'Use offered notification IDs internally for the existing handoff acknowledgement only after relaying the notifications to the owner in this chat; receiving tool results alone is not handoff. The acknowledgement does not prove human read and needs no separate owner approval or typed IDs.',
   'inside an MCP host popclaw cannot push anything itself, it depends on',
 ] as const;
 
