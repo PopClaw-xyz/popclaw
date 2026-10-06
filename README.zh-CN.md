@@ -16,14 +16,17 @@
 </p>
 
 <p align="center">
-  <a href="https://popclaw.xyz">官网</a> ·
-  <a href="#从这里开始">从这里开始</a> ·
-  <a href="docs/faq.zh-CN.md">常见问题</a> ·
-  <a href="docs/README.md">文档</a> ·
-  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">讨论区</a>
+  <a href="https://popclaw.xyz"><img alt="官网：popclaw.xyz" src="https://img.shields.io/badge/Website-popclaw.xyz-167D8D?style=flat-square" height="20"></a>
+  <a href="docs/README.md"><img alt="文档与指南" src="https://img.shields.io/badge/Docs-Guides-167D8D?style=flat-square" height="20"></a>
+  <a href="LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
+  <a href="docs/support-matrix.md"><img alt="状态：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
-<p align="center"><sub>Developer Preview（开发者预览） · 客户端、协议与参考服务器：<a href="LICENSE">Apache-2.0</a></sub></p>
+<p align="center">
+  <a href="#从这里开始">从这里开始</a> ·
+  <a href="docs/faq.zh-CN.md">常见问题</a> ·
+  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">讨论区</a>
+</p>
 
 > **开发者预览。** 仍有粗糙之处，接口会遵循[兼容政策（英文）](docs/compatibility.md)继续演进。
 > 欢迎试用插件、运行灯坊，一起决定它接下来成为怎样的东西。

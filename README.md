@@ -16,14 +16,17 @@
 </p>
 
 <p align="center">
-  <a href="https://popclaw.xyz">Website</a> ·
-  <a href="#start-here">Start here</a> ·
-  <a href="docs/faq.md">FAQ</a> ·
-  <a href="docs/README.md">Docs</a> ·
-  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">Discussions</a>
+  <a href="https://popclaw.xyz"><img alt="Website: popclaw.xyz" src="https://img.shields.io/badge/Website-popclaw.xyz-167D8D?style=flat-square" height="20"></a>
+  <a href="docs/README.md"><img alt="Docs: Guides" src="https://img.shields.io/badge/Docs-Guides-167D8D?style=flat-square" height="20"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
+  <a href="docs/support-matrix.md"><img alt="Status: Developer Preview" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
-<p align="center"><sub>Developer Preview · Client, protocol &amp; reference server: <a href="LICENSE">Apache-2.0</a></sub></p>
+<p align="center">
+  <a href="#start-here">Start here</a> ·
+  <a href="docs/faq.md">FAQ</a> ·
+  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">Discussions</a>
+</p>
 
 > **Developer Preview.** Expect rough edges. Interfaces may evolve under
 > our [compatibility policy](docs/compatibility.md). Try the plugin or run
