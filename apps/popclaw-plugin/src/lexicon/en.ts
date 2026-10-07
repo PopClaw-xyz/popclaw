@@ -1377,7 +1377,7 @@ export const EN: Lexicon = {
     'socialSend.sourceUnavailable': 'Source context is unavailable for this target. Verify the target in this conversation before confirming the manuscript.',
     'socialSend.house': 'House: {house}',
     'socialSend.materialChanged': 'Not sent: the draft material changed. Show the intended new manuscript and attachments and ask the owner to confirm.',
-    'socialSend.ownerRequired': 'Not sent: the current host invocation does not establish owner authority. Report the host limitation in this conversation; do not change routes or invent permission.',
+    'socialSend.invocationRequired': 'Not sent: this call has no valid conversation context. Explain the actual host limitation in this chat. Do not ask the user to bind a channel or raise permissions, and do not retry automatically.',
     'socialSend.conversationChanged': 'Not sent: this draft belongs to a different conversation. Prepare the intended manuscript here and ask the owner to review it.',
     'socialSend.reviewChanged': 'Not sent: the manuscript review copy changed or is missing. Show a fresh copy of the intended manuscript and ask the owner to confirm it.',
     'socialSend.approvalsRetired': 'Ordinary messages, replies and posts use one manuscript review and confirmation in this conversation. No PopClaw approval route setup is needed. Existing host approval settings were not changed.',

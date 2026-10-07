@@ -28,6 +28,7 @@ const config = await import('openclaw/plugin-sdk/config-runtime');
 const sessions = await import('openclaw/plugin-sdk/session-store-runtime');
 const inbound = await import('openclaw/plugin-sdk/conversation-runtime');
 const { putDraft, peekDraftSnapshot, noteDraftToolOutput } = await import('../../src/tools/draft-store.js');
+const { socialDraftBinding } = await import('../../src/host/social-send-context.js');
 const sessionKey = 'agent:main:main';
 const storePath = sessions.resolveStorePath(undefined, { agentId: 'main' });
 const meta: Promise<unknown>[] = [];
@@ -75,8 +76,8 @@ assert(runtimeService);
 // Tool execution uses the shipping command wrapper and isolated runtime.
 // Its identity/storage are temporary; all House/channel network is forbidden.
 let sends = 0;
-const draftBinding = { host: 'native' as const, agentId: 'main', sessionKey,
-  sessionId: entry.sessionId, senderId };
+const draftBinding = socialDraftBinding('native', { agentId: 'main', sessionKey,
+  sessionId: entry.sessionId, requesterSenderId: senderId });
 const manuscript = { binding: draftBinding, kind: 'dm' as const, recipientId: '1'.repeat(64), recipientLabel: 'Synthetic recipient',
     body: 'Complete original body', attachments: [], preview: null, output: null, house: 'https://synthetic.house.invalid' };
 putDraft('message-1', async () => {
@@ -124,11 +125,11 @@ assert.deepEqual(peekDraftSnapshot('message-1'), before);
 assert.equal(await hook({ ...event, toolCallId: 'send-fresh' }, { ...ctx, toolCallId: 'send-fresh' }), undefined);
 let current = true;
 const invocation = { agentId: 'main', sessionKey, sessionId: nextSession!.sessionId,
-  requesterSenderId: senderId, senderIsOwner: true,
+  requesterSenderId: senderId, senderIsOwner: false,
   assertInvocationCurrent: () => { if (!current) throw new Error('SYNTHETIC_INVOCATION_REVOKED'); } };
 const send = (context: unknown) => sendFactory.create(context).execute('send-fresh', event.params);
 const text = (result: any): string => result.text ?? result.content?.find((item: any) => item.type === 'text')?.text;
-for (const change of [{ senderIsOwner: false }, { assertInvocationCurrent: undefined },
+for (const change of [{ messageChannel: 'another-channel' }, { agentAccountId: 'another-account' }, { assertInvocationCurrent: undefined },
   { sessionId: 'other-session' }, { sessionKey: 'agent:main:other' },
   { agentId: 'other-agent' }, { requesterSenderId: 'other-owner' }]) {
   assert.notEqual(text(await send({ ...invocation, ...change })), 'synthetic send');

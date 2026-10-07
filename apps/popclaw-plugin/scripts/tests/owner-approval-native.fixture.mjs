@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 
 // Run from scripts/tests, or pass the absolute plugin package as argv[2].
 // Official SDK loader and resolver execute unchanged. The isolated host supplies
-// synthetic admitted-run/owner facts; only the final social sender is replaced.
+// synthetic admitted-run facts; only the final social sender is replaced.
 // This fixture does not verify actual channel authentication or human review.
 test('pinned native SDK registers v2 social tools and retains current confirmation authority', async () => {
   const root=resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)),'../..'));
@@ -71,7 +71,7 @@ test('pinned native SDK registers v2 social tools and retains current confirmati
   const acquisitionA=await loader.t({config:configA,env,workspaceDir:join(box,'workspace-a'),onlyPluginIds:[pluginId],toolDiscovery:true,runtimeSideEffects:false,logger});
   let sends=0;
   const cases=[];
-  const context={config,workspaceDir:join(box,'workspace'),agentId:'main',sessionId:'synthetic-session',sessionKey:'agent:main:synthetic',requesterSenderId:'synthetic-owner',senderIsOwner:true,logger};
+  const context={config,workspaceDir:join(box,'workspace'),agentId:'main',sessionId:'synthetic-session',sessionKey:'agent:main:synthetic',requesterSenderId:'synthetic-human',senderIsOwner:false,messageChannel:'weixin',agentAccountId:'synthetic-weixin-account',logger};
   const resolveTools=(assertInvocationCurrent,extra={})=>resolver.i({context,env,runtimeRegistry:acquisition.registry,toolAllowlist:[pluginId],assertInvocationCurrent,...extra});
   const resolveDraftTools=(assertInvocationCurrent,extra={})=>resolver.i({context:{...context,config:configA,workspaceDir:join(box,'workspace-a')},env,runtimeRegistry:acquisitionA.registry,toolAllowlist:[pluginId],assertInvocationCurrent,...extra,
     ...extra.context?{context:{...extra.context,config:configA,workspaceDir:join(box,'workspace-a')}}:{}});
@@ -117,14 +117,33 @@ test('pinned native SDK registers v2 social tools and retains current confirmati
     const absent=await draft();a.replaceSender(absent.id,async()=>{},()=>sends++);
     await assert.rejects(send(resolveTools(undefined),absent.id),/authority is unavailable outside an admitted run or request/);assert.equal(sends,1);
     const collector=await b.collectNativeAsMcp().execute('fixture:missing',{draft_id:absent.id});
-    assert.match(sentText(collector),/does not establish owner authority|无法确认主人权限/);assert.equal(sends,1);assert.ok(a.peekDraftSnapshot(absent.id));
+    assert.match(sentText(collector),/no valid conversation context|缺少有效的会话信息/);assert.equal(sends,1);assert.ok(a.peekDraftSnapshot(absent.id));
     cases.push('native with no admitted context rejects; contextless collector cannot select stdio authority');
 
-    const ownerRevoked=await draft();a.replaceSender(ownerRevoked.id,async()=>{},()=>sends++);
-    const ownerTools=resolveTools(()=>confirmation.assert());context.senderIsOwner=false;
-    assert.match(sentText(await send(ownerTools,ownerRevoked.id)),/does not establish owner authority|无法确认主人权限/);
-    assert.equal(sends,1);assert.ok(a.peekDraftSnapshot(ownerRevoked.id));context.senderIsOwner=true;
-    cases.push('SDK and wrapper retain live owner getter; owner revocation rejects existing tool');
+    for (const channel of ['weixin','telegram','custom-chat-provider']) {
+      for (const ownerMarker of [false,undefined]) {
+        const route={...context,messageChannel:channel,senderIsOwner:ownerMarker};
+        const before=sends,d=await draft(guard(),{context:route});
+        assert.equal(a.peekDraftSnapshot(d.id).binding.messageChannel,channel);
+        a.replaceSender(d.id,async()=>{},()=>sends++);
+        const tools=resolveTools(()=>confirmation.assert(),{context:route});
+        assert.equal(sentText(await send(tools,d.id)),'synthetic sender completed');
+        assert.equal(sends,before+1);assert.equal(route.senderIsOwner,ownerMarker);
+        await send(tools,d.id);assert.equal(sends,before+1);
+      }
+    }
+    cases.push('official SDK wrapper admits owner=false/undefined on Weixin and arbitrary channels; sends once without owner configuration');
+    const changingMarker=await draft();a.replaceSender(changingMarker.id,async()=>{},()=>sends++);
+    const liveMarkerTools=resolveTools(()=>confirmation.assert());context.senderIsOwner=undefined;
+    assert.equal(sentText(await send(liveMarkerTools,changingMarker.id)),'synthetic sender completed');context.senderIsOwner=false;
+    cases.push('changing an owner marker does not revoke an otherwise current admitted invocation');
+    for (const change of [{messageChannel:'other-channel'},{agentAccountId:'other-account'},{requesterSenderId:'other-sender'},{sessionId:'other-session'}]) {
+      const before=sends,d=await draft();a.replaceSender(d.id,async()=>{},()=>sends++);
+      const wrong=resolveTools(()=>confirmation.assert(),{context:{...context,...change}});
+      assert.match(sentText(await send(wrong,d.id)),/different conversation|另一个会话/);
+      assert.equal(sends,before);assert.ok(a.peekDraftSnapshot(d.id));
+    }
+    cases.push('same-session sender text cannot reuse a draft across channel/account; session and sender isolation remain');
 
     // Actual SDK continuation issuance, run ownership and caller scope. No
     // handwritten ownerContinuation is passed to the official tool resolver.
@@ -137,6 +156,7 @@ test('pinned native SDK registers v2 social tools and retains current confirmati
     runs.y(runId,{agentId:context.agentId,sessionKey:context.sessionKey,sessionId:context.sessionId});
     const scope=cron.u(runId,{kind:'unknown'},undefined,()=>{continuationGuard.assert();return true;},undefined,{senderId:context.requesterSenderId,channel:'tui',accountId:'synthetic-account',isCurrent(){try{ownerGuard.assert();return true;}catch{return false;}}});
     const caller={agentId:context.agentId,sessionKey:context.sessionKey,approvalAuthority:authority,operationalRunInstance:instance,receiptAuthority:()=>runs.A(authority)};
+    const beforeContinuation=sends;
     await callers.c(caller,()=>cron.f(scope,async()=>{
       const ownerContinuation=cron.o({runId,agentId:context.agentId,sessionKey:context.sessionKey,sessionId:context.sessionId});
       assert.ok(ownerContinuation,'official SDK must issue continuation');assert.equal(ownerContinuation.isCurrent(),true);
@@ -144,10 +164,10 @@ test('pinned native SDK registers v2 social tools and retains current confirmati
       const extra={context:continuationContext,ownerContinuation};
       const d=await draft(guard(),extra);a.replaceSender(d.id,async()=>{},()=>sends++);
       assert.equal(a.peekDraftSnapshot(d.id).binding.senderId,context.requesterSenderId);
-      assert.equal(sentText(await send(resolveTools(undefined,extra),d.id)),'synthetic sender completed');assert.equal(sends,2);
+      assert.equal(sentText(await send(resolveTools(undefined,extra),d.id)),'synthetic sender completed');assert.equal(sends,beforeContinuation+1);
       const revoked=await draft(guard(),extra);a.replaceSender(revoked.id,async()=>{},()=>sends++);
       const tools=resolveTools(undefined,extra);ownerGuard.close();assert.equal(ownerContinuation.isCurrent(),false);
-      await assert.rejects(send(tools,revoked.id),/Requester owner identity is no longer active/);assert.equal(sends,2);assert.ok(a.peekDraftSnapshot(revoked.id));
+      await assert.rejects(send(tools,revoked.id),/Requester owner identity is no longer active/);assert.equal(sends,beforeContinuation+1);assert.ok(a.peekDraftSnapshot(revoked.id));
       cases.push('SDK-issued owner continuation overrides untrusted route identity; revocation rejects live tools');
     }));
     runs.C(authority);

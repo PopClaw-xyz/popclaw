@@ -521,7 +521,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
     execute: async (_callId: string, params: unknown, signal?: AbortSignal) => {
       const { draft_id } = params as { draft_id: string };
       const assertCurrent = socialSendAssertion(deps.socialSendHost, toolCtx, signal);
-      if (!assertCurrent) return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.ownerRequired')};
+      if (!assertCurrent) return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.invocationRequired')};
       assertCurrent();
       const snapshot = peekDraftSnapshot(draft_id);
       if (!snapshot) return {type: 'text' as const, text: expiredDraftText(draft_id)};

@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createDraftReviewFiles } from '../../../src/host/draft-review-files.js';
 import { withDraftReview } from '../../../src/tools/draft-review.js';
-import { socialToolFactory } from '../../../src/host/social-send-context.js';
+import { socialDraftBinding, socialToolFactory } from '../../../src/host/social-send-context.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { popclaw } from '@popclaw/contracts';
 
@@ -61,6 +61,85 @@ beforeEach(() => {_draftsForTest.clear(); resetOwnerApprovals(); setOwnerLang('e
 afterEach(() => {_draftsForTest.clear(); resetOwnerApprovals(); setOwnerLang(undefined); vi.restoreAllMocks();});
 
 describe('ordinary social sends under the current host invocation', () => {
+  it.each([
+    ['weixin', false], ['weixin', undefined],
+    ['telegram', false], ['telegram', undefined],
+    ['custom-chat-provider', false], ['custom-chat-provider', undefined],
+  ] as const)('uses admitted %s chat with owner marker %s, without owner configuration', async (channel, ownerMarker) => {
+    for (const kind of ['message', 'post', 'reply'] as const) {
+      const fx = fixture();
+      const scope = {messageChannel: channel, agentAccountId: 'chat-account', nativeChannelId: 'chat-a',
+        deliveryContext: {channel, accountId: 'chat-account', to: 'chat-a', threadId: 7}, senderIsOwner: ownerMarker};
+      const drafting = turn(scope);
+      const params = kind === 'message' ? {recipient: 'Alice', body: 'Exact reviewed manuscript'}
+        : kind === 'reply' ? {platform: 'x', post_id: 'p1', body: 'Exact reviewed manuscript'}
+        : {body: 'Exact reviewed manuscript'};
+      const result = await fx.call(`popclaw_draft_${kind}`, params, drafting);
+      expect(result.text).toContain('Exact reviewed manuscript');
+      expect(fx.pushed).toHaveLength(0);
+      const id = tokenOf(result);
+      drafting.retire();
+      const confirming = turn(scope);
+      await fx.call('popclaw_send_draft', {draft_id: id}, confirming);
+      expect(fx.pushed).toHaveLength(1);
+      expect(confirming.assertInvocationCurrent).toHaveBeenCalled();
+      expect(confirming.senderIsOwner).toBe(ownerMarker);
+      await fx.call('popclaw_send_draft', {draft_id: id}, confirming);
+      expect(fx.pushed).toHaveLength(1);
+    }
+  });
+  it.each([
+    {messageChannel: 'other-channel'}, {agentAccountId: 'other-account'}, {nativeChannelId: 'other-chat'},
+    {deliveryContext: {channel: 'other-channel'}}, {deliveryContext: {accountId: 'other-account'}},
+    {deliveryContext: {to: 'other-chat'}}, {deliveryContext: {threadId: 8}},
+  ])('isolates same-session/sender drafts by the host conversation route: %j', async change => {
+    const fx = fixture();
+    const scope = {messageChannel: 'weixin', agentAccountId: 'chat-account', nativeChannelId: 'chat-a',
+      deliveryContext: {channel: 'weixin', accountId: 'chat-account', to: 'chat-a', threadId: 7}};
+    const id = tokenOf(await fx.call('popclaw_draft_message', {recipient: 'Alice', body: 'Reviewed here'}, turn(scope)));
+    const otherScope = {...scope, ...change, deliveryContext: {...scope.deliveryContext, ...change.deliveryContext}};
+    expect((await fx.call('popclaw_send_draft', {draft_id: id}, turn(otherScope))).text).toContain('different conversation');
+    expect(fx.pushed).toHaveLength(0);
+    expect(peekDraftSnapshot(id)).not.toBeNull();
+    await fx.call('popclaw_send_draft', {draft_id: id}, turn(scope));
+    expect(fx.pushed).toHaveLength(1);
+  });
+  it('does not reinterpret a changing owner marker as host revocation', async () => {
+    const fx = fixture(), ctx = turn();
+    const id = tokenOf(await fx.call('popclaw_draft_message', {recipient: 'Alice', body: 'Reviewed here'}, ctx));
+    const original = fx.owner.signer.sign.bind(fx.owner.signer);
+    vi.spyOn(fx.owner.signer, 'sign').mockImplementation(async bytes => {const signed = await original(bytes); ctx.senderIsOwner = false; return signed;});
+    await fx.call('popclaw_send_draft', {draft_id: id}, ctx);
+    expect(fx.pushed).toHaveLength(1);
+    expect(ctx.senderIsOwner).toBe(false);
+  });
+  it('rechecks the frozen conversation route after async signing', async () => {
+    const fx = fixture(), scope = {deliveryContext: {to: 'chat-a'}}, ctx = turn(scope);
+    const id = tokenOf(await fx.call('popclaw_draft_message', {recipient: 'Alice', body: 'Reviewed here'}, ctx));
+    const original = fx.owner.signer.sign.bind(fx.owner.signer);
+    vi.spyOn(fx.owner.signer, 'sign').mockImplementation(async bytes => {const signed = await original(bytes); scope.deliveryContext.to = 'chat-b'; return signed;});
+    await expect(fx.call('popclaw_send_draft', {draft_id: id}, ctx)).rejects.toThrow('SOCIAL_SEND_CONVERSATION_CHANGED');
+    expect(fx.pushed).toHaveLength(0);
+  });
+  it('allows an admitted CLI with absent route and owner fields, matching null defaults', async () => {
+    const fx = fixture(), drafting = turn({senderIsOwner: undefined, requesterSenderId: undefined});
+    const id = tokenOf(await fx.call('popclaw_draft_message', {recipient: 'Alice', body: 'Reviewed CLI manuscript'}, drafting));
+    const confirming = turn({senderIsOwner: false, requesterSenderId: null, messageChannel: null, agentAccountId: null,
+      nativeChannelId: null, deliveryContext: {channel: null, accountId: null, to: null, threadId: null}});
+    await fx.call('popclaw_send_draft', {draft_id: id}, confirming);
+    expect(fx.pushed).toHaveLength(1);
+  });
+  it.each(['before', 'during'] as const)('retains abort fencing %s asynchronous signing', async phase => {
+    const fx = fixture(), ctx = turn({senderIsOwner: false}), controller = new AbortController();
+    const id = tokenOf(await fx.call('popclaw_draft_message', {recipient: 'Alice', body: 'Reviewed here'}, ctx));
+    const original = fx.owner.signer.sign.bind(fx.owner.signer);
+    if (phase === 'before') controller.abort(new Error('HOST_ABORTED'));
+    else vi.spyOn(fx.owner.signer, 'sign').mockImplementation(async bytes => {const signed = await original(bytes); controller.abort(new Error('HOST_ABORTED')); return signed;});
+    await expect(fx.call('popclaw_send_draft', {draft_id: id}, ctx, controller.signal)).rejects.toThrow('HOST_ABORTED');
+    expect(fx.pushed).toHaveLength(0);
+    if (phase === 'before') expect(peekDraftSnapshot(id)).not.toBeNull();
+    else expect(peekDraftSnapshot(id)).toBeNull();
+  });
   it('sends on a later owner turn without a second native approval', async () => {
     const fx = fixture(), drafting = turn();
     const id = tokenOf(await fx.call('popclaw_draft_message', {recipient: 'Alice', body: 'Owner reviewed this'}, drafting));
@@ -133,7 +212,7 @@ describe('material and root scope boundaries', () => {
   it('does not send mutated stored attachment bytes', async () => {
     const fx = fixture(), id = 'message-attachment';
     const sent = vi.fn(async () => ({text: 'sent'}));
-    const binding = {host: 'native' as const, agentId: 'main', sessionId: 'session-a', sessionKey: 'agent:main:main', senderId: 'owner'};
+    const binding = socialDraftBinding('native', turn());
     putDraft(id, sent, {kind: 'dm', body: 'reviewed', attachments: [{name: 'photo.png', mime: 'image/png', bytes: new Uint8Array([1,2]), digest: 'ignored'}], binding, preview: null, output: null});
     peekDraftSnapshot(id)!.attachments[0]!.bytes[0] = 9;
     expect((await fx.call('popclaw_send_draft', {draft_id: id})).text).toContain('material changed');
@@ -169,7 +248,7 @@ describe('material and root scope boundaries', () => {
     await fx.call('popclaw_send_draft', {draft_id: id}); expect(fx.pushed).toHaveLength(0);
     const sent = vi.fn(async () => ({text: 'sent'}));
     putDraft('invite-1', sent, {kind: 'dm', body: 'hello', attachments: [], preview: null, output: null,
-      binding: {host: 'native', agentId: 'main', sessionId: 'session-a', sessionKey: 'agent:main:main', senderId: 'owner'}});
+      binding: socialDraftBinding('native', turn())});
     await fx.call('popclaw_send_draft', {draft_id: 'invite-1'}); expect(sent).not.toHaveBeenCalled();
   });
   it('shows the exact incoming message context before drafting a private reply', async () => {

@@ -1138,7 +1138,7 @@ export const ZH_CN: Lexicon = {
     'socialSend.sourceUnavailable': '这条目标的来源上下文暂不可用。请在本聊天核对目标，再确认稿件。',
     'socialSend.house': '灯坊：{house}',
     'socialSend.materialChanged': '未发送：草稿内容或附件已改变。请展示原定的新稿件和附件，给主人确认。',
-    'socialSend.ownerRequired': '未发送：当前宿主调用无法确认主人权限。请在本聊天说明宿主限制，不要更换路由或自行授予权限。',
+    'socialSend.invocationRequired': '未发送：当前调用缺少有效的会话信息。请在本聊天说明实际宿主限制。不要要求用户绑定渠道或提升权限，也不要自动重试。',
     'socialSend.conversationChanged': '未发送：这份草稿属于另一个会话。请在本聊天准备原定稿件，给主人看稿确认。',
     'socialSend.reviewChanged': '未发送：看稿副本已改变或丢失。请展示原定稿件的新副本，给主人确认。',
     'socialSend.approvalsRetired': '私信、回复和发帖只需在本聊天看稿确认一次，无需准备 PopClaw 审批路由。现有宿主审批配置未改动。',
