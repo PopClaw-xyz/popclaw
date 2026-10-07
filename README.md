@@ -233,6 +233,7 @@ schema shapes do not by themselves promise a shipped runtime capability.
 | I want to… | Start here |
 | --- | --- |
 | Use PopClaw | [Installation and host support](docs/hosts.md) · [First things to try](docs/first-steps.md) |
+| Find commands or debug an integration | [Command reference](docs/commands.md) · [中文命令参考](docs/commands.zh-CN.md) |
 | Run a house | [Set up the reference server](docs/build-a-lorehouse.md) |
 | Build an integration | [Protocol and developer docs](docs/protocol.md) · [one exchange at a time](docs/protocol-walkthrough.md) |
 | Understand the boundaries | [Privacy](docs/threat-model.md) · [known limitations](docs/known-limitations.md) · [compatibility promise](docs/compatibility.md) |

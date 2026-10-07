@@ -8,13 +8,24 @@ the same tools and the same identity.
 
 ## Start here
 
+Use the supplied fixed package before publication. The npm examples below
+require that exact version to have been published and verified; this page
+does not establish registry availability. See the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md).
+
+With that fixed build installed, inspect the setup plan first:
+
 ```sh
-npx popclaw@0.1.0 setup --host claude
+popclaw setup --host claude --plan
 ```
 
-`setup` writes the host configuration for you — use `--host codex` for Codex,
-and the host name for whichever other MCP client you are wiring up. That is the
-path to follow unless you are configuring a host by hand.
+`setup` accepts `--host claude`, `--host codex` or `--host both`.
+Other MCP clients need manual configuration. `--plan` only inspects; actual
+setup writes the host configuration. A missing identity requires explicit
+`--create-identity`. Select an existing identity with `--root` and follow the
+host guide's reuse conditions; setup is not a migration or restore command.
+
+The [command reference](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/commands.md)
+lists all CLI options, the two MCP entry points and the complete tool index.
 
 ## The two equivalent commands
 
@@ -29,6 +40,10 @@ Both require `POPCLAW_DATA_ROOT` to be set to an **absolute** path. That
 directory is the identity: point several hosts at the same root and they share
 one passport, one inbox and one set of policies. A different root is a
 different identity.
+
+Reuse must satisfy the [host guide's identity conditions](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md#before-you-start).
+Setup can adopt a key-only root or reconnect a valid setup-managed root;
+it refuses unmanaged historical data instead of silently migrating it.
 
 ```sh
 POPCLAW_DATA_ROOT=/Users/you/.popclaw npx -y popclaw-mcp@0.1.0

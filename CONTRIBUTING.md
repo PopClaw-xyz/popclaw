@@ -22,6 +22,10 @@ will route it.
 
 ## Working on the code
 
+For the available CLI, chat commands and agent tools, start with the
+[command reference](docs/commands.md). It includes debugging steps, effects
+and source entry points. Update both language versions when changing a command's contract.
+
 ```sh
 just install    # pnpm install with a frozen lockfile, plus the pinned protocol toolchain
 just build

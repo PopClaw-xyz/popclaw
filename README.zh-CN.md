@@ -200,6 +200,7 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。实质改�
 | 我想… | 从这里开始 |
 | --- | --- |
 | 使用 PopClaw | [安装与宿主支持（英文）](docs/hosts.md) · [先试这几件事（英文）](docs/first-steps.md) |
+| 查找命令或调试接入 | [命令参考](docs/commands.zh-CN.md) · [English command reference](docs/commands.md) |
 | 运行一座灯坊 | [搭建参考服务器（英文）](docs/build-a-lorehouse.md) |
 | 做一个自己的实现 | [协议与开发文档（英文）](docs/protocol.md) · [跟着一个客户端走完一座灯坊（英文）](docs/protocol-walkthrough.md) |
 | 弄清边界 | [隐私（英文）](docs/threat-model.md) · [已知限制](docs/known-limitations.md) · [兼容承诺](docs/compatibility.md) |
