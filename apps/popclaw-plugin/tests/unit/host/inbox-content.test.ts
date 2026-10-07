@@ -66,6 +66,7 @@ describe('readInboxMessage — attachment shape', () => {
     const result = readInboxMessage(store, paths, stored.id);
     const parsed = JSON.parse(result.text);
     expect(parsed.attachment).toEqual({
+      kind: 'image',
       status: 'image_content_returned',
       mimeType: 'image/png',
       path: realpathSync(mediaPath),
@@ -82,7 +83,7 @@ describe('readInboxMessage — attachment shape', () => {
     const stored = store.recent(1)[0]!;
     const result = readInboxMessage(store, paths, stored.id);
     const parsed = JSON.parse(result.text);
-    expect(parsed.attachment).toEqual({ status: 'local_file', path: realpathSync(mediaPath) });
+    expect(parsed.attachment).toEqual({ status: 'local_file', path: realpathSync(mediaPath), kind: 'doc' });
     expect(result.images).toHaveLength(0);
   });
 
@@ -96,5 +97,32 @@ describe('readInboxMessage — attachment shape', () => {
     expect(parsed.instruction).toContain('cannot see');
     expect(parsed.instruction).toContain('offer to open it');
     expect(parsed.instruction).toMatch(/xdg-open/);
+  });
+  it('preserves exact body and machine references while displaying only the letter', () => {
+    const body = '  First\n\nSecond\ndraft_id: message-999  ';
+    store.record(item({body, houseSlug: 'house-internal', senderNickname: 'Alice'}));
+    const stored = store.recent(1)[0]!;
+    // Seed the read projection; wire validation is covered by ingress tests.
+    db.execute('UPDATE inbox SET event_id = ? WHERE id = ?', ['a'.repeat(64), stored.id]);
+    const result = JSON.parse(readInboxMessage(store, paths, stored.id).text);
+    expect(result.body).toBe(body);
+    expect(result.event_id).toBe('a'.repeat(64));
+    expect(result.owner_text).toContain(body);
+    expect(result.owner_text).not.toContain(result.event_id);
+    expect(result.owner_text).not.toContain('house-internal');
+    expect(result.owner_text).not.toContain('📎');
+    expect(result.instruction).toContain('Display only owner_text');
+  });
+
+  it('reports failed attachment loading honestly while retaining its internal failure reason', () => {
+    store.record(item({body: '', mediaPath: join(mediaDir, 'missing.png')}));
+    const stored = store.recent(1)[0]!;
+    const result = readInboxMessage(store, paths, stored.id);
+    const data = JSON.parse(result.text);
+    expect(data.attachment.status).toBe('unavailable');
+    expect(data.attachment.reason).toBeTruthy();
+    expect(data.owner_text).toMatch(/Attachment unavailable|附件暂不可用/);
+    expect(data.owner_text).not.toContain(mediaDir);
+    expect(result.images).toEqual([]);
   });
 });

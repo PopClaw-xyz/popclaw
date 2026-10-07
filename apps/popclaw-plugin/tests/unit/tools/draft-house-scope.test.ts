@@ -1,3 +1,4 @@
+import { draftToken } from '../../helpers/draft-token.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
@@ -64,7 +65,7 @@ async function setup(origin?: string) {
   // The harness represents prior ordinary-chat review and confirmation; it
   // does not prove human content consent.
   const confirm = (preview: { text: string }) => {
-    const token = preview.text.match(/draft_id: (\S+)/)?.[1];
+    const token = draftToken(preview.text);
     expect(token).toBeTruthy();
     return sendDraftConfirmed((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token!);
   };
@@ -160,7 +161,7 @@ describe('draft destination and action generation', () => {
     const fx = await setup();
     const params = { reply_to_message_id: 1, body: 'Approved reply', house: 'house-b' };
     const draft = await fx.call('popclaw_draft_message', params);
-    expect(draft.text).toContain('house-b');
+    expect(JSON.parse(draft.text).owner_text).not.toContain('house-b');
     params.house = 'house-a';
     await fx.confirm(draft);
     expect(fx.pushed.map(p => p.house)).toEqual(['house-b']);

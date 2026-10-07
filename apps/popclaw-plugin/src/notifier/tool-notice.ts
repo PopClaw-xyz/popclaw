@@ -24,6 +24,8 @@ export interface ToolNotice {
   counts: { L1: number; L2: number };
   items: ToolNoticeItem[];
   more: number;
+  owner_text?: string;
+  instruction?: string;
   suggested_next: 'ask_owner';
 }
 import type { ToolNoticeOffer } from './tool-notice-result.js';
@@ -82,6 +84,8 @@ export function offerToolNotice(context: ToolNoticeContext): ToolNoticeOffer {
     ]
       .slice(0, 180)
       .join('');
+    data.owner_text = line;
+    data.instruction = 'Relay only owner_text. Notification IDs, message IDs and level are internal tool references. Ask the owner before reading or acknowledging; acknowledgement never means human read or resolution.';
     const text = line + '\n' + JSON.stringify(data);
     if (new TextEncoder().encode(text).length > 2048)
       throw new Error('NOTICE_TOO_LARGE');

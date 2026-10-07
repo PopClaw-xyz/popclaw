@@ -13,12 +13,12 @@ import { rethrowActionCancellation } from '../runtime/house-lifecycle/action-con
  */
 
 import { signDirectMessage } from '../messaging/sign-message.js';
-import { loadDmAttachment, kb } from '../messaging/dm-media.js';
+import { attachmentLine } from '../messaging/dm-presentation.js';
+import { loadDmAttachment } from '../messaging/dm-media.js';
 import { pushRejection, pushRouted } from '../egress/event-egress.js';
 import type { Signer } from '../identity/signer.js';
 import type { IdVerification } from '../identity/follow-resolution.js';
 import {
-  formatPerson,
   looksLikeBase58Id,
   unresolvedText,
   type PersonResolution,
@@ -94,12 +94,13 @@ export interface PopclawMessageDeps {
   media?: { bytes: Uint8Array; mime: string; name: string };
 }
 
-/** Runs the self-reported name from resolution/roster through the name chain (alias takes priority), then renders it as `name#sigil (id)`. */
+/** Runs the self-reported name from resolution/roster through the name chain (alias takes priority), then renders it as `name#sigil`. */
 function chainedPerson(
   p: { nickname: string; sigil: string; popclawId: string },
   nameOf?: NameChain,
 ): string {
-  return formatPerson({ ...p, nickname: nameOf?.(p.popclawId, p.nickname) || p.nickname });
+  const name = nameOf?.(p.popclawId, p.nickname) || p.nickname;
+  return name ? `${name}#${p.sigil}` : `#${p.sigil}`;
 }
 
 export async function runPopclawMessageCommand(
@@ -108,7 +109,7 @@ export async function runPopclawMessageCommand(
 ): Promise<{ text: string; eventId?: string }> {
   const lang = ownerLang();
   const ref = args.positional[0];
-  const body = args.positional.slice(1).join(' ').trim();
+  const body = args.positional.slice(1).join(' ');
   const imagePath = args.flags?.image;
 
   // Image with no text (real hardware, 2026-07-29): on WeChat you never
@@ -235,11 +236,9 @@ export async function runPopclawMessageCommand(
     event_id: signed.eventId,
   });
 
-  const preview = body.replace(/\s+/g, ' ').slice(0, 80);
-  // If we can't identify who it is, report only the sigil — a bare "first8…last4" id means nothing to the owner (ADR-0032).
   const who = display || displayNamed(toId, deps.nameOf);
-  const att = media ? renderCopy(lang, 'message.attachment', { name: media.name, size: kb(media.bytes.length) }) : '';
-  // Image-only: don't echo back an empty pair of quotes.
-  const what = body ? renderCopy(lang, 'message.bodyPreview', { preview }) : renderCopy(lang, 'message.imageOnly');
-  return { text: warn + renderCopy(lang, 'message.sent', { who, what, att }) + `\nevent_id: ${signed.eventId}`, eventId: signed.eventId };
+  const lines = [warn + renderCopy(lang, 'dm.presentation.sent', {who})];
+  if (media) lines.push('', attachmentLine(media.name, lang, media.bytes.length));
+  lines.push('', renderCopy(lang, 'dm.presentation.relay'));
+  return {text: lines.join('\n'), eventId: signed.eventId};
 }

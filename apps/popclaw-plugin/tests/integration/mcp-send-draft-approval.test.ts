@@ -54,9 +54,9 @@ describe('ordinary local MCP send without an extra approval surface', () => {
     const before = relay.frames.size;
     const manuscript = 'Actual full manuscript.\nSecond paragraph.';
     const draft = text(await client.call('popclaw_draft_message', {recipient: bob.id, house: relay.url, body: manuscript}));
-    expect(draft).toContain(manuscript); expect(relay.frames.size).toBe(before);
-    const id = /draft_id: (\S+)/.exec(draft)![1]!;
-    expect(text(await client.call('popclaw_send_draft', {draft_id: id}))).toContain('event_id:');
+    expect(JSON.parse(draft).owner_text).toContain(manuscript); expect(relay.frames.size).toBe(before);
+    const id = JSON.parse(draft).draft_id;
+    expect(text(await client.call('popclaw_send_draft', {draft_id: id}))).toContain('event_id');
     expect(client.dialogs).toHaveLength(0); expect(relay.frames.size).toBe(before + 1);
     await client.call('popclaw_send_draft', {draft_id: id});
     expect(relay.frames.size).toBe(before + 1);

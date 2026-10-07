@@ -2,7 +2,7 @@
 import { readableUrl } from '../lshow/sources/web-fallback.js';
 import type { NotificationItem } from './types.js';
 import { displayPerson } from '../identity/person-resolver.js';
-import { attachmentKind } from '../messaging/dm-media.js';
+import { renderReceivedLetter } from '../messaging/dm-presentation.js';
 import { imageUrlsIn, splitHomeletterHeader } from '../messaging/letter-text.js';
 import { renderCopy, type Lang } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
@@ -101,6 +101,7 @@ export function renderL1(item: NotificationItem, lang: Lang = ownerLang()): stri
     mediaPath?: string;
     bondLine?: string;
     messageId?: number | string;
+    hasMedia?: boolean;
   };
   // The owner-facing name always goes through displayPerson: `nickname#sigil`,
   // or just `#sigil` when the roster has no match. A real-machine screenshot
@@ -129,35 +130,8 @@ export function renderL1(item: NotificationItem, lang: Lang = ownerLang()): stri
   if (item.kind === 'ranger_verify_done' || item.kind === 'ranger_verify_fail') {
     return renderVerifyOutcome(item, lang);
   }
-  // The image itself gets pushed to the owner's IM along with mediaUrls (see
-  // notifyOwnerNow); this text line only flags its presence, so the owner
-  // isn't left completely unaware the message had an image when the upload
-  // fails.
-  // The `@` was removed: the name already carries the `#sigil` identity
-  // marker, so `@nickname#sigil` would be stacking two marker systems.
-  // Image-only, no text (2026-07-29): the whole sentence is swapped out
-  // rather than leaving a "sent you a DM:" line with nothing after the colon.
-  // This line is always non-empty — `notifyOwnerNow` uses it as the host
-  // payload's text, and nobody guarantees the host accepts an empty text.
-  // The noun follows the attachment kind — once voice/text were opened up,
-  // saying "sent you an image" for a voice clip would be a plain wrong statement.
-  const kind = p.mediaPath ? attachmentKind(p.mediaPath) : 'image';
-  // The inbox row id (real host 2026-09-25): the owner read the notice, then
-  // asked for "the message EngA sent at 22:57" and the agent asked back for an
-  // id the owner had never been shown. It is the same `message_id`
-  // popclaw_show_inbox returns. Items queued by an older build carry no id and
-  // render exactly as they did.
-  const idTag = typeof p.messageId === 'number' || (typeof p.messageId === 'string' && p.messageId !== '')
-    ? renderCopy(lang, 'notify.dm.idTag', { id: String(p.messageId) })
-    : '';
-  if (!body && p.mediaPath) {
-    const what = renderCopy(lang, `media.noun.${kind}`);
-    return `${renderCopy(lang, 'notify.dm.mediaOnly', { who, what, idTag })}${bondTail(p)}`;
-  }
-  const mediaTail = p.mediaPath
-    ? renderCopy(lang, 'notify.dm.mediaTail', { what: renderCopy(lang, `media.tail.${kind}`) })
-    : '';
-  return `${renderCopy(lang, 'notify.dm.withBody', { who, body, idTag })}${mediaTail}${bondTail(p)}`;
+  const attachment = p.mediaPath ? {path: p.mediaPath} : p.hasMedia ? {unavailable: true} : undefined;
+  return `${renderReceivedLetter(who, body, attachment, lang)}${bondTail(p)}`;
 }
 
 /**
@@ -260,5 +234,5 @@ export function renderL1Batch(items: readonly NotificationItem[]): { text: strin
     item.kind === 'dm' && ownerVisibleBody((item.payload as { body?: unknown }).body).length > BODY_MAX;
   if (items.some(truncatedDm)) lines.push(dmInvite());
   const mediaUrls = mediaUrlsOf(items);
-  return { text: lines.join('\n'), mediaUrls };
+  return { text: lines.join(items.some(it => it.kind === 'dm') ? '\n\n' : '\n'), mediaUrls };
 }

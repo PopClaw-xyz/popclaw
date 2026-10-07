@@ -185,7 +185,12 @@ exports[`preserves complete L1 delivery effects (failed) 1`] = `
             "mediaUrls": [
               "/staged/photo.png",
             ],
-            "text": "📨 #5fc0djbz 给你发了私信（#1）：message from A　📎 附图",
+            "text": "📨 收到信件
+来自：#5fc0djbz
+
+message from A
+
+📎 附件：photo.png",
           },
         ],
         "skipQueue": true,
@@ -304,7 +309,12 @@ exports[`preserves complete L1 delivery effects (partial_failed) 1`] = `
             "mediaUrls": [
               "/staged/photo.png",
             ],
-            "text": "📨 #5fc0djbz 给你发了私信（#1）：message from A　📎 附图",
+            "text": "📨 收到信件
+来自：#5fc0djbz
+
+message from A
+
+📎 附件：photo.png",
           },
         ],
         "skipQueue": true,
@@ -374,7 +384,12 @@ exports[`preserves complete L1 delivery effects (sent) 1`] = `
             "mediaUrls": [
               "/staged/photo.png",
             ],
-            "text": "📨 #5fc0djbz 给你发了私信（#1）：message from A　📎 附图",
+            "text": "📨 收到信件
+来自：#5fc0djbz
+
+message from A
+
+📎 附件：photo.png",
           },
         ],
         "skipQueue": true,

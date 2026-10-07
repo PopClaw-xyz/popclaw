@@ -52,6 +52,7 @@ export function makeDmNotificationPolicy(deps: DmNotificationPolicyDeps) {
           ...(item.eventId ? { eventId: item.eventId } : {}),
           ...(item.houseSlug ? { houseSlug: item.houseSlug } : {}),
           ...(item.mediaPath ? { mediaPath: item.mediaPath } : {}),
+          ...(item.hasMedia ? { hasMedia: true } : {}),
           ...(bondLine ? { bondLine } : {}),
           ...(verdict.verifiedFollowerCount ? { verifiedFollowerCount: verdict.verifiedFollowerCount } : {}),
         },

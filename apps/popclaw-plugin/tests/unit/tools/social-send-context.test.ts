@@ -1,3 +1,4 @@
+import { draftToken } from '../../helpers/draft-token.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
@@ -61,7 +62,7 @@ function fixture(mode: 'native' | 'local-stdio' = 'native', durable = false) {
   };
   return {call, pushed, push, owner, recipient, runtime, registrations};
 }
-const tokenOf = (r: {text: string}) => /draft_id: (\S+)/.exec(r.text)![1]!;
+const tokenOf = (r: {text: string}) => draftToken(r.text)!;
 beforeEach(() => {_draftsForTest.clear(); resetOwnerApprovals(); setOwnerLang('en', 'config');});
 afterEach(() => {_draftsForTest.clear(); resetOwnerApprovals(); setOwnerLang(undefined); vi.restoreAllMocks();});
 
@@ -268,8 +269,8 @@ describe('material and root scope boundaries', () => {
   it('shows the exact incoming message context before drafting a private reply', async () => {
     const fx = fixture();
     const result = await fx.call('popclaw_draft_message', {reply_to_message_id: 7, body: 'Reviewed private reply'});
-    expect(result.text).toContain('message 7');
-    expect(result.text).toContain('cd'.repeat(32));
+    expect(JSON.parse(result.text).owner_text).toContain('Replying to this letter:');
+    expect(JSON.parse(result.text).owner_text).not.toContain('cd'.repeat(32));
     expect(result.text).toContain('Original incoming message');
     expect(result.text).toContain(fx.recipient.id);
     expect(fx.pushed).toHaveLength(0);

@@ -1,3 +1,4 @@
+import { draftToken } from '../../helpers/draft-token.js';
 /**
  * The rename and naming fixes, measured through the registered tools rather
  * than the commands underneath them: a runtime built from the real
@@ -127,7 +128,7 @@ describe('naming the other person through the tools', () => {
     bondsStore.setNickname(PEER, PEER_NAME);
     const draft = await find('popclaw_draft_message').execute('d', { recipient: PEER, body: 'hi' });
     expect(draft.text).toContain(`${PEER_NAME}#${deriveSigil(PEER)}`);
-    const token = draft.text.match(/draft_id: (message-\d+)/)![1]!;
+    const token = draftToken(draft.text)!;
     const sent = await sendDraftConfirmed(find('popclaw_send_draft').execute, token);
     expect(sent.text).toContain(`${PEER_NAME}#${deriveSigil(PEER)}`);
   });

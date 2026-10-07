@@ -220,7 +220,7 @@ describe('registerPopclawTools', () => {
     const inbox = (findTool(tools, 'popclaw_show_inbox') as unknown as { description: string }).description;
     expect(inbox).toContain('With no arguments it lists the newest DMs first');
     expect(inbox).toContain('match `from` and `ts`');
-    expect(inbox).toContain('is its message_id');
+    expect(inbox).toContain('message_id is internal');
     expect(inbox).toContain('not popclaw_world_private_messages');
   });
 

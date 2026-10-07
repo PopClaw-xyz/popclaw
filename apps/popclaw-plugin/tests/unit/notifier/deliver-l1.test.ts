@@ -479,7 +479,7 @@ describe('notifyOwnerNow', () => {
 
     expect(got[0]!.urls).toEqual([]);
     expect(got[0]!.text).toContain('看这个');
-    expect(got[0]!.text).toContain('📎 附图'); // 有图这件事还是要告诉主人
+    expect(got[0]!.text).toContain('📎 附件暂不可用'); // 有图这件事还是要告诉主人
     expect(notifier.count('L1')).toBe(0); // 图丢了不算投递失败
   });
 
@@ -604,7 +604,7 @@ describe('renderL1', () => {
         payload: { fromPopclawId: from, fromName: '苍梧小居士', body },
         enqueuedAt: 100,
       });
-      expect(line).toBe(`📨 苍梧小居士#${deriveSigil(from)} 给你发了私信：${body}`);
+      expect(line).toBe(`📨 收到信件\n来自：苍梧小居士#${deriveSigil(from)}\n\n${body}`);
       expect(line).not.toContain('全文见信箱');
     }
   });
@@ -634,7 +634,7 @@ describe('renderL1', () => {
       payload: { fromPopclawId: from, fromName: '苍梧小居士', body: '在吗' },
       enqueuedAt: 100,
     });
-    expect(line).toBe(`📨 苍梧小居士#${deriveSigil(from)} 给你发了私信：在吗`);
+    expect(line).toBe(`📨 收到信件\n来自：苍梧小居士#${deriveSigil(from)}\n\n在吗`);
     expect(line).not.toContain(from.slice(0, 8));
   });
 
@@ -647,7 +647,7 @@ describe('renderL1', () => {
       payload: { fromPopclawId: from, body: '在吗' },
       enqueuedAt: 100,
     });
-    expect(line).toBe(`📨 #${deriveSigil(from)} 给你发了私信：在吗`);
+    expect(line).toBe(`📨 收到信件\n来自：#${deriveSigil(from)}\n\n在吗`);
     expect(line).not.toContain(from.slice(0, 8));
   });
 
@@ -759,7 +759,7 @@ describe('renderL1', () => {
       payload: { fromPopclawId: 'abcdefghij', body: '看这个', mediaPath: '/x/1.png' },
       enqueuedAt: 100,
     });
-    expect(line).toContain('📎 附图');
+    expect(line).toContain('📎 附件：1.png');
     expect(line).not.toContain('/x/1.png'); // 路径不进文字，图走 mediaUrls
   });
 
@@ -773,7 +773,7 @@ describe('renderL1', () => {
       payload: { fromPopclawId: from, fromName: '苍梧小居士', body: '', mediaPath: '/x/1.png' },
       enqueuedAt: 100,
     });
-    expect(line).toBe(`📨 苍梧小居士#${deriveSigil(from)} 给你发了一张图 📎`);
+    expect(line).toBe(`📨 收到信件\n来自：苍梧小居士#${deriveSigil(from)}\n\n📎 附件：1.png`);
     expect(line).not.toContain('/x/1.png'); // 路径不进文字，图走 mediaUrls
     expect(line.trim().length).toBeGreaterThan(0);
   });
@@ -832,20 +832,20 @@ describe('renderL1 · 交情上下文尾行', () => {
       }),
     );
     expect(line).toBe(
-      `📨 Blackfeather#${deriveSigil(FROM)} 给你发了私信：谢谢了兄弟\n` +
+      `📨 收到信件\n来自：Blackfeather#${deriveSigil(FROM)}\n\n谢谢了兄弟\n` +
         '　 ↳ 密友 · 昨天他给你来过信 · 爱烧脑科幻',
     );
   });
 
   it('dm: 没有尾行 → 单行，绝不留一行空的（陌生人不硬凑废话）', () => {
     const line = renderL1(item('dm', { fromPopclawId: FROM, fromName: '甲', body: '在吗' }));
-    expect(line.split('\n')).toHaveLength(1);
+    expect(line.split('\n')).toHaveLength(4);
     expect(line).not.toContain('↳');
   });
 
   it('dm: 空串尾行同样整行不出', () => {
     const line = renderL1(item('dm', { fromPopclawId: FROM, body: '在吗', bondLine: '' }));
-    expect(line.split('\n')).toHaveLength(1);
+    expect(line.split('\n')).toHaveLength(4);
   });
 
   it('dm 纯图无正文也带尾行', () => {
@@ -883,9 +883,9 @@ describe('renderL1 · 交情上下文尾行', () => {
     });
     await notifyOwnerNow(deps);
     const lines = sent[0]!.split('\n');
-    expect(lines).toHaveLength(3);
-    expect(lines[1]).toBe('　 ↳ 好友');
-    expect(lines[2]).toContain('乙');
+    expect(lines).toHaveLength(10);
+    expect(lines[4]).toBe('　 ↳ 好友');
+    expect(lines[7]).toContain('乙');
   });
 
   // requeue 是 `{...item.payload, attempts}` —— bondLine 在 payload 里，天然不丢。
@@ -923,7 +923,7 @@ describe('renderL1 · en lane (S6 lexicon parity)', () => {
       { id: 1, level: 'L1', kind: 'dm', payload: { fromPopclawId: from, fromName: 'Cangwu', body: 'you there' }, enqueuedAt: 100 },
       'en',
     );
-    expect(line).toBe(`📨 Cangwu#${deriveSigil(from)} sent you a DM: you there`);
+    expect(line).toBe(`📨 Letter received\nFrom: Cangwu#${deriveSigil(from)}\n\nyou there`);
   });
 
   it('dm: media-only, no dangling colon', () => {
@@ -932,7 +932,7 @@ describe('renderL1 · en lane (S6 lexicon parity)', () => {
       { id: 1, level: 'L1', kind: 'dm', payload: { fromPopclawId: from, body: '', mediaPath: '/x/1.png' }, enqueuedAt: 100 },
       'en',
     );
-    expect(line).toBe(`📨 #${deriveSigil(from)} sent you a picture 📎`);
+    expect(line).toBe(`📨 Letter received\nFrom: #${deriveSigil(from)}\n\n📎 Attachment: 1.png`);
   });
 
   it('dm: pic tail appended when there is both body and media', () => {
@@ -940,7 +940,7 @@ describe('renderL1 · en lane (S6 lexicon parity)', () => {
       { id: 1, level: 'L1', kind: 'dm', payload: { fromPopclawId: 'abcdefghij', body: 'look at this', mediaPath: '/x/1.png' }, enqueuedAt: 100 },
       'en',
     );
-    expect(line).toContain('📎 pic attached');
+    expect(line).toContain('📎 Attachment: 1.png');
     expect(line).not.toContain('/x/1.png');
   });
 
@@ -1020,7 +1020,7 @@ describe('renderL1 · en lane (S6 lexicon parity)', () => {
 });
 
 /**
- * Real host 2026-09-25 (build abc3177): the owner got `📨 EngA#… 给你发了私信：…`,
+ * Real host 2026-09-25 (build abc3177): the owner got `📨 收到信件\n来自：EngA#…\n\n…`,
  * asked six minutes later for "the message EngA sent at 22:57", and the agent
  * came back with two old ids and asked the owner for an id — while the new
  * letter (id 17) sat first in the inbox. The notice never showed an id, so
@@ -1034,30 +1034,30 @@ describe('renderL1 · the DM notice names the inbox message id', () => {
 
   it('zh: 「给你发了私信（#17）：…」', () => {
     expect(renderL1(dm({ messageId: 17, body: '在吗' }), 'zh-CN'))
-      .toBe(`📨 EngA#${deriveSigil(from)} 给你发了私信（#17）：在吗`);
+      .toBe(`📨 收到信件\n来自：EngA#${deriveSigil(from)}\n\n在吗`);
   });
 
   it('en: "sent you a DM (#17): …"', () => {
     expect(renderL1(dm({ messageId: 17, body: 'you there' }), 'en'))
-      .toBe(`📨 EngA#${deriveSigil(from)} sent you a DM (#17): you there`);
+      .toBe(`📨 Letter received\nFrom: EngA#${deriveSigil(from)}\n\nyou there`);
   });
 
   it('media-only notice carries the id too, in both locales', () => {
     expect(renderL1(dm({ messageId: 17, body: '', mediaPath: '/x/1.png' }), 'zh-CN'))
-      .toBe(`📨 EngA#${deriveSigil(from)} 给你发了一张图（#17） 📎`);
+      .toBe(`📨 收到信件\n来自：EngA#${deriveSigil(from)}\n\n📎 附件：1.png`);
     expect(renderL1(dm({ messageId: 17, body: '', mediaPath: '/x/1.png' }), 'en'))
-      .toBe(`📨 EngA#${deriveSigil(from)} sent you a picture (#17) 📎`);
+      .toBe(`📨 Letter received\nFrom: EngA#${deriveSigil(from)}\n\n📎 Attachment: 1.png`);
   });
 
   it('the id is the inbox row id, not the notification queue id', () => {
     const line = renderL1(dm({ messageId: 17, body: 'hi' }), 'en');
-    expect(line).toContain('(#17)');
+    expect(line).not.toContain('(#17)');
     expect(line).not.toContain('(#3)');
   });
 
   it('an item queued without an id (older build) renders exactly as before', () => {
-    expect(renderL1(dm({ body: '在吗' }), 'zh-CN')).toBe(`📨 EngA#${deriveSigil(from)} 给你发了私信：在吗`);
-    expect(renderL1(dm({ body: 'hi' }), 'en')).toBe(`📨 EngA#${deriveSigil(from)} sent you a DM: hi`);
+    expect(renderL1(dm({ body: '在吗' }), 'zh-CN')).toBe(`📨 收到信件\n来自：EngA#${deriveSigil(from)}\n\n在吗`);
+    expect(renderL1(dm({ body: 'hi' }), 'en')).toBe(`📨 Letter received\nFrom: EngA#${deriveSigil(from)}\n\nhi`);
   });
 });
 
@@ -1094,8 +1094,7 @@ describe('DM notice ids end to end (inbox → policy → owner push)', () => {
     })).resolves.toBe('channel');
 
     expect(sent).toHaveLength(1); // merged into one interruption
-    const lines = sent[0]!.split('\n');
-    expect(lines).toContain(`📨 Alice#${deriveSigil('alice-id')} 给你发了私信（#17）：from alice`);
-    expect(lines).toContain(`📨 Bob#${deriveSigil('bob-id')} 给你发了私信（#18）：from bob`);
+    expect(sent[0]).toContain(`📨 收到信件\n来自：Alice#${deriveSigil('alice-id')}\n\nfrom alice`);
+    expect(sent[0]).toContain(`📨 收到信件\n来自：Bob#${deriveSigil('bob-id')}\n\nfrom bob`);
   });
 });

@@ -16,7 +16,7 @@ it('returns complete mixed text and raw ordered media with one invitation per ki
     item('dm', { fromPopclawId: 'alice', body: 'https://images.test/b.png\nhttps://images.test/d.webp', mediaPath: '/local/voice.ogg' }),
   ] as const;
   expect(renderL1Batch(items)).toEqual({
-    text: `💬 Alice#5fc0djbz replied to you: Hello\nMet last week\n📨 #g6v3fp7w sent you a DM (#7): ${'L'.repeat(256)}… (full text in the inbox) 📎 pic attached\n💬 #g6v3fp7w replied to you: Again\n📨 #5fc0djbz sent you a DM: https://images.test/b.png\nhttps://images.test/d.webp 📎 voice attached\n Want to see all the replies? Just say so\n Want the full letter? Just say so`,
+    text: `💬 Alice#5fc0djbz replied to you: Hello\nMet last week\n\n📨 Letter received\nFrom: #g6v3fp7w\n\n${'L'.repeat(256)}… (full text in the inbox)\n\n📎 Attachment: photo.png\n\n💬 #g6v3fp7w replied to you: Again\n\n📨 Letter received\nFrom: #5fc0djbz\n\nhttps://images.test/b.png\nhttps://images.test/d.webp\n\n📎 Attachment: voice.ogg\n\n Want to see all the replies? Just say so\n\n Want the full letter? Just say so`,
     mediaUrls: ['/local/photo.png', 'https://images.test/a.jpg', 'https://images.test/b.png', '/local/voice.ogg', 'https://images.test/d.webp'],
   });
 });
@@ -41,4 +41,11 @@ it('keeps explicit language overrides and rereads the default for later calls', 
   setOwnerLang('en', 'config');
   expect(renderL1(reply)).toBe('💬 #5fc0djbz replied to you: Hello');
   expect(renderL1Batch([])).toEqual({ text: '', mediaUrls: [] });
+});
+
+
+it('lays out a received letter vertically without machine references', () => {
+  const notice = renderL1(item('dm', { fromPopclawId: 'alice', fromName: 'Alice', messageId: 5550, body: 'First paragraph.\n\nSecond paragraph.' }), 'en');
+  expect(notice).toBe('📨 Letter received\nFrom: Alice#5fc0djbz\n\nFirst paragraph.\n\nSecond paragraph.');
+  expect(notice).not.toContain('5550');
 });

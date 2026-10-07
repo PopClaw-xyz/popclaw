@@ -238,6 +238,17 @@ export const ZH_CN: Lexicon = {
     'attachments.noInboundDir':
       '这台宿主没有告诉 popclaw 主人递进来的文件存在哪里，所以我列不出来。请主人直接把文件路径给我，走 attachment_path。',
     // {idTag} = the inbox message_id (what popclaw_show_inbox returns).
+    'dm.presentation.received': '📨 收到信件',
+    'dm.presentation.from': '来自：{who}',
+    'dm.presentation.attachment': '📎 附件：{what}',
+    'dm.presentation.attachmentUnavailable': '📎 附件暂不可用，未能读取内容。',
+    'dm.presentation.draft': '📝 私信草稿 · 待你确认',
+    'dm.presentation.to': '收件人：{who}',
+    'dm.presentation.body': '正文：',
+    'dm.presentation.sent': '✉️ 信件已寄出\n收件人：{who}',
+    'dm.presentation.relay': '灯坊已接收，尚不能确认对方已收到。',
+    'dm.presentation.reply': '回复这封来信：',
+    'dm.presentation.confirm': '确认好后，在本聊天说一声“发”即可。',
     'notify.dm.idTag': '（#{id}）',
     'notify.dm.withBody': '📨 {who} 给你发了私信{idTag}：{body}',
     'notify.dm.mediaTail': '　📎 {what}',
@@ -1107,7 +1118,7 @@ export const ZH_CN: Lexicon = {
     // 长草稿的只读审阅副本（src/tools/draft-review.ts）。入口放在草稿工具结果里：
     // 智能体先把链接那一行原样发给主人，再请他审批。点链接即打开文件。
     'draft.review.entry': '完整稿件：{link}。请在本聊天看稿后确认发送。',
-    'draft.review.linkText': '审阅草稿 {id} \u2014 全文',
+    'draft.review.linkText': '查看完整草稿',
     'draft.review.writeFailed': '未能写入可选看稿文件。请在原聊天展示本工具结果中的完整稿件。',
     'draft.review.file.heading': '# PopClaw 草稿审阅副本（只读；不会从这个文件发出任何东西）',
     'draft.review.file.header': '草稿：{id}\n发给：{to}\n灯坊：{house}\n附件：{attachments}\n正文：{chars} 字，摘要 {digest}',

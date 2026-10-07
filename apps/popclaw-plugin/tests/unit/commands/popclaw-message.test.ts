@@ -41,7 +41,7 @@ describe('runPopclawMessageCommand', () => {
       { positional: [recipientId, 'hey,', 'want', 'to', 'chat?'] },
       { signer, egress, nickname: 'TestNick' },
     );
-    expect(out.text).toContain('sent DM');
+    expect(out.text).toContain('Letter sent');
     expect(egress.push).toHaveBeenCalledTimes(1);
 
     const sentBytes = egress.push.mock.calls[0]![0] as Uint8Array;
@@ -53,6 +53,20 @@ describe('runPopclawMessageCommand', () => {
     expect(env.directMessage!.body).toBe(DM_ENCRYPTED_BODY_PLACEHOLDER);
     const opened = recipient.openDm(env.directMessage!, await signer.popclawId());
     expect(opened.ok && opened.plaintext).toBe('hey, want to chat?');
+  });
+
+  it('encrypts the exact manuscript including outer whitespace and blank lines', async () => {
+    const signer = makeSigner(), recipient = makeSigner(99);
+    const body = '  Original words.\n\nSecond paragraph.\ndraft_id: message-999  ';
+    const egress = {push: vi.fn().mockResolvedValue({status: 200})};
+    const result = await runPopclawMessageCommand({positional: [await recipient.popclawId(), body]}, {signer, egress, nickname: 'Owner'});
+    const signed = popclaw.identity.SignedPayload.decode(egress.push.mock.calls[0]![0]);
+    const dm = popclaw.event.EventEnvelope.decode(signed.payload).directMessage!;
+    const opened = recipient.openDm(dm, await signer.popclawId());
+    expect(opened.ok && opened.plaintext).toBe(body);
+    expect(result.eventId).toBeTruthy();
+    expect(result.text).not.toContain(result.eventId!);
+    expect(result.text).not.toContain(body);
   });
 
   it('rejects "to" that does not look like a popclaw_id (and never points at reply)', async () => {
@@ -156,7 +170,7 @@ describe('runPopclawMessageCommand', () => {
       },
     );
     expect(out.text).toContain('Blackfeather#7t4k2n9q');
-    expect(out.text).toContain(recipientId);
+    expect(out.text).not.toContain(recipientId);
   });
 
   it('歧义 → 列候选、不发', async () => {
@@ -256,7 +270,7 @@ describe('runPopclawMessageCommand', () => {
       },
     );
     expect(out.text).not.toMatch(/可能打错了/);
-    expect(out.text).toContain('sent DM');
+    expect(out.text).toContain('Letter sent');
     expect(egress.push).toHaveBeenCalledTimes(1);
   });
 
@@ -297,7 +311,7 @@ describe('runPopclawMessageCommand', () => {
       const { out, egress, entries } = await send(result);
       // The letter was signed and offered — the push did happen.
       expect(egress.push).toHaveBeenCalledTimes(1);
-      expect(out.text).not.toContain('sent DM');
+      expect(out.text).not.toContain('Letter sent');
       expect(out.text).toContain(renderCopy(ownerLang(), 'message.notAccepted', {
         status: String(result.status),
         why: result.detail ? renderCopy(ownerLang(), 'message.notAccepted.reason', { detail: result.detail }) : '',
@@ -309,7 +323,7 @@ describe('runPopclawMessageCommand', () => {
     it('positive control: a 2xx receipt still reports sent and still logs dm_sent', async () => {
       const { out, egress, entries } = await send({ status: 202, eventId: 'accepted-event' });
       expect(egress.push).toHaveBeenCalledTimes(1);
-      expect(out.text).toContain('sent DM');
+      expect(out.text).toContain('Letter sent');
       expect(out.eventId).toBeTruthy();
       expect(entries.map((e) => e.kind)).toEqual(['dm_sent']);
     });
@@ -333,7 +347,7 @@ describe('runPopclawMessageCommand', () => {
         { positional: [await recipient.popclawId(), '看这个'], flags: { image: tmpImage('c.gif', bytes) } },
         { signer, egress, nickname: 'TestNick' },
       );
-      expect(out.text).toContain(renderCopy(ownerLang(), 'message.attachment', { name: 'c.gif', size: kb(bytes.length) }));
+      expect(out.text).toContain('📎 Attachment: c.gif (' + kb(bytes.length) + ')');
 
       const sp = popclaw.identity.SignedPayload.decode(egress.push.mock.calls[0]![0] as Uint8Array);
       const dm = popclaw.event.EventEnvelope.decode(sp.payload).directMessage!;
@@ -357,8 +371,8 @@ describe('runPopclawMessageCommand', () => {
         { positional: [await recipient.popclawId()], flags: { image: tmpImage('meme.gif', bytes) } },
         { signer, egress, nickname: 'TestNick' },
       );
-      expect(out.text).toContain('sent DM');
-      expect(out.text).toContain(renderCopy(ownerLang(), 'message.attachment', { name: 'meme.gif', size: kb(bytes.length) }));
+      expect(out.text).toContain('Letter sent');
+      expect(out.text).toContain('📎 Attachment: meme.gif (' + kb(bytes.length) + ')');
       expect(out.text.toLowerCase()).not.toMatch(/usage/);
       expect(egress.push).toHaveBeenCalledTimes(1);
 
@@ -424,7 +438,7 @@ describe('runPopclawMessageCommand', () => {
           { signer, egress, nickname: 'TestNick' },
         );
         expect(out.text).toMatch(/⚠️/);
-        expect(out.text).not.toContain('sent DM');
+        expect(out.text).not.toContain('Letter sent');
       }
       expect(egress.push).not.toHaveBeenCalled();
     });

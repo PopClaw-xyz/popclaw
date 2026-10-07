@@ -293,11 +293,17 @@ async function deliverOwnerBatch(
     // An image link inside the body is a **remote url**, not a local file:
     // staging (copying into a host-sendable directory) can't do anything with
     // it, so it's handed to the channel adapter as-is to fetch itself.
+    const failedMedia = new Set<string>();
     media = content.mediaUrls.flatMap((path) => {
       const staged = /^https?:\/\//i.test(path) ? path : deps.stageMedia ? deps.stageMedia(path) : path;
+      if (!staged) failedMedia.add(path);
       return staged ? [staged] : [];
     });
-    text = content.text;
+    text = failedMedia.size ? renderL1Batch(items.map(item => {
+      const path = item.payload.mediaPath;
+      return typeof path === 'string' && failedMedia.has(path)
+        ? {...item, payload: {...item.payload, mediaPath: undefined, hasMedia: true}} : item;
+    })).text : content.text;
   } catch (error) {
     // No host invocation occurred; keep the original row and retry budget.
     batch.cancel?.();

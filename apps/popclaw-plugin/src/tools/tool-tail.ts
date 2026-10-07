@@ -130,11 +130,18 @@ export function withTail(
         let text = (result as { text?: unknown } | null)?.text;
         if (typeof text === 'string') {
         try {
+          let envelope: Record<string, unknown> | undefined;
+          try { const parsed = JSON.parse(text); if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') envelope = parsed; } catch { /* ordinary text */ }
           const rt = (await runtime()) as TailRuntime | undefined;
           const guides = await rt?.houseRuntime?.pendingHouseGuides();
           if (guides?.length) {
-            text += '\n' + JSON.stringify({house_guide_contexts:guides});
-            if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) text += '\n' + optionalWorldOffer(ownerLang());
+            if (envelope) {
+              envelope.house_guide_contexts = guides;
+              if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) envelope.optional_world_offer = optionalWorldOffer(ownerLang());
+            } else {
+              text += '\n' + JSON.stringify({house_guide_contexts:guides});
+              if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) text += '\n' + optionalWorldOffer(ownerLang());
+            }
           }
           const pendingNotice = context ? context.store.hasNoticeFor(context) : false;
           const unreadLine = null;
@@ -151,7 +158,8 @@ export function withTail(
             const rt = (await runtime()) as TailRuntime | undefined;
             if (rt) await recordNudgeSent(rt.host, pick.key, nowSec);
           }
-          result = { ...(result as object), text: tail ? `${text}\n\n${tail}` : text };
+          if (envelope && tail) envelope.tool_tail = tail;
+          result = { ...(result as object), text: envelope ? JSON.stringify(envelope) : tail ? `${text}\n\n${tail}` : text };
         } catch { /* preserve business result */ }
         }
         return result;

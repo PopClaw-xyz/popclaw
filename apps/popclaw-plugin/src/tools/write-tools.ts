@@ -15,8 +15,9 @@ import { normalizeHouseOrigin } from '../runtime/house-lifecycle/control-client.
 import { assertHouseActionActive } from '../runtime/house-lifecycle/action-context.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
-import { formatPerson, unresolvedText, displayNickname } from '../identity/person-resolver.js';
-import { loadDmAttachment, kb } from '../messaging/dm-media.js';
+import { unresolvedText, displayNickname } from '../identity/person-resolver.js';
+import { DM_DISPLAY_INSTRUCTION, attachmentLine } from '../messaging/dm-presentation.js';
+import { loadDmAttachment } from '../messaging/dm-media.js';
 import { runPopclawReplyCommand } from '../commands/popclaw-reply.js';
 import { runPopclawMessageCommand } from '../commands/popclaw-message.js';
 import { runPopclawPostCommand } from '../commands/popclaw-post.js';
@@ -237,8 +238,8 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const p = params as { recipient?: string; reply_to_message_id?: number; house?: string; body?: string; attachment_path?: string; image_path?: string };
       // `image_path` is the old name — before the format was opened up, it could only send images. Both are accepted; new calls should use attachment_path.
       const attachmentPath = p.attachment_path ?? p.image_path;
-      const body = (p.body ?? '').trim();
-      if (!body && !attachmentPath) {
+      const body = p.body ?? '';
+      if (!body.trim() && !attachmentPath) {
         return { type: 'text' as const, text: renderCopy(ownerLang(), 'draft.message.emptyBody') };
       }
       // Person resolution happens at draft time: the preview shows the owner name#sigil,
@@ -252,7 +253,12 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       if (!recipient) throw new Error('Provide recipient or reply_to_message_id');
       const person = await resolvePersonRef(recipient, deps);
       if (person.kind !== 'resolved') {
-        return { type: 'text' as const, text: unresolvedText(recipient, person) };
+        const ownerText = person.kind === 'ambiguous'
+          ? [renderCopy(ownerLang(), person.guessed ? 'person.sigilMissedNameLookalikes' : 'person.ambiguous', {ref: recipient, count: String(person.candidates.length)}),
+            ...person.candidates.map(c => `${c.nickname || ''}#${c.sigil}`)].join('\n')
+          : unresolvedText(recipient, person);
+        return {type: 'text' as const, text: JSON.stringify({owner_text: ownerText,
+          ...(person.kind === 'ambiguous' ? {candidates: person.candidates} : {}), instruction: DM_DISPLAY_INSTRUCTION})};
       }
       // The owner resolves as a person (that is what makes "show my namecard"
       // work), so their own name reaches this recipient slot. runPopclawMessageCommand
@@ -360,25 +366,26 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         );
       }, snapshot);
       // What the owner confirms must be the **complete content** — if there's an image, the
-      // preview must spell out which one and how big; if there's no text, say plainly that
-      // it's image-only rather than leaving an empty pair of quotes for the owner to guess at.
+      // preview identifies the attachment and size. An attachment-only letter has no empty body section.
       const draftLang = ownerLang();
       const advice = await presendRelationshipAdvice(pinned.popclawId, deps, draftLang);
-      const attach = image ? renderCopy(draftLang, 'draft.message.attach', { name: image.name, size: kb(image.bytes.length) }) : '';
-      const bodyLine = snapshot.body ? `   "${snapshot.body}"\n` : renderCopy(draftLang, 'draft.message.imageOnly');
-      const preview =
-        `${renderCopy(draftLang, 'draft.message.title', { who: formatPerson(pinned, draftLang) })}\n` +
-        (snapshot.house ? `${renderCopy(draftLang, 'socialSend.house', { house: snapshot.house })}\n` : '') +
-        (replySource ? renderCopy(draftLang, 'socialSend.replySource', {id: String(replyMessageId), eventId: replySource.eventId ?? renderCopy(draftLang, 'draft.review.file.none')}) + '\n' : '') +
-        (replySource?.body ? renderCopy(draftLang, 'socialSend.sourcePreview', {context: sourceExcerpt(replySource.body)}) + '\n' : '') +
-        `${bodyLine}${attach}${unverifiedWarning(pinned, draftLang)}${advice}\n` +
-        `draft_id: ${token}`;
+      const preview = [
+        renderCopy(draftLang, 'dm.presentation.draft'),
+        renderCopy(draftLang, 'dm.presentation.to', {who: snapshot.recipientLabel!}),
+        ...(replySource?.body ? ['', renderCopy(draftLang, 'dm.presentation.reply'), sourceExcerpt(replySource.body)] : []),
+        ...(snapshot.body ? ['', renderCopy(draftLang, 'dm.presentation.body'), snapshot.body] : []),
+        ...(image ? ['', attachmentLine(image.name, draftLang, image.bytes.length)] : []),
+        ...[unverifiedWarning(pinned, draftLang), advice].filter(Boolean),
+        '', renderCopy(draftLang, 'dm.presentation.confirm'),
+      ].join('\n');
       const outcome = await deliverDraftPreview(toolCtx, preview);
       noteDraftPreview(token, preview, outcome.status);
-      // Record the complete manuscript emitted for original-chat review.
-      // A long draft's review copy and its link, on a root that writes them
-      // (draft-review.ts); unchanged everywhere else.
-      const text = withDraftReview(token, draftResultText(preview, outcome), deps.draftReviewFiles);
+      const ownerText = withDraftReview(token, preview, deps.draftReviewFiles);
+      const text = JSON.stringify({
+        owner_text: ownerText, draft_id: token, recipient_popclaw_id: pinned.popclawId,
+        ...(image ? {attachment: {name: image.name, mime: image.mime, size_bytes: image.bytes.length}} : {}),
+        instruction: DM_DISPLAY_INSTRUCTION + ' ' + confirmDiscipline(draftLang),
+      });
       noteDraftToolOutput(token, text);
       await retainSocialDraft(deps, token);
       return { type: 'text' as const, text };
@@ -573,7 +580,9 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const sender = takeDraft(draft_id, SEND_DRAFT_KINDS);
       if (!sender) return unavailable();
       const reply = await withSocialSendInvocation(assertCurrent, sender);
-      return {type: 'text' as const, text: reply.text};
+      return {type: 'text' as const, text: snapshot.kind === 'dm'
+        ? JSON.stringify({owner_text: reply.text, ...('eventId' in reply && reply.eventId ? {event_id: reply.eventId} : {}), instruction: DM_DISPLAY_INSTRUCTION + ' ' + sendResultDiscipline('en')})
+        : reply.text};
       } finally {
         // A refused send must not leave a volatile cache entry whose later
         // TTL/cap eviction could erase the durable manuscript's review copy.

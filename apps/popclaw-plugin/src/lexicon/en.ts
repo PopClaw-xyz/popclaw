@@ -333,6 +333,17 @@ export const EN: Lexicon = {
       + 'Ask the owner for the path and pass it to attachment_path directly.',
     // {idTag} = the inbox message_id (what popclaw_show_inbox returns), so the
     // owner has a number to hand over when asking about "the letter just now".
+    'dm.presentation.received': '📨 Letter received',
+    'dm.presentation.from': 'From: {who}',
+    'dm.presentation.attachment': '📎 Attachment: {what}',
+    'dm.presentation.attachmentUnavailable': '📎 Attachment unavailable; its content could not be read.',
+    'dm.presentation.draft': '📝 Draft DM · awaiting your confirmation',
+    'dm.presentation.to': 'To: {who}',
+    'dm.presentation.body': 'Message:',
+    'dm.presentation.sent': '✉️ Letter sent\nTo: {who}',
+    'dm.presentation.relay': 'The relay accepted the letter; recipient delivery is not confirmed.',
+    'dm.presentation.reply': 'Replying to this letter:',
+    'dm.presentation.confirm': 'Confirm in this conversation when you are ready to send.',
     'notify.dm.idTag': ' (#{id})',
     'notify.dm.withBody': '📨 {who} sent you a DM{idTag}: {body}',
     'notify.dm.mediaTail': ' 📎 {what}',
@@ -1342,7 +1353,7 @@ export const EN: Lexicon = {
     // entry goes in the draft tool's result: the agent posts the link line to
     // the owner before asking for approval. The link opens the file.
     'draft.review.entry': 'Full manuscript review: {link}. Read it in this conversation before confirming send.',
-    'draft.review.linkText': 'Review draft {id} \u2014 full text',
+    'draft.review.linkText': 'Review full draft',
     'draft.review.writeFailed': 'The optional review file could not be written. Show the complete manuscript from this tool result in the original conversation.',
     'draft.review.file.heading': '# PopClaw draft review copy (read-only; nothing is sent from this file)',
     'draft.review.file.header': 'draft: {id}\nto: {to}\nhouse: {house}\nattachments: {attachments}\ntext: {chars} chars, digest {digest}',

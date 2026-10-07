@@ -1,3 +1,4 @@
+import { draftToken } from '../../helpers/draft-token.js';
 import { withOutcomes } from '../../helpers/with-outcomes.js';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dirname, resolve } from 'node:path';
@@ -474,14 +475,14 @@ describe('registerPopclawTools', () => {
 
     expect(draft.text).toContain(`Blackfeather#${sigil}`);
     expect(draft.text).toContain(recipientId); // 机器钥匙同时递给 agent
-    expect(draft.text).toMatch(/draft_id: message-/);
+    expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/);
     expect(resolve).not.toHaveBeenCalled(); // 交情本命中 → 不问灯坊
 
     // 发出回执与草稿同款人话（不是裸 id）。
-    const token = draft.text.match(/draft_id: (message-[0-9]+)/)![1];
+    const token = draftToken(draft.text)!;
     const sent = await sendDraftConfirmed(sendTool.execute, token!);
     expect(sent.text).toContain(`Blackfeather#${sigil}`);
-    expect(sent.text).toContain(recipientId);
+    expect(JSON.parse(sent.text).owner_text).not.toContain(recipientId);
   });
 
   // 发送前关系建议：把收方的 relative-value 闸在发送侧
@@ -510,7 +511,7 @@ describe('registerPopclawTools', () => {
     const id = someoneId();
     const draft = await draftTo(id, { allFollowerIds: () => [] });
     expect(draft.text).toContain('还没关注你');
-    expect(draft.text).toMatch(/draft_id: message-/); // 建议不拦发送
+    expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/); // 建议不拦发送
   });
 
   it('草稿预览：对方已关注我 → 不啰嗦', async () => {
@@ -552,9 +553,9 @@ describe('registerPopclawTools', () => {
     });
     // 主人确认的是**完整内容**：哪张图、多大。
     expect(draft.text).toContain('📎 附件：cat.png');
-    expect(draft.text).toMatch(/draft_id: message-/);
+    expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/);
 
-    const token = draft.text.match(/draft_id: (message-[0-9]+)/)![1];
+    const token = draftToken(draft.text)!;
     const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
     expect(sent.text).toContain('📎 附件：cat.png');
 
@@ -582,7 +583,7 @@ describe('registerPopclawTools', () => {
       body: 'hi',
     });
     expect(draft.text).not.toContain('附图');
-    const token = draft.text.match(/draft_id: (message-[0-9]+)/)![1];
+    const token = draftToken(draft.text)!;
     await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
 
     const sp = popclaw.identity.SignedPayload.decode(fx.push.mock.calls[0]![0]);
@@ -608,11 +609,11 @@ describe('registerPopclawTools', () => {
       image_path: writeTmpImage('meme.gif', GIF),
     });
     // 主人确认的仍是**完整内容**：这封信没有字，只有这张图。
-    expect(draft.text).toContain('（纯图，无正文）');
+    expect(JSON.parse(draft.text).owner_text).not.toContain('正文');
     expect(draft.text).toContain('📎 附件：meme.gif');
-    expect(draft.text).toMatch(/draft_id: message-/);
+    expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/);
 
-    const token = draft.text.match(/draft_id: (message-[0-9]+)/)![1];
+    const token = draftToken(draft.text)!;
     const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
     expect(sent.text).toContain('📎 附件：meme.gif');
     expect(sent.text.toLowerCase()).not.toMatch(/usage/);
@@ -656,8 +657,8 @@ describe('registerPopclawTools', () => {
       recipient: fx.recipientRef,
       image_path: writeTmpImage('meme.gif', new Uint8Array([0x47, 0x49, 0x46, 7, 7])),
     });
-    expect(draft.text).toContain('(image only, no body)');
-    expect(draft.text).toContain('📎 attached: meme.gif');
+    expect(JSON.parse(draft.text).owner_text).not.toContain('Message:');
+    expect(draft.text).toContain('📎 Attachment: meme.gif');
     setOwnerLang('zh-CN', 'config'); // restore file default for tests after this one
   });
 
@@ -842,7 +843,7 @@ describe('registerPopclawTools', () => {
     const draftTool = findTool(tools, 'popclaw_draft_message');
     const draft = await draftTool.execute('cid', { recipient: '查无此人', body: 'hi' });
 
-    expect(draft.text).not.toMatch(/draft_id/);
+    expect(JSON.parse(draft.text).draft_id).toBeUndefined();
     expect(draft.text).not.toMatch(/reply/i);
     expect(draft.text).toContain('查无此人');
   });
@@ -1675,7 +1676,7 @@ describe('popclaw_note_taste', () => {
       expect(draft.text).toContain('苍梧'); // 草稿点名收信人
       expect(draft.text).toContain('卡在哪里：没有这个工具'); // 和信的原文
 
-      const token = draft.text.match(/draft_id: (\S+)/)![1];
+      const token = draftToken(draft.text)!;
       const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
 
       expect(push).toHaveBeenCalledTimes(1); // 走的就是普通私信那条路（签名+加密）
@@ -1724,7 +1725,7 @@ describe('popclaw_note_taste', () => {
       });
       // 信封大小只有签名那一刻才量得出来，所以这个诚实报错出现在确认之后
       // （和 popclaw_draft_message 的正文一样）—— 两步都零外发。
-      const token = draft.text.match(/draft_id: (\S+)/)![1];
+      const token = draftToken(draft.text)!;
       const r = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
 
       expect(push).not.toHaveBeenCalled(); // zero egress — nothing partially delivered

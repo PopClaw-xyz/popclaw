@@ -93,7 +93,7 @@ describe('renderNotifications', () => {
     ]);
     expect(out).toContain('你有 2 条待看');
     expect(out).toContain(
-      `[L1] 私信 · 来自 老张#${deriveSigil('abcdef0123456789')}：「在吗」 → 想回的话，告诉我回什么`,
+      `📨 收到信件\n来自：老张#${deriveSigil('abcdef0123456789')}\n\n在吗`,
     );
     expect(out).toContain(`[L2] 新粉 · #${deriveSigil('ffee00112233')} 关注了你`);
     expect(out).not.toContain('abcdef01…');
@@ -105,7 +105,7 @@ describe('renderNotifications', () => {
     const out = renderNotifications([
       item('L1', 'dm', { fromPopclawId: 'abcdef0123456789', fromName: '老张', body: '', mediaPath: '/x/1.png' }),
     ]);
-    expect(out).toContain(`私信 · 来自 老张#${deriveSigil('abcdef0123456789')} 一张图 📎`);
+    expect(out).toContain(`来自：老张#${deriveSigil('abcdef0123456789')}\n\n📎 附件：1.png`);
     expect(out).not.toContain('「」');
   });
 
@@ -117,7 +117,7 @@ describe('renderNotifications', () => {
       item('L1', 'reply', { fromPopclawId: 'aa11', body: '好', targetPostId: 'p1', bondLine: '　 ↳ 好友' }),
       item('L2', 'followed_you', { followerPopclawId: 'ffee00112233', bondLine: '　 ↳ 认识 · 爱做菜' }),
     ]);
-    expect(out).toContain('想回的话，告诉我回什么\n　 ↳ 密友 · 昨天他给你来过信');
+    expect(out).toContain('在吗\n　 ↳ 密友 · 昨天他给你来过信');
     expect(out).toContain('看这条 p1\n　 ↳ 好友');
     expect(out).toContain('关注了你\n　 ↳ 认识 · 爱做菜');
   });
@@ -127,7 +127,7 @@ describe('renderNotifications', () => {
       item('L1', 'dm', { fromPopclawId: 'abcdef0123456789', body: '在吗' }),
     ]);
     expect(out).not.toContain('↳');
-    expect(out.split('\n')).toHaveLength(2); // 抬头 + 一条
+    expect(out.split('\n')).toHaveLength(5); // 抬头 + 一条
   });
 });
 
@@ -145,7 +145,7 @@ describe('makeNotificationsTool — drains L1+L2, never L3', () => {
     const tool = makeNotificationsTool(async () => fake);
     const res = (await tool.execute('c', {})) as { text: string };
     expect(drained).toEqual(['L1', 'L2']); // L3 untouched
-    expect(res.text).toBe('📭 没有待看的通知。');
+    expect(JSON.parse(res.text).owner_text).toBe('📭 没有待看的通知。');
   });
 
   // 已决定/失效提议不作为新建议继续送达。
@@ -175,7 +175,7 @@ describe('makeNotificationsTool — drains L1+L2, never L3', () => {
       async () => ({ hasPendingFor: () => false }),
     );
     const res = (await tool.execute('c', {})) as { text: string };
-    expect(res.text).toBe('📭 没有待看的通知。'); // dropped → nothing to say
+    expect(JSON.parse(res.text).owner_text).toBe('📭 没有待看的通知。'); // dropped → nothing to say
     expect(reenqueued).toHaveLength(0); // dropped ≠ lost-and-retried; decided is decided
   });
 
@@ -231,7 +231,7 @@ describe('renderNotifications · en lane (S6 lexicon parity)', () => {
       'en',
     );
     expect(out).toContain('You have 2 pending');
-    expect(out).toContain(`[L1] DM · from Zhang#${deriveSigil('abcdef0123456789')}: "you there" → to answer, tell me what to reply`);
+    expect(out).toContain(`📨 Letter received\nFrom: Zhang#${deriveSigil('abcdef0123456789')}\n\nyou there`);
     expect(out).toContain(`[L2] new follower · #${deriveSigil('ffee00112233')} followed you`);
   });
 
@@ -241,8 +241,8 @@ describe('renderNotifications · en lane (S6 lexicon parity)', () => {
       undefined,
       'en',
     );
-    expect(out).toContain('DM · from');
-    expect(out).toContain('a picture 📎');
+    expect(out).toContain('Letter received');
+    expect(out).toContain('📎 Attachment: 1.png');
     expect(out).not.toContain('""');
   });
 
