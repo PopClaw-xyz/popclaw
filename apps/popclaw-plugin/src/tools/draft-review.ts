@@ -44,11 +44,15 @@ const fenced = (text: string): string => {
 /** The file's text. Pure: the same snapshot, id and language give the same
  *  bytes. */
 export function renderReviewCopy(snapshot: DraftSnapshot, id: string, lang: Lang): string {
-  if (snapshot.kind === 'dm') return [renderCopy(lang, 'draft.review.file.heading'), '',
-    renderCopy(lang, 'dm.presentation.to', {who: escapeValue(snapshot.recipientLabel ?? '')}), '',
-    ...(snapshot.body ? [fenced(snapshot.body), ''] : []),
-    ...snapshot.attachments.map(a => attachmentLine(escapeValue(a.name), lang, a.bytes.length)), '',
-  ].join('\n');
+  if (snapshot.kind === 'dm') {
+    const header = [
+      renderCopy(lang, 'dm.presentation.to', {who: escapeValue(snapshot.recipientLabel ?? '')}),
+      ...snapshot.attachments.map(a => attachmentLine(escapeValue(a.name), lang, a.bytes.length)),
+    ].join('\n');
+    return [renderCopy(lang, 'draft.review.file.heading'), '', fenced(header), '',
+      ...(snapshot.body ? [fenced(snapshot.body), ''] : []),
+    ].join('\n');
+  }
   const none = renderCopy(lang, 'draft.review.file.none');
   const short = snapshot.recipientId ? snapshot.recipientId.slice(0, 8) : '';
   const to = snapshot.recipientLabel
