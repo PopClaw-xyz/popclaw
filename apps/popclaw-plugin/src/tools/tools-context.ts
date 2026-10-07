@@ -29,6 +29,9 @@ import type { DraftReviewFiles } from './draft-store.js';
  * env.event_id), so `/post/<first 10 chars of platformPostId>` is the canonical web link.
  */
 export interface WorldSnapshotItemLike {
+  /** Catalog-assigned source house; never a peer-supplied wire field. */
+  readonly houseSlug?: string;
+  readonly eventId?: string | null;
   readonly authorPopclawId?: string | null;
   readonly actorNickname?: string | null;
   readonly platform?: string | null;

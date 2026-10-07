@@ -354,7 +354,7 @@ export function makeErrandFollow(deps: {
       house: deps.house,
       learn: deps.fillNickname,
     });
-    const resolution = await resolveFollowTarget(ref, localFirst(sources));
+    const resolution = await resolveFollowTarget(ref, localFirst(sources, ref));
     if (resolution.kind === 'lantern') {
       return { kind: 'unavailable', reason: renderCopy(ownerLang(), 'world.lanternDownShort') };
     }

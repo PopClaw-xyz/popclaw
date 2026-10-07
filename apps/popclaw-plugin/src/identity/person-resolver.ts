@@ -8,8 +8,7 @@
  * popclaw_id). The resolution order reflects storage sovereignty and
  * server-minimization:
  *   1. bond book + follow list (people I know, local authority, zero round-trip)
- *   2. world-feed local-cache authors (people I've seen; that table has no
- *      nickname column, so a bare-nickname query skips this source)
+ *   2. world-feed local-cache authors and their latest observed names
  *   3. lore-house `/v1/resolve` (strangers, ask the house last)
  * Ambiguity lists candidates rather than guessing; a miss is reported
  * honestly (the "honesty" gene).
@@ -39,8 +38,10 @@ export interface KnownPerson {
 export interface PersonSources {
   /** 1. bond book ∪ follow list ∪ people who follow me. */
   known: () => KnownPerson[];
-  /** 2. author ids seen in the world-feed cache (no nickname). */
+  /** 2. Author ids seen in the world-feed cache. */
   seen: () => readonly string[];
+  /** Latest explicitly observed names, tied to IDs; search clues, never credentials. */
+  seenNames?: () => readonly KnownPerson[];
   /**
    * The owner's own identity, matched **exactly** — never by substring.
    *
@@ -126,8 +127,12 @@ function norm(s: string): string {
 export function localCandidates(
   q: { sigil?: string; name?: string },
   sources: PersonSources,
+  allowFoldedNames = false,
 ): ResolveCandidate[] {
   const sigilOf = sources.sigilOf ?? deriveSigil;
+  const me = sources.self?.();
+  // Self names remain exact even when the owner's posts are in the cache.
+  const observed = (sources.seenNames?.() ?? []).filter(p => p.popclawId !== me?.popclawId);
   const byId = new Map<string, ResolveCandidate>();
   const add = (popclawId: string, nickname: string): void => {
     const prev = byId.get(popclawId);
@@ -136,14 +141,14 @@ export function localCandidates(
   };
 
   if (q.sigil) {
-    for (const p of sources.known()) {
+    for (const p of [...sources.known(), ...observed]) {
       // The nickname also has to be compared in its "folded" shape: a Latin
       // nickname (blackfeather) is itself valid Crockford input, so the
       // grammar would parse it as sigil b1ackfeather — if we only compared
       // the derived sigil, every Latin nickname in the bond book would be
       // missed, reproducing the original DM incident the moment the
       // lore-house goes down.
-      if (sigilOf(p.popclawId).startsWith(q.sigil) || normalizeSigilInput(p.nickname) === q.sigil) {
+      if (sigilOf(p.popclawId).startsWith(q.sigil) || (allowFoldedNames && normalizeSigilInput(p.nickname) === q.sigil)) {
         add(p.popclawId, p.nickname);
       }
     }
@@ -152,10 +157,9 @@ export function localCandidates(
     }
   } else if (q.name) {
     const n = norm(q.name);
-    for (const p of sources.known()) {
+    for (const p of [...sources.known(), ...observed]) {
       if (p.nickname && norm(p.nickname).includes(n)) add(p.popclawId, p.nickname);
     }
-    // The world-feed cache has no nickname column → this source is skipped for a bare-nickname query (ADR-0028 revision).
   }
 
   // The owner, last (so a bond alias for the same id still supplies the
@@ -163,10 +167,9 @@ export function localCandidates(
   // the ordinary one — a sigil addresses exactly one id, and the folded-name
   // comparison is an equality too — while the name lane demands the whole
   // name, not a fragment of it.
-  const me = sources.self?.();
   if (me?.popclawId) {
     const matched = q.sigil
-      ? sigilOf(me.popclawId).startsWith(q.sigil) || normalizeSigilInput(me.nickname) === q.sigil
+      ? sigilOf(me.popclawId).startsWith(q.sigil) || (allowFoldedNames && normalizeSigilInput(me.nickname) === q.sigil)
       : Boolean(q.name) && me.nickname !== '' && norm(me.nickname) === norm(q.name!);
     if (matched) add(me.popclawId, me.nickname);
   }
@@ -197,9 +200,13 @@ export function localCandidates(
  */
 export function localFirst(
   sources: PersonSources,
+  input?: string,
 ): (q: { sigil?: string; name?: string }) => Promise<ResolveCandidate[] | null> {
+  // Only a bare name may fold into a sigil-shaped token. Explicit hashes
+  // and full IDs must never let somebody's nickname replace that key.
+  const allowFoldedNames = input !== undefined && !input.includes('#') && !looksLikeBase58Id(input.trim());
   return async (q) => {
-    const local = localCandidates(q, sources);
+    const local = localCandidates(q, sources, allowFoldedNames);
     if (local.length > 0) return local;
     const remote = await sources.house(q);
     if (remote && sources.learn) {
@@ -243,6 +250,8 @@ export function personSourcesFrom(parts: {
    */
   followers?: () => readonly string[];
   feedAuthors?: () => readonly string[];
+  /** Latest observed feed names, kept separate from the display NameChain. */
+  feedNames?: () => readonly KnownPerson[];
   /**
    * **The owner's own identity.** Status hands the owner their own
    * `name#sigil` and their own popclaw_id, and the very next lookup used to
@@ -280,6 +289,7 @@ export function personSourcesFrom(parts: {
       return out;
     },
     seen: () => parts.feedAuthors?.() ?? [],
+    ...(parts.feedNames ? { seenNames: parts.feedNames } : {}),
     ...(parts.self ? { self: parts.self } : {}),
     house: parts.house,
   };
@@ -317,7 +327,7 @@ export async function resolvePerson(
     return { kind: 'invalid', reason: renderCopy(lang, 'person.mustSayWho') };
   }
   const sigilOf = sources.sigilOf ?? deriveSigil;
-  const r = await resolveFollowTarget(ref, localFirst(sources));
+  const r = await resolveFollowTarget(ref, localFirst(sources, ref));
   switch (r.kind) {
     case 'lantern':
       return { kind: 'notFound', ref, lanternDown: true };
@@ -410,6 +420,12 @@ export function formatPerson(
  */
 export function looksLikeBase58Id(s: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,64}$/.test(s);
+}
+
+/** A full public key is an identity anchor, never a nickname/display handle. */
+export function displayNickname(value: string | null | undefined): string {
+  const name = (value ?? '').trim();
+  return looksLikeBase58Id(name) ? '' : name;
 }
 
 export function displayPerson(popclawId: string, name?: string, lang: Lang = ownerLang()): string {

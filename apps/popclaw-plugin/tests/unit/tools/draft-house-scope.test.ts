@@ -8,6 +8,7 @@ import type { ToolsCtx } from '../../../src/tools/tools-context.js';
 import { _draftsForTest, makeDraftToken, putDraft, takeDraft } from '../../../src/tools/draft-store.js';
 import { ActionInactiveError, assertActionActive, assertHouseActionActive, withAction, withHouseActions } from '../../../src/runtime/house-lifecycle/action-context.js';
 import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
+import { makeNameChain } from '../../../src/identity/person-name.js';
 
 afterEach(() => _draftsForTest.clear());
 
@@ -25,7 +26,10 @@ function gate() {
 async function setup(origin?: string) {
   const recipient = await signer(2).popclawId();
   const post = { handle: 'Author A', textPreview: 'Original post', authorPopclawId: recipient, houseSlug: 'house-a', eventId: 'a'.repeat(64) };
-  const source = { fromPopclawId: recipient, houseSlug: 'house-a', eventId: 'b'.repeat(64) };
+  const source = { fromPopclawId: recipient, senderNickname: '', houseSlug: 'house-a', eventId: 'b'.repeat(64) };
+  let remarkName = '';
+  let latestName: string | undefined;
+  const nameOf = makeNameChain({ bond: () => ({ remarkName }), handleFromFeed: () => latestName ?? post.handle });
   const home = { slug: 'house-home' };
   let messageHouse: string | undefined = 'house-a';
   const pushed: Array<{ house: string | undefined; bytes: Uint8Array }> = [];
@@ -38,8 +42,9 @@ async function setup(origin?: string) {
   const runtime = async () => ({
     boot: { signer: signer(1), nickname: 'Owner', webBaseUrl: 'https://example.invalid' },
     egress: { home, capturePlan: () => ({ targets: ['house-home', 'house-a', 'house-b'].map(slug => ({ slug, origin: slug === 'house-a' && origin ? origin : slug })) }), pushTo, push: (bytes: Uint8Array) => pushTo(undefined, bytes) },
-    worldFeedCache: { lookup },
+    worldFeedCache: { lookup, findByEventIdPrefix: () => ({ item: post, ambiguous: [] }) },
     inboxStore: { houseOf, get: () => source },
+    nameOf,
     bondsStore: { list: () => [{ popclawId: recipient, nickname: 'Recipient', remarkName: '' }] },
   });
   type Tool = { name: string; execute(id: string, params: unknown): Promise<{ text: string }> };
@@ -63,10 +68,62 @@ async function setup(origin?: string) {
     expect(token).toBeTruthy();
     return sendDraftConfirmed((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token!);
   };
-  return { recipient, post, source, pushed, lookup, houseOf, call, confirm, home, setHouse: (house: string | undefined) => { messageHouse = house; } };
+  return { recipient, post, source, pushed, lookup, houseOf, call, confirm, home, setLatestName: (name: string) => { latestName = name; }, setRemark: (name: string) => { remarkName = name; }, setHouse: (house: string | undefined) => { messageHouse = house; } };
 }
 
 describe('draft destination and action generation', () => {
+  it('uses the inbox sender name in a DM reply preview without changing the pinned recipient or house', async () => {
+    const fx = await setup();
+    fx.source.senderNickname = 'Lee';
+    const draft = await fx.call('popclaw_draft_message', { reply_to_message_id: 1, body: 'Synthetic reply' });
+    expect(draft.text).toContain('Lee#');
+    expect(draft.text).toContain(fx.recipient);
+    fx.source.senderNickname = 'Later Name';
+    await fx.confirm(draft);
+    expect(fx.pushed.map(p => p.house)).toEqual(['house-a']);
+    const signed = popclaw.identity.SignedPayload.decode(fx.pushed[0]!.bytes);
+    const envelope = popclaw.event.EventEnvelope.decode(signed.payload);
+    expect(envelope.directMessage!.toPopclawId).toBe(fx.recipient);
+    expect(envelope.prevEventId).toBe(fx.source.eventId);
+  });
+
+  it('uses the local remark in a reply preview, keeping it out of outgoing bytes', async () => {
+    const fx = await setup();
+    fx.setRemark('Private Lee Alias');
+    fx.post.handle = fx.recipient;
+    const draft = await fx.call('popclaw_draft_reply', { platform: 'x', post_id: '123', body: 'Synthetic reply' });
+    expect(draft.text).toContain('Private Lee Alias');
+    expect(draft.text).toContain(fx.recipient);
+    await fx.confirm(draft);
+    expect(Buffer.from(fx.pushed[0]!.bytes).toString()).not.toContain('Private Lee Alias');
+  });
+
+  it('uses the same name chain in a quote preview without minting a send', async () => {
+    const fx = await setup();
+    fx.setRemark('Private Lee Alias');
+    fx.post.handle = fx.recipient;
+    const draft = await fx.call('popclaw_draft_post', { quote_of_event_id: fx.post.eventId, body: 'Synthetic quote' });
+    expect(draft.text).toContain('Private Lee Alias');
+    expect(draft.text).toContain(fx.recipient);
+    expect(fx.pushed).toEqual([]);
+  });
+
+  it('uses the current observed name rather than the historic source handle', async () => {
+    const fx = await setup();
+    fx.post.handle = 'Old Author';
+    fx.setLatestName('Lee');
+    for (const [tool, params] of [
+      ['popclaw_draft_reply', { platform: 'x', post_id: '123', body: 'Synthetic reply' }],
+      ['popclaw_draft_post', { quote_of_event_id: fx.post.eventId, body: 'Synthetic quote' }],
+    ] as const) {
+      const draft = await fx.call(tool, params);
+      expect(draft.text).toContain('Lee');
+      expect(draft.text).not.toContain('Old Author');
+      expect(draft.text).toContain(fx.recipient);
+    }
+    expect(fx.pushed).toEqual([]);
+  });
+
   it('shows the reply recipient and source, and pins fallback home before conversation review', async () => {
     const fx = await setup();
     Reflect.deleteProperty(fx.post, 'houseSlug');

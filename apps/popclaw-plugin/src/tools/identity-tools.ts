@@ -84,6 +84,7 @@ export function registerNamecardTool(ctx: ToolsCtx): void {
         // gateway) can answer it without owning the lifecycle.
         {
           loreHouseUrl: rt.boot.loreHouseUrl,
+          knownPerson: { popclawId: person.popclawId, nickname: person.nickname },
           ...(rt.boot.webBaseUrl === undefined ? {} : { webBaseUrl: rt.boot.webBaseUrl }),
           // So the owner's own card renders even on an identity no house has
           // ever been told about (a fresh `ranger-xxxxxx` is never published).

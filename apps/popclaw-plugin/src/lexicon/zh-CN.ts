@@ -648,6 +648,9 @@ export const ZH_CN: Lexicon = {
     'newspaper.dispatch.reason.timeout': '等了约 {minutes} 分钟还没编完（超时）',
     // openclaw 8.2：run 可能一直排队没轮到开工（排队不消耗超时预算），死线到时仍在队里。
     'newspaper.dispatch.reason.queued': '车间一直没排上队，到超时也没轮到开工（宿主可能正忙）',
+    'newspaper.dispatch.reason.empty': '本次时间窗没有收集到可用的报纸素材',
+    'newspaper.dispatch.reason.partial-no-material': '公共内容覆盖不完整，且未收集到可用的报纸素材',
+    'newspaper.dispatch.reason.source-refused': '已用公共素材来源变化或无法核验，请重新获取候选页',
     'newspaper.dispatch.reason.noReceipt': '车间这一轮跑完了，但这一期没能发布（没有拿到发布回执）',
     // 轻量模型完工令（2026-09-03 夜裁定）：产品必须在 deepseek-v4-flash 一档的
     // 模型上也能出完整期报，换模型不是修复路径。真机当晚：子会话取完今日素材后
@@ -977,6 +980,11 @@ export const ZH_CN: Lexicon = {
     'newspaper.page.deckCount': '{paper} · {date} · 第{index}叠 · {character} · {count} 条（含头版 {front} 条）',
     'newspaper.page.houseList': '灯坊给的名单，截至 {asOf}',
     'newspaper.page.onFront': '本栏 {count} 条已提上头版。',
+    'newspaper.source.unavailable': '{house}：公共素材不可用，本期无法确认这个时间窗没有新内容。',
+    'newspaper.source.partial': '{house}：公共内容覆盖不完整，本期只使用已核验、已接收的素材。',
+    'newspaper.source.refused': '公共素材来源已变化或无法核验（{reason}）。请重新获取候选页后继续。',
+    'newspaper.source.savedRefused': '报纸已保存在本地：{path}。公共素材来源已变化或无法核验（{reason}），交付已停止。请勿自动重发。',
+    'newspaper.source.unsupportedDraft': '此工具制作完整的个性化报纸，并按现有配置交付阅读链接。不支持只存草稿、仅预览或仅公共内容的限制；本次未开始制报。',
     'newspaper.page.quietHouse': '本灯坊今日无新事。',
     'newspaper.page.ear.awaiting': '待 回',
     'newspaper.page.ear.newFaces': '生 面 孔',
@@ -1134,6 +1142,9 @@ export const ZH_CN: Lexicon = {
     'socialSend.conversationChanged': '未发送：这份草稿属于另一个会话。请在本聊天准备原定稿件，给主人看稿确认。',
     'socialSend.reviewChanged': '未发送：看稿副本已改变或丢失。请展示原定稿件的新副本，给主人确认。',
     'socialSend.approvalsRetired': '私信、回复和发帖只需在本聊天看稿确认一次，无需准备 PopClaw 审批路由。现有宿主审批配置未改动。',
+    'draft.postref.publicUnavailable': '暂时无法核对这条帖子，请稍后重试。',
+    'draft.postref.publicAmbiguous': '这个短引用对应多条帖子，请提供更明确的帖子链接。',
+    'draft.postref.publicNotFound': '未找到这条帖子，请检查帖子链接。',
     'draft.postref.notHex':
       '⚠️ 这不是有效的帖子引用（{ref}）：需要完整 64 位十六进制 event_id、至少 6 位的短 id、或本站 /post/ 链接。',
     'draft.postref.tooShort': '⚠️ 短 id 太短：至少要 6 位十六进制（收到：{ref}）。',

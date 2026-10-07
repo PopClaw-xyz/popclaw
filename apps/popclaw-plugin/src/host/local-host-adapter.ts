@@ -153,6 +153,7 @@ class LocalStorage implements HostStorage {
         // chmod before it has its real name, not after: a secret must never be
         // reachable under the name others look for while still world-readable.
         if (mode !== undefined) await fsp.chmod(tmp, mode);
+        opts.assertCommitAllowed?.();
         try {
           await fsp.link(tmp, path); // EEXIST = someone else won; the caller decides
         } catch (err) {
@@ -173,6 +174,7 @@ class LocalStorage implements HostStorage {
               'older two-step way. Two processes first-running the same data root at the same ' +
               'instant could see it half-written; a single host is unaffected.',
           );
+          opts.assertCommitAllowed?.();
           await fsp.writeFile(path, bytes, mode === undefined ? { flag: 'wx' as const } : { flag: 'wx' as const, mode });
           if (mode !== undefined) await fsp.chmod(path, mode);
         }
@@ -181,6 +183,7 @@ class LocalStorage implements HostStorage {
       }
       return;
     }
+    opts?.assertCommitAllowed?.();
     await fsp.writeFile(path, bytes, mode === undefined ? {} : { mode });
     // writeFile's `mode` only applies when it creates the file, and umask can
     // shave bits off it — chmod unconditionally so a rewrite can't leave an

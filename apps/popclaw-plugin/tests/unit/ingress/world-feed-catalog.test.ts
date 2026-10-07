@@ -3,10 +3,14 @@
  * 三条不变量：来源坊标签 / event_id 跨坊去重 / 单坊配置逐条不变。
  */
 import { describe, it, expect, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { popclaw } from '@popclaw/contracts';
 import { makeCache, bytesOf, item } from '../../helpers/world-feed-cache';
 import { WorldFeedCatalog, type HouseFeed } from '../../../src/ingress/world-feed-catalog';
-import type { WorldFeedCache } from '../../../src/ingress/world-feed-cache';
+import { WorldFeedCache } from '../../../src/ingress/world-feed-cache';
+import { LocalHostDb } from '../../../src/host/local-host-db';
 
 async function house(
   slug: string,
@@ -179,6 +183,49 @@ describe('WorldFeedCatalog — 跨坊合并视图', () => {
 });
 
 describe('WorldFeedCatalog.fetchSnapshot — 各坊快照并发拉', () => {
+  it('returns sorted, deduplicated snapshots without writing a protected cache', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'world-feed-readonly-'));
+    const dbPath = join(root, 'legacy.db');
+    const source = new LocalHostDb(dbPath);
+    let readOnlyDb: LocalHostDb | undefined;
+    try {
+      const sourceCache = new WorldFeedCache({ db: source });
+      await sourceCache.start();
+      sourceCache.record(item({ platformPostId: 'history', eventId: 'history' }));
+      sourceCache.recordInsertCursor('31');
+      source.execute('CREATE TABLE world_stream(seq INTEGER PRIMARY KEY, task_done INTEGER)');
+      source.execute('INSERT INTO world_stream VALUES(31,1)');
+      source.close();
+
+      readOnlyDb = new LocalHostDb(dbPath, { readOnly: true });
+      const protectedCache = new WorldFeedCache({ db: readOnlyDb });
+      const protectedRecord = vi.spyOn(protectedCache, 'record');
+      const shared = item({ platformPostId: 'shared', eventId: 'shared', platformPostCreatedAt: 200 });
+      const protectedHouse: HouseFeed = {
+        slug: 'protected', baseUrl: 'https://protected.example', dbPath,
+        cache: protectedCache, cacheReadOnly: true,
+        snapshot: { fetchSnapshot: async () => [shared,
+          item({ platformPostId: 'protected-new', eventId: 'protected-new', platformPostCreatedAt: 100 })] },
+      };
+      const writableHouse = await house('writable', [shared,
+        item({ platformPostId: 'writable-new', eventId: 'writable-new', platformPostCreatedAt: 300 })]);
+      const writableRecord = vi.spyOn(writableHouse.cache, 'record');
+      const got = await new WorldFeedCatalog([protectedHouse, writableHouse]).fetchSnapshot({ limit: 10 });
+
+      expect(got.map(i => i.platformPostId)).toEqual(['writable-new', 'shared', 'protected-new']);
+      expect(protectedRecord).not.toHaveBeenCalled();
+      expect(writableRecord).toHaveBeenCalledTimes(2);
+      expect(writableHouse.cache.recent(10).map(i => i.platformPostId)).toEqual(['writable-new', 'shared']);
+      expect(protectedCache.recent(10).map(i => i.platformPostId)).toEqual(['history']);
+      expect(protectedCache.insertCursor()).toBe(31);
+      expect(readOnlyDb.queryAll('SELECT seq,task_done FROM world_stream')).toEqual([{ seq: 31, task_done: 1 }]);
+    } finally {
+      readOnlyDb?.close();
+      source.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('合并去重并把每条落进它自己那座坊的缓存（归属不串）', async () => {
     const home = await house('popclaw-me', [item({ platformPostId: 'h1', eventId: 'eh', platformPostCreatedAt: 100 })]);
     const world = await house('popclaw-world', [
@@ -217,4 +264,14 @@ describe('WorldFeedCatalog.fetchSnapshot — 各坊快照并发拉', () => {
     const b = await house('b', new Error('boom-b'));
     await expect(new WorldFeedCatalog([a, b]).fetchSnapshot({ limit: 10 })).rejects.toThrow('boom-a');
   });
+});
+
+
+it('tags a live readonly snapshot with its actual source house without persisting or trusting a remote tag', async () => {
+  const incoming = {...item({platform: 'popclaw', platformPostId: 'ab'.repeat(32), eventId: 'ab'.repeat(32)}), houseSlug: 'remote-spoof'};
+  const source = await house('actual-parent-house', [incoming]);
+  const record = vi.spyOn(source.cache, 'record');
+  const tagged = await new WorldFeedCatalog([{...source, cacheReadOnly: true}]).fetchSnapshot({limit: 1});
+  expect(tagged[0]).toMatchObject({houseSlug: 'actual-parent-house'});
+  expect(record).not.toHaveBeenCalled(); expect(incoming.houseSlug).toBe('remote-spoof');
 });

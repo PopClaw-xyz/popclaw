@@ -21,6 +21,8 @@ export interface HostAdapter {
 export type Namespace = 'identity' | 'social' | 'houses' | 'cache' | 'config';
 
 export interface WriteOptions {
+  /** Synchronous caller check immediately before file publication, after IO preparation. */
+  assertCommitAllowed?: () => void;
   /**
    * POSIX file mode for the written file (e.g. `0o600` for secrets). File-backed
    * adapters also create any MISSING directory in the chain at 0o700 — directories

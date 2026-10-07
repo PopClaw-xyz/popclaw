@@ -21,8 +21,9 @@
  *     lore-house while the local cache can be EMPTY, so searching only the
  *     local cache cannot close this loop. A URL counts only when it points at
  *     the trusted web base (the same `boot.webBaseUrl` the links are printed
- *     with); cross-site URLs are refused, never fetched — this module does no
- *     network access at all. External-platform post ids are never treated as
+ *     with); cross-site URLs are refused, never fetched. The draft-time
+ *     resolver may query the existing trusted public thread projection through
+ *     an injected read lane when source context is missing. External ids are never treated as
  *     popclaw event ids (mirror rows are filtered out before remembering).
  *   - full 64-hex ids pass through unchanged (legacy calls keep working).
  */
@@ -30,6 +31,9 @@
 import { getOrCreatePerProcess, resetSingletonForTest } from '../runtime/once.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { renderCopy, type Lang } from '../lexicon/index.js';
+import type { NativePostSource, PublicPostLookup } from './thread-post-source.js';
+import { decodeEnvelopeBody } from '../ingress/feed-item-projection.js';
+import { verifyInboundEnvelope } from '../ingress/verify-envelope.js';
 
 /** Minimum hex chars for a bare short reference — the same bar as the /popclaw post CLI's prefix lookup. */
 const MIN_PREFIX_CHARS = 6;
@@ -69,15 +73,40 @@ type ObservedMap = Map<string, Set<string>>;
 const observedMap = (): ObservedMap =>
   getOrCreatePerProcess('observed-post-ids', () => new Map() as ObservedMap);
 
+// A conflicting observation stays unavailable until eviction or process exit.
+const observedSources = (): Map<string, NativePostSource | null> =>
+  getOrCreatePerProcess('observed-post-sources', () => new Map<string, NativePostSource | null>());
+
 // Exported for test teardown only. DO NOT use from production code.
 export const _observedPostIdsForTest = {
-  clear: (): void => resetSingletonForTest('observed-post-ids'),
+  clear: (): void => {
+    resetSingletonForTest('observed-post-ids');
+    resetSingletonForTest('observed-post-sources');
+  },
 };
 
 /** What a trusted read returns per item — popclaw_author_latest passes its snapshot items straight through. */
 export interface ObservedPostItem {
   readonly platform?: string | null;
   readonly platformPostId?: string | null;
+  readonly eventId?: string | null;
+  readonly authorPopclawId?: string | null;
+  readonly houseSlug?: string;
+  readonly envelope?: Uint8Array | null;
+}
+
+/** Preserve full public content already verified by the snapshot client. */
+function observedSource(item: ObservedPostItem, id: string): NativePostSource | null {
+  if (item.eventId !== id || !item.houseSlug || !item.authorPopclawId || !item.envelope?.length) return null;
+  try {
+    const body = decodeEnvelopeBody(item.envelope);
+    const envelope = verifyInboundEnvelope(item.envelope, {publicStream: true});
+    if (!body || (!envelope.post && !envelope.reply) || envelope.eventId !== id
+      || envelope.actor?.popclawId !== item.authorPopclawId) return null;
+    return {eventId: id, authorPopclawId: item.authorPopclawId,
+      handle: envelope.actor.nickname || '',
+      textPreview: body.text, houseSlug: item.houseSlug};
+  } catch { return null; }
 }
 
 /**
@@ -97,18 +126,33 @@ export function rememberObservedPostIds(items: readonly ObservedPostItem[]): voi
     if (!fulls) {
       if (map.size >= MAX_OBSERVED) {
         const oldest = map.keys().next().value;
-        if (oldest !== undefined) map.delete(oldest);
+        if (oldest !== undefined) {
+          for (const oldId of map.get(oldest) ?? []) observedSources().delete(oldId);
+          map.delete(oldest);
+        }
       }
       fulls = new Set<string>();
       map.set(short, fulls);
     }
     fulls.add(id);
+    const source = observedSource(it, id);
+    if (!source) continue;
+    const sources = observedSources();
+    if (sources.has(id)) {
+      const previous = sources.get(id);
+      if (!previous || previous.authorPopclawId !== source.authorPopclawId
+        || previous.textPreview !== source.textPreview) sources.set(id, null);
+      continue;
+    }
+    if (sources.size >= MAX_OBSERVED) sources.delete(sources.keys().next().value!);
+    sources.set(id, source);
   }
 }
 
 /** The local-cache seam, duck-typed so partial test wiring degrades to "no cache source" instead of throwing. */
 export interface PostRefCache {
   findFullEventId?(prefix: string): { full: string | null; ambiguous: string[] };
+  findByEventIdPrefix?(prefix: string): { item: NativePostSource | null; ambiguous: string[] };
 }
 
 export interface PostRefSources {
@@ -130,6 +174,12 @@ export interface PostRefSources {
    * source that was never asked.
    */
   readonly cacheUnreachable?: boolean;
+  /** Exact ids returned by the existing trusted public thread query. */
+  readonly publicEventIds?: readonly string[];
+  /** The draft's current captured mounts, when the runtime supplies them. */
+  readonly mountedHouseSlugs?: readonly string[];
+  /** Recheck the original source gate even when no new HTTP read is needed. */
+  readonly assertSourceCurrent?: (houseSlug: string) => void;
 }
 
 export type PostRefResolution = { ok: true; eventId: string } | { ok: false; text: string };
@@ -219,6 +269,9 @@ function resolveShortHex(
   for (const fulls of observedMap().values()) {
     for (const id of fulls) if (id.startsWith(hex)) candidates.add(id);
   }
+  for (const id of sources.publicEventIds ?? []) {
+    if (/^[0-9a-f]{64}$/.test(id) && id.startsWith(hex)) candidates.add(id);
+  }
   if (candidates.size === 1) return { ok: true, eventId: [...candidates][0]! };
   if (candidates.size === 0) {
     return { ok: false, text: renderCopy(lang, 'draft.postref.absent', { ref: display }) };
@@ -245,7 +298,7 @@ export function resolvePostRef(
   sources: PostRefSources,
   lang: Lang = ownerLang(),
 ): PostRefResolution {
-  const ref = raw.trim();
+  const ref = raw.trim().replace(/^#(?=[0-9a-f]+$)/, '');
 
   // Legacy wire form: unchanged behavior, and deliberately NO source check —
   // a full id the owner typed by hand works even when no source holds it.
@@ -271,4 +324,60 @@ export function resolvePostRef(
     return resolveShortHex(hex, sources, lang, ref);
   }
   return resolveShortHex(ref, sources, lang, ref);
+}
+
+
+export type PostRefWithSource =
+  | {readonly ok: true; readonly eventId: string; readonly source: NativePostSource | null}
+  | {readonly ok: false; readonly text: string};
+
+/** Fill a missing source at draft time; the normal send path freezes it. */
+export async function resolvePostRefWithSource(
+  raw: string,
+  sources: PostRefSources,
+  lookupPublic?: (prefix: string) => Promise<PublicPostLookup>,
+  lang: Lang = ownerLang(),
+): Promise<PostRefWithSource> {
+  const resolution = resolvePostRef(raw, sources, lang);
+  const ref = raw.trim().replace(/^#(?=[0-9a-f]+$)/, '');
+  const prefix = /^[a-z][a-z0-9+.-]*:\/\//i.test(ref)
+    ? sources.webBaseUrl ? trustedPostUrlHex(ref, sources.webBaseUrl) : null : ref;
+  // Malformed/cross-site references never reach any network lookup.
+  if (!prefix || !/^[0-9a-f]{6,64}$/.test(prefix)) return resolution.ok ? {...resolution, source: null} : resolution;
+  if (prefix.length < 64 && (sources.cacheUnreachable || lookupCache(sources.cache, prefix).kind === 'unreadable')) return {ok: false, text: renderCopy(lang, 'draft.postref.cacheUnreadable', {ref})};
+  let source: NativePostSource | null = null;
+  if (resolution.ok) {
+    try { source = sources.cache?.findByEventIdPrefix?.(resolution.eventId).item ?? null; }
+    catch { return {ok: false, text: renderCopy(lang, 'draft.postref.cacheUnreadable', {ref})}; }
+    const observed = observedSources();
+    if (observed.has(resolution.eventId)) {
+      const known = observed.get(resolution.eventId);
+      if (!known || (sources.mountedHouseSlugs && !sources.mountedHouseSlugs.includes(known.houseSlug!))
+        || (source && (source.eventId !== known.eventId || source.authorPopclawId !== known.authorPopclawId
+          // The relay's first-block preview retains whitespace; the decoded
+          // full post trims it for display. Compare the same display form.
+          || !known.textPreview.trim().startsWith(source.textPreview.trim())))) {
+        return {ok: false, text: renderCopy(lang, 'draft.postref.publicUnavailable')};
+      }
+      try { sources.assertSourceCurrent?.(known.houseSlug!); }
+      catch { return {ok: false, text: renderCopy(lang, 'draft.postref.publicUnavailable')}; }
+      return {...resolution, source: {...known}};
+    }
+  }
+  if (resolution.ok && source?.houseSlug && source.authorPopclawId && typeof source.textPreview === 'string') return {...resolution, source: {...source}};
+  // Partial/legacy roots retain their original no-network resolution behavior.
+  if (!lookupPublic) return resolution.ok ? {...resolution, source: source ? {...source} : null} : resolution;
+  const result = await lookupPublic(prefix);
+  const legacyFull = prefix.length === 64;
+  if (!result.ok && resolution.ok && legacyFull) return {...resolution, source: source ? {...source} : null};
+  if (!result.ok) return {ok: false, text: renderCopy(lang,
+    result.reason === 'ambiguous' ? 'draft.postref.publicAmbiguous' : 'draft.postref.publicUnavailable')};
+  const final = resolvePostRef(raw, {...sources, publicEventIds: result.sources.map(s => s.eventId)}, lang);
+  if (!final.ok) return result.sources.length === 0 && !resolution.ok
+    ? {ok: false, text: renderCopy(lang, 'draft.postref.publicNotFound')} : final;
+  const found = result.sources.find(s => s.eventId === final.eventId && s.houseSlug === source?.houseSlug)
+    ?? result.sources.find(s => s.eventId === final.eventId);
+  if (!found) return resolution.ok && legacyFull ? {...resolution, source: source ? {...source} : null}
+    : {ok: false, text: renderCopy(lang, 'draft.postref.publicNotFound')};
+  return {...final, source: {...found}};
 }

@@ -1,3 +1,5 @@
+import type { HouseRuntime } from '../runtime/house-lifecycle/house-runtime.js';
+import { publicMaterialSource, PublicMaterialRefusal } from '../newspaper/public-material-source.js';
 /**
  * popclaw_newspaper's one call, as the steps it always ran in: read the
  * arguments → refuse a hand-in whose picks were lost → dispatch a bare call to
@@ -99,6 +101,7 @@ interface NewspaperParams {
 
 /** The runtime slots this call reads. */
 interface NewspaperRuntime {
+  houseRuntime?: HouseRuntime;
   worldFeedCache: GatherDeps['cache'];
   inboxStore: GatherDeps['inbox'];
   socialGraph: { followsIn(popclawId: string, houseSlug?: string): boolean };
@@ -403,7 +406,9 @@ function answerPicks(call: NewspaperCall, rt: NewspaperRuntime, args: NewspaperA
   } else {
     return { type: 'text' as const, text: renderCopy(ownerLang(), 'newspaper.picks.noProvenance') };
   }
+  const materialSource = publicMaterialSource(rt);
   const picked = buildIssueFromPicks(candidateToken, picks, {
+    ...(materialSource ? { validateMaterials: (issue) => materialSource.validate(issue) } : {}),
     manifestDir: rt.paths.newspaperManifestsDir(),
     mintToken: mintIssueToken,
     contentRules: readNewspaperContentRules(rt.paths.newspaperDir()),
@@ -445,8 +450,11 @@ function gatherCandidatePage(
 ): TextResult {
   const { api, toolCtx } = call;
   const { bondsStore, houseSlugs, digests, tasteTags, tasteText, bondLines } = paper;
+  const materialSource = publicMaterialSource(rt);
+  const publicBatch = materialSource?.collect();
   const r = gatherNewspaperMaterials(
     {
+      ...(publicBatch ? { publicBatch, validateMaterials: (issue) => materialSource!.validate(issue) } : {}),
       cache: rt.worldFeedCache,
       inbox: rt.inboxStore,
       readContentRules: () => readNewspaperContentRules(rt.paths.newspaperDir()),
@@ -538,6 +546,7 @@ function gatherCandidatePage(
   // a note the owner never hears.
   const legacyPage = r.kind === 'empty' ? r.message : r.payload;
   if (r.kind === 'candidates') NewspaperStageStore.note(toolCtx.sessionKey, 'candidatePage');
+  else NewspaperStageStore.collection(toolCtx.sessionKey, publicBatch?.coverage.some(s => s.unavailable || s.incomplete || s.truncated) ? 'partial-no-material' : 'empty');
   return {
     type: 'text' as const,
     text: modelIgnoredNote ? `${modelIgnoredNote}\n\n${legacyPage}` : legacyPage,
@@ -547,6 +556,10 @@ function gatherCandidatePage(
 /** popclaw_newspaper's execute. */
 export async function runNewspaperCall(call: NewspaperCall, params: unknown): Promise<TextResult> {
   try {
+    const constraints = params as Record<string, unknown>;
+    if (constraints && (constraints.draft_only === true || constraints.no_upload === true || constraints.public_only === true
+      || constraints.preview === true || constraints.publish === false || constraints.upload === false))
+      return { type: 'text', text: renderCopy(ownerLang(), 'newspaper.source.unsupportedDraft') };
     const args = readNewspaperArgs(params);
     const refused = picksLostReply(args);
     if (refused) return refused;
@@ -578,6 +591,7 @@ export async function runNewspaperCall(call: NewspaperCall, params: unknown): Pr
     if (args.hasPicks && args.picks) return answerPicks(call, rt, args, args.picks);
     return gatherCandidatePage(call, rt, args.hours, paper, modelIgnoredNote);
   } catch (err) {
-    return { type: 'text' as const, text: failureText('popclaw_newspaper', err) };
+    if (err instanceof PublicMaterialRefusal) NewspaperStageStore.collection(call.toolCtx.sessionKey, 'source-refused');
+    return { type: 'text' as const, text: err instanceof PublicMaterialRefusal ? renderCopy(ownerLang(), 'newspaper.source.refused', { reason: err.code }) : failureText('popclaw_newspaper', err) };
   }
 }

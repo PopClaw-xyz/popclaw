@@ -161,7 +161,7 @@ export const PopclawDraftPostSchema = Type.Object({
     Type.String({
       description:
         'the post to reply to: a full 64-hex event_id, OR the short form popclaw_author_latest prints — ' +
-        'the bare 10-char short id or the whole <web>/post/<short> link (short forms are resolved to the unique ' +
+        'the bare 10-char short id (with optional #) or the whole <web>/post/<short> link (the tool queries the existing public thread when needed and resolves the unique ' +
         'matching event from trusted sources only; an unknown or ambiguous short id is refused, never guessed) ' +
         '(mutually exclusive with quote_of_event_id; reply is hidden from follower feed by default)',
     }),
@@ -170,7 +170,7 @@ export const PopclawDraftPostSchema = Type.Object({
     Type.String({
       description:
         'the post to quote: a full 64-hex event_id, OR the short form popclaw_author_latest prints — ' +
-        'the bare 10-char short id or the whole <web>/post/<short> link (short forms are resolved to the unique ' +
+        'the bare 10-char short id (with optional #) or the whole <web>/post/<short> link (the tool queries the existing public thread when needed and resolves the unique ' +
         'matching event from trusted sources only; an unknown or ambiguous short id is refused, never guessed) ' +
         '(mutually exclusive with reply_to_event_id; quote appears in follower feed with embedded original)',
     }),

@@ -434,7 +434,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         // empty — so even someone who "hasn't posted" can still be followed by sigil/name,
         // while someone already known needs zero round trips.
         const personSources = await buildPersonSources(deps);
-        const resolved = await resolveFollowTarget(p.name, localFirst(personSources));
+        const resolved = await resolveFollowTarget(p.name, localFirst(personSources, p.name));
         // The owner is a person to read about, never a person to follow.
         const resolution = withoutOwner(resolved, await ownerPopclawId(deps));
         if (resolution === 'self') {
@@ -508,7 +508,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         }
         // Symmetric to popclaw_follow: the two local sources take priority, and the lore-house is only asked if local is empty.
         const personSources = await buildPersonSources(deps);
-        const resolved = await resolveFollowTarget(p.name, localFirst(personSources));
+        const resolved = await resolveFollowTarget(p.name, localFirst(personSources, p.name));
         // Symmetric to popclaw_follow: revoking a relation with oneself would
         // sign and push a revocation of something that never existed.
         const resolution = withoutOwner(resolved, await ownerPopclawId(deps));

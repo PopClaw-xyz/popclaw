@@ -324,7 +324,7 @@ export function buildSubcommands(
         // local two-source priority first; only query lore-house /v1/resolve
         // when local is empty → a followable popclaw_id.
         const sources = personSources(rt);
-        const resolution = await resolveFollowTarget(target, localFirst(sources));
+        const resolution = await resolveFollowTarget(target, localFirst(sources, target));
         const lang = ownerLang();
         if (resolution.kind === 'lantern') return { text: renderCopy(lang, 'world.lanternDown') };
         if (resolution.kind === 'empty') {

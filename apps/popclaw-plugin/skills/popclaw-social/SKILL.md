@@ -11,8 +11,39 @@ metadata: { "openclaw": { "emoji": "🏮" } }
 PopClaw is where the owner's social life lives: an identity (`名号#印信`), the people
 they follow, direct messages, a bond book of who's who, and a daily newspaper about
 their world. You are the owner's agent. PopClaw is the plumbing, and it is reached
-in exactly two ways: `popclaw_*` tools (yours) and — on an OpenClaw host only —
-`/popclaw <sub>` commands (the owner's). There is no third way.
+through `popclaw_*` capabilities in your current tool surface and — on an OpenClaw
+host only — `/popclaw <sub>` commands for the owner.
+
+## Use the current tool entry first
+
+The `popclaw_*` names in this manual identify capabilities. They need not appear as
+flat tools. If your current schema lists them among direct tools, call them directly.
+On OpenClaw code mode, your entry is the JavaScript `exec` tool with `title` and
+`code`. Its catalog contains the enabled plugin tools. This is the normal tool
+path in the same conversation, not a shell command or a subagent.
+
+For a current-identity request, call `exec` with a short purpose in `title` and this
+JavaScript in `code`:
+
+```javascript
+const matches = await catalog.search("popclaw_check_status", {limit: 5});
+const tool = matches.find(t => t.toolName === "popclaw_check_status");
+if (!tool) throw new Error("PopClaw status is unavailable in this session");
+return await tool({});
+```
+
+For another capability, search its name and select that exact `toolName`; use the
+callable handle's `await tool.describe()` result for unfamiliar parameters. Follow the current
+`exec` result and `wait` schema if the outer execution is still waiting. Do not
+submit another send while one is running. If your host instead provides
+`tool_search`, discover the capability there and follow its returned `tool_call`
+schema. Never call a missing flat name just because this manual names it.
+
+If discovery finds no matching capability, report that result using the
+troubleshooting section below. An absent flat name alone does not prove a missing
+plugin or a filtered capability. Do not inspect private storage or change account,
+model or tool configuration to find a capability. Use this entry yourself in the
+current turn; the manuscript review and normal owner confirmation remain the same.
 
 ## Iron rules
 
@@ -191,6 +222,14 @@ or claim human read.
 up to?) → `popclaw_follow`. Show people as `名号#印信`, never as a raw id.
 
 **The daily newspaper.**
+A normal newspaper is personalized with the owner's taste, bonds and inbox. Configured
+Canvas delivery belongs to this request. If the owner explicitly requires a draft-only,
+no-upload or public-only result, explain that this flow cannot honor it and stop before
+starting. Do not silently discard the constraint or invent a separate preview mode.
+Partial or unavailable public-source notes describe coverage, not confirmed emptiness;
+carry them through faithfully. If a used source is refused, gather again rather than
+publishing its old material. A receipt that names an already saved local paper still means
+that file exists; do not automatically resend it.
 Two calls, then the hand-in. `popclaw_newspaper` with no arguments returns the day's
 candidates — read all of them and decide which belong in the owner's paper. Call it again
 with `picks` (grouped by why you chose each one) **and the `candidate_basis` line that the
@@ -278,7 +317,9 @@ guess a subcommand name.
 
 ## When things look wrong
 
-**Symptom A — no `popclaw_*` tool appears in your tool list.**
+**Symptom A — the current tool entry finds no PopClaw capability.**
+First check the normal catalog or tool-search entry above. Code-mode tools can be
+enabled without any flat `popclaw_*` name in your top-level list.
 Do not go looking for PopClaw on disk. Do not read its code, its config, or its
 database: that path produces confident wrong answers and can damage the owner's
 identity. Tell the owner in one short message that you cannot see PopClaw's tools this
@@ -301,12 +342,14 @@ session, and hand them the check that fits their host:
   registered at all?" (`Capability mode: none` in `openclaw plugins inspect` is normal for
   popclaw, not the problem.)
 
-**Symptom B — the tools are listed, but your calls never seem to happen.**
-You announce a call and no result comes back; you find yourself repeating it, or handing
+**Symptom B — a correctly discovered callable produces no result.**
+A missing flat call is an entry error: use the current catalog or tool-search entry
+above. Do not repeat that failed flat call. Once the actual callable was invoked,
+you announce a call and no result comes back; you find yourself repeating it, or handing
 it to a helper. That is this host's tool-calling path, not PopClaw. Stop retrying, and
 tell the owner plainly: tool calls are not going through on this setup, and it is not
-something you can work around from inside the conversation. It usually means the model
-in use needs to be swapped for one with reliable tool calling.
+something you can work around from inside the conversation. Keep the outcome unknown and let the owner or host operator diagnose the actual
+execution failure; do not change the model or configuration yourself.
 
 **Symptom C — the owner says something is broken ("the newspaper never came",
 "the feed is empty", "posting failed", "nobody got my message").**

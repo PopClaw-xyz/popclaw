@@ -6,6 +6,7 @@
  * the page out from the stored issue (v0.2 — the layout is code).
  * popclaw itself never calls an LLM. See spec 2026-06-18.
  */
+import { retainPublicMaterialBasis, publicCoverageText } from './public-material-source.js';
 import { buildCandidatePage, candidateOrder } from './build-candidate-page.js';
 import { pageBudgetDecision, pageBudgetLogLine, pageBudgetNow } from './host-budget.js';
 import type { IssueData, PulseItem } from './issue.js';
@@ -73,6 +74,7 @@ const MIN_PULSE = 12;
 
 /** The local collection sources plus candidate-page and storage dependencies. */
 export interface GatherDeps extends MaterialSources {
+  validateMaterials?: (issue: IssueData) => void;
   // Retained for assembly compatibility; gathering reads neither writing-stage input.
   readContentRules: () => string;
   readStyle?: () => NewspaperStyle;
@@ -96,7 +98,10 @@ export type GatherResult =
 /** Collect materials, size and number the candidate page, then persist its exact order. */
 export function gatherNewspaperMaterials(deps: GatherDeps, opts: { hours?: number } = {}): GatherResult {
   const collected = collectNewspaperMaterials(deps, opts);
-  if (collected.kind === 'empty') return collected;
+  if (collected.kind === 'empty') {
+    const coverage = deps.publicBatch ? publicCoverageText(deps.publicBatch.coverage) : '';
+    return coverage ? { ...collected, message: coverage } : collected;
+  }
   const { candidateToken, lang, draft } = collected;
   const { pulse, byHouse } = draft;
 
@@ -154,8 +159,9 @@ export function gatherNewspaperMaterials(deps: GatherDeps, opts: { hours?: numbe
   // holes in its numbering (see `candidateOrder`).
   const ordered = candidateOrder(pulse, lang);
   let shown: readonly PulseItem[] = ordered;
-  const page = (list: readonly PulseItem[]): string =>
-    buildCandidatePage(issueOf(list), {
+  const coverage = deps.publicBatch ? publicCoverageText(deps.publicBatch.coverage) : '';
+  const page = (list: readonly PulseItem[]): string => {
+    const page = buildCandidatePage(issueOf(list), {
       tasteText: deps.tasteText ?? '',
       bondLines: deps.bondLines ?? [],
       publishToken: candidateToken,
@@ -168,6 +174,8 @@ export function gatherNewspaperMaterials(deps: GatherDeps, opts: { hours?: numbe
       overBudget: over,
       sessionKey: deps.sessionKey,
     });
+    return coverage ? `${coverage}\n\n${page}` : page;
+  };
   const budget = pageBudgetNow(deps.sessionKey);
   // Rebuilt below once the trim settles; `over` decides which completeness line the page carries.
   let over = false;
@@ -217,6 +225,9 @@ export function gatherNewspaperMaterials(deps: GatherDeps, opts: { hours?: numbe
   // diagnostic of WHO was served the page (2026-09-06 content-mismatch P1) — since r25 a
   // picks call resolves only by an explicit candidate_token/basis naming the page, never
   // by session-newest, so the stamp no longer gates any binding.
-  putIssue(candidateToken, issueOf(shown), deps.manifestDir, deps.sessionKey);
+  let stored = issueOf(shown);
+  if (deps.publicBatch) stored = retainPublicMaterialBasis({ ...stored, publicCoverage: deps.publicBatch.coverage }, deps.publicBatch.references);
+  deps.validateMaterials?.(stored);
+  putIssue(candidateToken, stored, deps.manifestDir, deps.sessionKey);
   return { kind: 'candidates', payload, candidateToken };
 }

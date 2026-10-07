@@ -201,12 +201,26 @@ export function matchLexicon(prompt: string, extra: LexiconEntry[] = []): Lexico
 const SKILL_POINTER =
   'If <available_skills> lists a popclaw skill, read it once before anything popclaw you have not done before.';
 
+/** Capability names are not necessarily flat tools on the current host. */
+export const NATIVE_TOOL_ENTRY = [
+  'Use the current tool surface before calling any popclaw_* capability named below. If it is listed among direct tools, call it directly.',
+  'On OpenClaw code mode, use the JavaScript exec tool (title and code), not a shell command or a flat popclaw_* call. Discover a callable with catalog.search; await tool.describe() for unfamiliar parameters. Example for the current identity:',
+  '```javascript',
+  'const matches = await catalog.search("popclaw_check_status", {limit: 5});',
+  'const tool = matches.find(t => t.toolName === "popclaw_check_status");',
+  'if (!tool) throw new Error("PopClaw status is unavailable in this session");',
+  'return await tool({});',
+  '```',
+  'If this session provides tool_search instead, discover the capability there and follow the returned tool_call schema. An absent flat name alone does not mean the plugin is missing. If discovery returns no matching capability, report that result; do not guess names, inspect private storage, change configuration, or delegate the call.',
+].join('\n');
+
 /** The L1 standing demo block (≤8 groups, including 1 negative example). Slice 2's hook feeds it into appendSystemContext. */
 export function renderL1(): string {
   const lines = LEXICON.filter((e) => e.core).map(
     (e) => `Owner: ${e.demo} → You: call ${e.tool}${e.chain ? ` (${e.chain})` : ''}`,
   );
   return [
+    NATIVE_TOOL_ENTRY,
     '[popclaw tool routing] When the owner brings up any of the following, call the matching tool for real material first, then render it yourself:',
     ...lines,
     NEGATIVE_DEMO,

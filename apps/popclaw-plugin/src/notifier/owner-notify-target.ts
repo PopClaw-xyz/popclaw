@@ -64,11 +64,18 @@ export class OwnerNotifyTargetStore {
    * to branch on. `/popclaw status` shows which channel got pinned, which is
    * the visible escape hatch. Add the filter if the SDK ever exposes chatType.
    */
-  async captureIfUnset(target: OwnerNotifyTarget): Promise<boolean> {
+  async captureIfUnset(target: OwnerNotifyTarget, beforeWrite?: () => void): Promise<boolean> {
     if (!target.deliveryContext.channel || !target.deliveryContext.to) return false;
     if (await this.get()) return false;
-    await this.set({ ...target, source: 'auto' });
-    return true;
+    beforeWrite?.();
+    try {
+      await this.storage.write(NS, KEY, new TextEncoder().encode(JSON.stringify({ ...target, source: 'auto' })), { exclusive: true, assertCommitAllowed: beforeWrite });
+      return true;
+    } catch (error) {
+      // A concurrent owner pin or first conversation wins at publication too.
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+      throw error;
+    }
   }
 
   async clear(): Promise<void> {

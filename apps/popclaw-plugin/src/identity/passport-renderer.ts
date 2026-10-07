@@ -113,9 +113,9 @@ function formatVerifiedDate(iso: string | null | undefined): string {
 export function renderPassport(input: PassportInput): string[] {
   const lines: string[] = [];
   lines.push(TOP);
-  lines.push(`  popclaw  @${input.handle}#${input.sigil}`);
+  lines.push(`  popclaw  ${input.handle ? `@${input.handle}` : ''}#${input.sigil}`);
   lines.push(`  popclaw_id  ${input.popclawId}`);
-  lines.push(`  popclaw.me  ${profileLinkText(input.handle, input.sigil, input.webBaseUrl)}`);
+  lines.push(`  popclaw.me  ${profileLinkText(input.handle || input.popclawId, input.sigil, input.webBaseUrl)}`);
   // This house's follower count (house_follower_count): the local follower
   // count on this lore-house, semantically distinct from the verified
   // accounts' external follower-count snapshot below — never summed, each

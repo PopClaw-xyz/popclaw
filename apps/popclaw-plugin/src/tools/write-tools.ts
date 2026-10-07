@@ -15,7 +15,7 @@ import { normalizeHouseOrigin } from '../runtime/house-lifecycle/control-client.
 import { assertHouseActionActive } from '../runtime/house-lifecycle/action-context.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
-import { formatPerson, unresolvedText } from '../identity/person-resolver.js';
+import { formatPerson, unresolvedText, displayNickname } from '../identity/person-resolver.js';
 import { loadDmAttachment, kb } from '../messaging/dm-media.js';
 import { runPopclawReplyCommand } from '../commands/popclaw-reply.js';
 import { runPopclawMessageCommand } from '../commands/popclaw-message.js';
@@ -33,7 +33,8 @@ import {
   type DraftAttachmentSnapshot,
   type DraftSnapshot,
 } from './draft-store.js';
-import { resolvePostRef, type PostRefSources } from '../world/post-ref.js';
+import { resolvePostRefWithSource, type PostRefSources, type PostRefWithSource } from '../world/post-ref.js';
+import { lookupThreadPost, type NativePostSource } from '../world/thread-post-source.js';
 import { type RegisterToolsDeps, type ToolsCtx } from './tools-context.js';
 import { ownerPopclawId, resolvePersonRef } from './person-sources.js';
 import { confirmDiscipline, sendResultDiscipline, deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
@@ -143,7 +144,9 @@ export function registerWriteTools(ctx: ToolsCtx): void {
     socialToolFactory(deps.socialSendHost, (toolCtx: unknown) => ({
     name: 'popclaw_draft_reply',
     description:
-      'Draft a popclaw-native reply to a social-media post. Returns a draft preview and a draft_id. ' +
+      'Draft a reply to an external-platform post on X, Instagram, TikTok, or YouTube using its platform and post_id. ' +
+      'For a PopClaw-native post, use popclaw_draft_post with body and reply_to_event_id instead. ' +
+      'Returns a draft preview and a draft_id. ' +
       BODY_OWNERSHIP +
       confirmDiscipline('en'),
     parameters: DraftReplySchema,
@@ -160,6 +163,8 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         houseSlug: item.houseSlug || draftRuntime.egress?.home?.slug,
         actorVerified: item.actorVerified?.map(verified => ({ ...verified })),
       } : null;
+      const replyName = replyItem
+        ? displayNickname(draftRuntime.nameOf?.(replyItem.authorPopclawId ?? '')) || displayNickname(replyItem.handle) : '';
       const token = makeDraftToken('reply');
       // The snapshot, not `p`: the model still holds the parameters object it
       // passed in, and everything the closure reads off it at send time is
@@ -168,7 +173,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'reply',
         ...(replyItem?.authorPopclawId ? { recipientId: replyItem.authorPopclawId } : {}),
-        ...(replyItem?.handle ? { recipientLabel: `@${replyItem.handle}` } : {}),
+        ...(replyName ? { recipientLabel: `@${replyName}` } : {}),
         ...(replyItem?.houseSlug ? { house: replyItem.houseSlug } : {}),
         target: `${p.platform}:${p.post_id}`,
         body: String(p.body ?? '').trim(),
@@ -294,7 +299,12 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const token = makeDraftToken('message');
       // The person resolved above is the person this letter is bound to. A
       // frozen copy, because the object itself is handed back to the closure.
-      const pinned = Object.freeze({ ...person });
+      const pinned = Object.freeze({
+        ...person,
+        nickname: replySource
+          ? displayNickname(rt.nameOf?.(person.popclawId, replySource.senderNickname) ?? replySource.senderNickname) || person.nickname
+          : person.nickname,
+      });
       const snapshot: DraftSnapshot = {
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'dm',
@@ -375,67 +385,53 @@ export function registerWriteTools(ctx: ToolsCtx): void {
     name: 'popclaw_draft_post',
     description:
       'Draft a popclaw-native post (root, reply, or quote). Returns a draft preview + draft_id. ' +
-      'Use reply_to_event_id for a pure reply (hidden from follower feed); use quote_of_event_id ' +
+      'Pass the public /post/ link or visible short id in reply_to_event_id; the tool resolves the exact parent and previews its author, text and house. Use it for a pure reply (hidden from follower feed); use quote_of_event_id ' +
       'for an embedded-quote post (shown in feed with original card).' +
       BODY_OWNERSHIP +
       confirmDiscipline('en'),
     parameters: PopclawDraftPostSchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { body: string; reply_to_event_id?: string; quote_of_event_id?: string };
-      // C3: reply/quote references may arrive in the short
-      // human form popclaw_author_latest prints (a bare short id or a
-      // <webBaseUrl>/post/<short> link). Resolve them to the full 64-hex at
-      // DRAFT time, unique-or-refuse from trusted sources only — a refusal
-      // issues no draft_id, so the owner is never asked to confirm a reply
-      // whose target could not be pinned down (failing only after the
-      // confirmation would be the worst possible order of events; same rule
-      // as the DM attachment check above). Legacy full 64-hex ids pass
-      // straight through, exactly as before.
       const draftLang = ownerLang();
       let refSources: PostRefSources | undefined;
-      const resolveRef = async (raw: string): Promise<string | { text: string }> => {
-        if (refSources === undefined) {
-          try {
-            const rt = (await runtime()) as {
-              boot?: { webBaseUrl?: string };
-              worldFeedCache?: PostRefSources['cache'];
-            };
-            refSources = { webBaseUrl: rt?.boot?.webBaseUrl, cache: rt?.worldFeedCache };
-          } catch {
-            // r17 (Codex): a runtime() throw is NOT "a host with no cache"
-            // (the lenient unwired case) — it is "the cache cannot be
-            // checked right now": the local cache may hold a colliding id
-            // that is invisible, exactly like r15's unreadable case. The
-            // short-ref leg must refuse (resolvePostRef's cacheUnreachable),
-            // never sign off the observed mapping alone. Full 64-hex refs
-            // never reach this branch's failure — they pass through without
-            // any source. Deliberately NOT memoized beyond this one tool
-            // call: the next draft re-fetches runtime, so a recovered
-            // runtime is honored on the spot (failure does not stick).
-            refSources = { cacheUnreachable: true };
-          }
-        }
-        const r = resolvePostRef(raw, refSources, draftLang);
-        return r.ok ? r.eventId : { text: r.text };
+      let resolvedSource: NativePostSource | null = null;
+      const resolveRef = async (raw: string): Promise<PostRefWithSource> => {
+        let rt: Awaited<ReturnType<typeof runtime>> | undefined;
+        try { rt = await runtime(); }
+        catch { refSources = {cacheUnreachable: true}; }
+        refSources ??= {webBaseUrl: rt?.boot?.webBaseUrl, cache: rt?.worldFeedCache};
+        const houses = rt?.houseRuntime;
+        const targets = houses?.capturePublicReadTargets?.() ?? rt?.egress?.capturePlan?.().targets;
+        if (targets) refSources = {...refSources, mountedHouseSlugs: targets.map(target => target.slug),
+          assertSourceCurrent: slug => {
+            const target = targets.find(item => item.slug === slug);
+            if (!target) throw new Error('HOUSE_READ_SOURCE_NOT_MOUNTED');
+            if ('assertCurrent' in target && typeof target.assertCurrent === 'function') target.assertCurrent();
+          }};
+        const lookup = targets && houses?.houseReadFetch
+          ? (prefix: string) => lookupThreadPost(prefix, targets, origin => houses.houseReadFetch(origin),
+            failure => api.logger?.info(`popclaw: native parent lookup refused ${JSON.stringify(failure)}`)) : undefined;
+        return resolvePostRefWithSource(raw, refSources, lookup, draftLang);
       };
       let replyTo: string | undefined;
       let quoteOf: string | undefined;
       if (p.reply_to_event_id) {
         const r = await resolveRef(p.reply_to_event_id);
-        if (typeof r !== 'string') return { type: 'text' as const, text: r.text };
-        replyTo = r;
+        if (!r.ok) return { type: 'text' as const, text: r.text };
+        replyTo = r.eventId;
+        resolvedSource = r.source;
       }
       if (p.quote_of_event_id) {
         const r = await resolveRef(p.quote_of_event_id);
-        if (typeof r !== 'string') return { type: 'text' as const, text: r.text };
-        quoteOf = r;
+        if (!r.ok) return { type: 'text' as const, text: r.text };
+        quoteOf = r.eventId;
+        resolvedSource = r.source;
       }
       // Resolve the source and the home egress once. A later feed refresh or
       // a changed home must not redirect the manuscript the owner reviewed.
       const draftRuntime = await runtime();
       const targetId = replyTo ?? quoteOf;
-      const found = targetId ? draftRuntime?.worldFeedCache?.findByEventIdPrefix?.(targetId).item : null;
-      const source = found ? {...found} : null;
+      const source = resolvedSource ? {...resolvedSource} : null;
       const pinnedEgress = draftRuntime?.egress?.capturePlan?.().egress ?? draftRuntime?.egress;
       const house = source?.houseSlug ?? draftRuntime?.egress?.home?.slug;
       const token = makeDraftToken('post');
@@ -488,7 +484,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         targetLine,
         ...(snapshot.house ? [renderCopy(ownerLang(), 'socialSend.house', {house: snapshot.house})] : []),
         ...(source?.handle || source?.authorPopclawId ? [renderCopy(ownerLang(), 'socialSend.sourceAuthor', {
-          author: [source.handle, source.authorPopclawId].filter(Boolean).join(' '),
+          author: [displayNickname(draftRuntime.nameOf?.(source.authorPopclawId)) || displayNickname(source.handle), source.authorPopclawId].filter(Boolean).join(' '),
         })] : []),
         ...(source?.textPreview ? [renderCopy(ownerLang(), 'socialSend.sourcePreview', {context: sourceExcerpt(source.textPreview)})] : []),
         ...(targetId && (!source?.textPreview || !(source.handle || source.authorPopclawId)) ? [renderCopy(ownerLang(), 'socialSend.sourceUnavailable')] : []),

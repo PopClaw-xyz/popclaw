@@ -28,6 +28,16 @@ The root assigns and clears optional slots as runtime enters and leaves its
 lifecycle; the adapter must read them on the current turn, never at registration.
 Only routing paths and per-registration announcement state are cached here.
 
+## Current tool entry
+
+The standing routing block explains how to reach a named capability through the
+current host surface before presenting tool recipes. Direct tools remain direct.
+OpenClaw code mode uses its existing JavaScript exec catalog and callable handles;
+search mode uses the host's returned tool-call schema. The shipped social skill
+uses the same entry and does not diagnose a missing plugin from flat names alone.
+This changes guidance only: registration, tool policy, SDK owner context and the
+ordinary manuscript confirmation path remain unchanged.
+
 ## Host rationale
 
 The typed hook surface is `api.on`, not the host's internal `registerHook` table.

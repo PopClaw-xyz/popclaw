@@ -155,6 +155,7 @@ function setup(o: {
 
   const tools: Array<{
     name: string;
+    description: string;
     execute: (callId: string, params: unknown) => Promise<{ type: string; text: string }>;
   }> = [];
   const push = (tool: { name?: unknown; execute?: unknown }) => {
@@ -205,6 +206,7 @@ function brokenDbCache(): WorldFeedCache {
 function setupWithCache(cache: WorldFeedCache): { tools: ReturnType<typeof setup>['tools'] } {
   const tools: Array<{
     name: string;
+    description: string;
     execute: (callId: string, params: unknown) => Promise<{ type: string; text: string }>;
   }> = [];
   const push = (tool: { name?: unknown; execute?: unknown }) => {
@@ -260,6 +262,14 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('C3: author_latest short link → draft_post reply → send_draft', () => {
+  it('advertises the existing native reply route instead of treating it as an external-platform reply', () => {
+    const { tools } = setup({});
+    const external = findTool(tools, 'popclaw_draft_reply').description;
+    expect(external).toContain('X, Instagram, TikTok, or YouTube');
+    expect(external).toContain('popclaw_draft_post');
+    expect(external).toContain('reply_to_event_id');
+    expect(findTool(tools, 'popclaw_draft_post').description).toContain('reply_to_event_id');
+  });
   it('bare 10-char short id resolves and the sent envelope carries the full event_id (both sources present)', async () => {
     const { tools, pushed } = setup({ cacheEntries: [FULL_A] });
     await readLatest(tools);
@@ -639,6 +649,7 @@ describe('C3 r17: runtime failure is unverifiable (tool-initialization layer)', 
   const setupWriteTools = (runtime: unknown): { tools: ReturnType<typeof setup>['tools'] } => {
     const tools: Array<{
       name: string;
+      description: string;
       execute: (callId: string, params: unknown) => Promise<{ type: string; text: string }>;
     }> = [];
     const push = (tool: { name?: unknown; execute?: unknown }) => {

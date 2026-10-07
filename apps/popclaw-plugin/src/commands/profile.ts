@@ -13,7 +13,7 @@
 
 import { renderPassport, type VerifiedProfileInput } from '../identity/passport-renderer.js';
 import { deriveSigil, parseSigilInput } from '../invite/sigil.js';
-import { looksLikeBase58Id } from '../identity/person-resolver.js';
+import { looksLikeBase58Id, displayNickname } from '../identity/person-resolver.js';
 import { LORE_HOUSE_TIMEOUT_MS } from '../world/http-timeout.js';
 import { renderCopy } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
@@ -39,6 +39,9 @@ export interface ProfileCommandDeps {
    * identity is sitting right here. Absent → the old behaviour for everyone.
    */
   readonly self?: { readonly popclawId: string; readonly nickname: string } | null;
+  /** Display-only fallback from local resolution, scoped to the requested ID.
+   * Does not assert publication or add a verified profile/namecard. */
+  readonly knownPerson?: { readonly popclawId: string; readonly nickname: string };
 }
 
 export interface ProfileCommandArgs {
@@ -162,14 +165,19 @@ export async function runProfileCommand(
   // the addressable name, then their self-reported namecard nickname. For the
   // owner the order flips, matching status: the card is what they themselves
   // declared, while the native row is a registration-time snapshot nothing
-  // refreshes; then the local identity name, which is the one thing no house
+  // refreshes; the current local identity name comes before that native row
+  // and is the one thing no house
   // can know about a never-published `ranger-xxxxxx`. A name the owner TYPED
   // is left alone.
   if (!raw.includes('#')) {
-    const native = (body.profiles ?? []).find((p) => p.platform === 'popclaw')?.handle?.trim() ?? '';
-    const cardName = body.card?.nickname?.trim() ?? '';
-    const ownName = isSelf ? me!.nickname.trim() : '';
-    handle = isSelf ? cardName || native || ownName || handle : native || cardName || handle;
+    const native = displayNickname((body.profiles ?? []).find((p) => p.platform === 'popclaw')?.handle);
+    const cardName = displayNickname(body.card?.nickname);
+    const ownName = isSelf ? displayNickname(me!.nickname) : '';
+    // A hint for another ID must never label the response. Public evidence
+    // remains exactly the house's card/profiles; this is only the heading.
+    const knownName = deps.knownPerson?.popclawId === raw && body.popclaw_id === raw
+      ? displayNickname(deps.knownPerson.nickname) : '';
+    handle = isSelf ? cardName || ownName || native || knownName : native || cardName || knownName;
   }
 
   const profiles: VerifiedProfileInput[] = (body.profiles ?? []).map((p) => ({

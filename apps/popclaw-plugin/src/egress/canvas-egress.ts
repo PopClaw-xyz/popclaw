@@ -4,6 +4,8 @@ import { canvasSigningBytes } from '../canvas/canvas-signing.js';
 import { LORE_HOUSE_UPLOAD_TIMEOUT_MS } from '../world/http-timeout.js';
 
 export interface UploadCanvasOpts {
+  /** Checked after the last signing await, immediately before the HTTP effect. */
+  assertCurrent?: () => void;
   baseUrl: string;
   signer: Signer;
   nickname: string;
@@ -31,6 +33,7 @@ export async function uploadCanvas(opts: UploadCanvasOpts): Promise<{ url: strin
   });
   const endpoint = `${opts.baseUrl.replace(/\/$/, '')}/v1/canvas`;
   const timeout = opts.timeoutMs ?? LORE_HOUSE_UPLOAD_TIMEOUT_MS;
+  opts.assertCurrent?.();
   const res = await request(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
