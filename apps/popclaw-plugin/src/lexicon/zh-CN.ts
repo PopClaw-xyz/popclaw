@@ -238,6 +238,8 @@ export const ZH_CN: Lexicon = {
     'attachments.noInboundDir':
       '这台宿主没有告诉 popclaw 主人递进来的文件存在哪里，所以我列不出来。请主人直接把文件路径给我，走 attachment_path。',
     // {idTag} = the inbox message_id (what popclaw_show_inbox returns).
+    'dm.presentation.recipientAmbiguous': '「{ref}」对应 {count} 位。你想把信寄给谁？请从下面的「名号#印信」中选一位：',
+    'dm.presentation.recipientLookalikes': '没有印信对得上「{ref}」。下面 {count} 位只是名号相近，尚未确认是你要找的人。你指的是其中哪一位？',
     'dm.presentation.received': '📨 收到信件',
     'dm.presentation.from': '来自：{who}',
     'dm.presentation.attachment': '📎 附件：{what}',

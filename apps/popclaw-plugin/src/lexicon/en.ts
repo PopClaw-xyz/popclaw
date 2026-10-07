@@ -333,6 +333,8 @@ export const EN: Lexicon = {
       + 'Ask the owner for the path and pass it to attachment_path directly.',
     // {idTag} = the inbox message_id (what popclaw_show_inbox returns), so the
     // owner has a number to hand over when asking about "the letter just now".
+    'dm.presentation.recipientAmbiguous': '"{ref}" matches {count} people. Who should receive this letter? Choose a name and its short sigil below:',
+    'dm.presentation.recipientLookalikes': 'No sigil matches "{ref}". These {count} people have similar names; they are possible matches only. Is one of them your intended recipient?',
     'dm.presentation.received': '📨 Letter received',
     'dm.presentation.from': 'From: {who}',
     'dm.presentation.attachment': '📎 Attachment: {what}',

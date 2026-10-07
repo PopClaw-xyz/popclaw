@@ -254,7 +254,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const person = await resolvePersonRef(recipient, deps);
       if (person.kind !== 'resolved') {
         const ownerText = person.kind === 'ambiguous'
-          ? [renderCopy(ownerLang(), person.guessed ? 'person.sigilMissedNameLookalikes' : 'person.ambiguous', {ref: recipient, count: String(person.candidates.length)}),
+          ? [renderCopy(ownerLang(), person.guessed ? 'dm.presentation.recipientLookalikes' : 'dm.presentation.recipientAmbiguous', {ref: recipient, count: String(person.candidates.length)}),
             ...person.candidates.map(c => `${c.nickname || ''}#${c.sigil}`)].join('\n')
           : unresolvedText(recipient, person);
         return {type: 'text' as const, text: JSON.stringify({owner_text: ownerText,
