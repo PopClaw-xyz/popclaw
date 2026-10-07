@@ -159,7 +159,7 @@ export function putIssue(
 ): void {
   if (store.size >= MAX) store.delete(store.keys().next().value as string);
   const entry: StoredIssue = {
-    issue,
+    issue: JSON.parse(JSON.stringify(issue)) as IssueData,
     created_at: Date.now(),
     ...(session !== undefined ? { servedSession: session } : {}),
     ...(fromCandidate !== undefined ? { fromCandidate } : {}),
@@ -177,7 +177,8 @@ export function putIssue(
 }
 
 export function getIssue(token: string, dir?: string): IssueData | undefined {
-  return entryOf(token, dir)?.issue;
+  const issue = entryOf(token, dir)?.issue;
+  return issue ? JSON.parse(JSON.stringify(issue)) as IssueData : undefined;
 }
 
 /** The candidate page this issue was picked from, if it was stamped with one. */

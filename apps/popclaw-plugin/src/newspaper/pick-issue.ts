@@ -2,7 +2,7 @@
  * Second half of the paper's choosing step: the writer read the candidate page and named
  * the numbers it wants, and this turns that answer into the issue.
  *
- * It never goes back to the feed. The candidate set was stored whole when the page was
+ * It never regathers the feed; retained public evidence is only revalidated. The candidate set was stored whole when the page was
  * built, so the numbers the writer is answering with mean exactly what they meant when it
  * read them — re-gathering here would let the world move underneath the picks and silently
  * shift every number (the same trap the offline preview harness documents).
@@ -13,6 +13,7 @@
  * accounts 63% of the page. A cap that only lives in the prompt is a cap that fails on the
  * exact day it matters.
  */
+import { retainPublicMaterialBasis, publicCoverageText } from './public-material-source.js';
 import { weightedChars } from './gather-materials.js';
 import { pageBudgetDecision, pageBudgetLogLine, pageBudgetNow } from './host-budget.js';
 import { getIssue, putIssue } from './issue-store.js';
@@ -21,6 +22,7 @@ import { houseCounts, type IssueData, type PulseItem } from './issue.js';
 import { authorKey, candidateNumberAt, isCandidateId } from './issue-identity.js';
 
 export interface PickOptions {
+  validateMaterials?: (issue: IssueData) => void;
   /** Where the candidate set was stored and where the issue goes. */
   manifestDir?: string;
   /** Mints the publish token the writing half will carry. */
@@ -116,6 +118,7 @@ export function buildIssueFromPicks(
       message: 'candidate set not found or expired — call popclaw_newspaper again with no picks to get a fresh candidate page',
     };
   }
+  opts.validateMaterials?.(candidates);
   const notes: string[] = [];
   const { list: picks, why } = readPicks(rawPicks);
   const wanted = new Set<number>();
@@ -218,8 +221,9 @@ export function buildIssueFromPicks(
   // that picks three hundred items would sail straight past it and get its material cut in
   // the middle. Trim the oldest until it fits, and say so.
   let over = false;
-  const brief = (list: readonly PulseItem[]): string =>
-    buildNewspaperPrompt({ ...issue, pulse: list }, {
+  const coverage = publicCoverageText(candidates.publicCoverage ?? []);
+  const brief = (list: readonly PulseItem[]): string => {
+    const page = buildNewspaperPrompt({ ...issue, pulse: list }, {
       contentRules: opts.contentRules,
       publishToken,
       leadMax: opts.leadMax,
@@ -227,6 +231,8 @@ export function buildIssueFromPicks(
       overBudget: over,
       sessionKey: opts.sessionKey,
     });
+    return coverage ? `${coverage}\n\n${page}` : page;
+  };
   let laidOut: readonly PulseItem[] = kept;
   let payload = brief(laidOut);
   const budget = pageBudgetNow(opts.sessionKey);
@@ -259,7 +265,11 @@ export function buildIssueFromPicks(
   // The candidate stamp (2026-09-12): this issue records the candidate page it was
   // picked from, so a hand-in that carries the candidate id where the material page's
   // id belongs can be bound by ancestry instead of refused twice over.
-  putIssue(publishToken, { ...issue, pulse: laidOut }, opts.manifestDir, opts.sessionKey, candidateToken);
+  let retained = { ...issue, pulse: laidOut };
+  if (candidates.publicMaterials) retained = retainPublicMaterialBasis(retained, candidates.publicMaterials.references);
+  opts.validateMaterials?.(retained);
+  putIssue(publishToken, retained, opts.manifestDir, opts.sessionKey, candidateToken);
+
   return { kind: 'ready', payload, publishToken, notes };
 }
 

@@ -818,6 +818,9 @@ export const EN: Lexicon = {
     // timeout budget); still in line when the deadline arrived.
     'newspaper.dispatch.reason.queued':
       'the workshop never got its turn — still queued when the wait ran out (the host may be busy)',
+    'newspaper.dispatch.reason.empty': 'no usable newspaper materials were collected in this window',
+    'newspaper.dispatch.reason.partial-no-material': 'public coverage was incomplete and no usable newspaper materials were collected',
+    'newspaper.dispatch.reason.source-refused': 'a used public material source changed or could not be verified; gather a fresh page',
     'newspaper.dispatch.reason.noReceipt':
       "the workshop finished its run but the edition could not be published (no publish receipt came back)",
     // Flash-completion batch mandate (2026-09-03 night ruling): the product MUST
@@ -1191,6 +1194,11 @@ export const EN: Lexicon = {
     'newspaper.page.deckCount': '{paper} · {date} · section {index} · {character} · {count} items ({front} on the front page)',
     'newspaper.page.houseList': "the lore-house's own list, as of {asOf}",
     'newspaper.page.onFront': '{count} from this column are on the front page.',
+    'newspaper.source.unavailable': '{house}: public materials unavailable; this edition cannot confirm an empty window.',
+    'newspaper.source.partial': '{house}: public coverage is incomplete; this edition uses only verified received materials.',
+    'newspaper.source.refused': 'Public material source changed or cannot be verified ({reason}). Gather a fresh candidate page before continuing.',
+    'newspaper.source.savedRefused': 'The local paper was saved at {path}. Delivery stopped because its public source changed or could not be verified ({reason}). Do not automatically resend.',
+    'newspaper.source.unsupportedDraft': 'This tool creates a complete personalized newspaper, including configured publisher delivery. Draft-only, preview-only or public-only constraints are not supported; no newspaper was started.',
     'newspaper.page.quietHouse': 'Nothing new from this lore-house today.',
     'newspaper.page.ear.awaiting': 'AWAITING REPLY',
     'newspaper.page.ear.newFaces': 'NEW FACES',

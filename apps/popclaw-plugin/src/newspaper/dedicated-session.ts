@@ -149,9 +149,10 @@ export interface NewspaperDispatchRecord {
  * fact. So nothing here is taken from the child's words: each flag is set by the tool entry
  * point that performed the thing, at the moment it performed it.
  *
- * Content-free by the same contract as the rest of the record: four booleans.
+ * Content-free: stage booleans and one bounded collection outcome.
  */
 export interface NewspaperDispatchStage {
+  collection?: 'empty' | 'partial-no-material' | 'source-refused';
   /** A candidate page was built and returned to the child. */
   candidatePage: boolean;
   /** The child came back with picks and a material page was built and returned. */
@@ -190,11 +191,18 @@ const stages = (): Map<string, NewspaperDispatchStage> =>
 
 export const NewspaperStageStore = {
   /** Record that this session reached `step`. A no-op outside a workshop session. */
-  note(sessionKey: string | undefined, step: keyof NewspaperDispatchStage): void {
+  note(sessionKey: string | undefined, step: Exclude<keyof NewspaperDispatchStage, 'collection'>): void {
     if (!isDedicatedSession(sessionKey)) return;
     const key = sessionKey!;
-    stages().set(key, { ...(stages().get(key) ?? noStage()), [step]: true });
+    const next = { ...(stages().get(key) ?? noStage()), [step]: true };
+    if (step === 'candidatePage') delete next.collection;
+    stages().set(key, next);
   },
+  collection(sessionKey: string | undefined, outcome: NonNullable<NewspaperDispatchStage['collection']>): void {
+    if (!isDedicatedSession(sessionKey)) return;
+    stages().set(sessionKey!, { ...(stages().get(sessionKey!) ?? noStage()), collection: outcome });
+  },
+  peek(sessionKey: string): NewspaperDispatchStage | undefined { return stages().get(sessionKey); },
   /** Read and consume this run's stages — one dispatch, one ledger line. */
   take(sessionKey: string): NewspaperDispatchStage | undefined {
     const found = stages().get(sessionKey);
@@ -664,12 +672,12 @@ export async function runDedicatedNewspaper(deps: DedicatedDispatchDeps): Promis
    * not become a new way to lose the paper.
    */
   const record = (outcome: NewspaperDispatchRecord['outcome'], reason?: string): void => {
+    const stage = NewspaperStageStore.take(childKey);
     if (!deps.recordDispatch) return;
     try {
       const b = pageBudgetDecision(childKey);
       // Consumed here, with the line it belongs to: one dispatch leaves one record, and
       // whatever the child did after that record is another run's business.
-      const stage = NewspaperStageStore.take(childKey);
       deps.recordDispatch({
         at: new Date().toISOString(),
         ...(runId ? { runId } : {}),
@@ -710,6 +718,9 @@ export async function runDedicatedNewspaper(deps: DedicatedDispatchDeps): Promis
       reason = renderCopy(lang, 'newspaper.dispatch.reason.timeout', { minutes });
     } else if (wait.status === 'pending') {
       reason = renderCopy(lang, 'newspaper.dispatch.reason.queued');
+    } else if (NewspaperStageStore.peek(childKey)?.collection) {
+      const collection = NewspaperStageStore.peek(childKey)!.collection!;
+      reason = renderCopy(lang, `newspaper.dispatch.reason.${collection}`);
     } else {
       reason = renderCopy(lang, 'newspaper.dispatch.reason.noReceipt');
     }

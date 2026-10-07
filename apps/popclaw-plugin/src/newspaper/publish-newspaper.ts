@@ -22,6 +22,7 @@
  * file we could not write.
  * See spec 2026-06-18.
  */
+import { PublicMaterialRefusal } from './public-material-source.js';
 import type { Signer } from '../identity/signer.js';
 import { putEdit, deleteIssue } from './issue-store.js';
 import { formatHouseCounts, type IssueData } from './issue.js';
@@ -48,12 +49,14 @@ const footerOf = (lang: Lang): string => `\n\n——\n${renderCopy(lang, 'newspa
 const MAX_CANVAS_BYTES = 2 * 1024 * 1024;
 
 export interface PublishDeps {
+  validateMaterials?: (issue: IssueData) => void;
   upload: (a: {
     baseUrl: string;
     signer: Signer;
     nickname: string;
     title: string;
     html: string;
+    assertCurrent?: () => void;
   }) => Promise<{ url: string }>;
   signer: Signer;
   nickname: string;
@@ -180,13 +183,15 @@ function piggybackOf(
 export async function publishNewspaper(
   deps: PublishDeps,
   input: { publishToken?: string; edit: unknown; teaser?: string },
-): Promise<{ text: string; landed?: boolean; accepted?: boolean }> {
+): Promise<{ text: string; landed?: boolean; accepted?: boolean; sourceRefused?: boolean }> {
   const lang = deps.lang ?? ownerLang();
   const { style, notes: styleNotes } = deps.style ?? { style: DEFAULT_STYLE, notes: [] };
 
   const admission = admitHandIn(input, deps, lang);
   if (admission.kind === 'refused') return { text: admission.text };
   const { publishToken, issue, edit, notes: admissionNotes } = admission;
+  const assertCurrent = (): void => deps.validateMaterials?.(issue);
+  assertCurrent();
   // The live nickname signs the paper (doorbell §6.1): masthead attribution and
   // the share line at the foot. The issue's own `ownerNickname` is a gather-time
   // snapshot; publish hands the renderer the name it would put on the upload.
@@ -198,6 +203,7 @@ export async function publishNewspaper(
   // caller cannot forget to pass it. Asked only when there is a doorbell to
   // keep honest — a paper nobody can publish prints no chips at all.
   const ownerPopclawId = publisherConfigured ? await deps.signer.popclawId() : '';
+  assertCurrent();
   const page = renderNewspaper(issue, edit, style, lang, {
     ownerNickname: deps.nickname,
     fonts: deps.fonts ?? 'web',
@@ -220,6 +226,7 @@ export async function publishNewspaper(
   const baked = deps.avatars
     ? await inlineAvatars(page.html, { ...deps.avatars, mode: avatarMode })
     : { html: monogramFallback(page.html), notes: [] };
+  assertCurrent();
   const teaser = edit.teaser ?? input.teaser ?? '';
   // The writer could not finish in one hand-in. Since the owner struck the fixed count
   // (2026-08-28) this is the exception rather than the rule — the writer picks what it can
@@ -262,6 +269,7 @@ export async function publishNewspaper(
   // links to the same day's paper, the first one gutted, is worse than waiting for the real
   // one. His own rule settles it: "too few, or empty, is no good either" (2026-08-28).
   if (unfinished) {
+    assertCurrent();
     settle();
     return {
       // Not landed, but the copy in this hand-in was kept — the difference the dispatch
@@ -280,6 +288,7 @@ export async function publishNewspaper(
   // exists, so nothing below runs if the file did not get written.
   let localPath: string;
   let saved: SavedNewspaperIssue;
+  assertCurrent();
   try {
     saved = deps.archive.save({ token: publishToken, html, nowMs: Date.now() });
     localPath = saved.path;
@@ -291,15 +300,21 @@ export async function publishNewspaper(
   }
   // P7: the paper is out — it is on the owner's own disk. The url of a publish is
   // the file they can open; a short link, when there is one, is a copy of it.
-  safeRecord(deps.socialLog, { kind: 'newspaper_published', text: publishSummary(issue), url: localPath });
-  // Doorbell §5: the author set is answerable the moment the owner can read the
-  // paper it came from, which is now — with or without a publisher. Descriptors
-  // quote the headlines this very page printed (`headsByNumber`).
-  recordFollowableSafely(
-    deps.recordFollowable,
-    followableAuthorsOf(issue, page.headsByNumber, Date.now()),
-  );
-  settle();
+  try {
+    assertCurrent();
+    safeRecord(deps.socialLog, { kind: 'newspaper_published', text: publishSummary(issue), url: localPath });
+    // Doorbell §5: the author set is answerable the moment the owner can read the
+    // paper it came from, which is now — with or without a publisher. Descriptors
+    // quote the headlines this very page printed (`headsByNumber`).
+    assertCurrent();
+    recordFollowableSafely(
+      deps.recordFollowable,
+      followableAuthorsOf(issue, page.headsByNumber, Date.now()),
+    );
+    assertCurrent();
+    settle();
+  } catch (error) { return { landed: true, sourceRefused: true,
+    text: renderCopy(lang, 'newspaper.source.savedRefused', { path: localPath, reason: String(error) }) }; }
 
   const whereItIs = [
     renderCopy(lang, 'newspaper.publish.localIssue', { path: localPath }),
@@ -315,15 +330,19 @@ export async function publishNewspaper(
     publisherNotes.push(renderCopy(lang, 'newspaper.publish.publisherOffNote'));
   } else {
     try {
+      assertCurrent();
       const { url } = await deps.upload({
         baseUrl: deps.canvasBaseUrl!,
         signer: deps.signer,
         nickname: deps.nickname,
         title: renderCopy(lang, 'newspaper.publish.canvasTitle'),
         html,
+        assertCurrent,
       });
       linkLine = `\n\n${renderCopy(lang, 'newspaper.publish.fullText', { url })}`;
     } catch (err) {
+      if (err instanceof PublicMaterialRefusal) return { landed: true, sourceRefused: true,
+        text: renderCopy(lang, 'newspaper.source.savedRefused', { path: localPath, reason: err.code }) };
       publisherNotes.push(renderCopy(lang, 'newspaper.publish.uploadFailedNote', { error: String(err) }));
       // The disk copy was written assuming this would work (doorbell on ⇒ colophon
       // promised a share link). It did not, so the master copy — the file the

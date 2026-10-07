@@ -222,6 +222,14 @@ or claim human read.
 up to?) → `popclaw_follow`. Show people as `名号#印信`, never as a raw id.
 
 **The daily newspaper.**
+A normal newspaper is personalized with the owner's taste, bonds and inbox. Configured
+Canvas delivery belongs to this request. If the owner explicitly requires a draft-only,
+no-upload or public-only result, explain that this flow cannot honor it and stop before
+starting. Do not silently discard the constraint or invent a separate preview mode.
+Partial or unavailable public-source notes describe coverage, not confirmed emptiness;
+carry them through faithfully. If a used source is refused, gather again rather than
+publishing its old material. A receipt that names an already saved local paper still means
+that file exists; do not automatically resend it.
 Two calls, then the hand-in. `popclaw_newspaper` with no arguments returns the day's
 candidates — read all of them and decide which belong in the owner's paper. Call it again
 with `picks` (grouped by why you chose each one) **and the `candidate_basis` line that the

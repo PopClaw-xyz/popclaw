@@ -1,7 +1,7 @@
 import { houseBindingBlocked } from '../../world/house-recovery-fence.js';
 import { HouseRecovery, type HouseRecoveryPort } from '../../world/house-recovery.js';
 import { projectWorldAgentContext, type WorldAgentContextQuery, type WorldAgentContextResult } from '../../world/world-agent-context.js';
-import { storageDatabasePathAllowed, readStorageControl, assertStorageBootstrap, type RecoveryPath } from '../../host/storage-maintenance.js';
+import { storageDatabasePathAllowed, storageDatabaseGeneration, readStorageControl, assertStorageBootstrap, type RecoveryPath } from '../../host/storage-maintenance.js';
 /** One composition seam for OpenClaw, MCP and the standalone daemon/CLI. */
 import { popclaw } from '@popclaw/contracts';
 import type { Signer } from '../../identity/signer.js';
@@ -36,6 +36,7 @@ import { declarationFingerprint, readVerifiedDeclaration, sessionReadSelected } 
 import { pinnedBinding } from '../../world/house-binding-pin.js';
 import { isLoopbackOrigin } from '../../social-graph/relation-host.js';
 import { isPrivateAddressHost, isPrivateAddressOrigin } from './private-address.js';
+import type { PublicMaterialCapture } from '../../ingress/public-journal-reader.js';
 import type { PublicDisplayCapture } from '../../ingress/public-feed-display.js';
 import type { ExecutionCatalogRow } from '../../host/execution-store.js';
 import { PUBLIC_JOURNAL_TABLES, ACTION_RECEIPT_FEATURE_TABLES, NATIVE_ACTION_FEATURE_TABLES } from '../../host/execution-store-schema.js';
@@ -510,6 +511,55 @@ export class HouseRuntime {
     assertCurrent();
     return { executionDb: partition.db, capability: captured.capability, producerPolicy: captured.producerPolicy,
       history: captured.history || !!captured.control?.held.length, assertCurrent };
+  }
+
+  /** Trusted adapter selection, never inferred from a mutable issue ledger. */
+  get newspaperPublicV1(): boolean { return this.opts.publicV1Mode === true; }
+
+  publicMaterialSources(): readonly { origin: string; slug: string; capture(): PublicMaterialCapture }[] {
+    return [...this.targets.entries()].map(([origin, slug]) => ({ origin, slug, capture: () => {
+      const house = this.stores.get(origin);
+      if (!house) throw new Error('NEWSPAPER_PUBLIC_STORE_UNAVAILABLE');
+      return this.capturePublicMaterial(house);
+    } }));
+  }
+
+  /** Business consumption of individually verified public materials needs no resident owner. */
+  capturePublicMaterial(house: HouseStore): PublicMaterialCapture {
+    const catalog = this.opts.executionStores, origin = normalizeHouseOrigin(house.baseUrl);
+    if (!catalog || !this.newspaperPublicV1 || !house.executionDb || this.stores.get(origin) !== house
+      || house.slug !== hostDbSlug(origin)) throw new Error('NEWSPAPER_PUBLIC_STORE_UNAVAILABLE');
+    const gate = this.publicReadGate(origin);
+    const snapshot = () => {
+      assertStorageBootstrap(catalog.options.paths);
+      if (!gate.isActive() || !this.storageAllows('consumers')) throw new Error('NEWSPAPER_PUBLIC_AUTHORITY_CHANGED');
+      const control = readStorageControl(catalog.options.paths);
+      if (!control && this.opts.db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='storage_control_required_v1'")) throw new Error('NEWSPAPER_PUBLIC_CONTROL_MISSING');
+      const view = readHouseCapabilityView(this.opts.db, origin), capability = view?.publicStreamCapability;
+      if (!view || view.publicStream.validation !== 'valid' || !capability) throw new Error('NEWSPAPER_PUBLIC_TRUST_UNAVAILABLE');
+      const participation = readParticipation(this.opts.db, origin)!;
+      const pin = normalizeAckKeyHex(this.opts.configuredPinFor?.(origin) || participation.ack_key_hex || '');
+      if (!pin || pin !== normalizeAckKeyHex(capability.house.houseKey)) throw new Error('NEWSPAPER_PUBLIC_PIN_CHANGED');
+      const row = this.opts.db.queryOne<ExecutionCatalogRow>('SELECT * FROM execution_store_catalog_v1 WHERE origin=?', [origin]);
+      const required: unknown = JSON.parse(row?.required_tables ?? '[]');
+      if (!row || row.actor_id !== catalog.options.actorId || !Array.isArray(required)
+        || !PUBLIC_JOURNAL_TABLES.every(name => required.includes(name))) throw new Error('NEWSPAPER_PUBLIC_JOURNAL_UNAVAILABLE');
+      const producerPolicy = publicProducerPolicy(view);
+      const authority = JSON.stringify({ origin, slug: house.slug, actor: catalog.options.actorId,
+        partition: { store: row.store_id, layout: row.layout_version }, storageGeneration: storageDatabaseGeneration(this.opts.db), capability, producerPolicy,
+        participation: { installation: participation.installation_id, op: participation.op_seq,
+          session: participation.session_id, revision: participation.house_revision, pin: participation.ack_key_hex } });
+      return { capability, producerPolicy, authority };
+    };
+    const captured = snapshot(), partition = catalog.open(origin);
+    if (partition.db !== house.executionDb) throw new Error('NEWSPAPER_PUBLIC_HANDLE_CHANGED');
+    catalog.verifySelected(origin, partition);
+    const assertCurrent = () => {
+      if (snapshot().authority !== captured.authority || this.stores.get(origin) !== house
+        || !catalog.isPublicJournalCurrent(origin, partition)) throw new Error('NEWSPAPER_PUBLIC_SOURCE_UPDATED');
+    };
+    assertCurrent();
+    return { executionDb: partition.db, ...captured, history: this.publicReadStatus(origin).transport !== 'active', assertCurrent };
   }
 
   /**

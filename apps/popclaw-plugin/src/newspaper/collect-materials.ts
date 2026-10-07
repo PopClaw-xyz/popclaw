@@ -3,6 +3,7 @@
  * people, letters and house context stay together here; candidate page sizing
  * and persistence belong to gather-materials.ts.
  */
+import type { PublicMaterialBatch } from './public-material-source.js';
 import type { CachedFeedItem, ReadableFeedItem } from '../ingress/world-feed-cache.js';
 import { personVerdict } from '../butler/person-verdict.js';
 import type { InboxItem } from '../messaging/inbox-store.js';
@@ -94,6 +95,7 @@ function blockScore(a: AuthorBlock): number {
 }
 
 export interface MaterialSources {
+  publicBatch?: PublicMaterialBatch;
   cache: {
     recentForReading(n: number): ReadableFeedItem[];
     /** First-seen time (seconds) for each author on this machine. Not implemented = no newcomer tag (an honest degradation). */
@@ -272,8 +274,7 @@ export function collectNewspaperMaterials(
     opts.hours === undefined ? startOfLocalDay(sources.now(), tz) : sources.now() - opts.hours * 3600;
   const bondOf = (id: string): NewspaperBond | null =>
     (id && sources.bondOf ? sources.bondOf(id) : null) ?? null;
-  const inWindow = sources.cache
-    .recentForReading(MAX_SCAN)
+  const inWindow = (sources.publicBatch?.items ?? sources.cache.recentForReading(MAX_SCAN))
     .filter((i) => i.platformPostCreatedAt >= start)
     .filter((i) => !isMuted(bondOf(i.authorPopclawId)));
 
@@ -341,7 +342,7 @@ export function collectNewspaperMaterials(
   };
 
   // ——— P5 first seen on this machine: one GROUP BY over all authors, not one query per item.
-  const firstSeen = sources.cache.authorFirstSeen?.();
+  const firstSeen = sources.publicBatch ? undefined : sources.cache.authorFirstSeen?.();
   /**
    * sigil → this machine's popclaw_id reverse-lookup table (see `idOfSigil`). If
    * a digest's `owner` doesn't carry `popclaw_id` (an old lore-house / an old

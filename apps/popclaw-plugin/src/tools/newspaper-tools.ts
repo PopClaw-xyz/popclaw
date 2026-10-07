@@ -1,3 +1,7 @@
+import type { HouseRuntime } from '../runtime/house-lifecycle/house-runtime.js';
+import { publicMaterialSource, PublicMaterialRefusal } from '../newspaper/public-material-source.js';
+import { renderCopy } from '../lexicon/index.js';
+import { ownerLang } from '../lexicon/owner-language.js';
 /** The daily paper's two tools: gather/pick (popclaw_newspaper) and publish. */
 
 import { createLocalNewspaperIssueArchive } from '../host/local-newspaper-artifacts.js';
@@ -34,6 +38,7 @@ export function registerNewspaperTools(ctx: ToolsCtx): void {
     name: 'popclaw_newspaper',
     description:
       "Use this tool for the owner's daily paper or morning edition; never create one from memory or chat context. " +
+      "This is a complete personalized paper with taste, bonds and inbox. Configured Canvas delivery is part of this request; draft-only or no-upload constraints are unsupported. " +
       "Normally call twice: (1) no arguments returns the day's candidates grouped by author, with taste and bond-book " +
       "context; read all candidates and choose. (2) pass picks with the printed candidate_basis copied verbatim, or a real " +
       "candidate_token; without either, selection is refused, never guessed. Write only from the returned full material. " +
@@ -109,6 +114,7 @@ export function registerNewspaperTools(ctx: ToolsCtx): void {
         NewspaperStageStore.note(toolCtx.sessionKey, 'publishCalled');
         const p = params as { publish_token?: string; edit: unknown };
         const rt = (await runtime()) as {
+          houseRuntime?: HouseRuntime;
           boot: {
             signer: PublishDeps['signer'];
             nickname: string;
@@ -123,9 +129,11 @@ export function registerNewspaperTools(ctx: ToolsCtx): void {
           /** The follow doorbell's pending store — gateway root only; the piggyback leg is simply off elsewhere. */
           pendingFollows?: { listPending(): Array<{ display_name: string }> };
         };
+        const materialSource = publicMaterialSource(rt);
         const socialLog = await socialLogOf(runtime);
         const r = await publishNewspaper(
           {
+            ...(materialSource ? { validateMaterials: (issue) => materialSource.validate(issue) } : {}),
             upload: rt.uploadCanvas,
             signer: rt.boot.signer,
             nickname: rt.boot.nickname,
@@ -189,14 +197,16 @@ export function registerNewspaperTools(ctx: ToolsCtx): void {
         // waiting dispatcher as success — anything else must surface as the
         // honest failure it is (2026-09-03: a cron run "succeeded" with zero
         // output and nobody knew).
-        recordOutcome(r.landed ? { ok: true, receiptText: r.text } : { ok: false, reason: briefReason(r.text) });
+        if (r.sourceRefused) NewspaperStageStore.collection(toolCtx.sessionKey, 'source-refused');
+        recordOutcome(r.landed && !r.sourceRefused ? { ok: true, receiptText: r.text } : { ok: false, reason: r.sourceRefused ? r.text : briefReason(r.text) });
         // `accepted` is publish's own word for "this hand-in's copy was kept" — the
         // published issue, or a batch saved with more still to write. A refusal is not it.
         if (r.accepted) NewspaperStageStore.note(toolCtx.sessionKey, 'publishAccepted');
         return { type: 'text' as const, text: r.text };
       } catch (err) {
+        if (err instanceof PublicMaterialRefusal) NewspaperStageStore.collection(toolCtx.sessionKey, 'source-refused');
         recordOutcome({ ok: false, reason: String(err instanceof Error ? err.message : err) });
-        return { type: 'text' as const, text: failureText('popclaw_publish_newspaper', err) };
+        return { type: 'text' as const, text: err instanceof PublicMaterialRefusal ? renderCopy(ownerLang(), 'newspaper.source.refused', { reason: err.code }) : failureText('popclaw_publish_newspaper', err) };
       }
     },
     }),

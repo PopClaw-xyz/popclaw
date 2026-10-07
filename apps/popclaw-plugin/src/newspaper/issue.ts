@@ -1,3 +1,4 @@
+import type { PublicMaterialBasis, PublicMaterialCoverage } from './public-material-source.js';
 import { renderCopy } from '../lexicon/index.js';
 import { langOf, ownerLangTag } from '../lexicon/owner-language.js';
 import { ownerTz } from '../time/time-context.js';
@@ -305,6 +306,8 @@ export function castList(pulse: readonly PulseItem[]): CastMember[] {
  * anything that reorders this array breaks every issue in flight.
  */
 export interface IssueData {
+  publicMaterials?: PublicMaterialBasis;
+  publicCoverage?: readonly PublicMaterialCoverage[];
   /** BCP-47 tag of the owner's language (`ownerLangTag()`), for the page's `lang` attribute and the label set. */
   language: string;
   /** The masthead date, already formatted in the owner's timezone. */
