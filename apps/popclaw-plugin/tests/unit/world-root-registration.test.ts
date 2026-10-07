@@ -28,18 +28,25 @@ afterEach(() => { roots.splice(0).forEach(root => rmSync(root, { recursive: true
 function register(hostContext: unknown = {agentId: 'main', getRuntimeConfig: () => ({})}) {
   const state = mkdtempSync(join(tmpdir(), 'world-root-register-')); roots.push(state);
   const tools: Array<{ name: string; parameters: unknown; execute(id: string, params: unknown): Promise<unknown> }> = [];
+  type Tool = typeof tools[number];
+  type Factory = (context: unknown) => Tool | Tool[] | null | undefined;
   const factoryNames: string[] = [];
   const api = {
     registrationMode: 'full', config: {}, pluginConfig: {},
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     runtime: { state: { resolveStateDir: () => state }, system: { enqueueSystemEvent: vi.fn(), runHeartbeatOnce: vi.fn() } },
-    registerTool: (tool: typeof tools[number] | ((context: unknown) => typeof tools[number]), options?: {name?: string}) => {
-      if (typeof tool === 'function') {
-        const resolved = tool(hostContext);
-        expect(resolved.name).toBe(options?.name);
-        factoryNames.push(resolved.name);
-        tools.push(resolved);
-      } else tools.push(tool);
+    registerTool: (registration: Tool | Factory | { contextVersion: 2; create: Factory }, options?: { name?: string; names?: string[] }) => {
+      const isFactory = typeof registration === 'function' || 'contextVersion' in registration;
+      const resolved = typeof registration === 'function' ? registration(hostContext)
+        : 'contextVersion' in registration ? registration.create(hostContext) : registration;
+      for (const tool of Array.isArray(resolved) ? resolved : resolved ? [resolved] : []) {
+        if (isFactory) {
+          if (options?.names) expect(options.names).toContain(tool.name);
+          else expect(tool.name).toBe(options?.name);
+          factoryNames.push(tool.name);
+        }
+        tools.push(tool);
+      }
     },
     registerCommand: vi.fn(), registerService: vi.fn(), registerInteractiveHandler: vi.fn(), on: vi.fn(),
   };
@@ -58,7 +65,12 @@ describe('world tools at the actual native plugin registration boundary', () => 
     const fetch = vi.fn(() => { throw new Error('UNEXPECTED_NETWORK'); }); vi.stubGlobal('fetch', fetch);
     const { tools, state, factoryNames } = register();
     expect(factoryNames).toContain('popclaw_world_invoke');
-    expect(factoryNames.filter(name => name.startsWith('popclaw_world_'))).toEqual(['popclaw_world_invoke']);
+    // The native route adapter now gives every ordinary world tool a trusted
+    // factory context, while retaining the exact discoverable names/schemas.
+    expect(factoryNames.filter(name => name.startsWith('popclaw_world_'))).toEqual([
+      'popclaw_world_guide', 'popclaw_world_summary',
+      ...Object.keys(WORLD_COMMAND_SCHEMAS).map(command => `popclaw_world_${command}`),
+    ]);
     for (const [command, schema] of Object.entries(WORLD_COMMAND_SCHEMAS)) {
       const matching = tools.filter(tool => tool.name === `popclaw_world_${command}`);
       expect(matching).toHaveLength(1);

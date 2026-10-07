@@ -24,13 +24,26 @@ afterEach(() => { roots.splice(0).forEach(root => rmSync(root, {recursive: true,
 function register() {
   const state = mkdtempSync(join(tmpdir(), 'house-slash-root-')); roots.push(state);
   const commands: Array<{name: string; handler(ctx: {args: string}): Promise<{text: string}>}> = [];
-  const tools: Array<{name: string}> = [];
+  type Tool = { name: string };
+  type Factory = (context: unknown) => Tool | Tool[] | null | undefined;
+  const tools: Tool[] = [];
+  const hostContext = { agentId: 'main', getRuntimeConfig: () => ({}) };
   const api = {
     registrationMode: 'full', config: {}, pluginConfig: {},
     logger: {debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn()},
     runtime: {state: {resolveStateDir: () => state}, system: {enqueueSystemEvent: vi.fn(), runHeartbeatOnce: vi.fn()}},
     registerCommand: (command: typeof commands[number]) => commands.push(command),
-    registerTool: (tool: typeof tools[number]) => tools.push(tool),
+    // SDK 9.8 accepts both function factories and v2 descriptors. Resolve
+    // their returned tools; Function.name is not the discoverable tool name.
+    registerTool: (registration: Tool | Factory | { contextVersion: 2; create: Factory }, options?: { name?: string; names?: string[] }) => {
+      const resolved = typeof registration === 'function' ? registration(hostContext)
+        : 'contextVersion' in registration ? registration.create(hostContext) : registration;
+      for (const tool of Array.isArray(resolved) ? resolved : resolved ? [resolved] : []) {
+        if (options?.names) expect(options.names).toContain(tool.name);
+        else expect(tool.name).toBe(options?.name);
+        tools.push(tool);
+      }
+    },
     registerService: vi.fn(), registerInteractiveHandler: vi.fn(), on: vi.fn(),
   };
   plugin.register!(api as unknown as Parameters<NonNullable<typeof plugin.register>>[0]);
@@ -42,7 +55,9 @@ describe('house commands through the actual plugin register callback', () => {
   it('registers discoverable house tools and keeps help/unknown out of runtime', async () => {
     seam.runtime.mockImplementation(() => { throw new Error('metadata must not bootstrap'); });
     const {invoke, tools} = register();
-    expect(tools.map(t => t.name)).toEqual(expect.arrayContaining(['popclaw_house_login', 'popclaw_house_logout']));
+    for (const name of ['popclaw_house_login', 'popclaw_house_logout']) {
+      expect(tools.filter(tool => tool.name === name)).toHaveLength(1);
+    }
     for (const args of ['', 'help', 'not-a-command']) {
       const reply = await invoke(args);
       expect(reply.text).toBeTruthy();
