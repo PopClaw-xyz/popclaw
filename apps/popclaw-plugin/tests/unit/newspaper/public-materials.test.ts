@@ -279,6 +279,9 @@ it('initially unavailable optional house contributes status while another house 
   expect(c.issue.publicCoverage?.find(s => s.slug==='missing-invalid')?.unavailable).toBe(true);
   source.validate(m.issue);
   const out = await publish(f,m.token); expect(out.text).toContain('https://canvas.invalid/paper?t=fixture');
+  const html = readFileSync(f.paths.lastNewspaperHtml(),'utf8');
+  expect(html).toContain('public materials unavailable');
+  expect(html).not.toContain('Nothing new from this lore-house today');
 });
 it('partial with no usable body is not reported as confirmed empty', async () => {
   const f = await newspaperFixture();

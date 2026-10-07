@@ -243,7 +243,11 @@ function renderDeck(c: Ctx, d: Deck, index: number): string {
   // A subscribed lore-house with nothing today still gets its stack (E4) — otherwise
   // the owner thinks it went down. One restrained line, no invented items, and it
   // carries the same ▢ mark every editor's note on the page carries (§10, one symbol one meaning).
-  if (note || !d.total) {
+  const coverage = c.issue.publicCoverage?.find(source => source.slug === d.slug);
+  const sourceNote = coverage?.unavailable ? c.L('source.unavailable', { house: d.slug })
+    : coverage && (coverage.incomplete || coverage.truncated) ? c.L('source.partial', { house: d.slug }) : '';
+  if (sourceNote) out.push(`<p class="note">${esc(c.L('page.note', { text: sourceNote }))}</p>`);
+  if (note || (!d.total && !sourceNote)) {
     out.push(`<p class="note">${esc(c.L('page.note', { text: note || c.L('page.quietHouse') }))}</p>`);
   }
   out.push(`</section>`);
@@ -398,7 +402,7 @@ export function renderNewspaper(
     // Page furniture lives under `newspaper.page.*`; the material slots the codex
     // already named (buttons, the unattributed fallback) keep their old keys so
     // both halves of the paper go on speaking with one vocabulary.
-    const full = key.startsWith('page.') ? `newspaper.${key}` : `newspaper.material.${key}`;
+    const full = (key.startsWith('page.') || key.startsWith('source.')) ? `newspaper.${key}` : `newspaper.material.${key}`;
     return renderCopy(lang, full, vars);
   };
   const numberOf = new Map(numberedPulse(issue.pulse).map(({ p, n }) => [p, n] as const));
