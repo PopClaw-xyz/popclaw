@@ -15,6 +15,8 @@ import { withDraftReview } from '../../../src/tools/draft-review.js';
 import { socialDraftBinding, socialToolFactory } from '../../../src/host/social-send-context.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { popclaw } from '@popclaw/contracts';
+import {LocalHostDb} from '../../../src/host/local-host-db.js';
+import {runMigrations} from '../../../src/host/migrations.js';
 
 function key(byte: number) {
   const seed = new Uint8Array(32).fill(byte), kp = nacl.sign.keyPair.fromSeed(seed);
@@ -29,10 +31,13 @@ function turn(overrides: Record<string, unknown> = {}) {
     assertInvocationCurrent: vi.fn(() => { if (!active) throw new Error('HOST_REVOKED'); }),
     retire: () => { active = false; }, ...overrides};
 }
-function fixture(mode: 'native' | 'local-stdio' = 'native') {
+function fixture(mode: 'native' | 'local-stdio' = 'native', durable = false) {
+  const db = durable ? new LocalHostDb(':memory:') : undefined;
+  if (db) runMigrations(db, join(process.cwd(), 'migrations'));
   const owner = key(3), recipient = key(5), pushed: Uint8Array[] = [];
   const push = vi.fn(async (bytes: Uint8Array) => {pushed.push(bytes); return {status: 200};});
   const runtime = async () => ({
+    ...(db ? {host: {db}} : {}),
     boot: {signer: owner.signer, nickname: 'Owner', popclawId: owner.id, webBaseUrl: 'https://fixture.invalid'},
     egress: {home: {slug: 'home'}, push, pushTo: async (_h: unknown, bytes: Uint8Array) => push(bytes)},
     bondsStore: {list: () => [{popclawId: recipient.id, nickname: 'Alice', remarkName: ''}]},
@@ -46,7 +51,7 @@ function fixture(mode: 'native' | 'local-stdio' = 'native') {
     const name = (opts as {name?: string})?.name ?? (definition as Tool).name;
     registrations.set(name, definition);
   }};
-  registerWriteTools({api, runtime, deps: {api, runtime, socialSendHost: mode}, total: 4} as unknown as ToolsCtx);
+  registerWriteTools({api, runtime, deps: {api, runtime, socialSendHost: mode, durableSocialDrafts: durable}, total: 4} as unknown as ToolsCtx);
   const call = (name: string, params: unknown, ctx: unknown = turn(), signal?: AbortSignal) => {
     const registered = registrations.get(name);
     const descriptor = registered as {contextVersion?: number; create?: (ctx: unknown) => unknown};
@@ -61,6 +66,15 @@ beforeEach(() => {_draftsForTest.clear(); resetOwnerApprovals(); setOwnerLang('e
 afterEach(() => {_draftsForTest.clear(); resetOwnerApprovals(); setOwnerLang(undefined); vi.restoreAllMocks();});
 
 describe('ordinary social sends under the current host invocation', () => {
+  it.each(['wait', 'pressure', 'runtime-reload'] as const)('retains durable social manuscript after %s', async reason => {
+    const fx = fixture('native', true), scope = turn({senderIsOwner: false, messageChannel: 'weixin'});
+    const id = tokenOf(await fx.call('popclaw_draft_message', {recipient: 'Alice', body: 'Original retained manuscript'}, scope));
+    if (reason === 'wait') vi.spyOn(Date, 'now').mockReturnValue(Date.now() + DRAFT_TTL_MS + 1000);
+    if (reason === 'pressure') for (let n = 0; n < 17; n++) await fx.call('popclaw_draft_message', {recipient: 'Alice', body: `Other manuscript ${n}`}, scope);
+    if (reason === 'runtime-reload') _draftsForTest.clear();
+    expect((await fx.call('popclaw_send_draft', {draft_id: id}, scope)).text).toContain('event_id:');
+    expect(fx.pushed).toHaveLength(1);
+  });
   it.each([
     ['weixin', false], ['weixin', undefined],
     ['telegram', false], ['telegram', undefined],

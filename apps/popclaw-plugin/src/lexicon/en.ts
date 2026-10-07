@@ -1378,6 +1378,8 @@ export const EN: Lexicon = {
     'socialSend.house': 'House: {house}',
     'socialSend.materialChanged': 'Not sent: the draft material changed. Show the intended new manuscript and attachments and ask the owner to confirm.',
     'socialSend.invocationRequired': 'Not sent: this call has no valid conversation context. Explain the actual host limitation in this chat. Do not ask the user to bind a channel or raise permissions, and do not retry automatically.',
+    'socialSend.draftUnavailable': 'Not sent: this draft is unavailable or has already been used. An uncertain send result must not be retried. Check the actual result; only make and review a new manuscript if another send is intended.',
+    'socialSend.saveFailed': 'Draft not saved. Do not send or claim that it will survive restart. Explain the storage error in this chat; do not retry automatically.',
     'socialSend.conversationChanged': 'Not sent: this draft belongs to a different conversation. Prepare the intended manuscript here and ask the owner to review it.',
     'socialSend.reviewChanged': 'Not sent: the manuscript review copy changed or is missing. Show a fresh copy of the intended manuscript and ask the owner to confirm it.',
     'socialSend.approvalsRetired': 'Ordinary messages, replies and posts use one manuscript review and confirmation in this conversation. No PopClaw approval route setup is needed. Existing host approval settings were not changed.',

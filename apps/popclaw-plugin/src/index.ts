@@ -822,6 +822,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     // The runtime() lexical closure is the lazy ignition path in register().
     toolsRegisteredCount = registerPopclawTools({
       socialSendHost: 'native',
+      durableSocialDrafts: true,
       nativeToolNotices: true,
       getToolNoticeContext: async signal => { const rt = await runtime(); return runtimeToolNoticeContext(rt, `native:${rt.boot.popclawId}`, signal, true); },
       api: withOpenClawNotifyRoute(

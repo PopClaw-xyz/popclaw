@@ -22,12 +22,14 @@ import type { ToolsCtx } from './tools-context.js';
 import { formatPerson } from '../identity/person-resolver.js';
 import { deriveSigil } from '../invite/sigil.js';
 import {
-  draftDigest, makeDraftToken, noteDraftPreview, noteDraftToolOutput, putDraft,
+  draftDigest, noteDraftPreview, noteDraftToolOutput, putDraft,
   type DraftAttachmentSnapshot, type DraftSnapshot,
 } from './draft-store.js';
 import { loadDmAttachment } from '../messaging/dm-media.js';
 import { deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
 import { withDraftReview } from './draft-review.js';
+import {retainSocialDraft, socialDraftToken} from './durable-social-drafts.js';
+import {pinSocialSendPlan} from './draft-send-plan.js';
 
 // Build provenance for the `[feedback/v1]` header — same esbuild `define` as
 // index.ts / mcp.ts. Unbundled (tests, tsx) there is no define; say so honestly.
@@ -183,13 +185,16 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
           // recipient and house, so confirming one draft can only ever send
           // that one letter to that one contact.
           draftDm: async (plan, send) => {
-            const token = makeDraftToken('message');
+            const token = await socialDraftToken(deps, 'message');
             // A letter is parked under the `message` prefix because it is an
             // outbound DM and must clear the DM door, but what the owner is
             // asked to approve is a letter — so the snapshot says so, and it
             // carries the same recipient, house and complete text the preview
             // below shows; the id is only an internal lookup handle.
-            putDraft(token, send, {...feedbackSnapshot(plan, attachment), binding: socialDraftBinding(deps.socialSendHost, toolCtx)});
+            putDraft(token, send, {...feedbackSnapshot(plan, attachment), binding: socialDraftBinding(deps.socialSendHost, toolCtx),
+              ...(deps.durableSocialDrafts ? {sendPlan: {...pinSocialSendPlan(await runtime(), plan.house),
+                person: {popclawId: plan.contactPopclawId, nickname: plan.contactName ?? '', sigil: deriveSigil(plan.contactPopclawId)},
+                receiptPrefix: plan.receiptPrefix, receiptSuffix: plan.receiptSuffix}} : {})});
             const preview = feedbackDraftPreview(plan, token, ownerLang());
             const outcome = await deliverDraftPreview(toolCtx, preview);
             noteDraftPreview(token, preview, outcome.status);
@@ -198,6 +203,7 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
             // (popclaw-feedback.ts hands a draftDm result straight back).
             const text = withDraftReview(token, draftResultText(preview, outcome), deps.draftReviewFiles);
             noteDraftToolOutput(token, text);
+            await retainSocialDraft(deps, token);
             return { text };
           },
           // react is not wired in: kind is a bug|need enum, so a typed tool can never reach the deprecated up/down alias.
@@ -205,7 +211,7 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
       );
       return { type: 'text' as const, text: reply.text };
     },
-    }), deps.getHostedSocialInvocation),
+    }), deps.getHostedSocialInvocation, deps.getLocalSocialScope),
     { name: 'popclaw_feedback' },
   );
 

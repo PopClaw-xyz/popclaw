@@ -55,7 +55,6 @@ import {
 
 import { PopclawPaths } from './host/popclaw-paths.js';
 import { createDraftReviewFiles } from './host/draft-review-files.js';
-import { DRAFT_TTL_MS } from './tools/draft-store.js';
 import { pinoHostLogger } from './runtime/logger.js';
 import { ownerLang, failureText } from './lexicon/owner-language.js';
 import { languageDirective } from './lexicon/directive.js';
@@ -135,6 +134,8 @@ async function main(): Promise<void> {
   registerPopclawTools({
     // This root is single-owner local stdio. Hosted must use its own caller binding.
     socialSendHost: 'local-stdio',
+    durableSocialDrafts: true,
+    getLocalSocialScope: notificationConsumerId,
     notificationTools: false,
     getToolNoticeContext: async signal => runtimeToolNoticeContext(await runtime(), notificationConsumerId(), signal),
     api,
@@ -157,8 +158,9 @@ async function main(): Promise<void> {
     // only, because a chat link to a local file is what the MCP desktop host
     // was shown to open. Built at this root's first draft, never at
     // initialize (ADR-0035: tools/list touches no disk), and then once:
-    // building it clears stale copies an earlier process left (older than a
-    // draft can live). A directory that cannot be made leaves this root
+    // ordinary draft copies survive waiting and restart, just like their
+    // persisted manuscripts. Successful consumption removes the copy.
+    // A directory that cannot be made leaves this root
     // without copies (long drafts then get the whole-text dialog, as before)
     // rather than stopping the root.
     draftReviewFiles: ((): (() => ReturnType<typeof createDraftReviewFiles> | null) => {
@@ -167,7 +169,7 @@ async function main(): Promise<void> {
         if (built) return built.files;
         try {
           built = { files: createDraftReviewFiles(new PopclawPaths(mcpRoot()).draftReviewDir(), {
-            staleAfterMs: DRAFT_TTL_MS, warn: (message) => logger.warn({}, message),
+            staleAfterMs: Infinity, warn: (message) => logger.warn({}, message),
           }) };
         } catch (error) {
           logger.warn({}, `popclaw: draft review directory unavailable — ${String(error)}`);

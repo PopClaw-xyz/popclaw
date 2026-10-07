@@ -17,7 +17,7 @@ function hosted(context: unknown): HostedSocialInvocation | null {
   const getter = (context as HostedContext | null)?.getHostedSocialInvocation;
   return typeof getter === 'function' ? getter() : null;
 }
-export type SocialDraftBinding = Readonly<{host: 'local-stdio'}> | Readonly<{host: 'hosted'; scope: string}> | Readonly<{
+export type SocialDraftBinding = Readonly<{host: 'local-stdio'; scope?: string | null}> | Readonly<{host: 'hosted'; scope: string}> | Readonly<{
   host: 'native'; agentId: string; sessionId: string; sessionKey: string; senderId: string | null;
   messageChannel: string | null; agentAccountId: string | null; nativeChannelId: string | null;
   deliveryChannel: string | null; deliveryAccountId: string | null; deliveryTo: string | null;
@@ -32,7 +32,10 @@ const optionalText = (v: unknown): string | null => text(v) ? v : null;
 
 /** Store only stable identity. Never park the drafting turn's expiring guard. */
 export function socialDraftBinding(host: SocialSendHost | undefined, context: unknown): SocialDraftBinding | null {
-  if (host === 'local-stdio') return Object.freeze({host: 'local-stdio'});
+  if (host === 'local-stdio') {
+    const getter = (context as {getLocalSocialScope?: () => string} | null)?.getLocalSocialScope;
+    return Object.freeze({host: 'local-stdio', scope: optionalText(getter?.())});
+  }
   if (host === 'hosted') {
     const ctx = hosted(context);
     return ctx && text(ctx.scope) ? Object.freeze({host: 'hosted', scope: ctx.scope}) : null;
@@ -53,7 +56,7 @@ export function socialDraftBinding(host: SocialSendHost | undefined, context: un
 }
 export function sameSocialDraftBinding(a: SocialDraftBinding | null | undefined, b: SocialDraftBinding | null): boolean {
   if (!a || !b || a.host !== b.host) return false;
-  if (a.host === 'local-stdio' && b.host === 'local-stdio') return true;
+  if (a.host === 'local-stdio' && b.host === 'local-stdio') return (a.scope ?? null) === (b.scope ?? null);
   if (a.host === 'hosted' && b.host === 'hosted') return a.scope === b.scope;
   return a.host === 'native' && b.host === 'native' && a.agentId === b.agentId
     && a.sessionId === b.sessionId && a.sessionKey === b.sessionKey && a.senderId === b.senderId
@@ -65,7 +68,13 @@ export function sameSocialDraftBinding(a: SocialDraftBinding | null | undefined,
 
 /** Selected only by trusted root assembly, never by tool arguments. */
 export function socialSendAssertion(host: SocialSendHost | undefined, context: unknown, signal?: AbortSignal): (() => void) | null {
-  if (host === 'local-stdio') return () => signal?.throwIfAborted();
+  if (host === 'local-stdio') {
+    const binding = socialDraftBinding(host, context);
+    return () => {
+      signal?.throwIfAborted();
+      if (!sameSocialDraftBinding(binding, socialDraftBinding(host, context))) throw new Error('SOCIAL_SEND_CONVERSATION_CHANGED');
+    };
+  }
   if (host === 'hosted') {
     const invocation = hosted(context);
     if (!invocation || !text(invocation.scope) || invocation.purpose !== 'chat-send' || typeof invocation.assertCurrent !== 'function') return null;
@@ -91,7 +100,7 @@ export function withSocialSendInvocation<T>(assertCurrent: () => void, work: () 
 }
 
 /** v2 is a native SDK contract. Local stdio is an explicitly different root. */
-export function socialToolFactory(host: SocialSendHost | undefined, create: (ctx: unknown) => unknown, getHostedSocialInvocation?: HostedSocialContext): unknown {
+export function socialToolFactory(host: SocialSendHost | undefined, create: (ctx: unknown) => unknown, getHostedSocialInvocation?: HostedSocialContext, getLocalSocialScope?: () => string): unknown {
   if (host === 'hosted') return () => create({getHostedSocialInvocation});
-  return host === 'local-stdio' ? create : {contextVersion: 2, create};
+  return host === 'local-stdio' ? (ctx: unknown) => create({...ctx as object, getLocalSocialScope}) : {contextVersion: 2, create};
 }

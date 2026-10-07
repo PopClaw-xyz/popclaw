@@ -24,7 +24,7 @@ import {
   draftDigest,
   draftContentIsCurrent,
   expiredDraftText,
-  makeDraftToken,
+  forgetDraft,
   noteDraftPreview,
   noteDraftToolOutput,
   putDraft,
@@ -48,6 +48,9 @@ function sourceExcerpt(value: string): string {
 }
 
 import { withDraftReview } from './draft-review.js';
+import {retainSocialDraft, socialDraftStore, socialDraftToken} from './durable-social-drafts.js';
+import {pinSocialSendPlan, sendSocialDraft} from './draft-send-plan.js';
+import {setDraftReviewFiles} from './draft-store.js';
 
 /**
  * The warning line shown in the draft preview when the lore-house can't verify
@@ -165,11 +168,12 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       } : null;
       const replyName = replyItem
         ? displayNickname(draftRuntime.nameOf?.(replyItem.authorPopclawId ?? '')) || displayNickname(replyItem.handle) : '';
-      const token = makeDraftToken('reply');
+      const token = await socialDraftToken(deps, 'reply');
       // The snapshot, not `p`: the model still holds the parameters object it
       // passed in, and everything the closure reads off it at send time is
       // something it could rewrite after the owner has read the draft.
       const snapshot: DraftSnapshot = {
+        ...(deps.durableSocialDrafts ? {sendPlan: {...pinSocialSendPlan(draftRuntime, replyItem?.houseSlug), replySource: replyItem}} : {}),
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'reply',
         ...(replyItem?.authorPopclawId ? { recipientId: replyItem.authorPopclawId } : {}),
@@ -209,9 +213,10 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       // (draft-review.ts); unchanged everywhere else.
       const text = withDraftReview(token, draftResultText(preview, outcome), deps.draftReviewFiles);
       noteDraftToolOutput(token, text);
+      await retainSocialDraft(deps, token);
       return { type: 'text' as const, text };
     },
-    }), deps.getHostedSocialInvocation),
+    }), deps.getHostedSocialInvocation, deps.getLocalSocialScope),
     { name: 'popclaw_draft_reply' },
   );
 
@@ -296,7 +301,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         // sent — see DraftAttachmentSnapshot.
         image = { name: loaded.name, digest: draftDigest(loaded.bytes), mime: loaded.mime, bytes: loaded.bytes };
       }
-      const token = makeDraftToken('message');
+      const token = await socialDraftToken(deps, 'message');
       // The person resolved above is the person this letter is bound to. A
       // frozen copy, because the object itself is handed back to the closure.
       const pinned = Object.freeze({
@@ -306,6 +311,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
           : person.nickname,
       });
       const snapshot: DraftSnapshot = {
+        ...(deps.durableSocialDrafts ? {sendPlan: {...pinSocialSendPlan(rt, houseSlug), person: pinned}} : {}),
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'dm',
         recipientId: pinned.popclawId,
@@ -374,9 +380,10 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       // (draft-review.ts); unchanged everywhere else.
       const text = withDraftReview(token, draftResultText(preview, outcome), deps.draftReviewFiles);
       noteDraftToolOutput(token, text);
+      await retainSocialDraft(deps, token);
       return { type: 'text' as const, text };
     },
-    }), deps.getHostedSocialInvocation),
+    }), deps.getHostedSocialInvocation, deps.getLocalSocialScope),
     { name: 'popclaw_draft_message' },
   );
 
@@ -434,8 +441,9 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const source = resolvedSource ? {...resolvedSource} : null;
       const pinnedEgress = draftRuntime?.egress?.capturePlan?.().egress ?? draftRuntime?.egress;
       const house = source?.houseSlug ?? draftRuntime?.egress?.home?.slug;
-      const token = makeDraftToken('post');
+      const token = await socialDraftToken(deps, 'post');
       const snapshot: DraftSnapshot = {
+        ...(deps.durableSocialDrafts ? {sendPlan: {...pinSocialSendPlan(draftRuntime, house), postSource: source, replyTo, quoteOf}} : {}),
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'post',
         ...(house ? {house} : {}),
@@ -497,9 +505,10 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       // (draft-review.ts); unchanged everywhere else.
       const text = withDraftReview(token, draftResultText(preview, outcome), deps.draftReviewFiles);
       noteDraftToolOutput(token, text);
+      await retainSocialDraft(deps, token);
       return { type: 'text' as const, text };
     },
-    }), deps.getHostedSocialInvocation),
+    }), deps.getHostedSocialInvocation, deps.getLocalSocialScope),
     { name: 'popclaw_draft_post' },
   );
 
@@ -523,8 +532,34 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const assertCurrent = socialSendAssertion(deps.socialSendHost, toolCtx, signal);
       if (!assertCurrent) return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.invocationRequired')};
       assertCurrent();
+      const unavailable = () => ({type: 'text' as const, text: deps.durableSocialDrafts
+        ? renderCopy(ownerLang(), 'socialSend.draftUnavailable') : expiredDraftText(draft_id)});
+      let durable: Awaited<ReturnType<typeof socialDraftStore>> | null = null;
+      try {
+      if (deps.durableSocialDrafts) {
+        if (!SEND_DRAFT_KINDS.some(kind => draft_id.startsWith(`${kind}-`))) return unavailable();
+        durable = await socialDraftStore(deps);
+        assertCurrent();
+        let saved: DraftSnapshot | null;
+        try { saved = durable.load(draft_id); }
+        catch (error) {
+          if (error instanceof Error && error.message === 'SOCIAL_DRAFT_MATERIAL_CHANGED') {
+            return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.materialChanged')};
+          }
+          throw error;
+        }
+        if (!saved) return unavailable();
+        if (!sameSocialDraftBinding(saved.binding, socialDraftBinding(deps.socialSendHost, toolCtx))) {
+          return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.conversationChanged')};
+        }
+        const rt = await runtime();
+        assertCurrent();
+        putDraft(draft_id, () => sendSocialDraft(saved, rt), saved);
+        const files = typeof deps.draftReviewFiles === 'function' ? deps.draftReviewFiles() : deps.draftReviewFiles;
+        setDraftReviewFiles(files ?? null);
+      }
       const snapshot = peekDraftSnapshot(draft_id);
-      if (!snapshot) return {type: 'text' as const, text: expiredDraftText(draft_id)};
+      if (!snapshot) return unavailable();
       if (!sameSocialDraftBinding(snapshot.binding, socialDraftBinding(deps.socialSendHost, toolCtx))) {
         return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.conversationChanged')};
       }
@@ -533,10 +568,17 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.reviewChanged')};
       }
       // Spend once before awaiting a transport: an unknown outcome is not retried.
+      assertCurrent();
+      if (durable && !durable.consume(draft_id)) return unavailable();
       const sender = takeDraft(draft_id, SEND_DRAFT_KINDS);
-      if (!sender) return {type: 'text' as const, text: expiredDraftText(draft_id)};
+      if (!sender) return unavailable();
       const reply = await withSocialSendInvocation(assertCurrent, sender);
       return {type: 'text' as const, text: reply.text};
+      } finally {
+        // A refused send must not leave a volatile cache entry whose later
+        // TTL/cap eviction could erase the durable manuscript's review copy.
+        if (durable) forgetDraft(draft_id);
+      }
     },
-  }), deps.getHostedSocialInvocation), {name: SEND_DRAFT_TOOL});
+  }), deps.getHostedSocialInvocation, deps.getLocalSocialScope), {name: SEND_DRAFT_TOOL});
 }

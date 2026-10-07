@@ -27,8 +27,9 @@ writeFileSync(process.env.OPENCLAW_CONFIG_PATH, JSON.stringify(initial), { mode:
 const config = await import('openclaw/plugin-sdk/config-runtime');
 const sessions = await import('openclaw/plugin-sdk/session-store-runtime');
 const inbound = await import('openclaw/plugin-sdk/conversation-runtime');
-const { putDraft, peekDraftSnapshot, noteDraftToolOutput } = await import('../../src/tools/draft-store.js');
-const { socialDraftBinding } = await import('../../src/host/social-send-context.js');
+const {loadDurableNativeSdk} = await import('../../scripts/tests/helpers/durable-native-sdk.mjs');
+const {fixtureKey} = await import('./durable-social-process.js');
+const {popclaw} = await import('@popclaw/contracts');
 const sessionKey = 'agent:main:main';
 const storePath = sessions.resolveStorePath(undefined, { agentId: 'main' });
 const meta: Promise<unknown>[] = [];
@@ -73,25 +74,26 @@ plugin.register({ registrationMode: 'full', pluginConfig: {}, config: snapshot.c
 assert.equal(sendFactory?.contextVersion, 2);
 assert.equal(typeof sendFactory.create, 'function');
 assert(runtimeService);
-// Tool execution uses the shipping command wrapper and isolated runtime.
-// Its identity/storage are temporary; all House/channel network is forbidden.
-let sends = 0;
-const draftBinding = socialDraftBinding('native', { agentId: 'main', sessionKey,
-  sessionId: entry.sessionId, requesterSenderId: senderId });
-const manuscript = { binding: draftBinding, kind: 'dm' as const, recipientId: '1'.repeat(64), recipientLabel: 'Synthetic recipient',
-    body: 'Complete original body', attachments: [], preview: null, output: null, house: 'https://synthetic.house.invalid' };
-putDraft('message-1', async () => {
-  assert.deepEqual(before, peekedManuscript);
-  sends++; return { text: 'synthetic send' };
-}, manuscript);
-noteDraftToolOutput('message-1', `${manuscript.recipientLabel}\n${manuscript.house}\n${manuscript.body}`);
-const before = peekDraftSnapshot('message-1');
-const peekedManuscript = { ...manuscript, output: before!.output };
+// Shipping entry hooks/configuration above remain under test. The positive
+// draft/send uses the same source registrations through the official SDK
+// wrapper, real SQLite and signing, with only final egress synthetic.
+// Never inject an in-memory send closure as proof of a durable manuscript.
+let current = true;
+const assertCurrent = () => {if (!current) throw new Error('SYNTHETIC_INVOCATION_REVOKED');};
+const sdk = await loadDurableNativeSdk({root: process.cwd(), box: mkdtempSync(join(tmpdir(), 'popclaw-first-entry-sdk-')),
+  env: {...process.env}, context: {config: snapshot.config, agentId: 'main', sessionKey,
+    sessionId: entry.sessionId, requesterSenderId: senderId, senderIsOwner: false}});
+const tools = sdk.tools(assertCurrent);
+const draftTool = tools.find((tool: any) => tool.name === 'popclaw_draft_message')!;
+const draft = await draftTool.execute('real-preparation', {recipient: fixtureKey(5).id, body: 'Complete original body'});
+const resultText = (r: any): string => r.text ?? r.content?.find((part: any) => part.type === 'text')?.text;
+const draftId = /draft_id: (\S+)/.exec(resultText(draft))![1]!;
+const before = sdk.runtime.manuscript(draftId);
 assert(before?.output);
 const ctx = { agentId: 'main', sessionKey, sessionId: entry.sessionId, toolCallId: 'send-first',
   channelId: nativeChannelId, turnSourceTo: target,
   requester: { channel, accountId: 'default', senderId, senderIsOwner: true } };
-const event = { toolName: 'popclaw_send_draft', toolCallId: 'send-first', params: { draft_id: 'message-1' } };
+const event = { toolName: 'popclaw_send_draft', toolCallId: 'send-first', params: { draft_id: draftId } };
 const hook = typed.get('before_tool_call')!;
 assert.equal(await hook(event, ctx), undefined, 'ordinary social sends do not request a second native approval');
 const commandCtx = { agentId: 'main', sessionKey, sessionId: entry.sessionId,
@@ -106,12 +108,12 @@ const saved = JSON.parse(readFileSync(process.env.OPENCLAW_CONFIG_PATH, 'utf8'))
 assert.deepEqual(saved, initial);
 assert.equal(writes, 0, 'ordinary sends and retired commands must not enable approvals for all plugins');
 assert.equal(injections.length, 0, 'new or unrelated owner intent must not receive an injected old draft action');
-assert.deepEqual(peekDraftSnapshot('message-1'), before);
-assert.equal(sends, 0);
+assert.deepEqual(sdk.runtime.manuscript(draftId), before);
+assert.equal(sdk.runtime.effects(), 0);
 // A NEW ordinary owner message requests the original manuscript. The host
 // admission and owner facts below are synthetic; no live model or IM auth runs.
-const ordinaryOwnerMessage = 'continue sending draft message-1';
-assert.match(ordinaryOwnerMessage, /message-1/);
+const ordinaryOwnerMessage = `continue sending draft ${draftId}`;
+assert(ordinaryOwnerMessage.includes(draftId));
 await inbound.recordInboundSession({ storePath, sessionKey,
   ctx: { Provider: channel, Surface: channel, From: `${channel}:${senderId}`, To: target,
     AccountId: 'default', ChatType: 'direct', SenderId: senderId, NativeChannelId: nativeChannelId,
@@ -121,39 +123,52 @@ await inbound.recordInboundSession({ storePath, sessionKey,
 await Promise.all(meta);
 const nextSession = sessions.getSessionEntry({ agentId: 'main', sessionKey, readConsistency: 'latest' });
 assert.equal(nextSession?.sessionId, entry.sessionId);
-assert.deepEqual(peekDraftSnapshot('message-1'), before);
+assert.deepEqual(sdk.runtime.manuscript(draftId), before);
 assert.equal(await hook({ ...event, toolCallId: 'send-fresh' }, { ...ctx, toolCallId: 'send-fresh' }), undefined);
-let current = true;
 const invocation = { agentId: 'main', sessionKey, sessionId: nextSession!.sessionId,
   requesterSenderId: senderId, senderIsOwner: false,
-  assertInvocationCurrent: () => { if (!current) throw new Error('SYNTHETIC_INVOCATION_REVOKED'); } };
-const send = (context: unknown) => sendFactory.create(context).execute('send-fresh', event.params);
+  assertInvocationCurrent: assertCurrent };
+const sendTool = (context: any) => {
+  const {assertInvocationCurrent, ...scope} = context;
+  return sdk.tools(assertInvocationCurrent, scope).find((tool: any) => tool.name === 'popclaw_send_draft')!;
+};
+const send = (context: unknown) => sendTool(context).execute('send-fresh', event.params);
 const text = (result: any): string => result.text ?? result.content?.find((item: any) => item.type === 'text')?.text;
 for (const change of [{ messageChannel: 'another-channel' }, { agentAccountId: 'another-account' }, { assertInvocationCurrent: undefined },
   { sessionId: 'other-session' }, { sessionKey: 'agent:main:other' },
   { agentId: 'other-agent' }, { requesterSenderId: 'other-owner' }]) {
-  assert.notEqual(text(await send({ ...invocation, ...change })), 'synthetic send');
-  assert.equal(sends, 0);
-  assert.deepEqual(peekDraftSnapshot('message-1'), before);
+  if ('assertInvocationCurrent' in change) await assert.rejects(send({ ...invocation, ...change }), /authority is unavailable outside an admitted run or request/);
+  else assert(!text(await send({ ...invocation, ...change })).includes('event_id:'));
+  assert.equal(sdk.runtime.effects(), 0);
+  assert.deepEqual(sdk.runtime.manuscript(draftId), before);
 }
-const staleTool = sendFactory.create(invocation);
+const staleTool = sendTool(invocation);
 current = false;
 await assert.rejects(staleTool.execute('stale-confirmation', event.params), /SYNTHETIC_INVOCATION_REVOKED/);
-assert.equal(sends, 0);
-assert.deepEqual(peekDraftSnapshot('message-1'), before);
+assert.equal(sdk.runtime.effects(), 0);
+assert.deepEqual(sdk.runtime.manuscript(draftId), before);
 current = true;
-assert.match(text(await send(invocation)), /^synthetic send(?:\n|$)/);
-assert.equal(sends, 1);
-assert.equal(peekDraftSnapshot('message-1'), null);
-assert.notEqual(text(await send(invocation)), 'synthetic send');
-assert.equal(sends, 1, 'a consumed draft must never be sent twice');
+assert.match(text(await send(invocation)), /event_id:/);
+assert.equal(sdk.runtime.effects(), 1);
+const effect = sdk.runtime.effectsData()[0];
+assert.equal(effect.house, before.house);
+const signed = popclaw.identity.SignedPayload.decode(effect.bytes);
+const sentEnvelope = popclaw.event.EventEnvelope.decode(signed.payload);
+assert.equal(sentEnvelope.directMessage?.toPopclawId, before.recipientId);
+assert.deepEqual(fixtureKey(5).signer.openDm(sentEnvelope.directMessage!, fixtureKey(3).id),
+  {ok: true, plaintext: before.body, plaintextBytes: new TextEncoder().encode(before.body)});
+assert.equal(sdk.runtime.manuscript(draftId), null);
+assert(!text(await send(invocation)).includes('event_id:'));
+assert.equal(sdk.runtime.effects(), 1, 'a consumed draft must never be sent twice');
 assert.equal(writes, 0);
 assert.equal(injections.length, 0);
 assert.deepEqual(JSON.parse(readFileSync(process.env.OPENCLAW_CONFIG_PATH, 'utf8')), initial);
 await runtimeService.stop();
+await sdk.close();
 console.log(JSON.stringify({ standardEntry: true, channel, initialApprovalConfigAbsent: true,
   sdkSessionBindingVerified: true, sdkWrites: writes, userTriggeredOriginalDraft: true, automaticContinuation: false,
   oldDraftInjections: injections.length, originalHouseRecipientBodyPreserved: true,
   secondNativeApprovalAbsent: true, currentInvocationRequired: true, rejectedInvocationsPreserveDraft: true,
-  singleUseVerified: true, sends, stateDir }));
+  singleUseVerified: true, sends: 1, durablePreparationThroughSdk: true, sdkWrapperVerified: true,
+  fixtureBoundary: 'shipping entry hooks plus product registrations under official SDK; synthetic egress, no live channel', stateDir }));
 process.exit(0);

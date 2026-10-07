@@ -2,8 +2,9 @@
  * The write-class draft table: mint a draft_id, park the send closure behind
  * it, and hand it back out exactly once when the owner confirms.
  *
- * Split out of register-tools.ts (2026-08-25); the machinery itself is
- * unchanged.
+ * Short independent protocols still use this volatile table. Installed local
+ * ordinary social manuscripts use durable-social-drafts.ts; their closures
+ * exist here only while drafting or executing a current send invocation.
  */
 
 import nacl from 'tweetnacl';
@@ -60,7 +61,8 @@ export function draftDigest(value: string | Uint8Array): string {
  *
  * Affordable because the format allowlist already caps one attachment at
  * `MAX_DM_MEDIA_BYTES` (1 MiB, dm-crypto.ts) and rejects anything larger at
- * DRAFT time, and because drafts are few and die after 30 minutes.
+ * DRAFT time. Local ordinary manuscripts move these bytes to HostDb instead
+ * of retaining an unbounded closure cache.
  */
 export interface DraftAttachmentSnapshot {
   readonly name: string;
@@ -122,6 +124,8 @@ export interface DraftToolOutputSnapshot {
  * Conversation review and confirmation remain the agent's responsibility.
  */
 export interface DraftSnapshot {
+  /** Serializable operation data, never a parked invocation callback. */
+  readonly sendPlan?: import('./draft-send-plan.js').DraftSendPlan;
   /** Stable root/session identity; never a drafting-turn invocation capability. */
   readonly binding?: import('../host/social-send-context.js').SocialDraftBinding | null;
   readonly kind: DraftContentKind;
@@ -196,7 +200,7 @@ function dropReviewCopy(entry: DraftEntry | undefined): void {
 function contentDigest(snapshot: DraftSnapshot): string {
   return draftDigest(JSON.stringify({kind: snapshot.kind, recipientId: snapshot.recipientId,
     recipientLabel: snapshot.recipientLabel, house: snapshot.house, target: snapshot.target,
-    body: snapshot.body, binding: snapshot.binding,
+    body: snapshot.body, binding: snapshot.binding, sendPlan: snapshot.sendPlan,
     attachments: snapshot.attachments.map(a => ({name: a.name, mime: a.mime, bytes: draftDigest(a.bytes)}))}));
 }
 /** Read-only integrity check on the frozen material, including actual bytes. */
@@ -208,6 +212,12 @@ export function draftContentIsCurrent(token: string): boolean {
 /** Deep-frozen so neither the tool that built it nor anything downstream can
  *  edit what the owner approved. */
 function freezeSnapshot(snapshot: DraftSnapshot): DraftSnapshot {
+  const freezePlan = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || value instanceof Uint8Array) return;
+    for (const child of Object.values(value)) freezePlan(child);
+    Object.freeze(value);
+  };
+  freezePlan(snapshot.sendPlan);
   for (const a of snapshot.attachments) Object.freeze(a);
   Object.freeze(snapshot.attachments);
   if (snapshot.preview) Object.freeze(snapshot.preview);
@@ -341,6 +351,8 @@ export function makeDraftToken(kind: DraftKind): string {
   sweepExpired(drafts, Date.now());
   return `${kind}-${++draftSeq().n}`;
 }
+/** Drop a disposable closure, retaining its persisted review copy. */
+export function forgetDraft(token: string): void { draftStore().delete(token); }
 
 /**
  * Park a draft. `snapshot` is what the owner will be asked to approve, and it

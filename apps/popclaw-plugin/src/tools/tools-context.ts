@@ -78,6 +78,10 @@ export interface WorldToolsDeps {
 }
 
 export interface RegisterToolsDeps {
+  /** Installed local roots persist ordinary social manuscripts in host.db. */
+  durableSocialDrafts?: boolean;
+  /** Existing trusted single-owner stdio consumer; not a human chat proof. */
+  getLocalSocialScope?: () => string;
   /** Trusted root mode. Missing mode stays native and fails closed. */
   socialSendHost?: import('../host/social-send-context.js').SocialSendHost;
   /** Hosted-only trusted current connection/purpose; missing context denies sending. */

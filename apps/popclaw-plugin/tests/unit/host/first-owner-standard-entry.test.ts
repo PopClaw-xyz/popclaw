@@ -14,6 +14,7 @@ describe('standard native first-owner entry', () => {
     expect(receipt).toMatchObject({ standardEntry: true, initialApprovalConfigAbsent: true,
       channel, sdkSessionBindingVerified: true, sdkWrites: 0, userTriggeredOriginalDraft: true, automaticContinuation: false,
       oldDraftInjections: 0, originalHouseRecipientBodyPreserved: true, secondNativeApprovalAbsent: true,
-      currentInvocationRequired: true, rejectedInvocationsPreserveDraft: true, singleUseVerified: true, sends: 1 });
+      currentInvocationRequired: true, rejectedInvocationsPreserveDraft: true, singleUseVerified: true, sends: 1,
+      durablePreparationThroughSdk: true, sdkWrapperVerified: true });
   }, 300_000);
 });

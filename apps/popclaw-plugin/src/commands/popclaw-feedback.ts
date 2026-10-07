@@ -58,6 +58,8 @@ export interface PopclawFeedbackArgs {
  * the owner has read it.
  */
 export interface FeedbackDraftPlan {
+  readonly receiptPrefix?: string;
+  readonly receiptSuffix?: string;
   readonly kind: 'bug' | 'need';
   /** The resolved contact's popclaw_id — the exact id the parked send is bound to. */
   readonly contactPopclawId: string;
@@ -323,8 +325,14 @@ export async function runPopclawFeedbackCommand(
   };
 
   if (deps.draftDm) {
+    const whose = toPrimary ? renderCopy(lang, 'feedback.receipt.wholePrimary') : renderCopy(lang, 'feedback.receipt.wholeHouse', {target});
+    const contactName = contact.contact ? renderCopy(lang, 'feedback.receipt.contactSep') + contact.contact : '';
+    const who = renderCopy(lang, 'feedback.receipt.who', {whose, contactName});
+    const kindLabel = renderCopy(lang, kind === 'bug' ? 'feedback.kindLabel.bug' : 'feedback.kindLabel.need');
     return deps.draftDm(
       {
+        receiptPrefix: fellBack ? renderCopy(lang, 'feedback.receipt.fellBackNotice', {target}) + '\n' : '',
+        receiptSuffix: '\n' + renderCopy(lang, 'feedback.receipt.sent', {kindLabel, who}) + renderCopy(lang, 'feedback.receipt.inboxNote'),
         kind,
         contactPopclawId: contact.popclawId,
         ...(contact.contact ? { contactName: contact.contact } : {}),
