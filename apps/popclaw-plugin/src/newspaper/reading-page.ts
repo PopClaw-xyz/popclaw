@@ -1,5 +1,5 @@
 /** A bounded response over a complete, immutable reading document in the issue ledger. */
-import { getIssue, getReadingText, putReadingText, readingTextVersion } from './issue-store.js';
+import { getReadingDocumentSnapshot, putReadingText, readingTextVersion } from './issue-store.js';
 import { pageBudgetNow } from './host-budget.js';
 import { weightedChars } from './reading-weight.js';
 import { isCandidateId } from './issue-identity.js';
@@ -21,19 +21,27 @@ export function previewReading(token: string, text: string, opts: ReadingOptions
   return renderReadingPage(token, readingTextVersion(text), text, 0, opts);
 }
 
+/** Current complete document for native/Hosted readers; this is reading, never a publishing grant. */
+export function readNewspaperDocument(token: string, opts: ReadingOptions = {}): { version: string; text: string } {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(token)) throw new Error('invalid newspaper document token');
+  const snapshot = getReadingDocumentSnapshot(token, opts.manifestDir);
+  if (!snapshot) throw new Error('newspaper reading document not found or expired');
+  const { issue, version, text } = snapshot;
+  if (!/^[a-f0-9]{64}$/.test(version) || readingTextVersion(text) !== version)
+    throw new Error('newspaper reading content version changed');
+  opts.validateMaterials?.(issue);
+  return { version, text };
+}
+
 export function readNewspaperPage(cursor: string, opts: ReadingOptions = {}): string {
   const match = /^([A-Za-z0-9_-]{1,64})\.([a-f0-9]{64})\.(0|[1-9][0-9]*)$/.exec(cursor);
   if (!match) throw new Error('invalid newspaper page_cursor');
   const [, token, id, at] = match;
-  const issue = getIssue(token!, opts.manifestDir);
-  const text = getReadingText(token!, id!, opts.manifestDir);
+  const { version, text } = readNewspaperDocument(token!, opts);
   const start = Number(at);
-  if (!issue || text === undefined) throw new Error('newspaper reading document not found or expired');
-  if (readingTextVersion(text) !== id)
-    throw new Error('newspaper reading content version changed');
+  if (version !== id) throw new Error('newspaper reading document not found or expired');
   if (!Number.isSafeInteger(start) || start > text.length || (start > 0 && /[\uDC00-\uDFFF]/.test(text[start]!)))
     throw new Error('invalid newspaper reading offset');
-  opts.validateMaterials?.(issue);
   return renderReadingPage(token!, id!, text, start, opts);
 }
 

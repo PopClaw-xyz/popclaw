@@ -10,6 +10,7 @@ import { MockAgent, getGlobalDispatcher, setGlobalDispatcher } from 'undici';
 import { uploadCanvas } from '../../../src/egress/canvas-egress.js';
 import { noteContextTokenBudget, _resetBudgetForTest } from '../../../src/newspaper/host-budget.js';
 import { publicMaterialSource } from '../../../src/newspaper/public-material-source.js';
+import { readNewspaperDocument } from '../../../src/newspaper/reading-page.js';
 import { NewspaperOutcomeStore, NewspaperStageStore, runDedicatedNewspaper, type NewspaperDispatchRecord } from '../../../src/newspaper/dedicated-session.js';
 import { LocalHostDb } from '../../../src/host/local-host-db.js';
 import { runMigrations } from '../../../src/host/migrations.js';
@@ -167,6 +168,19 @@ async function publish(f: Awaited<ReturnType<typeof newspaperFixture>>, token: s
   const items = Object.fromEntries(issue.pulse.map((p,i) => [String(p.itemNumber ?? i+1), { q: p.text, h: 'Verified daily material', s: 'A faithful summary of astronomy material.' }]));
   return f.tools()('popclaw_publish_newspaper', { edit: { basis: token, masthead: 'Synthetic personal paper', teaser: 'A synthetic edition', items } });
 }
+it('structured full-document reading enforces the real signed-public source validator before returning text', async () => {
+  const f = await newspaperFixture(), candidate = await gather(f);
+  const source = publicMaterialSource(f.runtime)!;
+  const validateMaterials = vi.fn((current: Parameters<typeof source.validate>[0]) => source.validate(current));
+  const opts = { manifestDir: f.paths.newspaperManifestsDir(), validateMaterials };
+  expect(readNewspaperDocument(candidate.token, opts).text).toContain(f.body);
+  expect(validateMaterials).toHaveBeenCalledOnce();
+  f.db.execute('UPDATE house_participation SET lease_expires_at=1');
+  expect(() => readNewspaperDocument(candidate.token, opts)).toThrow();
+  expect(validateMaterials).toHaveBeenCalledTimes(2);
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
+});
 it('gather → disk re-registration → picks → basis-only actual publish returns its fake URL without journal/cache writes', async () => {
   const f = await newspaperFixture(), before = snapshot(f.partition.db), globalBefore = snapshot(f.db);
   f.partition.db.execute('PRAGMA query_only=ON'); f.db.execute('PRAGMA query_only=ON');

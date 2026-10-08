@@ -200,8 +200,20 @@ export function putReadingText(token: string, text: string, dir?: string): strin
 }
 
 export function getReadingText(token: string, id: string, dir?: string): string | undefined {
-  const entry = entryOf(token, dir);
-  return entry?.readingCurrent === id ? entry.reading?.[id] : undefined;
+  const snapshot = getReadingDocumentSnapshot(token, dir);
+  return snapshot?.version === id ? snapshot.text : undefined;
+}
+
+/** Reading only: disk is authoritative when configured; all fields come from one ledger read. */
+export function getReadingDocumentSnapshot(token: string, dir?: string): {
+  issue: IssueData; version: string; text: string;
+} | undefined {
+  if (!SAFE_TOKEN.test(token)) return undefined;
+  const entry = dir !== undefined ? readIssueFile(fileOf(dir, token)!) : entryOf(token);
+  const version = entry?.readingCurrent;
+  const text = version === undefined ? undefined : entry?.reading?.[version];
+  if (!entry?.issue || typeof version !== 'string' || typeof text !== 'string') return undefined;
+  return { issue: JSON.parse(JSON.stringify(entry.issue)) as IssueData, version, text };
 }
 
 export function readingTextVersion(text: string): string {
