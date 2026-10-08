@@ -11,6 +11,8 @@ import { ensureInstallationIdSchema } from '../runtime/house-lifecycle/installat
 import { ensureOwnerLeaseSchema, ensureHouseCommandSchema, ensureWorldConversationInboxSchema,
   ensureHouseRecoverySchema, ensureWorldCapabilitySchema } from './runtime-storage-schema.js';
 import { schemaSqlTokens } from './storage-compatibility-sql.js';
+import { ensureExecutionStoreIdentitySchema, ensureExecutionStoreCatalogSchema, addPrivateMessageFeatureColumn } from './execution-catalog-schema.js';
+import { ensureHouseOriginBindingsSchema, ensureHouseRecoveryCursorEvidenceSchema } from '../runtime/house-lifecycle/house-runtime-schema.js';
 
 function tableNames(db: HostDb): string[] {
   return db.queryAll<{name: string}>("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").map(row => row.name);
@@ -59,6 +61,16 @@ export function verifyAppliedGlobalSchema(db: HostDb, migrationsDir: string, app
     ensureStorageControlSchema(expected);
     ensureStorageParticipantsSchema(expected);
     ensureStorageRestoreSchema(expected);
+    ensureExecutionStoreIdentitySchema(expected);
+    ensureExecutionStoreCatalogSchema(expected);
+    // Production adds the uncertified column only at its existing preparation
+    // points. Either actual shape is supported; inspection alters only memory.
+    if (present.has('execution_store_catalog_v1')
+      && db.queryAll<{name: string}>('PRAGMA table_xinfo(execution_store_catalog_v1)').some(column => column.name === 'private_message_feature')) {
+      addPrivateMessageFeatureColumn(expected);
+    }
+    ensureHouseOriginBindingsSchema(expected);
+    ensureHouseRecoveryCursorEvidenceSchema(expected);
     const allowed = new Set(tableNames(expected));
     for (const name of allowed) {
       if (!required.has(name) && present.has(name)
