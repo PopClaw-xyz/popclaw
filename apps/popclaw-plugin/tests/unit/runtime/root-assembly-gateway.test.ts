@@ -15,6 +15,8 @@ import { SocialLogWriter } from '../../../src/social-log/social-log.js';
 import { makeBondContext } from '../../../src/bonds/bond-context.js';
 import type { BondsStore } from '../../../src/bonds/bonds-store.js';
 import { resetOwnerApprovals } from '../../../src/host/owner-approval.js';
+import { LocalHostAdapter } from '../../../src/host/local-host-adapter.js';
+import { bootstrapPlugin } from '../../../src/runtime/plugin-bootstrap.js';
 import { barrier, FORCED_BOOT_FAILURE, patchPrototypes, probe, push, type L2SlotRead } from '../../helpers/root-assembly-probe.js';
 import { ALL_STARTERS, RESIDENT_SERVICES } from '../../../src/runtime/resident-services.js';
 
@@ -230,9 +232,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function newState(): string {
+async function newState(): Promise<string> {
   const state = mkdtempSync(join(tmpdir(), 'popclaw-assembly-gw-'));
   roots.push(state);
+  // Initialize before registration/faults/holds through real bootstrap. Setup
+  // opens no runtime participant and calls none of the probed runtime APIs.
+  const initialization = new LocalHostAdapter({ dataRoot: join(state, 'popclaw'),
+    logger: { info() {}, warn() {}, error() {} } });
+  try {
+    await bootstrapPlugin(initialization);
+  } finally {
+    initialization.db.close();
+  }
   mkdirSync(join(state, 'popclaw', 'config'), { recursive: true });
   // Canvas pinned too: the doorbell and page-state loops would otherwise pick
   // POPCLAW_CANVAS_BASE_URL or the public default.
@@ -269,7 +280,7 @@ const offline = () => vi.stubGlobal('fetch', vi.fn(async () => { throw new Error
 
 async function boot() {
   offline();
-  const root = registerAt(newState());
+  const root = registerAt(await newState());
   await root.start();
   const bag = await getOrCreatePerProcess<Promise<GatewayBag>>('runtime', () => {
     throw new Error('the popclaw-runtime service should have memoized the runtime');
@@ -424,7 +435,7 @@ describe('gateway root — failed-boot cleanup (row 29)', () => {
   // SHOWN; whether each slot is filled is the observable.)
   it('after the L2 slots are exposed: clears all four slots and the memo BEFORE the drain awaits; nothing is closed while the drain is held; then reverse close, release, host DB, rethrow', async () => {
     offline();
-    const root = registerAt(newState());
+    const root = registerAt(await newState());
     const drainHeld = barrier();
     let beforeFailure: { slots: unknown; memo: boolean } | undefined;
     let atDrainEntry: { slots: unknown; memo: boolean } | undefined;
@@ -481,7 +492,7 @@ describe('gateway root — failed-boot cleanup (row 29)', () => {
 
   it('a cleanup that itself fails: rejects with STORAGE_BOOT_CLEANUP_FAILED carrying both errors; nothing is closed, storage is NOT released, the host DB stays open; slots and memo are still cleared', async () => {
     offline();
-    const root = registerAt(newState());
+    const root = registerAt(await newState());
     probe.failReception = true;
     probe.beforeFail = () => { probe.failHousesStop = true; };
     const error = await root.start().then(() => undefined, (e: unknown) => e);
@@ -595,7 +606,7 @@ describe('gateway root — drift rows pinned as current behaviour', () => {
     // start() then stop() in the same tick: the lazy runtime aborts before its
     // builder has run at all (createLazyRuntime defers build to a microtask).
     offline();
-    const root = registerAt(newState());
+    const root = registerAt(await newState());
     const booting = root.start().then(() => 'booted', (error: Error) => error.message);
     const stopping = root.stop();
     const boot = await booting;
@@ -613,7 +624,7 @@ describe('gateway root — drift rows pinned as current behaviour', () => {
 
   it('#7 closing fired mid-boot (root held on its openRelationReception await): the build is not cancelled, houses are not started, DM recovery is still scheduled, then the normal shutdown runs', async () => {
     offline();
-    const root = registerAt(newState());
+    const root = registerAt(await newState());
     const held = barrier();
     probe.holdReception = held;
     const booting = root.start().then(() => 'booted', (e: unknown) => (e as Error).message);

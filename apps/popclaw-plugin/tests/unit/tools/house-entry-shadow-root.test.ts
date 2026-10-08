@@ -47,6 +47,7 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 import { createOpenClawHostAdapter } from '../../../src/host/openclaw-host-adapter.js';
+import { LocalHostAdapter } from '../../../src/host/local-host-adapter.js';
 import { bootstrapPlugin } from '../../../src/runtime/plugin-bootstrap.js';
 import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
 import { beginHouseAdd, commitEstablishAndActivate, prepareHouseTrust } from '../../../src/world/house-trust.js';
@@ -63,8 +64,8 @@ const APP = 'https://app.example';
 const NOW = 1_789_000_000;
 const ENTRY = { profile: BROWSER_ENTRY_PROFILE, audience: APP, entry_url: `${APP}/welcome`, shorten_url: `${APP}/api/shorten` };
 
-/** Writes a master.key for a fixed seed under `root` and returns its identity. */
-function plantIdentity(root: string, fill: number) {
+/** Initializes a root with the same fixed-seed identity through real bootstrap. */
+async function plantIdentity(root: string, fill: number) {
   const seed = new Uint8Array(32).fill(fill);
   const kp = nacl.sign.keyPair.fromSeed(seed);
   const popclawId = bs58.encode(kp.publicKey);
@@ -72,6 +73,15 @@ function plantIdentity(root: string, fill: number) {
   mkdirSync(dirname(keyPath), { recursive: true, mode: 0o700 });
   const body = { version: 1, type: 'master-raw-seed', created_at: '2026-01-01T00:00:00.000Z', public_key: popclawId, seed: Buffer.from(seed).toString('hex') };
   writeFileSync(keyPath, JSON.stringify(body), { mode: 0o600 });
+  // Admit the identity-only root and publish migrations/profile through real
+  // bootstrap, then close setup before adding this test's house configuration.
+  const initialization = new LocalHostAdapter({ dataRoot: root,
+    logger: { info() {}, warn() {}, error() {} } });
+  try {
+    await bootstrapPlugin(initialization);
+  } finally {
+    initialization.db.close();
+  }
   // A complete install, so a mis-rooted boot fails on identity, not on a missing config.
   mkdirSync(new PopclawPaths(root).config(), { recursive: true });
   writeFileSync(new PopclawPaths(root).configFile('plugin'), JSON.stringify({ lore_houses: [HOUSE] }));
@@ -105,12 +115,12 @@ describe('a machine with a second identity at the default root', () => {
     const stateDir = join(homedir(), '.openclaw');
     const shadowRoot = PopclawPaths.resolveRoot({}, stateDir);
     expect(shadowRoot.startsWith(`${tmp}/`)).toBe(true);
-    const b = plantIdentity(shadowRoot, 0xbb);
+    const b = await plantIdentity(shadowRoot, 0xbb);
     expect(b.keyPath).toBe(join(home, '.openclaw/popclaw/vault/social/identity/master.key'));
 
     const rootA = join(tmp, 'instance-a');
     process.env.POPCLAW_DATA_ROOT = rootA;
-    const a = plantIdentity(rootA, 0xaa);
+    const a = await plantIdentity(rootA, 0xaa);
     expect(a.popclawId).not.toBe(b.popclawId);
 
     touched.length = 0;
