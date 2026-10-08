@@ -29,6 +29,7 @@ import type { HostDb } from './host-db.js';
 import { LocalHostDb } from './local-host-db.js';
 import { runMigrations } from './migrations.js';
 import { PopclawPaths } from './popclaw-paths.js';
+import { assertStorageWriteAdmission, registerStorageInitialization } from './storage-compatibility.js';
 
 export interface LocalHostOptions {
   dataRoot: string;
@@ -56,6 +57,9 @@ export class LocalHostAdapter implements HostAdapter {
   constructor(opts: LocalHostOptions) {
     this.logger = opts.logger;
     const paths = new PopclawPaths(opts.dataRoot);
+    const migrationsDir = opts.migrationsDir ?? defaultMigrationsDir();
+    // Before RW open, mkdir, sentinel, migrations, or the participant callback.
+    const admission = assertStorageWriteAdmission({paths, migrationsDir});
     // Storage namespaces → buckets: 'identity' is the keypair (vault/social);
     // 'config' holds notify-target.json (OwnerNotifyTargetStore) and belongs in
     // the config bucket next to plugin.json — NOT under data/. Other namespaces
@@ -74,9 +78,9 @@ export class LocalHostAdapter implements HostAdapter {
     let release: (() => void) | undefined;
     this.db = new LocalHostDb(dbPath, {beforeInitialize: opts.beforeDbInitialize
       ? db => (release = opts.beforeDbInitialize!(db)) : undefined});
-    const migrationsDir = opts.migrationsDir ?? defaultMigrationsDir();
     try { runMigrations(this.db, migrationsDir); }
     catch (error) { try {release?.();} finally {this.db.close();} throw error; }
+    registerStorageInitialization(this, {paths, migrationsDir}, admission);
   }
 }
 

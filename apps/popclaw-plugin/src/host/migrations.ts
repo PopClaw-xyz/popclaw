@@ -25,36 +25,57 @@ import type { HostDb } from './host-db.js';
  * literals would break naive split — DDL migrations don't have these.
  */
 export function runMigrations(db: HostDb, migrationsDir: string): void {
-  db.execute(`
-    CREATE TABLE IF NOT EXISTS _migrations (
-      filename   TEXT PRIMARY KEY,
-      applied_at INTEGER NOT NULL
-    )
-  `);
-
-  const all = readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
-
-  const applied = new Set(
-    db.queryAll<{ filename: string }>('SELECT filename FROM _migrations').map((r) => r.filename),
-  );
+  // Check before even creating the bookkeeping table. An older program must
+  // never apply its remaining migrations to data already changed by a newer one.
+  const all = migrationFilenames(migrationsDir);
+  const applied = assertKnownAppliedMigrations(db, all);
+  ensureMigrationTable(db);
 
   for (const filename of all) {
     if (applied.has(filename)) continue;
-    const sql = readFileSync(join(migrationsDir, filename), 'utf-8');
-    const statements = splitStatements(sql);
     db.transaction((tx) => {
       if (tx.queryOne('SELECT filename FROM _migrations WHERE filename = ?', [filename])) return;
-      for (const stmt of statements) {
-        tx.execute(stmt);
-      }
+      applyMigrationSql(tx, migrationsDir, filename);
       tx.execute(
         'INSERT INTO _migrations (filename, applied_at) VALUES (?, ?)',
         [filename, Math.floor(Date.now() / 1000)],
       );
     });
   }
+}
+
+function ensureMigrationTable(db: HostDb): void {
+  db.execute(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      filename   TEXT PRIMARY KEY,
+      applied_at INTEGER NOT NULL
+    )
+  `);
+}
+
+function applyMigrationSql(db: HostDb, migrationsDir: string, filename: string): void {
+  for (const statement of splitStatements(readFileSync(join(migrationsDir, filename), 'utf-8'))) db.execute(statement);
+}
+
+/** Build the applied schema authority on an isolated in-memory database only.
+ * Uses the same SQL path as migration, including ALTER/DROP and FTS objects. */
+export function replayAppliedMigrationSchema(db: HostDb, migrationsDir: string, applied: readonly string[]): void {
+  const known = migrationFilenames(migrationsDir);
+  if (applied.some(filename => !known.includes(filename))) throw new Error('STORAGE_MIGRATION_UNSUPPORTED');
+  ensureMigrationTable(db);
+  for (const filename of known) if (applied.includes(filename)) applyMigrationSql(db, migrationsDir, filename);
+}
+
+export function migrationFilenames(migrationsDir: string): string[] {
+  return readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+}
+
+/** Read-only; shared by runtime admission and the migration runner. */
+export function assertKnownAppliedMigrations(db: HostDb, known: readonly string[]): Set<string> {
+  if (!db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='_migrations'")) return new Set();
+  const applied = new Set(db.queryAll<{filename: string}>('SELECT filename FROM _migrations').map(r => r.filename));
+  if ([...applied].some(filename => !known.includes(filename))) throw new Error('STORAGE_MIGRATION_UNSUPPORTED');
+  return applied;
 }
 
 /**

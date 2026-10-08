@@ -83,7 +83,7 @@ export class MaintenanceSession {
     return db.transaction(tx => {
       const current = readStorageControl(paths);
       if (current?.mode === 'maintenance') throw new Error('STORAGE_MAINTENANCE_PENDING');
-      ensureParticipants(tx);
+      ensureStorageParticipantsSchema(tx);
       // No TTL takeover: an expired lease cannot prove an uncancellable call has finished.
       const participants = tx.queryAll<{token: string; pid: number}>('SELECT token,pid FROM storage_runtime_participants_v1');
       for (const row of participants) {
@@ -93,7 +93,7 @@ export class MaintenanceSession {
         tx.execute('DELETE FROM storage_runtime_participants_v1 WHERE token=?', [row.token]);
       }
       const epoch = randomBytes(16).toString('hex');
-      tx.execute('CREATE TABLE IF NOT EXISTS storage_control_required_v1(id INTEGER PRIMARY KEY CHECK(id=1))');
+      ensureStorageControlSchema(tx);
       tx.execute('INSERT OR IGNORE INTO storage_control_required_v1 VALUES(1)');
       publishStorageJson(paths.storageControlFile(), {
         version: 1, epoch, mode: 'maintenance', reason, held: ALL_PATHS, releases: {},
@@ -121,7 +121,10 @@ export class MaintenanceSession {
     } satisfies StorageControl);
   }
 }
-function ensureParticipants(db: HostDb): void {
+export function ensureStorageControlSchema(db: HostDb): void {
+  db.execute('CREATE TABLE IF NOT EXISTS storage_control_required_v1(id INTEGER PRIMARY KEY CHECK(id=1))');
+}
+export function ensureStorageParticipantsSchema(db: HostDb): void {
   db.execute('CREATE TABLE IF NOT EXISTS storage_runtime_participants_v1(token TEXT PRIMARY KEY, pid INTEGER NOT NULL)');
 }
 /** Register before starting any root writer; release only after all owned promises have joined. */
@@ -130,7 +133,7 @@ export function registerStorageRuntime(db: HostDb, paths: PopclawPaths): () => v
   databasePaths.set(db, paths);
   db.transaction(tx => {
     assertStorageBootstrap(paths);
-    ensureParticipants(tx);
+    ensureStorageParticipantsSchema(tx);
     tx.execute('INSERT INTO storage_runtime_participants_v1 VALUES(?,?)', [token, process.pid]);
   });
   return () => { db.execute('DELETE FROM storage_runtime_participants_v1 WHERE token=?', [token]); };

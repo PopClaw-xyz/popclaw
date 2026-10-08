@@ -1,3 +1,4 @@
+import { ensureWorldConversationInboxSchema } from '../host/runtime-storage-schema.js';
 import { decodeEnvelope, canonicalizeEnvelope } from '../protocol/public-envelope.js';
 /** Durable local conversation rendering; no notification or policy authority. */
 import { popclaw } from '@popclaw/contracts';
@@ -68,6 +69,8 @@ function captureKey(input: WorldConversationKey, actorId: string) {
   return { house, actorId, messageId: input.messageId, binding: JSON.stringify([house.origin, house.houseKey, house.incarnation, actorId, input.messageId]) };
 }
 
+export { ensureWorldConversationInboxSchema } from '../host/runtime-storage-schema.js';
+
 export function createWorldConversationInbox(options: WorldConversationInboxOptions) {
   const { hostDb: db, actorId, authorizeCurrent } = options;
   worldPublicKey(actorId);
@@ -75,10 +78,7 @@ export function createWorldConversationInbox(options: WorldConversationInboxOpti
   // A facade over the supplied handle; it never opens/closes a database or
   // changes InboxStore's schema/ordinary-DM policy.
   const inbox = new InboxStore(db);
-  db.execute(`CREATE TABLE IF NOT EXISTS ${TABLE} (
-    binding TEXT PRIMARY KEY, inbox_id INTEGER NOT NULL REFERENCES inbox(id),
-    metadata TEXT NOT NULL, original_text TEXT NOT NULL, envelope_bytes BLOB NOT NULL,
-    received_at_ms INTEGER NOT NULL)`);
+  ensureWorldConversationInboxSchema(db);
   const read = (binding: string) => db.queryOne<Row>(`SELECT * FROM ${TABLE} WHERE binding=?`, [binding]);
   return {
     onConversation(message: StructuredPrivateDeliveryMessage): void {

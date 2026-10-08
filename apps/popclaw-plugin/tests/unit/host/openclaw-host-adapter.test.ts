@@ -18,6 +18,7 @@ describe('createOpenClawHostAdapter', () => {
       await host.storage.write('social', 'foo.txt', new TextEncoder().encode('hi'));
       const expected = join(tmp, 'popclaw', 'data', 'social', 'foo.txt');
       expect(readFileSync(expected, 'utf-8')).toBe('hi');
+      host.db.close();
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
@@ -33,15 +34,20 @@ describe('createOpenClawHostAdapter', () => {
       expect(keys).toEqual(['a.json', 'b.json']);
       const a = await host.storage.read('social', 'a.json');
       expect(a && new TextDecoder().decode(a)).toBe('{"x":1}');
+      host.db.close();
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
 
   it('exposes clock + timer + logger', () => {
-    const host = createOpenClawHostAdapter(fakeApi('/tmp/popclaw-oc-never-used'));
-    expect(host.clock.now()).toBeInstanceOf(Date);
-    expect(typeof host.timer.schedule).toBe('function');
-    expect(typeof host.logger.info).toBe('function');
+    const tmp = mkdtempSync(join(tmpdir(), 'popclaw-oc-'));
+    try {
+      const host = createOpenClawHostAdapter(fakeApi(tmp));
+      expect(host.clock.now()).toBeInstanceOf(Date);
+      expect(typeof host.timer.schedule).toBe('function');
+      expect(typeof host.logger.info).toBe('function');
+      host.db.close();
+    } finally { rmSync(tmp, {recursive: true, force: true}); }
   });
 });

@@ -1,3 +1,4 @@
+import { ensureHouseRecoverySchema } from '../host/runtime-storage-schema.js';
 /** Same-origin, same-key recovery. The host approval is consumed here, never a
  * model-supplied boolean. Preparation has no authority; cutover never logs in. */
 import bs58 from 'bs58';
@@ -60,20 +61,12 @@ export function houseRecoverySubject(read: (id: string) => HouseRecoveryDecision
     },
   };
 }
+export { ensureHouseRecoverySchema } from '../host/runtime-storage-schema.js';
 export class HouseRecovery implements HouseRecoveryPort {
   private readonly now: () => number;
   constructor(private readonly opts: HouseRecoveryOptions) {
     this.now = opts.now ?? Date.now;
-    opts.db.execute(`CREATE TABLE IF NOT EXISTS house_recovery_decisions_v1 (
-      decision_id TEXT PRIMARY KEY, origin TEXT NOT NULL, decision_json TEXT NOT NULL, pin_json TEXT NOT NULL,
-      participation_json TEXT NOT NULL, raw_bytes BLOB NOT NULL, proof_header TEXT NOT NULL,
-      state TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', approved_epoch INTEGER)`);
-    opts.db.execute(`CREATE TABLE IF NOT EXISTS house_recovery_command_evidence_v1 (
-      decision_id TEXT NOT NULL, request_id TEXT NOT NULL, capture_json TEXT NOT NULL,
-      PRIMARY KEY(decision_id,request_id))`);
-    opts.db.execute(`CREATE TABLE IF NOT EXISTS house_recovery_fences_v1 (
-      origin TEXT PRIMARY KEY, decision_id TEXT NOT NULL, house_key TEXT NOT NULL, old_incarnation TEXT NOT NULL,
-      new_incarnation TEXT NOT NULL, fence_seq INTEGER NOT NULL, state TEXT NOT NULL, completed_at INTEGER)`);
+    ensureHouseRecoverySchema(opts.db);
   }
   private row(id: string): DecisionRow | null {
     return this.opts.db.queryOne<DecisionRow>('SELECT * FROM house_recovery_decisions_v1 WHERE decision_id=?', [id]);

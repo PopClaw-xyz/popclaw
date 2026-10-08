@@ -9,6 +9,7 @@ import { resolveCanvasBaseUrl } from '../canvas/canvas-fallback.js';
 import { hostDbSlug } from '../ingress/host-slug.js';
 import { PopclawPaths } from '../host/popclaw-paths.js';
 import { onNicknamePersisted } from '../onboarding/identity-writer.js';
+import { completeStorageInitialization } from '../host/storage-compatibility.js';
 
 export interface BootstrappedPlugin {
   readonly host: HostAdapter;
@@ -65,6 +66,7 @@ export async function bootstrapPlugin(
 ): Promise<BootstrappedPlugin> {
   const config = await loadPluginConfig(host);
   const key = await new Keystore(host).loadOrGenerate();
+  completeStorageInitialization(host, key.popclawId);
   noticeSecondRoot(host, defaultStateDir, key.popclawId);
   const signer = new MasterKeySigner(key);
   const loreHouseUrl = config.lore_houses[0];
