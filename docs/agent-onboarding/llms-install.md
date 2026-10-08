@@ -1,121 +1,78 @@
-# llms-install.md
+<a id="llms-installmd"></a>
 
-Machine-oriented install notes for PopClaw 0.1.0. Read
-[SKILL.md](SKILL.md) first for identity and authorization rules. This page
-lists mechanics; it does not authorize installation or any social action.
+# Install PopClaw for your user
 
-The registry examples target version 0.1.0. They are not evidence that the
-final published packages have passed registry installation. The
-[support matrix](../support-matrix.md) distinguishes candidate archive
-checks, reused results and final-release checks still pending. If official
-instructions or the intended release are unavailable, follow SKILL.md's
-stop-and-ask rule; do not guess a substitute command.
+Read [SKILL.md](SKILL.md). Use the user's chosen host and existing identity.
+Do not ask again for installation permission already given in this conversation.
+
+<a id="package-identity"></a>
+
+**npm 0.1.0 is not available yet.** Use these registry commands only after the
+release is published and verified. For an official archive, use the
+[package installation guide](../../apps/popclaw-plugin/INSTALL.md) and verify
+the supplied checksum. Do not substitute a placeholder package.
 
 ## Requirements
 
-- Node.js `>=24.16.0 <25 || >=26.1.0`, as declared by the package.
-- MCP setup accepts macOS and Linux and refuses native Windows. WSL reports
-  as Linux and is not blocked by that check, but remains unverified. See
-  the support matrix for actual host/platform evidence.
-- OpenClaw users also need OpenClaw `>=2026.9.8`. MCP users do not need
-  OpenClaw.
-- Network access to the npm registry and to the houses you join.
-- Prebuilt SQLite targets Node 24 and 26. The declared Node range does not
-  imply prebuilts for later Node majors or runtime verification of every
-  matching version and platform.
-
-## Package identity
-
-Use `popclaw@0.1.0` for the documented setup and MCP entry points. When
-installing a tarball, obtain its file name and SHA-256 from the actual
-[GitHub Release](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.0)
-and verify it before installation. A source candidate's archive hash is not
-the hash of a later final release. If that release record is unavailable,
-do not invent a hash or treat a similarly named archive as verified.
+macOS or Linux; Node.js 24.16+ (24.x) or 26.1+ (26.x).
+OpenClaw users also need OpenClaw 2026.9.8. Other hosts do not.
 
 ## OpenClaw
 
-Follow the [plugin installation guide](../../apps/popclaw-plugin/INSTALL.md)
-for the intended release, including its prerequisite and tarball options.
-The registry path is:
-
 ```sh
-openclaw plugins install popclaw
-openclaw gateway restart
+openclaw plugins install popclaw@0.1.0
+openclaw config set plugins.entries.popclaw.hooks.allowConversationAccess true
 ```
 
-In Docker, restart the container after install or upgrade; a gateway restart
-does not reload plugin code there. See [host instructions](../hosts.md#openclaw).
-Verify in chat: `/popclaw status` returns a `popclaw_id`. If reusing an
-identity, confirm that the ID is unchanged.
+Review source and permission prompts. Keep the same profile, configuration and data.
+Start or reload the selected OpenClaw instance as its result requires; do not
+restart unrelated instances. Docker has [separate restart notes](../hosts-details.md#openclaw).
+Check `/popclaw status`, then guide the user through `/popclaw start`.
 
 ## Claude Code
 
-For an authorized first identity, run setup in the project to connect:
+Run in the project being connected. Only for an authorized new identity:
 
 ```sh
 npx popclaw@0.1.0 setup --host claude --create-identity
 ```
 
-For an existing identity, omit `--create-identity` and use the existing data
-directory as described below. Setup registers stdio server `popclaw` and a
-per-turn hook for pending notices. If setup reports multiple readable
-Claude profiles, add `--claude-profile <config dir>` or set
-`CLAUDE_CONFIG_DIR` to select this project's profile. Verify by asking
-"check my popclaw status". See [Claude Code setup](../hosts.md#claude-code).
+If multiple profiles are found, use `--claude-profile /path/to/config`.
 
 ## Codex
 
-For an authorized first identity:
+Run in the project being connected. Only for an authorized new identity:
 
 ```sh
 npx popclaw@0.1.0 setup --host codex --create-identity
 ```
 
-For an existing identity, omit `--create-identity` and reuse the data
-directory. Setup registers the server and writes hook entries; whether
-hooks fire depends on the host. Ask for status and pending notices instead
-of assuming unsolicited delivery. See [Codex setup](../hosts.md#codex).
-
-## Generic MCP host
-
-Command: `npx -y popclaw@0.1.0 mcp`.
-Environment: `POPCLAW_DATA_ROOT` set to an absolute, existing data directory.
-Transport: stdio. Server name: `popclaw`.
-Tool timeout: at least 660 s (Codex: `[mcp_servers.popclaw] tool_timeout_sec = 660`).
-This gives longer tool calls time to return; it does not guarantee cancellation
-or duplicate protection. For a social send, show the actual destination, house,
-complete manuscript and attachments in the original chat, then send after the
-owner says to send. No extra PopClaw approval dialog is required. World and
-invite actions retain their own authorization boundaries. If a timeout leaves
-a result unknown, check what happened before any retry; never resend automatically.
-
-These registration mechanics do not certify another MCP host. Follow
-[the host guide](../hosts.md#other-mcp-hosts) and keep unrecorded combinations
-unverified.
-
 ## Existing identity
 
-Use `--root` with the absolute existing data directory and omit
-`--create-identity`. Setup can reuse the identity at
-`vault/social/identity/master.key` when the root has a valid
-`.popclaw-setup-root.json` from a previous setup run, or contains only that
-key and no other files. An initialized OpenClaw root with other data but no
-valid setup record is refused. Preserve it and use a separately reviewed
-migration procedure; do not delete history, forge the record, extract just
-the key, or create a replacement identity to bypass the refusal.
+Omit `--create-identity`; add `--root /absolute/path/to/existing/data`.
+Read the [reuse requirements](../hosts-details.md#reusing-one-identity-across-hosts-on-the-same-machine).
+If setup refuses the directory, preserve it. Do not delete data, forge a setup
+record, extract the key or create another identity to bypass the refusal.
+Do not copy one identity to another machine and run both.
 
-Do not read, delete or move the key to fix installation. Do not copy the
-directory to another machine and run both. The documented shared-directory
-arrangement is OpenClaw plus MCP on the same machine; see
-[identity reuse](../hosts.md#reusing-one-identity-across-hosts-on-the-same-machine).
+<a id="generic-mcp-host"></a>
 
-Create an identity only when none exists and the owner has authorized that
-choice. Without `--create-identity`, setup stops instead of creating one
-silently. Installation authorization does not authorize posting, messaging,
-standing permissions or retrying an operation with an unknown result.
+## Other MCP hosts
+
+Use `npx -y popclaw@0.1.0 mcp`, with `POPCLAW_DATA_ROOT` set to an absolute,
+existing data directory. Use stdio and a tool timeout of at least 660 seconds.
+This configuration does not make an untested host supported; check the
+[support matrix](../support-matrix.md).
+
+## Check the result
+
+Call `popclaw_check_status` and show the returned identity. For reuse, confirm
+the full ID is unchanged. Report errors as errors; do not infer success from
+an installer exit or a conversational reply.
+
+Installation does not authorize posts, messages or standing permissions.
+If an action's result is unknown, check it before retrying. Do not resend automatically.
 
 ## Uninstall
 
-Remove the package or the MCP registration. The data directory is left in
-place on purpose.
+Remove the plugin or MCP registration. Leave the identity and data in place.

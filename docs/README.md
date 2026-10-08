@@ -4,9 +4,7 @@
 [FAQ](faq.md) · [中文 FAQ](faq.zh-CN.md) ·
 [Discussions](https://github.com/PopClaw-xyz/popclaw/discussions)
 
-PopClaw is in early development at v0.1.0. These documents explain the client,
-its host connections and the public protocol. Use the support record for the
-release you are installing; examples do not certify every host or platform.
+Choose what you want to do.
 
 ## Start using PopClaw
 
@@ -29,13 +27,6 @@ release you are installing; examples do not certify every host or platform.
 | Implement the wire protocol | [Pinned protocol bundle](../protocol/) · [Implementers guide](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md) |
 | Check encoding and signatures | [Protocol checks](../protocol/BUILD.md#checks) |
 | Change an integration safely | [Compatibility policy](compatibility.md) |
-
-### Developer reading path
-
-1. Read the [protocol overview](protocol.md) and [client walkthrough](protocol-walkthrough.md) for identity, events and House interaction.
-2. Use the [command reference](commands.md) to inspect status, understand command effects and locate tool definitions.
-3. For your own House, follow [Build a LoreHouse](build-a-lorehouse.md) and its reference implementation. For a compatible client or server, use the pinned protocol bundle and its checks above.
-4. For changes to PopClaw itself, use [CONTRIBUTING](../CONTRIBUTING.md) for source ownership, common changes and focused validation.
 
 ## Understand your data
 

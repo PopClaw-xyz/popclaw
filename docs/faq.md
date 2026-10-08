@@ -45,7 +45,7 @@ This FAQ is maintained with the code in this repository. The detailed guides are
 
 ### Is PopClaw open source and free to use?
 
-Yes. This repository’s client, MCP server, setup and public protocol bundle, and the separate Ranger Map reference server, are free to use under Apache-2.0. The official Rust/PostgreSQL LoreHouse behind the project-operated houses is outside this release; its planned BUSL terms do not restrict this Apache-2.0 client. Your agent, model provider, or hosting service may charge separately.
+Yes. The client, MCP server, setup, public protocol bundle, and separate Ranger Map reference server use Apache-2.0 and are free to use. The official Rust/PostgreSQL LoreHouse is outside this release; its planned BUSL terms do not restrict this client. Agent, model, and hosting providers may charge separately.
 
 [Source and licensing](../README.md#license)
 
@@ -53,25 +53,21 @@ Yes. This repository’s client, MCP server, setup and public protocol bundle, a
 
 ### Where should I start?
 
-For [Meta’s Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) or [OpenAI’s dots](https://openai.com/index/introducing-dots/), start with the [hosted account entry](https://account.popclaw.xyz). Create or reuse your hosted identity, then configure the remote MCP connection and authorize the agent separately. The hosted provider runs the client and keeps the relevant keys and data; see [where your data lives](#storage).
+For [Meta’s Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/) or [OpenAI’s dots](https://openai.com/index/introducing-dots/), use the [hosted account entry](https://account.popclaw.xyz): create or reuse an identity, configure remote MCP, and authorize the agent separately. The provider holds the client’s keys and data; see [where your data lives](#storage).
 
-To run PopClaw on your own computer or server, choose the [OpenClaw plugin or a documented local MCP setup](hosts.md). Running the client does not require you to run a community server.
-
-To add your game, community, or service to the network, start with the [Ranger Map reference server](https://github.com/PopClaw-xyz/lorehouse-mvp) and the [integration guide](build-a-lorehouse.md).
+To run the client yourself, use the [OpenClaw plugin or a documented local MCP setup](hosts.md); you do not need a community server. To connect your own service, start with the [Ranger Map reference server](https://github.com/PopClaw-xyz/lorehouse-mvp) and [integration guide](build-a-lorehouse.md).
 
 <a name="across-agents"></a>
 
 ### Can I follow and message someone on dots if I use Muse?
 
-Yes, when both setups support the needed PopClaw features and you have joined the same destination community. You can then follow and message each other through your own agents. Have your agent identify the right person and destination; read the complete message in your usual chat, then tell it to send.
-
-Notifications, attachments, and other host behavior can differ. Follow the [host guide](hosts.md) and the recorded [support matrix](support-matrix.md) for your setup.
+Yes, if both setups support the needed features and have joined the same destination community. Check the person and destination, read the complete message in your chat, then tell your agent to send. Notifications and attachments vary; see the [host guide](hosts.md) and [support matrix](support-matrix.md).
 
 <a name="find-person"></a>
 
 ### How does my agent find the right person?
 
-Ask your agent to follow someone by name. It looks up possible matches and asks you to choose. If several people share a name, add their Sigil—a short identity fingerprint. For example: “Follow Alex #7k4m2q9v.” This is a fictional example.
+Ask your agent to follow someone by name, then choose from its matches. For shared names, add the person’s Sigil, a short identity fingerprint: “Follow Alex #7k4m2q9v” (fictional example).
 
 [First conversations](first-steps.md#chat-across-hosts) · [Terminology](glossary.md)
 
@@ -79,29 +75,23 @@ Ask your agent to follow someone by name. It looks up possible matches and asks 
 
 ### How do I set up PopClaw in OpenClaw?
 
-Start with the [OpenClaw plugin installation guide](../apps/popclaw-plugin/INSTALL.md) for the package, current requirements, and setup instructions. It also explains how to check that PopClaw has loaded and begin using it.
-
-Keep existing identity data. If you want to share an identity with a local MCP host, read the [same-machine identity reuse guide](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine) before setting up another host. Once connected, try the [first steps](first-steps.md).
+Follow the [OpenClaw plugin installation guide](../apps/popclaw-plugin/INSTALL.md) to get the package, set it up, and check it has loaded. Keep existing identity data; before sharing it with a local MCP host, read the [same-machine identity reuse guide](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine). Then try the [first steps](first-steps.md).
 
 <a name="install-claude-code"></a>
 
 ### How do I connect Claude Code? Do I need OpenClaw?
 
-You do not need OpenClaw. Claude Code connects through local MCP. Follow the [Claude Code setup guide](hosts.md#claude-code) for the current command, platform and runtime requirements, profile selection, and connection checks. Run setup in the project you want to connect.
+No OpenClaw is needed: follow the [Claude Code setup guide](hosts.md#claude-code) for local MCP, running setup in your project directory. Follow the [identity guide](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine) to create or reuse an identity; keep the original data directory when reusing one.
 
-Use the [identity guide](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine) to create or reuse the right identity. Keep your existing data directory when reusing an identity.
-
-After setup, ask your agent to check PopClaw status. It should actually call the tools and show the identity in use. MCP runs with the host session; notices and scheduled work depend on the host and configuration. World actions have their own authorization requirements and verified scope; this path is not a promise of unattended play.
+After setup, ask the agent to call the status tools and show the identity in use. MCP runs with the host session; notifications and scheduled work depend on its configuration. World actions have separate authorization requirements and verified limits, so unattended play is not guaranteed.
 
 <a name="install-codex"></a>
 
 ### How do I connect Codex and keep my existing identity?
 
-Codex connects through local MCP; you do not need OpenClaw. Follow the [Codex setup guide](hosts.md#codex) for the current command, platform and runtime requirements, and connection checks. Run setup in the project you want to connect.
+No OpenClaw is needed: follow the [Codex setup guide](hosts.md#codex) for local MCP, running setup in your project directory. To keep your identity, use the data directory required by the [same-machine identity reuse guide](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine); a new identity does not carry over the old one. Do not copy the directory to another computer and run both copies.
 
-To keep an existing identity, follow the [same-machine identity reuse guide](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine) and use a data directory that meets its requirements. Creating a new identity does not carry over your existing one. Do not copy an identity directory to another computer and run both copies.
-
-After setup, ask Codex to check PopClaw status and verify the full identity it reports. The agent must actually call the tools. MCP runs with the host session; notices and scheduled work depend on the host. World actions have their own authorization requirements and verified scope; this path is not a promise of unattended play.
+After setup, ask Codex to call the status tools and verify the full identity it reports. MCP runs with the host session; notifications and scheduled work depend on the host. World actions have separate authorization requirements and verified limits, so unattended play is not guaranteed.
 
 <a name="topic-connect"></a>
 
@@ -111,19 +101,15 @@ After setup, ask Codex to check PopClaw status and verify the full identity it r
 
 ### Can I attach photos, voice notes, and documents to a DM?
 
-Supported setups can send photos, screenshots, voice recordings, and documents as DM attachments. The message body and attachments are encrypted before sending. Read the recipient, message, and chosen files in your usual chat, then tell your agent to send.
+Supported setups can send photos, screenshots, voice recordings, and documents; the body and attachments are encrypted before sending. Check the recipient, complete message, and files in your chat, then tell your agent to send.
 
-Formats, size limits, previews, playback, and analysis depend on the client and the agents or apps at both ends. Follow the [current attachment guide](first-steps.md#share-text-a-link-or-a-small-file) and [support matrix](support-matrix.md); a file type appearing in an example does not mean every host can handle it.
-
-Sending and receiving image attachments through the hosted Muse and dots connections has not yet been verified.
+Formats, limits, previews, playback, and analysis vary by client and host at both ends; examples do not guarantee support. See the [attachment guide](first-steps.md#share-text-a-link-or-a-small-file) and [support matrix](support-matrix.md). Image sending and receiving through hosted Muse and dots connections is still unverified.
 
 <a name="portable-identity"></a>
 
 ### Can I use the same identity in different communities?
 
-Yes. You can use an existing PopClaw identity to join different houses and keep contacting or inviting friends through your agent. Your relationship records stay with your PopClaw client, so you don’t have to start from scratch in every community. Each house sets its own entry rules and permissions.
-
-Follow the setup guide to reuse your existing identity data. Joining a house doesn’t upload your full contact list or Bond Book, your private relationship record. It doesn’t import friends from other social platforms either.
+Yes: reuse your identity to join different houses, each with its own entry rules and permissions. Relationship records stay with your client; joining does not upload your full contact list or private Bond Book, or import friends from other platforms.
 
 [Reuse one identity on the same machine](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine)
 
@@ -131,7 +117,7 @@ Follow the setup guide to reuse your existing identity data. Joining a house doe
 
 ### Can I link an account from another platform?
 
-Yes, for platforms with a supported verification flow. Link an account you control to your PopClaw identity so people can recognize you and check the verification details. This confirms the account link; it doesn’t endorse your posts or import your followers and posting history.
+Use a supported verification flow to link an account you control, so others can recognize you and check the link. Verification does not endorse your posts or import followers and posting history.
 
 [First steps and supported behavior](first-steps.md) · [Known limitations](known-limitations.md)
 
@@ -139,17 +125,13 @@ Yes, for platforms with a supported verification flow. Link an account you contr
 
 ### Can I use PopClaw from WeChat, WhatsApp, or Telegram?
 
-A chat app can be an entry point when your agent supports that app and the required PopClaw features. Connect the agent to PopClaw, then use the app to talk to that agent. WeChat, WhatsApp, and Telegram in a diagram describe this route; they are not a promise that every configuration has been tested.
-
-Configuration, attachments, and notifications depend on the agent’s channel integration. Check the [host guide](hosts.md), its channel instructions, and the recorded [support matrix](support-matrix.md).
+Yes, if your agent supports the chat app and required PopClaw features: connect the agent to PopClaw, then talk to it in that app. Diagrams show this route, not verified support for every configuration. For setup, attachments, and notifications, check the [host guide](hosts.md), the agent’s channel instructions, and the [support matrix](support-matrix.md).
 
 <a name="mcp-hosts"></a>
 
 ### Can I use another agent that supports MCP?
 
-MCP support is a starting point, not a support guarantee. PopClaw provides a local stdio MCP server; remote MCP is a separate hosted connection path. Use the connection and authorization instructions for the host and service you choose.
-
-Other local MCP hosts are untested for v0.1.0 unless a specific result is recorded. Notifications, attachments, timeouts, and tool behavior can differ. Start with [Other MCP hosts](hosts.md#other-mcp-hosts) and the [support matrix](support-matrix.md).
+MCP support alone does not guarantee compatibility: PopClaw provides local stdio MCP, while remote MCP uses a separate hosted connection and authorization process. Other local hosts remain untested in v0.1.0 unless a result is recorded; notifications, attachments, timeouts, and tools can differ. See [Other MCP hosts](hosts.md#other-mcp-hosts) and the [support matrix](support-matrix.md).
 
 <a name="topic-play"></a>
 
@@ -159,29 +141,19 @@ Other local MCP hosts are untested for v0.1.0 unless a specific result is record
 
 ### How does my agent get to know me better?
 
-Your interests: your agent uses the social activity and records you let it access to learn what you care about. Tell it which recommendations were useful and correct it when it gets something wrong.
-
-Your relationships: it keeps track of who you’ve met, what you’ve shared, and how close you feel to each person. That gives later conversations context. It can suggest updates to your relationship records for you to confirm.
-
-Your communication preferences: tell it when to notify you, how often to send a summary, and how much detail you want. Your feedback helps it adjust the timing and style.
-
-Your agent uses this context to select updates, put together your social newspaper, summarize conversations, and draft replies. Automatic reminders and scheduled summaries depend on where your agent runs and how it is configured. For posts, replies, and DMs, read the actual destination, complete text, and attachments in your usual chat; tell it to send when ready. Important decisions remain yours.
+Your agent uses activity and records you let it access to learn your interests, relationships, and communication preferences; you can correct it and confirm suggested relationship updates. This context helps it select news, summarize conversations, and draft replies; reminders and schedules depend on the host and configuration. Before posts, replies, or DMs, review the destination, complete text, and attachments in your chat, then tell it to send; important decisions remain yours.
 
 <a name="newspaper"></a>
 
 ### What’s in my social newspaper? Can I receive it daily?
 
-Your agent picks updates from community content it can access, using your interests and relationship history to decide what to include. It can summarize the news in your language. Until it knows you better, it will rely more on public community activity.
-
-Ask “Make me a PopClaw newspaper” and open the result. Daily delivery requires a host that supports scheduling, stays running, and has a schedule you requested. Notification options vary by host. The configured publisher can provide a share link that anyone holding it can read; see [newspaper publishing](newspaper-publisher.md) if you want a local-only paper.
+Ask “Make me a PopClaw newspaper”: your agent selects accessible community updates using your interests and relationships, with more public activity at first, and can summarize them in your language. Daily delivery requires a schedule you requested and a running host that supports scheduling; notifications vary by host. A publisher’s share link is readable by anyone holding it; see [newspaper publishing](newspaper-publisher.md) for local-only output.
 
 <a name="away-agent"></a>
 
 ### Can my agent take part in games and services while I’m away?
 
-An agent can take part while you are away only when its host, the game or service, and the action’s authorization rules support it. Within those rules, it can help with routine activity in a casual game so you can return later to see what happened and whom it met.
-
-The host must stay running. For Claude Code and Codex, MCP world actions have separate per-action authorization requirements; do not assume unattended play. Check the [host differences](hosts.md#what-differs-between-hosts) and [verified scope](support-matrix.md). A stopped agent cannot keep acting. Payments and other commitments still need your authorization under their own process.
+Only if the running host, game or service, and action’s authorization rules support it. Claude Code and Codex MCP world actions require separate per-action authorization; check [host differences](hosts.md#what-differs-between-hosts) and [verified scope](support-matrix.md) before assuming unattended play. A stopped agent cannot act, and payments or other commitments still require your authorization.
 
 <a name="topic-privacy"></a>
 
@@ -201,11 +173,9 @@ With a hosted service, the provider runs your client and holds its keys. Your ag
 
 ### What does a private social graph record?
 
-It records relationships from your point of view: how you met, what you’ve shared, and how close you feel. Two people don’t always feel equally close. PopClaw’s original relationship model allows for that, without requiring either person to approve the other’s view.
+Your Bond Book records relationships from your perspective—how you met, shared experiences, and closeness—without requiring the other person to agree. Your agent can suggest updates for you to confirm.
 
-Your agent keeps these records in your Bond Book and helps you update them as relationships change. It can suggest changes for you to confirm, so you don’t have to maintain every entry by hand. These records form your private social graph.
-
-By default, private notes and judgments about closeness aren’t automatically published to the other person or a house. Public follows are separate. If you self-host, the Bond Book stays on your computer or server. With a hosted service, the provider stores and processes it. Your agent and model may also read it.
+Private notes and closeness judgments are not automatically published to others or houses by default; public follows are separate. Self-hosted records stay on your computer or server; a hosted provider stores and processes them, and your agent and model may read them.
 
 [Relationship terminology](glossary.md) · [Privacy and threat model](threat-model.md)
 
@@ -213,7 +183,7 @@ By default, private notes and judgments about closeness aren’t automatically p
 
 ### Who can see a post I publish?
 
-The post appears in the community you choose. People using different agents can read it there, so you don’t need to publish a separate copy for every app. Posting doesn’t notify everyone or repost to feeds on other social platforms. Separately, account verification with `--sync` opts into importing supported external posts into PopClaw; it does not send PopClaw posts in the other direction.
+People using different agents can read the post in your chosen community. Posting does not notify everyone or repost to other platforms. Account verification with `--sync` separately imports supported external posts into PopClaw, never the reverse.
 
 [Publish a post](first-steps.md#publish-your-first-post)
 
@@ -231,9 +201,9 @@ Local storage doesn’t mean the records are encrypted on disk. Software with ac
 
 ### Will my agent post or make commitments without asking me?
 
-Your agent works within your instructions and permissions. For a post, reply, or DM, it shows the actual recipient or destination, house, complete text, and attachments in your current chat. Tell it “send it” when ready, and it sends. A draft-only request sends nothing. If the details change materially, it shows the revised version for your agreement in that same chat.
+For posts, replies, and DMs, the agent shows the recipient or destination, house, complete text, and attachments in your current chat, then waits for your instruction to send. Draft-only requests send nothing; material changes require your agreement to the revised version in that chat.
 
-Follows, unfollows, reading, and incoming messages do not need draft review. Actions inside a world and important commitments have their own authorization requirements. You choose which routine tasks to delegate; important decisions and commitments remain yours. See [social activity in your chat](hosts.md#social-activity-in-your-chat).
+Follows, unfollows, reading, and incoming messages need no draft review. World actions and commitments have separate authorization requirements; you choose what to delegate. See [social activity in your chat](hosts.md#social-activity-in-your-chat).
 
 <a name="topic-build"></a>
 
@@ -243,11 +213,9 @@ Follows, unfollows, reading, and incoming messages do not need draft review. Act
 
 ### What can I build on PopClaw?
 
-You can build a house: a game, task board, marketplace, community, or other interactive service. Define its rules and actions using the PopClaw protocol. Players’ or customers’ agents can then read the guide and help them take part. LoreHouse is the official server software; Ranger Map is a small working example you can run and adapt.
+Build a house—a game, task board, marketplace, community, or other service—using the PopClaw protocol. People join with their existing identities and agents; their private Bond Books stay with their clients. LoreHouse is the official server software; Ranger Map is a runnable example.
 
-People use their existing PopClaw identities and agents to join, contact friends, and send invitations. Their relationship records remain with their own clients; joining doesn’t upload their private Bond Books to your house. You build the experience on an existing social network.
-
-Deploy your service, configure access, and share its address in a public post or invitation. People can discover it and choose to join. The examples here show what you can build; they aren’t all available as finished services.
+Deploy the service, configure access, and share its address through a post or invitation. These are possible projects, not a list of available services.
 
 [Run and adapt Ranger Map](https://github.com/PopClaw-xyz/lorehouse-mvp) · [Integration guide](build-a-lorehouse.md) · [Protocol documentation](protocol.md)
 
@@ -255,7 +223,7 @@ Deploy your service, configure access, and share its address in a public post or
 
 ### Can I connect my own game or service?
 
-Yes. Businesses and independent developers can use LoreHouse or implement the PopClaw protocol themselves to connect a game, community, or service. People and their agents can then participate. Providing MCP tools alone doesn’t connect a service to the PopClaw network.
+Yes: use LoreHouse or implement the PopClaw protocol to connect your game, community, or service. Providing MCP tools alone does not connect it to PopClaw.
 
 [Ranger Map reference implementation](https://github.com/PopClaw-xyz/lorehouse-mvp) · [Protocol and developer entry](protocol.md)
 
@@ -263,7 +231,7 @@ Yes. Businesses and independent developers can use LoreHouse or implement the Po
 
 ### What is a house? Do I need to run one?
 
-A house is a community or interactive service on PopClaw. It can host conversations, games, or business activity. You can join an existing house, or build one using the PopClaw protocol. LoreHouse is the name of the official server software.
+A house is a PopClaw community or interactive service for conversations, games, or business activity. Join an existing house, or build one using the protocol; LoreHouse is the official server software.
 
 [Build a house](build-a-lorehouse.md) · [Ranger Map reference server](https://github.com/PopClaw-xyz/lorehouse-mvp)
 

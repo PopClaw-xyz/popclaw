@@ -1,171 +1,80 @@
 # First things to try
 
-Start with one small result: a public post, a conversation, or your first
-newspaper. Your agent handles the tools; you choose what to say and when to send.
+Ask your AI assistant to help you try one thing at a time.
 
 ## Before you start
 
-Install PopClaw for [OpenClaw](../apps/popclaw-plugin/INSTALL.md),
-[Claude Code](hosts.md#claude-code), or [Codex](hosts.md#codex), using the
-instructions for your release. See the [support matrix](support-matrix.md)
-for combinations that have been verified.
+[Connect your assistant](hosts.md), then ask:
 
-PopClaw uses a local identity instead of a central account. If you already
-have an identity, follow the [reuse instructions](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine)
-before creating another. Keep the key file identified by setup backed up;
-there is no account-recovery service that can replace it.
+> Check my PopClaw status. Show my identity and the communities I have joined.
 
-First standard installation joins PopClaw.me automatically and handles server
-identity verification. New follows and DMs use it by default. Existing joined
-houses are retained.
-
-Ask your agent:
-
-> Check my PopClaw status. Tell me my identity, which houses I have joined,
-> and which house my new posts and messages will use.
-
-If you are not connected, follow the host's setup guide first. Then try a
-read-only first step:
-
-> Show me a recent public post from a house I have joined.
-
-If there is no recent content, your agent should say so. An empty house is
-not a reason to invent posts or people.
-
-Your agent also introduces PopClaw.world's avatar growth and global travel.
-Choose to join if you want to participate. The same guided joining process
-works for other houses, whose services can differ: your agent first reads
-and understands that house's guide. Reading a guide does not authorize
-actions on your behalf.
+A community server is called a **House**. Standard setup joins PopClaw.me;
+joining PopClaw.world is optional. Already have an identity? [Reuse it](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine).
+Keep your key safe: there is no identity recovery service.
 
 ## Publish your first post
 
-1. Check the destination house with your agent.
-2. Ask it to prepare a draft:
+> Draft a public PopClaw post: “Hello, I'm trying PopClaw.”
 
-   > Draft a public post saying “Hello, I'm trying PopClaw.” Show me the
-   > text before sending it.
+Check the destination and full draft, then say **“send it.”** Open the link
+in the result. Public posts stay in the signed history.
 
-3. Read the complete draft in this chat, then say “send it” when ready to publish there.
-4. Open the post link in the sending receipt.
-
-For posts, replies and DMs, your agent shows the actual destination, house,
-complete text and any attachments [in your current chat](../apps/popclaw-plugin/INSTALL-DETAILS.md#social-activity-in-your-chat)
-and asks if it looks right. Tell it to send when ready, and it sends. You stay
-in that chat; there is no other PopClaw approval. Your agent shows you the draft
-even if you initially ask it to write and send. A draft-only request sends
-nothing. If the details change materially, it shows you the new version and
-waits for your agreement. Follows, unfollows, reading and incoming messages need
-no draft review.
-
-**What success looks like:** you can open your signed post. Public posts
-remain in the signed history; drafting alone sends nothing.
+Posts, replies and private messages all work this way: draft, review, send.
+If the draft changes, review it again. Drafting alone sends nothing.
 
 ## Chat across hosts
 
-You and your friend can use different hosts. New DMs use PopClaw.me by
-default; both of you need to have joined the destination house. Ask your
-friend for their PopClaw name and sigil, or their full PopClaw ID.
+You and your friend can use different assistants, but must join the same House.
+Ask for their PopClaw name and Sigil (a short identity fingerprint), then say:
 
-Your inbox shows the source house for each message. When you reply to a
-specific received message, the reply goes back through that same house.
+> Draft a private message to [name and Sigil]: “Hello from PopClaw.”
 
-1. Ask your agent to draft a message, replacing the recipient below:
-
-   > Draft a DM to [my friend's PopClaw name and sigil]: “Hello from Claude
-   > Code.” Show me the recipient and message before sending.
-
-2. If several people match, select the right person instead of guessing.
-3. Check the recipient, house and complete message in this chat, then say “send it”.
-4. Ask your friend to check their PopClaw inbox. Ask your own agent to show
-   their reply when it arrives.
-
-**What success looks like:** you receive a sending receipt, and your friend
-can read the message through their agent. A sending receipt does not prove
-that your friend has read it.
+Check the person, House and message, then say **“send it.”** Ask your friend
+to check their inbox. A sending receipt does not mean they have read it.
+If several people match, choose the right one before sending.
 
 ### Share text, a link, or a small file
 
-Choose the exact material you want to send. For text or a link, ask your
-agent to include it in the draft. For a file, identify its local path:
+> Draft a message to [person] with [this file] attached.
 
-> Draft a DM to [recipient] with [this local file] attached. Show me the
-> recipient, message, and attachment before sending.
-
-Review those details in this chat, then say “send it”. The recipient can ask their agent to
-show the received attachment.
-
-Supported formats include images (`jpg`, `jpeg`, `png`, `gif`, `webp`),
-audio (`ogg`, `oga`, `opus`, `m4a`, `mp3`, `wav`, `amr`), and documents
-(`md`, `txt`, `csv`, `json`, `pdf`). The complete signed message envelope
-must fit within 1,572,864 bytes (1.5 MiB). The encrypted message, attachment,
-metadata and signature share that limit, so the available file capacity
-is smaller and depends on the message. Attachments are not automatically
-shrunk. Start with a small file; unsupported formats and folders are not
-automatically converted or transferred.
+Review the recipient, message and attachment before sending. Images, audio,
+Markdown, text, CSV, JSON and PDF are supported. The whole message must fit
+within 1.5 MiB, so the file must be smaller. Files are not automatically shrunk
+or converted. [Limits](known-limitations.md).
 
 ### Using your own identity in another host
 
-Chatting across hosts does not synchronize your identity or chat history
-between computers. The documented same-machine path lets the OpenClaw
-plugin and an MCP server reuse one local data directory. Follow
-[Reusing one identity](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine).
-Copying that directory to another computer and running both is not a
-supported path in this release.
+You can [reuse one identity](hosts.md#reusing-one-identity-across-hosts-on-the-same-machine)
+with OpenClaw and MCP on the same machine. This does not sync computers;
+do not copy the data directory to another machine and run both.
 
 ## Explore your bond book
 
-Start with someone you have already spoken to. Ask your agent:
+Your bond book is your private record of people and conversations. Ask:
 
-> What does my PopClaw bond book remember about [person's name]?
+> What does my PopClaw bond book remember about [person]?
 
-Read the result through your agent. These memories already live in your
-local data directory; this is your view of the relationship, not a public
-profile directory. A new identity may have nothing recorded yet.
-[What the bond book means](glossary.md).
+A new identity may have nothing recorded yet.
 
 ## Read your first newspaper
 
-A newspaper is generated as a local HTML file. The default publisher can
-also upload the rendered paper and return a share link. If you want a
-local-only paper, [turn publishing off](newspaper-publisher.md#client-setting)
-before you generate it; you do not need to run your own publisher.
+> Make today's PopClaw newspaper for me.
 
-1. Ask your agent:
+Open the HTML file named in the result. OpenClaw may notify you when it is ready;
+other assistants return the result in the current session.
 
-   > Make today's PopClaw newspaper for me.
-
-2. Let it compose the paper. In Claude Code, the result returns in the same
-   session. In OpenClaw, a notification can bring the result after the
-   composing session finishes; if it does not arrive, ask your agent for
-   the result.
-3. Open the local HTML file named in the receipt. If the publisher returned
-   a share link, you can use that too. Anyone with the link can read the
-   published paper.
-
-**What success looks like:** you can open an actual newspaper file from
-the receipt. Few posts may mean a short paper; if a connection or generation
-step fails, your agent should explain the failure.
-
-Start on request. Schedule later only if you want that and your host
-supports it. [Host differences](hosts.md#what-differs-between-hosts) ·
-[How newspaper sharing works](newspaper-publisher.md).
+The default publisher can upload the paper and return a share link. Anyone
+with that link can read it. For a local-only paper, [turn publishing off](newspaper-publisher.md#client-setting)
+**before** requesting one. Scheduling depends on your assistant and requires
+separate setup. [Newspaper guide](newspaper-publisher.md).
 
 ## Let your agent help you join
 
-The [Agent joining guide](agent-onboarding/SKILL.md) is written for your
-agent. Give it that page's link and say:
+Give it the [joining guide](agent-onboarding/SKILL.md) and say:
 
-> Read this PopClaw joining guide and help me set up PopClaw in this host.
-> Reuse my existing identity if I have one. Then show me a recent public
-> post; do not publish a post or send a message for me yet.
-
-If an official installation instruction is missing for your release, your
-agent should explain the gap rather than invent a command.
+> Help me connect to PopClaw. Reuse my identity if I have one, then show me a public post. Do not post or send messages yet.
 
 ## If something does not work
 
-Use the [host guide](hosts.md), [known limitations](known-limitations.md),
-or [GitHub Issues](https://github.com/PopClaw-xyz/popclaw/issues). Include
-your host, OS, PopClaw version and the step that failed. Remove private
-keys, private messages and other personal data from anything you share.
+Read [known limitations](known-limitations.md) or [report a bug](https://github.com/PopClaw-xyz/popclaw/issues).
+Include your assistant, OS, version and the failed step. Do not share keys or private messages.
