@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,16 @@ import { createOpenClawHostAdapter } from '../../../src/host/openclaw-host-adapt
 import { claimRoot } from '../../../src/setup/identity.js';
 import { tableFingerprint } from '../../../src/host/storage-backup.js';
 import { buildMcpRuntime } from '../../../src/host/mcp-runtime-ports.js';
+import { InboxStore } from '../../../src/messaging/inbox-store.js';
+import { ensureWorldCapabilitySchema } from '../../../src/world/world-capabilities.js';
+import { ensureHouseCommandSchema } from '../../../src/runtime/house-lifecycle/command-bus.js';
+import { ensureOwnerLeaseSchema } from '../../../src/runtime/house-lifecycle/owner-lease.js';
+import { ensureHouseRecoverySchema } from '../../../src/world/house-recovery.js';
+import { ensureWorldConversationInboxSchema } from '../../../src/runtime/world-conversation-inbox.js';
+import { ensureStorageParticipantsSchema } from '../../../src/host/storage-maintenance.js';
+import { ensureStorageRestoreSchema } from '../../../src/host/storage-backup.js';
+import { ensureHouseLifecycleSchema } from '../../../src/runtime/house-lifecycle/participation-store.js';
+import { ensureInstallationIdSchema } from '../../../src/runtime/house-lifecycle/installation.js';
 
 const migrationsDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../migrations');
 const migrations = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
@@ -47,6 +58,27 @@ function fixture() {
   return {paths, actorId, partitionPath};
 }
 function seal(db: LocalHostDb) { db.queryOne('PRAGMA journal_mode=DELETE'); db.close(); }
+/** Commit then terminate the OWNED fixture writer without close/checkpoint.
+ * The parent waits for its death before any raw-byte measurement. */
+function stoppedWalCommit(path: string, sql: string) {
+  const module = new URL('../../../src/host/local-host-db.ts', import.meta.url).href;
+  const script = `import {LocalHostDb} from ${JSON.stringify(module)}; const db=new LocalHostDb(${JSON.stringify(path)}); db.execute('PRAGMA wal_autocheckpoint=0'); db.execute(${JSON.stringify(sql)}); process.kill(process.pid,'SIGKILL');`;
+  const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {cwd: resolve(migrationsDir, '..'), encoding: 'utf8'});
+  expect(result.error).toBeUndefined(); expect(result.signal).toBe('SIGKILL');
+  expect(readFileSync(path + '-wal').length).toBeGreaterThan(32);
+}
+function persistentWalSnapshot(paths: PopclawPaths) {
+  return Object.fromEntries(Object.entries(snapshot(paths)).filter(([name]) => !name.endsWith('.db-shm')));
+}
+function proveUnchangedWalBytes(paths: PopclawPaths, before: Record<string, string>, scenario: string) {
+  const after = persistentWalSnapshot(paths);
+  expect(after).toEqual(before);
+  // Synthetic, stopped fixtures only. Emit metadata for DB/WAL evidence;
+  // never identity contents, row bodies, envelope bytes or key material.
+  console.info('A_WAL_BYTE_PROOF', JSON.stringify({scenario, unchanged: true, files: Object.entries(before)
+    .filter(([name]) => name.endsWith('.db') || name.endsWith('.db-wal'))
+    .map(([name, sha256]) => ({name, bytes: statSync(join(paths.rootDir(), name)).size, before: sha256, after: after[name]}))}));
+}
 function migrationFixture(paths: PopclawPaths, actorId: string, state = 'prepared') {
   const source = paths.lorehouseDb('pending'), original = new LocalHostDb(source);
   original.execute('CREATE TABLE world_stream(value BLOB)');
@@ -177,6 +209,157 @@ describe('storage admission before the first durable write', () => {
     const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
     db.execute('CREATE TABLE future_owner_assets(value BLOB)'); seal(db);
     refused(paths, 'STORAGE_SCHEMA_UNKNOWN');
+  });
+  it('keeps the actual supported inbox read and cross-replay UNIQUE dedup behavior', () => {
+    const {paths} = fixture(), host = new LocalHostAdapter({dataRoot: paths.rootDir(), logger});
+    const store = new InboxStore(host.db), item = {ts: 1, fromPopclawId: 'synthetic-sender', toPopclawId: 'synthetic-owner', body: 'synthetic', receivedAtMs: 1};
+    expect([store.record(item), store.record(item)]).toEqual([true, false]);
+    expect(host.db.queryOne<{n: number}>('SELECT count(body) n FROM inbox')?.n).toBe(1); host.db.close();
+  });
+  it('refuses a migrated global table missing a required body column', () => {
+    const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
+    db.execute('ALTER TABLE inbox DROP COLUMN body'); seal(db);
+    refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
+  });
+  it.each([
+    '',
+    'CREATE INDEX inbox_dedup ON inbox(from_popclaw_id,ts,body_hash)',
+    'CREATE UNIQUE INDEX inbox_dedup ON inbox(from_popclaw_id,ts)',
+    "CREATE UNIQUE INDEX inbox_dedup ON inbox(from_popclaw_id,ts,body_hash) WHERE ts>0",
+  ])('refuses missing or changed critical dedup index semantics: %s', replacement => {
+    const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
+    db.execute('DROP INDEX inbox_dedup'); if (replacement) db.execute(replacement); seal(db);
+    refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
+  });
+  it.each([
+    ['notification_preferences', (sql: string) => sql.replace('PRIMARY KEY', '')],
+    ['notification_preferences', (sql: string) => sql.replace("CHECK(dm_level IN ('L1','L2','L3'))", "CHECK(dm_level IN ('L1','L2','L3','future'))")],
+    ['bond_dynamics', (sql: string) => sql.replace('ON DELETE CASCADE', 'ON DELETE RESTRICT')],
+  ])('refuses changed PK, CHECK or FK semantics derived from applied SQL: %s', (table, change) => {
+    const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
+    const ddl = db.queryOne<{sql: string}>("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", [table])!.sql;
+    const indices = db.queryAll<{sql: string}>("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL", [table]);
+    expect(change(ddl)).not.toBe(ddl);
+    db.execute(`DROP TABLE ${table}`); db.execute(change(ddl));
+    for (const index of indices) db.execute(index.sql);
+    seal(db); refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
+  });
+  it.each([
+    'CREATE UNIQUE INDEX inbox_dedup ON inbox(from_popclaw_id COLLATE NOCASE,ts,body_hash)',
+    'CREATE UNIQUE INDEX inbox_dedup ON inbox(from_popclaw_id,ts DESC,body_hash)',
+  ])('refuses changed index collation or ordering: %s', replacement => {
+    const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
+    db.execute('DROP INDEX inbox_dedup'); db.execute(replacement); seal(db);
+    refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
+  });
+  it('refuses an opaque selected trigger that demonstrably corrupts a real signed original', () => {
+    const {paths, partitionPath} = fixture(), db = new LocalHostDb(partitionPath);
+    db.execute('CREATE TRIGGER future_asset_rewriter AFTER INSERT ON world_public_events_v1 BEGIN UPDATE world_public_events_v1 SET envelope=zeroblob(length(NEW.envelope)) WHERE binding_id=NEW.binding_id AND event_id=NEW.event_id; END');
+    const pair = nacl.sign.keyPair.fromSeed(Buffer.alloc(32, 11)), signed = nacl.sign(Uint8Array.of(1, 9, 255, 4), pair.secretKey);
+    expect(nacl.sign.open(signed, pair.publicKey)).not.toBeNull();
+    db.execute('INSERT INTO world_public_events_v1(binding_id,event_id,envelope,kind) VALUES(?,?,?,?)', ['binding', 'event', signed, 'test']);
+    const stored = db.queryOne<{envelope: Uint8Array}>('SELECT envelope FROM world_public_events_v1')!.envelope;
+    expect(nacl.sign.open(stored, pair.publicKey)).toBeNull(); seal(db);
+    refused(paths, 'EXECUTION_SCHEMA_UNKNOWN');
+  });
+  it.each([
+    [ensureWorldCapabilitySchema, 'world_capability_views_v1', 'guide_bytes'],
+    [ensureHouseCommandSchema, 'house_lifecycle_commands', 'effect_json'],
+    [ensureOwnerLeaseSchema, 'house_lifecycle_owner', 'renewed_at'],
+    [ensureHouseRecoverySchema, 'house_recovery_decisions_v1', 'raw_bytes'],
+    [ensureWorldConversationInboxSchema, 'world_conversation_inbox_v1', 'envelope_bytes'],
+    [ensureStorageParticipantsSchema, 'storage_runtime_participants_v1', 'pid'],
+    [ensureStorageRestoreSchema, 'storage_restore_applied_v1', 'operation'],
+    [ensureHouseLifecycleSchema, 'house_participation', 'remote_error'],
+    [ensureInstallationIdSchema, 'house_lifecycle_meta', 'value'],
+  ])('verifies a present optional runtime table from its real schema authority: %s', (ensure, table, column) => {
+    const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
+    ensure(db); seal(db); const before = snapshot(paths);
+    expect(inspectStorageCompatibility({paths, migrationsDir}).status).toBe('current');
+    expect(snapshot(paths)).toEqual(before);
+    const damaged = new LocalHostDb(paths.socialDb()); damaged.execute(`ALTER TABLE ${table} DROP COLUMN ${column}`); seal(damaged);
+    refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
+  });
+  it('allows a partially initialized optional capability schema without manufacturing missing tables', () => {
+    const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
+    ensureWorldCapabilitySchema(db);
+    for (const name of ['world_capability_current_v1', 'world_capability_recovery_views_v1', 'world_public_manifest_logs_v1', 'world_public_manifest_log_evidence_v1', 'world_kind_revisions']) db.execute(`DROP TABLE ${name}`);
+    seal(db); const before = snapshot(paths);
+    expect(inspectStorageCompatibility({paths, migrationsDir}).status).toBe('current');
+    expect(snapshot(paths)).toEqual(before);
+  });
+  it('boots the ordinary adapter with optional runtime schemas without minting installation or lease authority', async () => {
+    const {paths, actorId} = fixture(), db = new LocalHostDb(paths.socialDb());
+    for (const ensure of [ensureWorldCapabilitySchema, ensureHouseCommandSchema, ensureOwnerLeaseSchema,
+      ensureHouseRecoverySchema, ensureWorldConversationInboxSchema, ensureStorageRestoreSchema,
+      ensureHouseLifecycleSchema, ensureInstallationIdSchema]) ensure(db);
+    seal(db);
+    const before = snapshot(paths), host = new LocalHostAdapter({dataRoot: paths.rootDir(), logger});
+    const boot = await bootstrapPlugin(host);
+    expect(boot.identityGenerated).toBe(false); expect(boot.popclawId).toBe(actorId);
+    for (const table of ['house_lifecycle_owner', 'house_lifecycle_commands', 'house_lifecycle_meta',
+      'house_participation', 'house_recovery_decisions_v1', 'world_capability_current_v1']) {
+      expect(host.db.queryOne<{n: number}>(`SELECT count(*) n FROM ${table}`)?.n).toBe(0);
+    }
+    seal(host.db as LocalHostDb); const after = snapshot(paths);
+    // Ordinary admitted bootstrap may initialize configuration. The pure
+    // schema reuse must preserve identity/profile and selected originals.
+    for (const [name, hash] of Object.entries(before)) {
+      if (name.endsWith('master.key') || name.endsWith('data-profile.json') || name.startsWith('vault/social/execution/')) expect(after[name]).toBe(hash);
+    }
+  });
+  it('refuses changed optional owner CHECK and command pending-index semantics', () => {
+    for (const kind of ['owner', 'commands']) {
+      const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
+      if (kind === 'commands') { ensureHouseCommandSchema(db); db.execute('DROP INDEX house_commands_pending'); }
+      else {
+        ensureOwnerLeaseSchema(db);
+        const sql = db.queryOne<{sql: string}>("SELECT sql FROM sqlite_master WHERE name='house_lifecycle_owner'")!.sql;
+        db.execute('DROP TABLE house_lifecycle_owner'); db.execute(sql.replace('CHECK (id = 1)', 'CHECK (id >= 1)'));
+      }
+      seal(db); refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
+    }
+  });
+  it('refuses an opaque selected view without repairing the partition', () => {
+    const {paths, partitionPath} = fixture(), db = new LocalHostDb(partitionPath);
+    db.execute('CREATE VIEW future_projection AS SELECT event_id FROM world_public_events_v1'); seal(db);
+    refused(paths, 'EXECUTION_SCHEMA_UNKNOWN');
+  });
+  it('reads committed but uncheckpointed compatible WAL state without changing DB or existing WAL bytes', () => {
+    const {paths} = fixture();
+    stoppedWalCommit(paths.socialDb(), "INSERT INTO notification_queue(level,kind,payload_json,enqueued_at) VALUES('L1','wal-proof','{}',1)");
+    const before = persistentWalSnapshot(paths);
+    expect(inspectStorageCompatibility({paths, migrationsDir}).status).toBe('current');
+    const db = new LocalHostDb(paths.socialDb(), {readOnly: true});
+    expect(db.queryOne<{n: number}>("SELECT count(*) n FROM notification_queue WHERE kind='wal-proof'")?.n).toBe(1); db.close();
+    proveUnchangedWalBytes(paths, before, 'compatible-uncheckpointed-global');
+  });
+  it('sees a future applied migration committed only in WAL and refuses before application writes', () => {
+    const {paths} = fixture(); stoppedWalCommit(paths.socialDb(), "INSERT INTO _migrations VALUES('999-future.sql',1)");
+    const before = persistentWalSnapshot(paths); let called = 0;
+    expect(inspectStorageCompatibility({paths, migrationsDir}).reason).toBe('STORAGE_MIGRATION_UNSUPPORTED');
+    expect(() => new LocalHostAdapter({dataRoot: paths.rootDir(), logger, beforeDbInitialize: () => {called++; return () => {};}})).toThrow('STORAGE_MIGRATION_UNSUPPORTED');
+    expect(called).toBe(0); proveUnchangedWalBytes(paths, before, 'future-migration-uncheckpointed-global');
+  });
+  it('rejects a selected trigger committed only in its WAL without checkpointing or altering original bytes', () => {
+    const {paths, partitionPath} = fixture();
+    stoppedWalCommit(partitionPath, 'CREATE TRIGGER future_asset_rewriter AFTER INSERT ON world_public_events_v1 BEGIN UPDATE world_public_events_v1 SET envelope=zeroblob(length(NEW.envelope)) WHERE event_id=NEW.event_id; END');
+    const before = persistentWalSnapshot(paths);
+    expect(inspectStorageCompatibility({paths, migrationsDir}).reason).toBe('EXECUTION_SCHEMA_UNKNOWN');
+    expect(() => new LocalHostAdapter({dataRoot: paths.rootDir(), logger})).toThrow('EXECUTION_SCHEMA_UNKNOWN');
+    proveUnchangedWalBytes(paths, before, 'unknown-trigger-uncheckpointed-partition');
+  });
+  it('allows only SQLite coordination sidecars when inspecting a stopped WAL root with no sidecars', async () => {
+    const paths = root(), host = new LocalHostAdapter({dataRoot: paths.rootDir(), logger});
+    await bootstrapPlugin(host); host.db.close();
+    const writer = new LocalHostDb(paths.socialDb()); writer.execute("INSERT INTO _migrations VALUES('999-future.sql',1)"); writer.close();
+    expect(existsSync(paths.socialDb() + '-wal')).toBe(false);
+    const before = snapshot(paths);
+    expect(inspectStorageCompatibility({paths, migrationsDir}).reason).toBe('STORAGE_MIGRATION_UNSUPPORTED');
+    const after = snapshot(paths), added = Object.keys(after).filter(name => !(name in before));
+    expect(added.every(name => name === 'vault/social/my-social-assets.db-wal' || name === 'vault/social/my-social-assets.db-shm')).toBe(true);
+    for (const [name, hash] of Object.entries(before)) expect(after[name]).toBe(hash);
+    if (existsSync(paths.socialDb() + '-wal')) expect(readFileSync(paths.socialDb() + '-wal').length).toBe(0);
   });
   it('refuses a selected journal with unknown schema', () => {
     const {paths, partitionPath} = fixture(), db = new LocalHostDb(partitionPath);

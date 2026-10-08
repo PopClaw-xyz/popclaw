@@ -4,6 +4,7 @@ import { join, relative, resolve, sep } from 'node:path';
 import { verifyExecutionPartition, type ExecutionCatalogRow } from './execution-store.js';
 import { LocalHostDb, assertNoLiveDatabaseDescriptor, hasOpenDatabaseConnection } from './local-host-db.js';
 import type { PopclawPaths } from './popclaw-paths.js';
+import type { HostDb } from './host-db.js';
 import { MaintenanceSession, publishStorageJson, readStorageControl, type StorageControl } from './storage-maintenance.js';
 
 export interface BackupFile { path: string; sha256: string; sqlite: boolean; tables?: Record<string, number> }
@@ -242,6 +243,10 @@ export async function createStorageBackup(options: {
  * A move consumes a currently held, freshly quiesced source; clones always mint a new installation.
  * Recovery release is deliberately separate from copying history.
  */
+export function ensureStorageRestoreSchema(db: HostDb): void {
+  db.execute('CREATE TABLE IF NOT EXISTS storage_restore_applied_v1(epoch TEXT PRIMARY KEY, set_id TEXT NOT NULL, operation TEXT NOT NULL)');
+}
+
 export async function restoreStorageBackup(options: {
   backupDirectory: string; destination: PopclawPaths; operation: 'restore' | 'move' | 'clone';
   expectedActorId: string; sourceMaintenance?: MaintenanceSession;
@@ -336,7 +341,7 @@ export async function restoreStorageBackup(options: {
   const global = new LocalHostDb(paths.socialDb());
   try {
     global.transaction(tx => {
-      tx.execute('CREATE TABLE IF NOT EXISTS storage_restore_applied_v1(epoch TEXT PRIMARY KEY, set_id TEXT NOT NULL, operation TEXT NOT NULL)');
+      ensureStorageRestoreSchema(tx);
       if (tx.queryOne('SELECT epoch FROM storage_restore_applied_v1 WHERE epoch=?', [epoch!])) return;
       const has = (name: string) => !!tx.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [name]);
       if (has('storage_runtime_participants_v1')) tx.execute('DELETE FROM storage_runtime_participants_v1');

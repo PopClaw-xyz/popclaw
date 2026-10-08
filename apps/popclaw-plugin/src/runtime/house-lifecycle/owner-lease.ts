@@ -1,3 +1,4 @@
+import { ensureOwnerLeaseSchema } from '../../host/runtime-storage-schema.js';
 /**
  * ADR-0051 S2b — the same-root lifecycle OWNER lease.
  *
@@ -36,13 +37,7 @@ export interface OwnerLeaseOptions {
   readonly now?: () => number;
 }
 
-const SCHEMA =
-  'CREATE TABLE IF NOT EXISTS house_lifecycle_owner (\n' +
-  '  id INTEGER PRIMARY KEY CHECK (id = 1),\n' +
-  '  generation INTEGER NOT NULL,\n' +
-  '  holder TEXT NOT NULL,\n' +
-  '  renewed_at INTEGER NOT NULL\n' +
-  ')';
+export { ensureOwnerLeaseSchema } from '../../host/runtime-storage-schema.js';
 
 export class OwnerLease {
   private readonly db: HostDb;
@@ -61,7 +56,7 @@ export class OwnerLease {
     this.token = opts.token;
     this.ttlMs = opts.ttlMs;
     this.now = opts.now ?? (() => Date.now());
-    this.db.execute(SCHEMA);
+    ensureOwnerLeaseSchema(this.db);
   }
 
   /**

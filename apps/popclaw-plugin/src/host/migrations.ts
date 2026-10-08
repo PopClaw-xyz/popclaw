@@ -29,28 +29,41 @@ export function runMigrations(db: HostDb, migrationsDir: string): void {
   // never apply its remaining migrations to data already changed by a newer one.
   const all = migrationFilenames(migrationsDir);
   const applied = assertKnownAppliedMigrations(db, all);
-  db.execute(`
-    CREATE TABLE IF NOT EXISTS _migrations (
-      filename   TEXT PRIMARY KEY,
-      applied_at INTEGER NOT NULL
-    )
-  `);
+  ensureMigrationTable(db);
 
   for (const filename of all) {
     if (applied.has(filename)) continue;
-    const sql = readFileSync(join(migrationsDir, filename), 'utf-8');
-    const statements = splitStatements(sql);
     db.transaction((tx) => {
       if (tx.queryOne('SELECT filename FROM _migrations WHERE filename = ?', [filename])) return;
-      for (const stmt of statements) {
-        tx.execute(stmt);
-      }
+      applyMigrationSql(tx, migrationsDir, filename);
       tx.execute(
         'INSERT INTO _migrations (filename, applied_at) VALUES (?, ?)',
         [filename, Math.floor(Date.now() / 1000)],
       );
     });
   }
+}
+
+function ensureMigrationTable(db: HostDb): void {
+  db.execute(`
+    CREATE TABLE IF NOT EXISTS _migrations (
+      filename   TEXT PRIMARY KEY,
+      applied_at INTEGER NOT NULL
+    )
+  `);
+}
+
+function applyMigrationSql(db: HostDb, migrationsDir: string, filename: string): void {
+  for (const statement of splitStatements(readFileSync(join(migrationsDir, filename), 'utf-8'))) db.execute(statement);
+}
+
+/** Build the applied schema authority on an isolated in-memory database only.
+ * Uses the same SQL path as migration, including ALTER/DROP and FTS objects. */
+export function replayAppliedMigrationSchema(db: HostDb, migrationsDir: string, applied: readonly string[]): void {
+  const known = migrationFilenames(migrationsDir);
+  if (applied.some(filename => !known.includes(filename))) throw new Error('STORAGE_MIGRATION_UNSUPPORTED');
+  ensureMigrationTable(db);
+  for (const filename of known) if (applied.includes(filename)) applyMigrationSql(db, migrationsDir, filename);
 }
 
 export function migrationFilenames(migrationsDir: string): string[] {

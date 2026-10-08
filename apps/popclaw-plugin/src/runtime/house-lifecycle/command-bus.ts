@@ -1,3 +1,4 @@
+import { ensureHouseCommandSchema } from '../../host/runtime-storage-schema.js';
 import { localDatabasePath } from '../../host/local-host-db.js';
 import { houseBindingBlocked } from '../../world/house-recovery-fence.js';
 import { storageDatabasePathAllowed } from '../../host/storage-maintenance.js';
@@ -80,6 +81,8 @@ export interface HouseCommandBusOptions {
 // processes and epoch takeovers are covered by the bounded idle timer.
 const localWakeups = new Map<string | HostDb, Set<() => void>>();
 
+export { ensureHouseCommandSchema } from '../../host/runtime-storage-schema.js';
+
 export class HouseCommandBus implements HouseCommandPort {
   private readonly stoppedSignal = new AbortController();
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -96,18 +99,7 @@ export class HouseCommandBus implements HouseCommandPort {
     this.pollMs = opts.pollMs ?? 50;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
     this.wakeKey = localDatabasePath(opts.db) ?? opts.db;
-    opts.db.execute(`CREATE TABLE IF NOT EXISTS house_lifecycle_commands (
-      request_id TEXT PRIMARY KEY, kind TEXT NOT NULL, house_origin TEXT NOT NULL,
-      baseline_seq INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
-      running_epoch INTEGER, result_json TEXT, created_at INTEGER NOT NULL
-    )`);
-    opts.db.transaction(tx => {
-      const columns = new Set(tx.queryAll<{ name: string }>('PRAGMA table_info(house_lifecycle_commands)').map(c => c.name));
-      for (const [name, type] of Object.entries({ payload_bytes: 'BLOB', effect_json: 'TEXT', session_id: 'TEXT', house_revision: 'INTEGER', ack_key_hex: 'TEXT', installation_id: 'TEXT', deadline_at: 'INTEGER' })) {
-        if (!columns.has(name)) tx.execute(`ALTER TABLE house_lifecycle_commands ADD COLUMN ${name} ${type}`);
-      }
-    });
-    opts.db.execute('CREATE INDEX IF NOT EXISTS house_commands_pending ON house_lifecycle_commands(state, created_at)');
+    ensureHouseCommandSchema(opts.db);
     const listeners = localWakeups.get(this.wakeKey) ?? new Set<() => void>();
     listeners.add(this.onWake);
     localWakeups.set(this.wakeKey, listeners);

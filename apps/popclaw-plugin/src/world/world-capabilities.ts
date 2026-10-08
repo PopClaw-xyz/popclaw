@@ -1,3 +1,4 @@
+import { ensureWorldCapabilitySchema } from '../host/runtime-storage-schema.js';
 import { recoveredCapabilityBinding } from './house-recovery-fence.js';
 import { houseKeyFromAckHex, verifyManifestProof } from './house-binding.js';
 import { popclaw, isHouseSessionBoard } from '@popclaw/contracts';
@@ -75,37 +76,7 @@ function freeze<T>(value: T): T {
   }
   return value;
 }
-function tables(tx: HostDb): void {
-  // Existing historical records and high-water marks are preserved in place.
-  tx.execute(`CREATE TABLE IF NOT EXISTS world_kind_revisions (
-    origin TEXT NOT NULL, direction TEXT NOT NULL, kind TEXT NOT NULL,
-    version INTEGER NOT NULL, schema_digest TEXT NOT NULL, PRIMARY KEY(origin,direction,kind))`);
-  tx.execute(`CREATE TABLE IF NOT EXISTS world_capability_views_v1 (
-    origin TEXT NOT NULL, capability_revision TEXT NOT NULL, house_key TEXT NOT NULL, incarnation TEXT NOT NULL,
-    manifest_bytes BLOB NOT NULL, proof_bytes BLOB NOT NULL, pin_provenance TEXT NOT NULL, guide_bytes BLOB,
-    PRIMARY KEY(origin,capability_revision))`);
-  // A restore may change only proof metadata, keeping identical manifest
-  // bytes and digest. Preserve every incarnation's signed observation.
-  tx.execute(`CREATE TABLE IF NOT EXISTS world_capability_recovery_views_v1 (
-    origin TEXT NOT NULL, capability_revision TEXT NOT NULL, house_key TEXT NOT NULL, incarnation TEXT NOT NULL,
-    manifest_bytes BLOB NOT NULL, proof_bytes BLOB NOT NULL, pin_provenance TEXT NOT NULL, guide_bytes BLOB,
-    PRIMARY KEY(origin,house_key,incarnation,capability_revision))`);
-  tx.execute(`CREATE TABLE IF NOT EXISTS world_capability_current_v1 (
-    origin TEXT PRIMARY KEY, capability_revision TEXT NOT NULL, active INTEGER NOT NULL, detail TEXT NOT NULL,
-    validation_json TEXT NOT NULL,
-    FOREIGN KEY(origin,capability_revision) REFERENCES world_capability_views_v1(origin,capability_revision))`);
-  tx.execute(`CREATE TABLE IF NOT EXISTS world_public_manifest_logs_v1 (
-    origin TEXT NOT NULL, house_key TEXT NOT NULL, incarnation TEXT NOT NULL, log_incarnation TEXT NOT NULL,
-    baseline_key TEXT NOT NULL, first_revision TEXT NOT NULL,
-    retired INTEGER NOT NULL CHECK(retired IN (0,1)), conflicted INTEGER NOT NULL CHECK(conflicted IN (0,1)),
-    retired_by_revision TEXT, conflict_revision TEXT,
-    PRIMARY KEY(origin,house_key,incarnation,log_incarnation))`);
-  tx.execute(`CREATE TABLE IF NOT EXISTS world_public_manifest_log_evidence_v1 (
-    origin TEXT NOT NULL, house_key TEXT NOT NULL, incarnation TEXT NOT NULL, capability_revision TEXT NOT NULL,
-    log_incarnation TEXT, baseline_key TEXT,
-    CHECK((log_incarnation IS NULL AND baseline_key IS NULL) OR (log_incarnation IS NOT NULL AND baseline_key IS NOT NULL)),
-    PRIMARY KEY(origin,house_key,incarnation,capability_revision))`);
-}
+export { ensureWorldCapabilitySchema } from '../host/runtime-storage-schema.js';
 
 type ManifestHouse = VerifiedHouseManifest['house'];
 interface ManifestLogObservation { log: string; baseline: string }
@@ -434,7 +405,7 @@ export function makeWorldManifestPreparer(options: { fetch?: typeof globalThis.f
     if (input.signal.aborted) throw new Error('CAPABILITY_ABORTED');
     return { commit(tx) {
       if (input.signal.aborted) throw new Error('CAPABILITY_ABORTED');
-      tables(tx);
+      ensureWorldCapabilitySchema(tx);
       const old = tx.queryOne<{ house_key: string; incarnation: string }>('SELECT house_key,incarnation FROM world_capability_views_v1 WHERE origin=? LIMIT 1', [origin])
         ?? (tx.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='world_capabilities'") ? tx.queryOne<{ house_key: string; incarnation: string }>('SELECT house_key,incarnation FROM world_capabilities WHERE origin=?', [origin]) : null);
       if (old && (old.house_key !== pinId || old.incarnation !== incarnation)

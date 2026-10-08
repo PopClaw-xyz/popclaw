@@ -12,6 +12,7 @@ import { CACHE_TABLES, DURABLE_TABLES, EXECUTION_LAYOUT_VERSION, inspectLegacySc
 import { verifyExecutionPartition, type ExecutionCatalogRow } from './execution-store.js';
 import { assertStorageBootstrap, publishStorageJson, readStorageControl } from './storage-maintenance.js';
 import { tableFingerprint } from './storage-backup.js';
+import { verifyAppliedGlobalSchema } from './storage-compatibility-schema.js';
 
 /** Generation 1 is the first public local format. Component authorities stay
  * _migrations and the execution catalog/journal verifiers; no build equality. */
@@ -43,16 +44,11 @@ export interface PreservedStorageReference {
 }
 export interface StorageInspectionOptions { paths: PopclawPaths; migrationsDir: string }
 
-// Tables created by the existing runtime rather than SQL migration files.
-// Keep this bounded first-release set beside the admission policy, not a registry.
-const RUNTIME_GLOBAL_TABLES = new Set([
-  '_READ_THIS_FIRST', '_migrations', 'execution_store_identity_v1', 'execution_store_catalog_v1',
-  'storage_control_required_v1', 'storage_runtime_participants_v1', 'storage_restore_applied_v1',
-  'house_participation', 'house_lifecycle_outbox', 'house_lifecycle_commands', 'house_lifecycle_owner', 'house_lifecycle_meta',
-  'house_origin_bindings', 'house_recovery_cursor_evidence_v1', 'house_recovery_decisions_v1',
-  'house_recovery_command_evidence_v1', 'house_recovery_fences_v1', 'world_conversation_inbox_v1',
-  'world_kind_revisions', 'world_capability_views_v1', 'world_capability_recovery_views_v1', 'world_capability_current_v1',
-  'world_public_manifest_logs_v1', 'world_public_manifest_log_evidence_v1',
+// Pending the separately owned catalog/binding schema-only exports. This
+// intermediate candidate is not final admission coverage for these four tables.
+const PENDING_GLOBAL_SCHEMA_AUTHORITIES = new Set([
+  'execution_store_identity_v1', 'execution_store_catalog_v1',
+  'house_origin_bindings', 'house_recovery_cursor_evidence_v1',
 ]);
 function fail(code: string): never { throw new Error(code); }
 function tables(db: HostDb): Set<string> {
@@ -129,25 +125,8 @@ function inspectGlobal(db: HostDb, actor: string, known: string[], migrationsDir
   const present = tables(db), applied = [...assertKnownAppliedMigrations(db, known)].sort();
   if (!present.has('_migrations')) fail('STORAGE_MIGRATION_RECORD_MISSING');
   checkColumns(db, '_migrations', ['filename', 'applied_at']);
-  const allowed = new Set(RUNTIME_GLOBAL_TABLES), required = new Set<string>();
-  for (const filename of known) {
-    const sql = readFileSync(join(migrationsDir, filename), 'utf8').replace(/^\s*--.*$/gm, '');
-    for (const match of sql.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)/gi)) {
-      allowed.add(match[1]!);
-      if (applied.includes(filename)) required.add(match[1]!);
-    }
-    // SQLite owns FTS5 shadow tables declared by the shipped bonds migration.
-    for (const match of sql.matchAll(/CREATE\s+VIRTUAL\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s+USING\s+fts5/gi)) {
-      for (const suffix of ['', '_data', '_idx', '_content', '_docsize', '_config']) {
-        const name = match[1]! + suffix;
-        allowed.add(name); if (applied.includes(filename)) required.add(name);
-      }
-    }
-    // Existing migrations intentionally replace favorites with marks. Derive
-    // required names from the applied sequence, not every historical CREATE.
-    if (applied.includes(filename)) for (const match of sql.matchAll(/DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)/gi)) required.delete(match[1]!);
-  }
-  if ([...required].some(name => !present.has(name))) fail('STORAGE_MIGRATED_TABLE_MISSING');
+  const verified = verifyAppliedGlobalSchema(db, migrationsDir, applied);
+  const allowed = new Set([...PENDING_GLOBAL_SCHEMA_AUTHORITIES, ...verified]);
   if ([...present].some(name => !allowed.has(name)) || db.queryOne("SELECT name FROM sqlite_master WHERE type IN ('trigger','view')")) fail('STORAGE_SCHEMA_UNKNOWN');
   if (present.has('execution_store_identity_v1')) {
     checkColumns(db, 'execution_store_identity_v1', ['singleton', 'actor_id', 'layout_version']);
@@ -277,7 +256,10 @@ export function inspectStorageCompatibility({paths, migrationsDir}: StorageInspe
       if (!existsSync(path)) fail('EXECUTION_PARTITION_MISSING');
       if (!lstatSync(path).isFile()) fail('EXECUTION_PARTITION_BINDING_MISMATCH');
       const partition = new LocalHostDb(path, {readOnly: true});
-      try { verifyExecutionPartition(partition, row, actorId); } finally { partition.close(); }
+      try {
+        if (partition.queryOne("SELECT name FROM sqlite_master WHERE type IN ('trigger','view')")) fail('EXECUTION_SCHEMA_UNKNOWN');
+        verifyExecutionPartition(partition, row, actorId);
+      } finally { partition.close(); }
     }
     const migration = inspectMigrationReferences(paths, actorId, selected);
     const legacyMixedSources: string[] = [];

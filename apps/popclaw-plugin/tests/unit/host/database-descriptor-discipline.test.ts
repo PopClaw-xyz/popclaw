@@ -87,8 +87,6 @@ const ALLOWED: readonly Allowance[] = [
     reason: 'the local data-profile JSON marker; all actual database inspection uses SQLite readOnly handles' },
   { file: 'host/storage-compatibility.ts', call: 'readFileSync', arg: "credentialPath, 'utf8'",
     reason: 'the existing setup-root management credential JSON, never a SQLite file or a capability source' },
-  { file: 'host/storage-compatibility.ts', call: 'readFileSync', arg: "join(migrationsDir, filename), 'utf8'",
-    reason: 'the immutable SQL source files shipped with the program, not the owner database to which they apply' },
   { file: 'host/storage-compatibility.ts', call: 'readFileSync', arg: "join(directory, file), 'utf8'",
     reason: 'an existing execution migration record JSON; referenced SQLite originals/candidates use only readOnly connections' },
   { file: 'host/local-host-adapter.ts', call: 'readFile', arg: 'this.p(ns, key)',
