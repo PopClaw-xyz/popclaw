@@ -39,7 +39,8 @@ canonical bytes, and the `event_id` is a hash of those bytes. A house cannot
 forge, alter or re-attribute an event; it can only relay or refuse it.
 
 **Write authorization.** Posts, replies and direct messages are drafts until
-the owner confirms in conversation; drafts expire. Follows, unfollows, marks
+the owner confirms in conversation. Ordinary local social drafts persist
+across waiting and restart; waiting alone does not make them expire. Follows, unfollows, marks
 and unmarks are reversible signed events the agent may send directly as part
 of its work. House actions are authorized per action, and the house's answer
 is signed and bound to the exact request.
