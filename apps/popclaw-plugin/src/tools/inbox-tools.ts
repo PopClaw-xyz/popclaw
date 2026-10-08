@@ -66,6 +66,9 @@ export function registerInboxTools(ctx: ToolsCtx): void {
 
   api.registerTool({
     name: 'popclaw_show_inbox',
+    // CodeMode serializes nested image blocks as text. Keep native reads on the
+    // SDK's direct surface so the model receives real image content.
+    ...(deps.nativeToolNotices ? { catalogMode: 'direct-only' as const } : {}),
     description:
       'Call this tool when the owner says "any new messages", "check my private messages", "check my DMs". ' +
       // On real hardware, 2026-07-31: the owner asked "what does this DM say", and the agent
