@@ -44,7 +44,7 @@ const USER = '# my own settings\nmodel = "unchanged"   # keep this comment\n\n[p
 test('the derived value is the longest window plus 60 s — not the default window', () => {
   assert.equal(DERIVED, 660);
   // The hand-registration advice quotes the same number.
-  const doc = readFileSync(new URL('../../../../docs/known-limitations.md', import.meta.url), 'utf8');
+  const doc = readFileSync(new URL('../../../../docs/known-limitations-technical.md', import.meta.url), 'utf8');
   assert.match(doc, new RegExp(`tool_timeout_sec = ${DERIVED}\\b`));
   assert.match(doc, new RegExp(`at least ${DERIVED}\\b`));
 });
@@ -53,10 +53,14 @@ test('the derived value is the longest window plus 60 s — not the default wind
 // number is taken from the shared source, never re-typed here.
 test('the hand-registration docs quote the shared tool timeout', () => {
   assert.equal(CODEX_TOOL_TIMEOUT_SECONDS, DERIVED);
-  for (const file of ['docs/hosts.md', 'docs/agent-onboarding/llms-install.md']) {
+  for (const { file, minimumQuotes } of [
+    { file: 'docs/hosts-details.md', minimumQuotes: 2 },
+    // The short generic-host guide states the timeout once in prose.
+    { file: 'docs/agent-onboarding/llms-install.md', minimumQuotes: 1 },
+  ]) {
     const doc = readFileSync(new URL(`../../../../${file}`, import.meta.url), 'utf8');
     const quoted = [...doc.matchAll(/tool_timeout_sec = (\d+)|at least (\d+) s/g)].map(m => Number(m[1] ?? m[2]));
-    assert.ok(quoted.length >= 2, `${file} must state the timeout`);
+    assert.ok(quoted.length >= minimumQuotes, `${file} must state the timeout`);
     for (const n of quoted) assert.equal(n, CODEX_TOOL_TIMEOUT_SECONDS, file);
   }
 });
