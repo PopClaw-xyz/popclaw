@@ -1,4 +1,4 @@
-import { guideBindingDigest } from '../../world/house-guide-context.js';
+import { recordJoinedGuide } from '../../world/house-guide-context.js';
 import type { HouseParticipationAdmissionPort, HouseParticipationSource, HouseParticipationReceipt } from './participation-admission.js';
 import { stageParticipationPlan, recordParticipationReceipt, entryDigest, cancelInitialSetup } from './participation-journal.js';
 import { houseRecoveryHeld, recoveryRetiredLeave, houseBindingBlocked, readHouseRecoveryStatus, type HouseRecoveryStatus } from '../../world/house-recovery-fence.js';
@@ -684,14 +684,7 @@ export class HouseLifecycleManager {
           VALUES (?,?,?,'enabled','connected',?) ON CONFLICT(house_origin) DO UPDATE SET
           installation_id=excluded.installation_id,op_seq=excluded.op_seq,desired='enabled',phase='connected',pending_enter_request_id=NULL,
           remote_status='unsupported',remote_error='no house_session board',updated_at=excluded.updated_at`,[origin,this.installationId,afterOpSeq,this.nowSecs()]);
-        const doc = JSON.parse(new TextDecoder().decode(manifest.rawBytes)) as {guide_url?:unknown};
-        const url = typeof doc.guide_url === 'string' ? new URL(doc.guide_url,origin) : undefined;
-        const binding = pinnedBinding(tx,origin);
-        if (!binding) throw new Error('HOUSE_BINDING_UNAVAILABLE');
-        tx.execute(`INSERT INTO house_guide_context (origin,binding_digest,op_seq,guide_url,manifest_digest)
-          VALUES (?,?,?,?,?) ON CONFLICT(origin) DO UPDATE SET binding_digest=excluded.binding_digest,op_seq=excluded.op_seq,
-          guide_url=excluded.guide_url,manifest_digest=excluded.manifest_digest,guide_digest=NULL,guide_body=NULL,delivered_digest=NULL`,
-          [origin,guideBindingDigest(tx,origin),afterOpSeq,url && ['http:','https:'].includes(url.protocol) ? url.href : '',p.manifestDigest]);
+        recordJoinedGuide(tx, {origin, opSeq: afterOpSeq, rawBytes: manifest.rawBytes, manifestDigest: p.manifestDigest});
         receipt = recordParticipationReceipt(tx,p,this.clock());
       });
       ctx.releaseLogoutFence(); this.closeGate(origin); this.openGate(origin);

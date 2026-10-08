@@ -43,7 +43,7 @@ async function fixture(override?: (port:HouseParticipationAdmissionPort)=>HouseP
   rt.configureResources({host:{db}as never,recipientPopclawId:boot.popclawId,worldStreamMode:true,stores,openStore:async origin=>stores.find(s=>s.baseUrl===origin)!,isOfficialActor:()=>false});
   rt.start();
   closes.push(async()=>{await rt.stop();release();db.close();rmSync(root,{recursive:true,force:true});});
-  return {db,rt,boot,transport,guideFails:()=>guideFails=true,noEvidence:()=>evidence=false};
+  return {db,rt,boot,transport,houses,guideFails:()=>guideFails=true,noEvidence:()=>evidence=false};
 }
 it('normal installation joins only me with a receipt; guide availability and delivery are separate',async()=>{
   const f=await fixture();expect(f.boot.config.lore_houses).toEqual([ME]);expect(readParticipation(f.db,ME)).toBeNull();
@@ -153,4 +153,151 @@ it('configured first-pin cannot preseed a port-authorized install before initial
   expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_participation_attempts')?.n).toBe(0);
   expect(await f.rt.activateInitialMe()).toMatchObject({admission:'configured'});
   expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_participation_attempts')?.n).toBe(1);
+});
+
+
+function deferred() {
+  let release!: () => void;
+  return { wait: new Promise<void>(resolve => { release = resolve; }), release: () => release() };
+}
+function guidePointer(db: LocalHostAdapter['db']) {
+  return db.queryOne<{origin: string; binding_digest: string; op_seq: number; guide_url: string; manifest_digest: string; guide_body: string | null}>('SELECT * FROM house_guide_context WHERE origin=?', [ME]);
+}
+
+it('historical joined pointer backfill preserves participation and creates no admission', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe();
+  const participation = readParticipation(f.db, ME);
+  f.db.execute('DELETE FROM house_guide_context WHERE origin=?', [ME]);
+  f.transport.mockClear();
+  expect(await f.rt.readHouseGuide(ME)).toMatchObject({status: 'available', delivered: false});
+  expect(readParticipation(f.db, ME)).toEqual(participation);
+  expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_participation_attempts')?.n).toBe(1);
+  expect(f.transport.mock.calls.map(([url]) => new URL(String(url)).pathname)).toEqual(['/v1/manifest', '/guide.md']);
+});
+
+it('historical backfill without its original binding does not fetch or create trust', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe();
+  f.db.execute('DELETE FROM house_guide_context WHERE origin=?', [ME]);
+  f.db.execute('DELETE FROM house_binding_pin WHERE origin=?', [ME]);
+  f.transport.mockClear();
+  expect(await f.rt.readHouseGuide(ME)).toMatchObject({status: 'unavailable'});
+  expect(f.transport).not.toHaveBeenCalled(); expect(guidePointer(f.db)).toBeNull();
+  expect(readParticipation(f.db, ME)?.phase).toBe('connected');
+});
+
+it('delayed manifest backfill succeeds with unchanged participation', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe();
+  f.db.execute('DELETE FROM house_guide_context WHERE origin=?', [ME]);
+  const started = deferred(), held = deferred();
+  f.transport.mockImplementationOnce(async input => { started.release(); await held.wait; return f.houses.get(ME)!.fetch(input); });
+  const read = f.rt.readHouseGuide(ME); await started.wait;
+  expect(guidePointer(f.db)).toBeNull(); held.release();
+  expect(await read).toMatchObject({status: 'available', delivered: false});
+});
+
+it('leave and rejoin during manifest backfill rejects the captured old read', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe();
+  f.db.execute('DELETE FROM house_guide_context WHERE origin=?', [ME]);
+  const started = deferred(), held = deferred();
+  f.transport.mockImplementationOnce(async input => { started.release(); await held.wait; return f.houses.get(ME)!.fetch(input); });
+  const read = f.rt.readHouseGuide(ME); await started.wait;
+  await f.rt.commands.logoutHouse(ME); await f.rt.commands.loginHouse(ME);
+  const currentPointer = guidePointer(f.db); held.release();
+  expect(await read).toMatchObject({status: 'unavailable'});
+  expect(guidePointer(f.db)).toEqual(currentPointer);
+  expect(await f.rt.readHouseGuide(ME)).toMatchObject({status: 'available', delivered: false});
+});
+
+it('delayed guide body succeeds with unchanged participation', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe();
+  const started = deferred(), held = deferred();
+  f.transport.mockImplementationOnce(async () => {
+    const response = new Response('delayed complete guide');
+    response.text = async () => { started.release(); await held.wait; return 'delayed complete guide'; };
+    return response;
+  });
+  const read = f.rt.readHouseGuide(ME); await started.wait;
+  expect(guidePointer(f.db)?.guide_body).toBeNull(); held.release();
+  expect(await read).toMatchObject({status: 'available', guide: 'delayed complete guide', delivered: false});
+});
+
+it('leave and rejoin during guide body fetch neither caches nor delivers the old body', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe();
+  const started = deferred(), held = deferred();
+  f.transport.mockImplementationOnce(async () => {
+    const response = new Response('old delayed guide');
+    response.text = async () => { started.release(); await held.wait; return 'old delayed guide'; };
+    return response;
+  });
+  const read = f.rt.readHouseGuide(ME); await started.wait;
+  await f.rt.commands.logoutHouse(ME); await f.rt.commands.loginHouse(ME);
+  held.release(); expect(await read).toMatchObject({status: 'unavailable'});
+  expect(guidePointer(f.db)).toMatchObject({guide_body: null, guide_digest: null, delivered_digest: null});
+  expect(await f.rt.readHouseGuide(ME)).toMatchObject({status: 'available', delivered: false});
+});
+
+it('invalid joined guide URL rolls back binding, participation, pointer and receipt together', async () => {
+  const f = await fixture();
+  f.houses.set(ME, mintHouse({origin: ME, seed: 90, manifest: {relations: {ordered: 1}, guide_url: 'http://['}}));
+  expect(await f.rt.activateInitialMe()).toMatchObject({status: 'connecting'});
+  expect(readParticipation(f.db, ME)).toBeNull(); expect(guidePointer(f.db)).toBeNull();
+  expect(f.db.queryOne('SELECT origin FROM house_binding_pin WHERE origin=?', [ME])).toBeNull();
+  expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_participation_attempts WHERE receipt_json IS NOT NULL')?.n).toBe(0);
+});
+
+it('invalid historical guide URL is caught without changing joined participation', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe();
+  const participation = readParticipation(f.db, ME);
+  f.db.execute('DELETE FROM house_guide_context WHERE origin=?', [ME]);
+  f.houses.set(ME, mintHouse({origin: ME, seed: 90, manifest: {relations: {ordered: 1}, guide_url: 'http://['}}));
+  expect(await f.rt.readHouseGuide(ME)).toMatchObject({status: 'unavailable'});
+  expect(readParticipation(f.db, ME)).toEqual(participation); expect(guidePointer(f.db)).toBeNull();
+  expect(f.db.queryOne('SELECT origin FROM house_binding_pin WHERE origin=?', [ME])).not.toBeNull();
+});
+
+it('pending guide reads remain sequential in durable row order', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe(); await f.rt.commands.loginHouse(WORLD);
+  const calls: string[] = [], started = deferred(), held = deferred();
+  f.transport.mockImplementation(async input => {
+    const url = new URL(String(input)); calls.push(url.origin);
+    if (url.origin === ME) { started.release(); await held.wait; }
+    return new Response(url.origin + ' guide');
+  });
+  const pending = f.rt.pendingHouseGuides(); await started.wait;
+  expect(calls).toEqual([ME]); held.release();
+  expect((await pending).map(context => context.origin)).toEqual([ME, WORLD]);
+  expect(calls).toEqual([ME, WORLD]);
+});
+
+
+it('cached guide completion preserves promise-adoption ordering', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe(); await f.rt.readHouseGuide(ME);
+  const trace: string[] = [];
+  const read = f.rt.readHouseGuide(ME).then(() => { trace.push('guide'); });
+  for (let i = 1; i <= 4; i++) { await Promise.resolve(); trace.push('tick' + i); }
+  await read;
+  expect(trace).toEqual(['tick1', 'tick2', 'guide', 'tick3', 'tick4']);
+});
+
+it('invalid guide origin rejects through a promise without a synchronous facade throw', async () => {
+  const f = await fixture();
+  let result: ReturnType<HouseRuntime['readHouseGuide']> | undefined;
+  expect(() => { result = f.rt.readHouseGuide(''); }).not.toThrow();
+  await expect(result).rejects.toThrow('invalid house address');
+});
+
+it('historical backfill preserves a pointer and complete body installed during the manifest await', async () => {
+  const f = await fixture(); await f.rt.activateInitialMe();
+  const before = guidePointer(f.db)!;
+  f.db.execute('DELETE FROM house_guide_context WHERE origin=?', [ME]);
+  const started = deferred(), held = deferred();
+  f.transport.mockImplementationOnce(async input => { started.release(); await held.wait; return f.houses.get(ME)!.fetch(input); });
+  const read = f.rt.readHouseGuide(ME); await started.wait;
+  f.db.execute(`INSERT INTO house_guide_context
+    (origin,binding_digest,op_seq,guide_url,manifest_digest,guide_digest,guide_body,delivered_digest)
+    VALUES (?,?,?,?,?,'concurrent-digest','complete concurrent guide','concurrent-digest')`,
+    [ME, before.binding_digest, before.op_seq, before.guide_url, before.manifest_digest]);
+  const concurrent = guidePointer(f.db); held.release();
+  expect(await read).toMatchObject({status: 'available', guide: 'complete concurrent guide', delivered: true});
+  expect(guidePointer(f.db)).toEqual(concurrent);
 });

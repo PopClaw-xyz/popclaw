@@ -43,6 +43,21 @@ boundaries. Sessionless queued actions retain their versioned capture envelope;
 same-root mixed-version upgrade/downgrade constraints are not removed by this
 ownership map.
 
+## House Guide lifecycle
+
+`world/house-guide-context.ts` owns declared Guide pointers, historical joined
+backfill, body caching, pending contexts and recognition of actual complete
+agent input. Reading or emitting a Guide grants no join or action authority.
+`HouseRuntime` captures the public-read gate once and supplies transport at the
+original read stages; its Guide methods remain compatible host facades.
+
+The lifecycle manager records a joined Guide synchronously inside the existing
+binding/participation/receipt transaction. Join replaces the pointer and clears
+old body/delivery state; historical backfill only inserts a missing pointer.
+Invalid JSON or URL parsing keeps the original transaction rollback and read
+catch behavior. Delivery requires the exact current origin, operation sequence,
+binding digest, Guide digest and complete body observed in actual host output.
+
 ## Configured first trust
 
 `HouseRuntime` selects a typed configured-pinning policy before boot loops

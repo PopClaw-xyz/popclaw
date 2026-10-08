@@ -61,6 +61,7 @@ that directory (`cd apps/popclaw-plugin`).
 | Local newspaper artifact storage | `src/host/local-newspaper-artifacts.ts`, through the type-only `src/newspaper/newspaper-artifacts.ts` port; publication stays in `publish-newspaper.ts` | `pnpm exec vitest run --no-cache tests/unit/host/local-newspaper-artifacts.test.ts tests/unit/newspaper/publish-local-master.test.ts` |
 | Per-house relation reception | `src/social-graph/relation-house-registry.ts`; transport, timer and global sweep remain in `relation-host.ts` ([ownership](apps/popclaw-plugin/docs/relation-reception-ownership.md)) | `pnpm exec vitest run --no-cache tests/unit/social-graph/relation-house-registry.test.ts tests/unit/social-graph/relation-host-reception-characterization.test.ts tests/unit/social-graph/relation-host-recovery-capture.test.ts` |
 | Author history success display | `src/tools/author-history-view.ts`; source resolution, observed IDs and failure paths remain at the tool entry | `pnpm exec vitest run --no-cache tests/unit/tools/author-history-view.test.ts tests/unit/tools/world-tools.test.ts` |
+| House Guide lifecycle | `src/world/house-guide-context.ts`; join keeps its synchronous caller-owned transaction, runtime keeps the captured read gate and transport ([ownership](apps/popclaw-plugin/docs/runtime-architecture.md)) | `pnpm exec vitest run --no-cache tests/unit/world/house-guide-context.test.ts tests/unit/runtime/participation-entry.test.ts tests/unit/runtime/sessionless-retry.test.ts` |
 
 ### Three common changes
 

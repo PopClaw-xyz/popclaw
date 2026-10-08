@@ -16,8 +16,8 @@ import { INBOX_TOKEN_HEADER } from '../../identity/read-credential.js';
 import type { InboxReadCredential } from '../../messaging/inbox-stream-client.js';
 import type { ReadAuthority, ReadCredentialOutcome } from '../../identity/read-authority.js';
 import type { ConfiguredHousePinningStrategy } from './configured-first-pin.js';
-import { entryDigest, cancelInitialSetup } from './participation-journal.js';
-import { guideBindingDigest, readHouseGuideContext, markHouseGuideDelivered, type HouseGuideContext } from '../../world/house-guide-context.js';
+import { cancelInitialSetup } from './participation-journal.js';
+import { readJoinedHouseGuide, pendingHouseGuides, markGuidesInAgentInput, markHouseGuideDelivered, type HouseGuideContext } from '../../world/house-guide-context.js';
 import { findParticipationReceipt } from './participation-journal.js';
 import type { HouseParticipationReceiptQuery, HouseParticipationReceiptResult } from './participation-admission.js';
 import { HouseLifecycleManager, type HouseGate, type ManagerOptions } from './manager.js';
@@ -369,66 +369,28 @@ export class HouseRuntime {
     this.bindOrigin(origin);
     return this.bus.loginHouse(origin,{requestId:source.originalOperationRef,participationSource:source});
   }
-  async readHouseGuide(input: string) {
-    const origin = normalizeHouseOrigin(input), gate = this.publicReadGate(origin);
-    // Existing joined Houses may predate the journal. Refresh their verified
-    // declared pointer without creating a join or first trust.
-    if (gate.isActive() && !this.opts.db.queryOne('SELECT origin FROM house_guide_context WHERE origin=?',[origin])) {
-      const row = readParticipation(this.opts.db,origin), binding = pinnedBinding(this.opts.db,origin);
-      if (row && binding) try {
-        const manifest = await fetchSessionManifest(origin,this.opts.fetch ?? globalThis.fetch,gate.signal);
-        const prepared = await makeRelationBindingPreparer({db:this.opts.db,
+  readHouseGuide(input: string) {
+    // Return the domain promise directly, while capture errors still reject
+    // as they did in the original async method.
+    try {
+      const origin = normalizeHouseOrigin(input), gate = this.publicReadGate(origin);
+      return readJoinedHouseGuide(this.opts.db, origin, {
+        gate,
+        fetchManifest: () => fetchSessionManifest(origin, this.opts.fetch ?? globalThis.fetch, gate.signal),
+        prepareBinding: manifest => makeRelationBindingPreparer({db: this.opts.db,
           configuredKeyFor: origin => this.opts.configuredPinFor?.(origin),
-          allowInsecureOrigin: origin => isPrivateAddressOrigin(origin)})({origin,rawBytes:manifest.rawBytes,proofHeader:manifest.proofHeader,signal:gate.signal});
-        this.opts.db.transaction(tx => {
-          if (!gate.isActive() || JSON.stringify(readParticipation(tx,origin)) !== JSON.stringify(row)) throw new Error('HOUSE_GUIDE_CONTEXT_STALE');
-          const refusal = prepared.commit(tx);
-          if (refusal) return;
-          const doc = JSON.parse(new TextDecoder().decode(manifest.rawBytes));
-          const url = typeof doc.guide_url === 'string' ? new URL(doc.guide_url,origin) : undefined;
-          tx.execute(`INSERT INTO house_guide_context(origin,binding_digest,op_seq,guide_url,manifest_digest) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`,
-            [origin,guideBindingDigest(tx,origin),row.op_seq,url && ['https:','http:'].includes(url.protocol) ? url.href : '',entryDigest(Buffer.from(manifest.rawBytes).toString('base64'))]);
-        });
-      } catch { /* Joined status remains separate from guide availability. */ }
-    }
-    return readHouseGuideContext(this.opts.db,origin,this.documentFetch(origin,{...gate,origin,generation:readParticipation(this.opts.db,origin)?.op_seq ?? 0}),() => !this.stopped && gate.isActive());
+          allowInsecureOrigin: origin => isPrivateAddressOrigin(origin)})({origin,
+            rawBytes: manifest.rawBytes, proofHeader: manifest.proofHeader, signal: gate.signal}),
+        documentFetch: () => this.documentFetch(origin, {...gate, origin,
+          generation: readParticipation(this.opts.db, origin)?.op_seq ?? 0}),
+        active: () => !this.stopped && gate.isActive(),
+      });
+    } catch (error) { return Promise.reject(error); }
   }
-  async pendingHouseGuides(): Promise<HouseGuideContext[]> {
-    const result: HouseGuideContext[] = [];
-    for (const {origin} of this.opts.db.queryAll<{origin:string}>(`SELECT origin FROM house_guide_context WHERE delivered_digest IS NULL OR delivered_digest!=guide_digest`)) {
-      const context = await this.readHouseGuide(origin);
-      if (context.status === 'available' && !context.delivered) result.push(context);
-    }
-    return result;
+  pendingHouseGuides(): Promise<HouseGuideContext[]> {
+    return pendingHouseGuides(this.opts.db, origin => this.readHouseGuide(origin));
   }
-  /** Actual host output/LLM-input observer; never claim a prepared or truncated body was delivered. */
-  markGuidesInAgentInput(serialized: string): void {
-    const rows = this.opts.db.queryAll<{origin:string;guide_body:string;guide_digest:string;binding_digest:string;op_seq:number}>(
-      `SELECT * FROM house_guide_context WHERE guide_body IS NOT NULL AND (delivered_digest IS NULL OR delivered_digest!=guide_digest)`);
-    // MCP serializes JSON context inside a text result; native history wraps
-    // the same text in messages. Inspect those actual emitted values.
-    const inspect = (value: unknown, depth: number): void => {
-      if (depth > 8) return;
-      if (typeof value === 'string') {
-        for (const text of [value, ...value.split('\n')]) {
-          if (!text.startsWith('{') && !text.startsWith('[')) continue;
-          try { inspect(JSON.parse(text), depth + 1); } catch { /* Ordinary reply text. */ }
-        }
-      } else if (value && typeof value === 'object') {
-        const context = value as Record<string, unknown>;
-        for (const row of rows) {
-          if (context.status !== 'available' || context.origin !== row.origin || context.opSeq !== row.op_seq
-            || context.guide !== row.guide_body || context.guideDigest !== row.guide_digest
-            || context.bindingDigest !== row.binding_digest) continue;
-          this.markHouseGuideDelivered({status:'available',origin:row.origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,
-            guideUrl:'',guideDigest:row.guide_digest,guide:row.guide_body,delivered:false});
-        }
-        for (const child of Object.values(context)) inspect(child, depth + 1);
-      }
-    };
-    inspect(serialized, 0);
-  }
-
+  markGuidesInAgentInput(serialized: string): void { markGuidesInAgentInput(this.opts.db, serialized); }
   markHouseGuideDelivered(context: HouseGuideContext): boolean { return markHouseGuideDelivered(this.opts.db,context); }
   findParticipationReceipt(query: HouseParticipationReceiptQuery): HouseParticipationReceiptResult {
     return findParticipationReceipt(this.opts.db,query);
