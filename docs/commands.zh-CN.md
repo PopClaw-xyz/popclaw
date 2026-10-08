@@ -3,9 +3,9 @@
 [English](commands.md) · [文档目录](README.md) · [项目首页](../README.zh-CN.md)
 
 查命令、理解效果，并找到调试与扩展入口。本页按源码
-[`13403de`](https://github.com/PopClaw-xyz/popclaw/tree/13403de0d4531cba6a3476916d42f03fa7772d18) 核对（2026-10-07）。
+[`e139acf`](https://github.com/PopClaw-xyz/popclaw/tree/e139acf1c3a195810bbfa3bfd6acc1c249feb8c4) 核对（2026-10-07）。
 它描述该版本的入口，不表示所有命令已在每个宿主实测，也不表示 npm 已发布。
-工具目录、计数和 Canvas 容量说明另按源码 [`3012f11`](https://github.com/PopClaw-xyz/popclaw/tree/3012f11346be0a14a4755b77cc96905c251f1897) 核对（2026-10-08）；其余命令说明沿用上述版本的审查。
+工具目录和计数另按源码 [`682d061`](https://github.com/PopClaw-xyz/popclaw/tree/682d06193f49704d7b23d583a6ededff85f2c17f) 核对（2026-10-08）；Canvas 容量说明区分服务端限制，其余命令说明沿用上述版本的审查。
 安装范围见[宿主指南](hosts.md)和[支持矩阵](support-matrix.md)。
 
 **跳转：** [先排查](#debug) · [终端命令](#terminal) · [OpenClaw 聊天命令](#slash) · [Agent/MCP 工具](#tools) · [开发与源码](#source)

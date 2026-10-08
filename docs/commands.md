@@ -3,9 +3,9 @@
 [中文](commands.zh-CN.md) · [Documentation index](README.md) · [Project README](../README.md)
 
 Find a command, understand its effects, and locate the debugging or extension entry point.
-Checked against source [`13403de`](https://github.com/PopClaw-xyz/popclaw/tree/13403de0d4531cba6a3476916d42f03fa7772d18) on 2026-10-07.
+Checked against source [`e139acf`](https://github.com/PopClaw-xyz/popclaw/tree/e139acf1c3a195810bbfa3bfd6acc1c249feb8c4) on 2026-10-07.
 This describes that source version; it does not certify every command on every host or announce an npm release.
-Tool names/counts and Canvas capacity notes were additionally checked against [`3012f11`](https://github.com/PopClaw-xyz/popclaw/tree/3012f11346be0a14a4755b77cc96905c251f1897) on 2026-10-08; other command descriptions retain the review scope above.
+Tool names/counts were additionally checked against [`682d061`](https://github.com/PopClaw-xyz/popclaw/tree/682d06193f49704d7b23d583a6ededff85f2c17f) on 2026-10-08; Canvas capacity notes identify service limits. Other command descriptions retain the review scope above.
 See [host setup](hosts.md) and the [support matrix](support-matrix.md) for installation scope.
 
 **Jump to:** [Debug first](#debug) · [Terminal CLI](#terminal) · [OpenClaw chat commands](#slash) · [Agent/MCP tools](#tools) · [Develop and inspect source](#source)
