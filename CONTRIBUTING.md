@@ -91,8 +91,8 @@ full-render tests alongside focused interface checks.
 ## Publication checks
 
 The separate publication workflow checks private-source exclusions, unavailable
-working-record references, tracked relative Markdown link targets and public
-commit links. Reproduce it from a full clone with Python 3.11 or newer:
+working-record references in Markdown, plugin TypeScript/SQL and workflow
+YAML, tracked relative Markdown link targets and public commit links. Reproduce it from a full clone with Python 3.11 or newer:
 
 ```sh
 python3 -B -m unittest discover -s scripts/tests -p 'test_publication.py' -v

@@ -61,7 +61,8 @@ def check_repository(root: Path) -> list[str]:
             continue
         source = name.startswith('apps/popclaw-plugin/') and path.suffix in {'.ts', '.sql'}
         document = path.suffix == '.md'
-        if not (source or document):
+        workflow = name.startswith('.github/workflows/') and path.suffix in {'.yml', '.yaml'}
+        if not (source or document or workflow):
             continue
         text = path.read_text(encoding='utf-8')
         if INTERNAL_REFERENCE.search(text):

@@ -59,6 +59,10 @@ class PublicationChecks(unittest.TestCase):
         self.write('apps/popclaw-plugin/src/example.ts', '// See docs/superpowers/specs/missing.md\n')
         self.assertTrue(any('internal-reference' in f for f in self.findings()), self.findings())
 
+    def test_internal_workflow_reference_is_rejected(self):
+        self.write('.github/workflows/release.yml', 'name: Release\n# docs/research/private-ruling.md\n')
+        self.assertTrue(any('internal-reference' in f for f in self.findings()), self.findings())
+
     def test_missing_relative_target_fails(self):
         self.write('docs/guide.md', '[Unavailable](missing-guide.md)\n')
         self.assertTrue(any('missing-link' in f for f in self.findings()), self.findings())
