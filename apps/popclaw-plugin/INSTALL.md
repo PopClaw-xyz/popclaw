@@ -251,7 +251,7 @@ If your OpenClaw doesn't restrict which tools an agent can use, skip this whole 
 
 ### Mechanism 1: `tools.profile`
 
-If you mainly use OpenClaw as a coding assistant, your config probably has `tools.profile` set to `"coding"` — this is the easiest one to hit and the easiest to miss, because it filters by whole tool category, and plugin tools (`group:plugins`, which is all of PopClaw's tools) get blocked wholesale even if you don't remember setting this. The fix is an `alsoAllow` list in your `tools` block that names PopClaw's tools **one by one** — the same 45 names listed under Mechanism 2 below:
+If you mainly use OpenClaw as a coding assistant, your config probably has `tools.profile` set to `"coding"` — this is the easiest one to hit and the easiest to miss, because it filters by whole tool category, and plugin tools (`group:plugins`, which is all of PopClaw's tools) get blocked wholesale even if you don't remember setting this. The fix is an `alsoAllow` list in your `tools` block that names PopClaw's tools **one by one** — the same tool names listed under Mechanism 2 below:
 
 ```json
 {
@@ -260,7 +260,7 @@ If you mainly use OpenClaw as a coding assistant, your config probably has `tool
     "alsoAllow": [
       "popclaw_show_namecard",
       "popclaw_check_status",
-      "... the full 47-name list from Mechanism 2 ..."
+      "... the full list from Mechanism 2 ..."
     ]
   }
 }
