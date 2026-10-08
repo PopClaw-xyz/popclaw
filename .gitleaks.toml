@@ -43,7 +43,7 @@ paths = [
   '''^protocol/packages/contracts/fixtures/relation\-read\-v2\-vectors\.json$''',
 ]
 
-# ParticipationDescriptor house_key, not secret material; pure-protocol fixture for reading-world, .test origin. The paired train fixture records deterministic W0 seed derivation; no derivation claim added for this standalone literal.
+# ParticipationDescriptor house_key, not secret material; pure-protocol fixture for reading-world with a reading.example origin. The paired train fixture records deterministic W0 seed derivation; no derivation claim added for this standalone literal.
 [[allowlists]]
 description = "reading_participation_house"
 targetRules = ["generic-api-key"]
@@ -81,7 +81,7 @@ paths = [
   '''^protocol/packages/contracts/ts/algorithms/tests/canonical\-parity\.test\.ts$''',
 ]
 
-# ParticipationDescriptor house_key; fixture comment says all identities deterministic W0 test keys (seed=SHA-256(label)), no real credentials; .test origin. No private secret is the reported value.
+# ParticipationDescriptor house_key; fixture comment says all identities deterministic W0 test keys (seed=SHA-256(label)), no real credentials. Its demo.loreshow.com origin is not evidence of a reserved test domain. No private secret is the reported value.
 [[allowlists]]
 description = "train_participation_house"
 targetRules = ["generic-api-key"]
