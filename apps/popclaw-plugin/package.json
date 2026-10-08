@@ -27,6 +27,7 @@
     "CHANGELOG.md",
     "LICENSE",
     "INSTALL.md",
+    "INSTALL-DETAILS.md",
     "README.zh-CN.md"
   ],
   "scripts": {
