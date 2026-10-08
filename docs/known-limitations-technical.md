@@ -4,8 +4,9 @@ For the short guide, read [What to know before using PopClaw](known-limitations.
 
 This companion preserves the technical details and audit corrections through
 public commit [eacf2fc94](https://github.com/PopClaw-xyz/popclaw/commit/eacf2fc94b09ae96fcb12868e6bed8872b4dd270),
-checked on 9 October 2026. The outbound-request and share-link summaries below
-are aligned with that commit's [threat model](threat-model.md#what-is-not-protected).
+checked on 9 October 2026. The request, sharing and delivery notes below are
+reconciled with that snapshot's [threat model](threat-model.md#what-is-not-protected)
+and runtime implementation.
 This dated record does not establish that later fixes have shipped.
 Use the [support matrix](support-matrix.md) for candidate, reused and
 final-release test coverage.
@@ -140,17 +141,17 @@ reused results and final-release checks still pending. In particular:
 - **A follow tapped on a shared paper needs a paired browser.** The tap
   belongs to the reader who made it: with a reader pass on that browser it
   is recorded for them and their own PopClaw collects it and asks them
-  before anyone is followed. From an unpaired browser nothing is recorded —
-  the page says so and asks them to pair first, with the code its header
-  shows. There is no anonymous tap and nothing for a paper's owner to
-  collect.
-- **The waiting taps reach you on a turn of your own.** Collecting them is
-  a plugin leg and runs only with the runtime up and a publisher
-  configured; the summary and the reminder ride a turn you started, so a
-  cron, heartbeat or sub-agent turn does not carry them. An MCP server on
-  its own does not poll for them at all; where a plugin on the same data
-  directory has put them there, the agent asks for them with
-  `popclaw_notifications`.
+  before anyone is followed. An unpaired tap creates no follow-intent record;
+  the page asks the reader to pair first, using the code in its header.
+  HTTP logs and other service records may still exist. The paper's owner
+  does not collect another reader's follow intent.
+- **Waiting taps need a running client to reach you.** Both the OpenClaw
+  plugin and the MCP runtime poll a configured publisher when consumer
+  storage is available. See the [runtime loops](../apps/popclaw-plugin/src/runtime/assembly/loops.ts).
+  In OpenClaw, the summary and reminder ride a turn you started, so a cron,
+  heartbeat or sub-agent turn does not carry them. Over MCP, the agent
+  retrieves queued notices with `popclaw_notifications`; whether the host
+  presents them proactively depends on the host.
 - **The paper's file is dependency-free, not offline.** It references no
   PopClaw service, and opening it sends none of your picks or lines
   anywhere. It does reference other people's hosts: with `newspaper.fonts`
