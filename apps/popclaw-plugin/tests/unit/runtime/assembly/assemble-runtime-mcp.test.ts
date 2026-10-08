@@ -8,6 +8,8 @@ import { ExecutionStoreCatalog } from '../../../../src/host/execution-store.js';
 import { KnownFollowersStore } from '../../../../src/social-graph/followers-sync.js';
 import { SqliteNotifier } from '../../../../src/notifier/sqlite-notifier.js';
 import { LocalHostAdapter } from '../../../../src/host/local-host-adapter.js';
+import { Keystore } from '../../../../src/identity/keystore.js';
+import { completeStorageInitialization } from '../../../../src/host/storage-compatibility.js';
 import { PopclawPaths } from '../../../../src/host/popclaw-paths.js';
 import { assertStorageBootstrap, registerStorageRuntime } from '../../../../src/host/storage-maintenance.js';
 import { assembleRuntime, type RuntimePorts } from '../../../../src/runtime/assembly/index.js';
@@ -250,9 +252,20 @@ function logger(): ReturnType<typeof pinoHostLogger> {
   return { info: at('info'), warn: at('warn'), error: at('error'), debug: at('debug') } as unknown as ReturnType<typeof pinoHostLogger>;
 }
 
-function dataRoot(): string {
+async function dataRoot(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), 'popclaw-assembly-c2-'));
   roots.push(root);
+  // Initialize an empty synthetic root through the real adapter, migrations,
+  // keystore and data-profile publication before adding assembly-test config.
+  // This is fixture setup only: no runtime participants or probe events exist.
+  const initialization = new LocalHostAdapter({ dataRoot: root,
+    logger: { info() {}, warn() {}, error() {} } });
+  try {
+    const key = await new Keystore(initialization).loadOrGenerate();
+    completeStorageInitialization(initialization, key.popclawId);
+  } finally {
+    initialization.db.close();
+  }
   mkdirSync(join(root, 'config'), { recursive: true });
   writeFileSync(join(root, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [HOUSE], canvas_base_url: HOUSE }));
   vi.stubEnv('POPCLAW_DATA_ROOT', root);
@@ -262,7 +275,7 @@ function dataRoot(): string {
 /** Exactly what src/mcp.ts `buildRuntime` passes, bar the logger and the consumer thunk. */
 async function boot(closing: AbortSignal = new AbortController().signal): Promise<McpPluginRuntime> {
   const rt = await buildMcpRuntime({ logger: logger(), closing, serverBox: {}, approvalWindowMs: undefined,
-    dataRoot: dataRoot(), consumerId: () => CONSUMER });
+    dataRoot: await dataRoot(), consumerId: () => CONSUMER });
   built.push(rt);
   return rt;
 }
@@ -527,7 +540,7 @@ describe('failed boot before the house stores open, and the host\'s cleanup step
 
   it('lifecycle.beforeFailedBootCleanup runs first, before the drain', async () => {
     fault.bindConsumer = true;
-    const { host, ports } = localRoot();
+    const { host, ports } = await localRoot();
     const withHook: RuntimePorts<object> = { ...ports, lifecycle: { ...ports.lifecycle, beforeFailedBootCleanup: () => push('beforeFailedBootCleanup') } };
     await expect(assembleRuntime(host, withHook, new AbortController().signal)).rejects.toThrow('C2_EARLY_BOOT_FAILURE');
     expect(probe.events.slice(probe.events.indexOf('boot.fail') + 1)).toEqual([
@@ -538,7 +551,7 @@ describe('failed boot before the house stores open, and the host\'s cleanup step
 
   it('a throwing beforeFailedBootCleanup is a cleanup failure: STORAGE_BOOT_CLEANUP_FAILED with both errors, nothing else cleaned', async () => {
     fault.bindConsumer = true;
-    const { host, ports } = localRoot();
+    const { host, ports } = await localRoot();
     const withHook: RuntimePorts<object> = { ...ports, lifecycle: { ...ports.lifecycle,
       beforeFailedBootCleanup: () => { push('beforeFailedBootCleanup'); throw new Error('C2_HOOK_FAILED'); } } };
     const failure = await assembleRuntime(host, withHook, new AbortController().signal).catch((error: unknown) => error);
@@ -567,11 +580,11 @@ describe('the production MCP ports themselves', () => {
   });
 
   it('a port value the assembly does not assemble yet is refused like a failed boot: storage released, host DB closed', async () => {
-    const { host, ports } = localRoot();
+    const { host, ports } = await localRoot();
     const pushDelivery: RuntimePorts<object> = { ...ports, delivery: { kind: 'push' } };
     await expect(assembleRuntime(host, pushDelivery, new AbortController().signal)).rejects.toThrow('RUNTIME_ASSEMBLY_UNWIRED: delivery.kind');
-    // Nothing was built (no identity, no execution stores); what the root's
-    // host already held is handed back.
+    // Assembly built no runtime bag or execution stores; what the root's
+    // host already held is handed back. Identity exists from fixture setup.
     expect(probe.events).toEqual(['release', 'hostDb.close']);
   });
 });
@@ -582,8 +595,8 @@ function payloads(rt: McpPluginRuntime): Array<Record<string, unknown>> {
 }
 
 /** The host and ports exactly as buildMcpRuntime builds them, for tests that must vary one port. */
-function localRoot(): { host: LocalHostAdapter; ports: RuntimePorts<object> } {
-  const root = dataRoot();
+async function localRoot(): Promise<{ host: LocalHostAdapter; ports: RuntimePorts<object> }> {
+  const root = await dataRoot();
   const storagePaths = new PopclawPaths(root);
   assertStorageBootstrap(storagePaths);
   let releaseStorage!: () => void;
