@@ -6,12 +6,17 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {popclaw} from '@popclaw/contracts';
 import {durableFixture, fixtureContext, fixtureKey} from '../helpers/durable-social-process.js';
+import {draftToken} from '../helpers/draft-token.js';
 import {decryptDmBody, decryptDmMedia} from '../../src/messaging/dm-crypto.js';
 import {DurableSocialDrafts} from '../../src/tools/durable-social-drafts.js';
 const roots: string[] = [];
 const root = () => {const path = mkdtempSync(join(tmpdir(), 'popclaw-durable-test-')); roots.push(path); return path;};
 afterEach(() => {for (const path of roots.splice(0)) rmSync(path, {recursive: true, force: true});});
-const idOf = (text: string) => /draft_id: (\S+)/.exec(text)![1]!;
+const idOf = (text: string) => draftToken(text)!;
+const eventIdOf = (text: string) => {
+  try { return JSON.parse(text).event_id; }
+  catch { return undefined; }
+};
 type Result = {result?: {text: string}; error?: string; effects: Array<{house: string; bytes: string}> | number};
 const child = async (input: Record<string, unknown>): Promise<Result> => {
   const run = await promisify(execFile)(process.execPath, ['--import', 'tsx', 'tests/helpers/durable-social-process.ts', '--durable-operation', JSON.stringify(input)], {cwd: process.cwd(), timeout: 20000});
@@ -40,7 +45,7 @@ describe('ordinary social draft persistence across real Node processes and SQLit
     (await fx.runtime()).worldFeedCache.lookup();
     await fx.call('popclaw_send_draft', {draft_id: later});
     expect(fx.db.queryOne('SELECT op_seq,session_id,installation_id FROM house_participation')).toEqual(before);
-    expect((await fx.call('popclaw_send_draft', {draft_id: first})).text).toContain('event_id:');
+    expect(eventIdOf((await fx.call('popclaw_send_draft', {draft_id: first})).text)).toMatch(/^[a-f0-9]{64}$/);
     expect(fx.effects()).toHaveLength(2); fx.db.close();
   });
   it.each(['message', 'reply', 'post', 'feedback'] as const)('recovers %s after restart and waiting; retains exact target/body/bytes and consumes once', async kind => {
@@ -50,7 +55,9 @@ describe('ordinary social draft persistence across real Node processes and SQLit
     const params = kind === 'message' ? {recipient: recipient.id, body, attachment_path: attachment}
       : kind === 'reply' ? {platform: 'x', post_id: 'post-a', body} : kind === 'feedback' ? {kind: 'need', body} : {body, reply_to_event_id: 'ab'.repeat(32)};
     const draft = await child({root: dir, name, params, pressure: 20});
-    expect(draft.error).toBeUndefined(); const id = idOf(draft.result!.text); expect(draft.result!.text).toContain(body);
+    expect(draft.error).toBeUndefined(); const id = idOf(draft.result!.text);
+    const reviewText = kind === 'message' || kind === 'feedback' ? JSON.parse(draft.result!.text).owner_text : draft.result!.text;
+    expect(reviewText).toContain(body);
     expect(id).toMatch(/^(message|reply|post)-s\d+$/);
     expect(draft.effects).toEqual([]); writeFileSync(attachment, 'changed disk attachment');
     const sent = await child({root: dir, name: 'popclaw_send_draft', params: {draft_id: id}, advanceMs: 31 * 60000});
@@ -77,7 +84,7 @@ describe('ordinary social draft persistence across real Node processes and SQLit
     const mint = async () => idOf((await child({root: dir, name: 'popclaw_draft_message', params: {recipient: fixtureKey(5).id, body: 'Concurrency manuscript'}})).result!.text);
     const id = await mint();
     const results = await Promise.all([child({root: dir, name: 'popclaw_send_draft', params: {draft_id: id}}), child({root: dir, name: 'popclaw_send_draft', params: {draft_id: id}})]);
-    expect(results.filter(r => r.result?.text.includes('event_id:'))).toHaveLength(1);
+    expect(results.filter(r => typeof eventIdOf(r.result?.text ?? '') === 'string')).toHaveLength(1);
     const unknown = await mint();
     const uncertain = await child({root: dir, name: 'popclaw_send_draft', params: {draft_id: unknown}, options: {unknown: true}});
     expect(uncertain.result?.text ?? uncertain.error).toContain('SYNTHETIC_TRANSPORT_UNKNOWN_AFTER_EFFECT');

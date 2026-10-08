@@ -73,7 +73,7 @@ describe('ordinary social sends under the current host invocation', () => {
     if (reason === 'wait') vi.spyOn(Date, 'now').mockReturnValue(Date.now() + DRAFT_TTL_MS + 1000);
     if (reason === 'pressure') for (let n = 0; n < 17; n++) await fx.call('popclaw_draft_message', {recipient: 'Alice', body: `Other manuscript ${n}`}, scope);
     if (reason === 'runtime-reload') _draftsForTest.clear();
-    expect((await fx.call('popclaw_send_draft', {draft_id: id}, scope)).text).toContain('event_id:');
+    expect(JSON.parse((await fx.call('popclaw_send_draft', {draft_id: id}, scope)).text).event_id).toMatch(/^[a-f0-9]{64}$/);
     expect(fx.pushed).toHaveLength(1);
   });
   it.each([
