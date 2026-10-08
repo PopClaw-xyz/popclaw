@@ -5,6 +5,7 @@
 Find a command, understand its effects, and locate the debugging or extension entry point.
 Checked against source [`13403de`](https://github.com/PopClaw-xyz/popclaw/tree/13403de0d4531cba6a3476916d42f03fa7772d18) on 2026-10-07.
 This describes that source version; it does not certify every command on every host or announce an npm release.
+Tool names/counts and Canvas capacity notes were additionally checked against [`3012f11`](https://github.com/PopClaw-xyz/popclaw/tree/3012f11346be0a14a4755b77cc96905c251f1897) on 2026-10-08; other command descriptions retain the review scope above.
 See [host setup](hosts.md) and the [support matrix](support-matrix.md) for installation scope.
 
 **Jump to:** [Debug first](#debug) · [Terminal CLI](#terminal) · [OpenClaw chat commands](#slash) · [Agent/MCP tools](#tools) · [Develop and inspect source](#source)
@@ -223,7 +224,7 @@ Use structured tools for complex text or arguments. To inspect help, use `/popcl
 | `/popclaw recommend [--feedback <note>]` | Build a text digest using taste scoring and rendering. `--feedback` saves a local layout note instead; `--visual` is retired. |
 | `/popclaw newspaper [hours] [--feedback <note>]` | Hand off newspaper creation to the agent and its newspaper tools. Hours must be 1–168; omission or invalid input means today. `--feedback` only saves a layout note. |
 | `/popclaw brief [hours] [--feedback <note>]` | Compatibility alias for `newspaper`, including layout feedback. |
-| `/popclaw canvas <file.html> [--title <title>]` | Read and upload an HTML file to the configured publisher, returning a shareable URL. Requires a publisher; file limit 2 MiB. This publishes content. |
+| `/popclaw canvas <file.html> [--title <title>]` | Read and upload an HTML file to the configured publisher, returning a shareable URL. Requires a publisher; the Canvas service limits HTML to 2 MiB and the complete JSON request body to 3 MiB. Both must fit. This publishes content. |
 
 ### Onboarding and notifications
 
@@ -268,7 +269,7 @@ The source also accepts `doctor send <note> --confirm` to collect and send in on
 
 This is an index of tool names and purposes. Use the parameter schema returned by the running host when calling a tool; do not enter these names in a shell.
 
-The fixed source registers **54 distinct tool names**. The seven marked † are optional in OpenClaw and normally require an explicit session tool allow setting to be visible to the model. MCP lists all 54. A host can still restrict access; registration does not prove a tool can execute in the current session.
+The full fixed-source catalog contains **55 distinct tool names**. The OpenClaw manifest marks 48 as non-optional and the seven marked † as optional; the full MCP catalog contains all 55. These are catalog and manifest counts, not evidence that a real host session exposes or permits 48 or 55 tools by default. Actual access depends on the host.
 
 - `draft_*` and `feedback` prepare drafts without sending. `send_draft` sends after the owner reviews the destination, House, full text and attachments in the original conversation and agrees. Material changes need review again; there is no extra PopClaw social approval dialog.
 - House actions and recovery reconfirmation retain their own host-authorization requirements. Each `world_invoke` can create a new action; query `world_action_status` for unknown outcomes instead of automatically invoking again.
@@ -319,6 +320,7 @@ Tool names link to their source definitions. Use the current host-returned schem
 | [popclaw_unmark](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | Remove a local mark and submit a signed revocation. |
 | [popclaw_show_marks](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | List the owner’s locally recorded marked items. |
 | [popclaw_set_name](../apps/popclaw-plugin/src/tools/name-taste-tools.ts) † | Rename the owner and publish a newly signed namecard. |
+| [popclaw_set_bio](../apps/popclaw-plugin/src/tools/name-taste-tools.ts) | Edit or clear the public biography when the owner explicitly asks; an empty string clears it. Save locally, publish to each House and return public read-back evidence. Local saving alone does not establish public success. |
 | [popclaw_note_taste](../apps/popclaw-plugin/src/tools/name-taste-tools.ts) | Save the owner’s own words about interests or dislikes. |
 | [popclaw_feedback](../apps/popclaw-plugin/src/tools/feedback-cadence-tools.ts) | Draft a private product-feedback letter with an optional health-report attachment. |
 | [popclaw_update_cadence](../apps/popclaw-plugin/src/tools/feedback-cadence-tools.ts) | Set the owner’s primary language or timezone. |

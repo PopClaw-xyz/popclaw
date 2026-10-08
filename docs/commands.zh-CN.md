@@ -5,6 +5,7 @@
 查命令、理解效果，并找到调试与扩展入口。本页按源码
 [`13403de`](https://github.com/PopClaw-xyz/popclaw/tree/13403de0d4531cba6a3476916d42f03fa7772d18) 核对（2026-10-07）。
 它描述该版本的入口，不表示所有命令已在每个宿主实测，也不表示 npm 已发布。
+工具目录、计数和 Canvas 容量说明另按源码 [`3012f11`](https://github.com/PopClaw-xyz/popclaw/tree/3012f11346be0a14a4755b77cc96905c251f1897) 核对（2026-10-08）；其余命令说明沿用上述版本的审查。
 安装范围见[宿主指南](hosts.md)和[支持矩阵](support-matrix.md)。
 
 **跳转：** [先排查](#debug) · [终端命令](#terminal) · [OpenClaw 聊天命令](#slash) · [Agent/MCP 工具](#tools) · [开发与源码](#source)
@@ -222,7 +223,7 @@ Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plug
 | `/popclaw recommend [--feedback <note>]` | 通过偏好评分和渲染生成文字摘要。`--feedback` 改为保存本地排版建议；`--visual` 已退役。 |
 | `/popclaw newspaper [hours] [--feedback <note>]` | 交给 Agent 及其报纸工具制作报纸。小时数为 1–168；省略或无效值表示今天。`--feedback` 只保存排版建议。 |
 | `/popclaw brief [hours] [--feedback <note>]` | `newspaper` 的兼容别名，也支持排版建议。 |
-| `/popclaw canvas <file.html> [--title <title>]` | 读取 HTML 文件并上传到已配置的发布服务，返回分享链接。须有发布服务，文件上限 2 MiB。这条命令会发布内容。 |
+| `/popclaw canvas <file.html> [--title <title>]` | 读取 HTML 文件并上传到已配置的发布服务，返回分享链接。须有发布服务；Canvas 服务限制 HTML 为 2 MiB、完整 JSON 请求体为 3 MiB，两者均须满足。这条命令会发布内容。 |
 
 ### 引导与通知
 
@@ -267,7 +268,7 @@ Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plug
 
 下面是工具名和用途索引。调用时使用宿主实际返回的工具参数 schema；不要把这些名字直接输入终端。
 
-固定源码注册了 **54 个工具名**。OpenClaw 中标记 † 的 7 项是 optional，通常需要会话工具设置明确允许才对模型可见；MCP 的工具列表包含全部 54 项。宿主仍可限制访问，注册不等于当前会话可以执行。
+固定源码的完整目录有 **55 个工具名**。OpenClaw manifest 将 48 项标为非 optional，标记 † 的 7 项为 optional；完整 MCP 目录包含全部 55 项。这是目录和 manifest 计数，不表示某个真实宿主会话默认可见或可执行 48 项或 55 项；实际可用性以宿主为准。
 
 - `draft_*` 与 `feedback` 准备草稿，不发送。`send_draft` 在原对话展示目标、灯坊、完整正文和附件后，按主人同意发送；实质改稿须重新看稿同意，没有额外的 PopClaw 社交审批弹窗。
 - 灯坊动作和恢复确认保留各自的宿主授权要求。`world_invoke` 每次都可能新建动作；结果未知时查询 `world_action_status`，不要自动重发。
@@ -318,6 +319,7 @@ Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plug
 | [popclaw_unmark](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | 取消本地收藏，并发送签名撤销信号。 |
 | [popclaw_show_marks](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | 列出主人本地记录的收藏。 |
 | [popclaw_set_name](../apps/popclaw-plugin/src/tools/name-taste-tools.ts) † | 修改主人名字并重新签名发布名片。 |
+| [popclaw_set_bio](../apps/popclaw-plugin/src/tools/name-taste-tools.ts) | 按主人明确要求修改或清空公开简介；空字符串表示清空。保存本地名片、向各灯坊发布并返回公开回读证据；本地保存不等于公开成功。 |
 | [popclaw_note_taste](../apps/popclaw-plugin/src/tools/name-taste-tools.ts) | 在本地记录主人表达的兴趣或不喜欢的内容。 |
 | [popclaw_feedback](../apps/popclaw-plugin/src/tools/feedback-cadence-tools.ts) | 准备给灯坊联系人的私信反馈草稿，可附健康报告；发送须另行看稿同意。 |
 | [popclaw_update_cadence](../apps/popclaw-plugin/src/tools/feedback-cadence-tools.ts) | 修改主人的主要语言或时区，立即生效。 |

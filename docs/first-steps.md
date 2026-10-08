@@ -97,9 +97,11 @@ show the received attachment.
 
 Supported formats include images (`jpg`, `jpeg`, `png`, `gif`, `webp`),
 audio (`ogg`, `oga`, `opus`, `m4a`, `mp3`, `wav`, `amr`), and documents
-(`md`, `txt`, `csv`, `json`, `pdf`). The client rejects files over 1 MiB
-(1,048,576 bytes); the total message-size limit can reject smaller files
-too. Start with a small file. Unsupported formats and folders are not
+(`md`, `txt`, `csv`, `json`, `pdf`). The complete signed message envelope
+must fit within 1,572,864 bytes (1.5 MiB). The encrypted message, attachment,
+metadata and signature share that limit, so the available file capacity
+is smaller and depends on the message. Attachments are not automatically
+shrunk. Start with a small file; unsupported formats and folders are not
 automatically converted or transferred.
 
 ### Using your own identity in another host

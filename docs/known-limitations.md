@@ -62,11 +62,12 @@ reused results and final-release checks still pending. In particular:
   These notices are batched, never an interrupt. Nothing else changes: no
   message is resent, no relationship is altered, and a later poll does not
   repeat it.
-- **Attachments are limited** to image, audio and documents (Markdown, plain
-  text, CSV, JSON, PDF). A direct message may carry an attachment of up to
-  1 MiB. Anything larger is refused outright rather than shrunk, so a long
-  recording may not send. Both ends need a build that carries the raised limit;
-  against an older client the send is refused at the receiving side.
+- **Attachments share the signed message's size limit.** Supported formats
+  are images, audio and documents (Markdown, plain text, CSV, JSON, PDF).
+  The complete signed DM envelope must not exceed 1,572,864 bytes (1.5 MiB),
+  including encrypted text, attachment, metadata and signature. There is no
+  separate 1 MiB file cap; this does not mean unlimited attachments. An
+  oversized envelope is refused without automatically shrinking the file.
 
 ## Houses, and why there is no federation
 
