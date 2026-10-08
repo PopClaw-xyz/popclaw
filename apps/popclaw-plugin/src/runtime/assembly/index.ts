@@ -31,7 +31,7 @@ import type { SqliteNotifier } from '../../notifier/sqlite-notifier.js';
 import type { InviteWatchDeps } from '../../invite/pending-invites.js';
 import type { FollowerSyncService } from '../../social-graph/follower-sync-service.js';
 import type { PluginRuntime } from '../plugin-runtime.js';
-import { PublicFeedDisplay } from '../../ingress/public-feed-display.js';
+import { HouseFeedReader } from '../../ingress/house-feed-reader.js';
 import { InboxStore } from '../../messaging/inbox-store.js';
 import { VerifiedFollowersCache } from '../../identity/verified-followers-cache.js';
 import { makeBondContext } from '../../bonds/bond-context.js';
@@ -196,8 +196,9 @@ export async function assembleRuntime<S extends object, P extends object = Recor
   // P5: one-shot legacy-file migrations.
   lifecycle.migrateLegacyFiles?.({ paths, marksStore });
 
+  const houseFeedReader = new HouseFeedReader({db:host.db,houses,stores:()=>houseStores});
   const { orchestrator } = buildOnboarding({ host, boot, paths, ports, houses, egress, notifier, collaborators,
-    worldFeedCache, nameOf, mountedHouses, houseStarted, bondsStore, socialGraph, knownFollowers, socialLog, stateRepo });
+    snapshotClient:houseFeedReader, worldFeedCache, nameOf, mountedHouses, houseStarted, bondsStore, socialGraph, knownFollowers, socialLog, stateRepo });
 
   const relationReception = await openReception({ host, boot, ports, houses, readAuthorityFor, relationProducer,
     deps: relationFollowerDeps, houseStores, worldFeedCache });
@@ -218,9 +219,8 @@ export async function assembleRuntime<S extends object, P extends object = Recor
   const bag = {
     shutdown,
     houseRuntime: houses,
-        ...(ports.platform.receiveMode() === 'public-v1' ? { publicFeedDisplay: new PublicFeedDisplay({
-          sources: () => houseStores.map(house => ({ origin: house.baseUrl, slug: house.slug, capture: () => houses.capturePublicDisplay(house) })),
-        }) } : {}),
+    houseFeedReader,
+    ...(ports.platform.receiveMode() === 'public-v1' ? {publicFeedDisplay:houseFeedReader} : {}),
     worldRuntime: worlds,
     ...lane.slots,
     ...push?.slots,
@@ -229,7 +229,7 @@ export async function assembleRuntime<S extends object, P extends object = Recor
     egress,
     initiator,
     paths,
-    worldFeedClient: worldFeedCache,
+    worldFeedClient: houseFeedReader,
     worldFeedCache,
     tasteLoader,
     cadenceLoader,

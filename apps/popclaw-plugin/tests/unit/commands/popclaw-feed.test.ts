@@ -764,8 +764,9 @@ it('public display shows full signed content and local provenance without snapsh
     body: 'Complete signed body beyond preview', kind: 'post', relaySnapshot: false, mirrorSigner: false,
     source: { origin: 'https://source.invalid', slug: 'source', observedAt: 100, sequence: '1', logIncarnation: 'private-log-detail' } }],
     sources: [{ origin: 'https://source.invalid', slug: 'source', history: true, incomplete: true, unavailable: false, truncated: true }], truncated: true }));
+  const display = { read, prepare: async () => display };
   const result = await runPopclawFeedCommand({ positional: ['7'], flags: { author: 'signer', platform: 'popclaw' } }, client,
-    { cache: { record, recent }, publicFeedDisplay: { read } as never });
+    { cache: { record, recent }, publicFeedDisplay: display as never });
   expect(read).toHaveBeenCalledWith({ limit: 7, author: 'signer', platform: 'popclaw', includeThreads: false });
   expect(result.text).toContain(id); expect(result.text).toContain('Complete signed body beyond preview');
   expect(result.text).toContain('本地历史'); expect(result.text).toContain('接收尚不完整'); expect(result.text).toContain('并非完整搜索');

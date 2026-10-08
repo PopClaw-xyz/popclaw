@@ -43,7 +43,7 @@ import type { PublicMaterialCapture } from '../../ingress/public-journal-reader.
 import type { PublicDisplayCapture } from '../../ingress/public-feed-display.js';
 import type { ExecutionCatalogRow } from '../../host/execution-store.js';
 import { PUBLIC_JOURNAL_TABLES, ACTION_RECEIPT_FEATURE_TABLES, NATIVE_ACTION_FEATURE_TABLES } from '../../host/execution-store-schema.js';
-import { readHouseCapabilityView } from '../../world/world-capabilities.js';
+import { readHouseCapabilityView, currentVerifiedManifestDigest } from '../../world/world-capabilities.js';
 import { normalizeAckKeyHex } from './control-client.js';
 import { captureLegacyTrust } from './legacy-trust.js';
 import type { HouseReadFailureCode } from './read-failure.js';
@@ -516,6 +516,33 @@ export class HouseRuntime {
 
   /** Trusted adapter selection, never inferred from a mutable issue ledger. */
   get newspaperPublicV1(): boolean { return this.opts.publicV1Mode === true; }
+
+  /** Ordinary signed snapshots use the existing cache contract, never public log rows. */
+  captureOrdinaryFeed(house: HouseStore) {
+    const origin = normalizeHouseOrigin(house.baseUrl), catalog = this.opts.executionStores;
+    if (!catalog || !house.executionDb || this.stores.get(origin) !== house || house.slug !== hostDbSlug(origin))
+      throw new Error('ORDINARY_FEED_STORE_UNAVAILABLE');
+    const gate = this.publicReadGate(origin), partition = catalog.open(origin);
+    if (partition.db !== house.executionDb) throw new Error('ORDINARY_FEED_HANDLE_CHANGED');
+    const snapshot = () => {
+      assertStorageBootstrap(catalog.options.paths);
+      if (!gate.isActive() || !this.storageAllows('consumers')) throw new Error('ORDINARY_FEED_AUTHORITY_CHANGED');
+      catalog.verifySelected(origin, partition);
+      const pin = pinnedBinding(this.opts.db, origin), participation = readParticipation(this.opts.db, origin);
+      if (!pin || pin.blockedReason || !participation || houseBindingBlocked(this.opts.db, origin)) throw new Error('ORDINARY_FEED_TRUST_UNAVAILABLE');
+      return JSON.stringify({ origin, slug:house.slug, actor:catalog.options.actorId, store:partition.storeId,
+        storageGeneration:storageDatabaseGeneration(this.opts.db),
+        pin:{...pin,confirmedAt:undefined}, participation:{installation:participation.installation_id,op:participation.op_seq,
+          phase:participation.phase,desired:participation.desired,session:participation.session_id},
+        manifestDigest:currentVerifiedManifestDigest(this.opts.db,pin),
+        declaration:declarationFingerprint(readVerifiedDeclaration(this.opts.db,pin)) });
+    };
+    const authority = snapshot();
+    const assertCurrent = () => {
+      if (this.stores.get(origin) !== house || snapshot() !== authority) throw new Error('ORDINARY_FEED_SOURCE_CHANGED');
+    };
+    return {authority,assertCurrent};
+  }
 
   publicMaterialSources(): readonly { origin: string; slug: string; capture(): PublicMaterialCapture }[] {
     return [...this.targets.entries()].map(([origin, slug]) => ({ origin, slug, capture: () => {

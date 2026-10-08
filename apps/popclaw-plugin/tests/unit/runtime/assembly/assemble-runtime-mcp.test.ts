@@ -296,14 +296,15 @@ describe('the MCP bag, as the production root path builds it', () => {
   it('carries the shared runtime keys with the default publicFeedDisplay', async () => {
     const rt = await boot();
     expect(Object.keys(rt).sort()).toEqual([
-      'boot', 'bondsStore', 'cadenceLoader', 'egress', 'guideClient', 'host', 'houseRuntime', 'houseStarted', 'houses',
+      'boot', 'bondsStore', 'cadenceLoader', 'egress', 'guideClient', 'host', 'houseFeedReader', 'houseRuntime', 'houseStarted', 'houses',
       'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers', 'llmComplete', 'markService', 'marksStore', 'nameOf',
       'notifier', 'onboardingState', 'orchestrator', 'ownerNotifyTargetStore', 'paths', 'pendingFollows', 'pendingInvites',
       'proposalsStore', 'replyPings', 'scoreCache', 'shutdown', 'socialGraph', 'socialLog', 'summaryClient', 'tasteLoader',
       'publicFeedDisplay', 'uploadCanvas', 'worldFeedCache', 'worldFeedClient', 'worldOwnerAuthorization', 'worldRuntime',
     ].sort());
-    expect(Object.keys(rt)).toHaveLength(38);
-    expect(rt.worldFeedClient).toBe(rt.worldFeedCache);
+    expect(Object.keys(rt)).toHaveLength(39);
+    expect(rt.worldFeedClient).toBe(rt.houseFeedReader);
+    expect(rt.publicFeedDisplay).toBe(rt.houseFeedReader);
   });
 
   it('captures receive configuration before host construction and shares it throughout boot', async () => {

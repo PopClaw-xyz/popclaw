@@ -173,7 +173,8 @@ export async function runPopclawFeedCommand(
   const includeThreads = 'include-threads' in args.flags || 'include_threads' in args.flags;
 
   if (opts.publicFeedDisplay) {
-    const result = opts.publicFeedDisplay.read({ limit, author, platform, includeThreads });
+    const display = await opts.publicFeedDisplay.prepare({limit,author,platform,includeThreads});
+    const result = display.read({ limit, author, platform, includeThreads });
     return { text: formatPublicDisplay(result) };
   }
 
@@ -325,21 +326,26 @@ function pad(s: string, n: number): string {
  * observation, never a claim about current counts or author verification. */
 export function formatPublicDisplay(result: PublicDisplayResult, query?: string): string {
   const lang = ownerLang();
-  const lines = [renderCopy(lang, 'feed.public.title', { count: String(result.items.length) })];
+  const ordinary=result.sources.some(s=>s.protocol==='ordinary-snapshot');
+  const lines = [ordinary ? (lang==='zh-CN' ? `已验签的灯坊内容（${result.items.length}条）` : `Verified House content (${result.items.length} items)`)
+    : renderCopy(lang, 'feed.public.title', { count: String(result.items.length) })];
   if (query) lines.push(renderCopy(lang, 'feed.public.query', { query }));
   if (!result.sources.length) lines.push(renderCopy(lang, 'feed.public.unavailable'));
   for (const source of result.sources) {
     const state = source.unavailable ? 'unavailable' : source.history ? 'history' : 'local';
-    lines.push(`${source.origin} — ${renderCopy(lang, `feed.public.${state}`)}`);
-    if (source.incomplete && !source.unavailable) lines.push(renderCopy(lang, 'feed.public.incomplete'));
+    lines.push(`${source.origin} — ${source.protocol === 'ordinary-snapshot'
+      ? (source.unavailable ? (lang==='zh-CN' ? '无法读取已选择的灯坊快照。' : 'Selected House snapshot unavailable.')
+        : (lang==='zh-CN' ? '已验签的有界快照；不代表完整历史。' : 'Verified bounded snapshot; not complete source history.'))
+      : renderCopy(lang, `feed.public.${state}`)}`);
+    if (source.incomplete && !source.unavailable && source.protocol!=='ordinary-snapshot') lines.push(renderCopy(lang, 'feed.public.incomplete'));
   }
-  if (!result.items.length) lines.push(renderCopy(lang, 'feed.public.empty'));
+  if (!result.items.length) lines.push(ordinary ? (lang==='zh-CN' ? '本次有界快照没有匹配内容；这不代表来源的全部内容。' : 'No matching items in this bounded snapshot; this does not describe everything on the source.') : renderCopy(lang, 'feed.public.empty'));
   if (result.truncated) lines.push(renderCopy(lang, 'feed.public.truncated'));
-  rememberObservedPostIds(result.items.map(hit => hit.item));
+  rememberObservedPostIds(result.items.map(hit => ({...hit.item,houseSlug:hit.source.slug})));
   for (const hit of result.items) {
     const item = hit.item;
     const actor = formatActor(item.actorNickname, item.authorPopclawId ?? '');
-    const who = hit.mirrorSigner ? renderCopy(lang, 'feed.public.sharedBy', { actor }) : formatWho(item);
+    const who = hit.mirrorSigner ? (item.authorPopclawId ? renderCopy(lang, 'feed.public.sharedBy', { actor }) : `${item.platform ?? ''} · ${item.originalUrl ?? ''}`) : formatWho(item);
     lines.push('', `${who} · ${item.platform ?? ''}`, `${item.platformPostId ?? item.eventId ?? ''}`, hit.body);
     if (hit.kind !== 'post' && hit.kind !== 'reply') lines.push(renderCopy(lang, 'feed.public.eventKind', { kind: hit.kind }));
     if (hit.bodyUnavailable) lines.push(renderCopy(lang, 'feed.public.opaqueBody'));

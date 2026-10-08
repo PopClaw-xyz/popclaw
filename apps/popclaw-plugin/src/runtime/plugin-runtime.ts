@@ -60,6 +60,7 @@ import type { WorldSummaryClient } from '../world/world-summary-client.js';
 
 export interface PluginRuntime {
   readonly publicFeedDisplay?: import('../ingress/public-feed-display.js').PublicFeedDisplay;
+  readonly houseFeedReader?: import('../ingress/house-feed-reader.js').HouseFeedReader;
   readonly houseRuntime: HouseRuntime;
   readonly worldRuntime: import('./world-runtime.js').WorldRuntime;
   readonly host: HostAdapter;
@@ -67,7 +68,7 @@ export interface PluginRuntime {
   readonly egress: MultiHouseEgress;
   readonly initiator: InviteInitiator;
   /** Cross-house snapshot fetch (= the same catalog object). */
-  readonly worldFeedClient: WorldFeedCatalog;
+  readonly worldFeedClient: import('../ingress/world-feed-client.js').SnapshotSource;
   /** Cross-house merged world-feed cache view (Spec B, slice ②). Each item carries its source house slug. */
   readonly worldFeedCache: WorldFeedCatalog;
   readonly tasteLoader: TasteLoader;

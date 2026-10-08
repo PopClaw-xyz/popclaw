@@ -15,6 +15,7 @@ export interface PublicDisplayCapture {
   assertCurrent(): void;
 }
 export interface PublicDisplaySource {
+  readonly protocol?: 'ordinary-snapshot' | 'public-v1';
   readonly origin: string;
   readonly slug: string;
   readonly capabilityRevision: string;
@@ -58,6 +59,8 @@ function unavailable(source: { origin: string; slug: string }, capture: PublicDi
  * never opens a house itself or borrows the global catalog's snapshot path. */
 export class PublicFeedDisplay {
   constructor(private readonly options: PublicFeedDisplayOptions) {}
+  /** A prepared display belongs to one invocation; the journal-only adapter needs no IO. */
+  async prepare(_query: PublicDisplayQuery = {}): Promise<PublicFeedDisplay> { return this; }
   read(query: PublicDisplayQuery = {}): PublicDisplayResult { return this.query(query); }
   search(query: string, limit = 10): PublicDisplayResult { return this.query({ limit }, query); }
 

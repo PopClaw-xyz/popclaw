@@ -44,6 +44,7 @@ import {
   type PinSource,
 } from './house-binding-pin.js';
 import { projectReadDeclarationInTx } from './house-read-declaration.js';
+import { retainVerifiedManifestObservation } from './world-capabilities.js';
 import type { HostDb } from '../host/host-db.js';
 import { bumpParticipationInTx } from '../ingress/inbound-commit.js';
 import { popclaw } from '@popclaw/contracts';
@@ -533,6 +534,9 @@ function commitPreparedInTx(
   // confirm all leave one projection behind rather than three answers from
   // three responses. A refusal above returned already and wrote nothing.
   projectReadDeclarationInTx(tx, facts.binding, facts.manifestBytes, at);
+  retainVerifiedManifestObservation(tx, facts.binding, facts.manifestBytes, facts.intent === 'confirm' ? 'persisted_pin'
+    : facts.source === 'configured' ? 'configured_pin'
+      : facts.binding.origin.startsWith('https:') ? 'https_tofu' : 'loopback_fixture');
   return { ok: true as const, binding: facts.binding };
 }
 

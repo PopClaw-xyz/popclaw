@@ -1875,7 +1875,8 @@ it('public show/search bypass all legacy author discovery, cache and automatic t
     source: { origin: 'https://local.invalid', slug: 'local', observedAt: 100, sequence: '1', logIncarnation: 'log' } };
   const result = { items: [item], sources: [{ origin: 'https://local.invalid', slug: 'local', incomplete: false, unavailable: false, history: true }], truncated: false };
   const read = vi.fn(() => result), search = vi.fn(() => result), forbidden = vi.fn(() => { throw new Error('unexpected legacy or tail'); });
-  const rt = { publicFeedDisplay: { read, search }, get worldFeedClient() { return { fetchSnapshot: forbidden }; },
+  const display = { read, search, prepare: async () => display };
+  const rt = { publicFeedDisplay: display, get worldFeedClient() { return { fetchSnapshot: forbidden }; },
     get worldFeedCache() { return { search: forbidden }; }, get inboxStore() { forbidden(); return undefined; }, get host() { forbidden(); return undefined; } };
   registerPopclawTools({ api, runtime: (async () => rt) as never, getWorldDeps: forbidden });
   expect((await findTool(tools, 'popclaw_show_feed').execute('show', { filter_by_author: 'Alice', limit: 2 })).text).toContain('Signed local topic');

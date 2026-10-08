@@ -39,15 +39,17 @@ export function registerFeedTools(ctx: ToolsCtx): void {
       '"recent posts", "latest posts", "what is on/happening in my lore-house", or asks to see a lore-house\'s recent content with authors and post ids. ' +
       "Show the user's world feed of PUBLIC posts (popclaw-native + scraped social posts) — not private messages. " +
       'filter_by_author takes a name or a popclaw_id — a name (e.g. "Elon Musk") is resolved automatically first. ' +
-      'In public-v1 mode this reads local public content; preserve its history/completeness qualifications. ' +
+      'Each House selects verified local public-v1 content or its declared ordinary signed snapshot; preserve bounded/history/completeness qualifications. ' +
       'If the tool fails, tell the owner it failed — never make up a result.',
     parameters: ShowFeedSchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { filter_by_author?: string; limit?: number };
       const rt = (await runtime()) as { worldFeedClient: unknown; worldFeedCache?: unknown; publicFeedDisplay?: PublicFeedDisplay };
+      const display=await rt.publicFeedDisplay?.prepare();
       // runPopclawFeedCommand reads count from positional[0] (parseInt) and
       // --author from flags. See apps/popclaw-plugin/src/commands/popclaw-feed.ts
       const flags: Record<string, string> = {};
+      let observedAuthorNote = '';
       if (p.filter_by_author) {
         // S4.1-T3: names go through resolveAuthor first; zero hits → treat
         // the input as a raw popclaw_id (legacy passthrough); ambiguous →
@@ -55,18 +57,29 @@ export function registerFeedTools(ctx: ToolsCtx): void {
         let author = p.filter_by_author;
         let fullAuthorId = false;
         try { fullAuthorId = bs58.decode(author).length === 32 && bs58.encode(bs58.decode(author)) === author; } catch { /* name */ }
-        if (rt.publicFeedDisplay && !fullAuthorId) {
-          const local = rt.publicFeedDisplay.read({ limit: 100 });
+        if (display && !fullAuthorId) {
+          const local = display.read({ limit: 100 });
           const candidates = resolveAuthor(author, local.items.filter(hit => !hit.mirrorSigner).map(({ item }) => ({
             popclawId: item.authorPopclawId ?? '', platform: item.platform ?? '', nickname: item.handle || item.actorNickname || '',
           })));
-          if (candidates.length > 1) return { type: 'text' as const, text: disambiguationText(author, candidates) };
+          const hasOrdinary = local.sources.some(source => source.protocol === 'ordinary-snapshot');
+          const clarifyOrdinary = ownerLang() === 'zh-CN'
+            ? '请说明是哪位作者，或给出作者资料、帖子链接。本次有界快照不能确认全部同名作者。'
+            : 'Which author do you mean? A profile or post link can help. This bounded snapshot does not identify every author with that name.';
+          if (candidates.length > 1) return { type: 'text' as const, text: hasOrdinary
+            ? `${candidates.map((candidate,index)=>`${index+1}. ${candidate.nickname}`).join('\n')}\n${clarifyOrdinary}`
+            : disambiguationText(author, candidates) };
           if (candidates.length === 1) {
-            if (local.truncated || local.sources.some(source => source.unavailable || source.incomplete)) return {
+            const observedOrdinary = local.items.some(hit => !hit.mirrorSigner && hit.item.authorPopclawId === candidates[0]!.popclawId
+              && local.sources.some(source => source.origin === hit.source.origin && source.protocol === 'ordinary-snapshot' && !source.unavailable));
+            if (!observedOrdinary && (local.truncated || local.sources.some(source => source.unavailable || source.incomplete))) return {
               type: 'text' as const, text: renderCopy(ownerLang(), 'feed.public.authorLimited'),
             };
+            if (observedOrdinary) observedAuthorNote = ownerLang() === 'zh-CN'
+              ? `按本次已验签快照中观察到的作者“${candidates[0]!.nickname}”筛选。这不是全站唯一性判断；若你指同名的另一人，请指出对象。\n`
+              : `Filtered by the signed author “${candidates[0]!.nickname}” observed in this bounded snapshot, not a claim of site-wide uniqueness. If you mean someone else with that name, please clarify.\n`;
             author = candidates[0]!.popclawId;
-          } else return { type: 'text' as const, text: renderCopy(ownerLang(), 'feed.public.authorLimited') };
+          } else return { type: 'text' as const, text: hasOrdinary ? clarifyOrdinary : renderCopy(ownerLang(), 'feed.public.authorLimited') };
         } else if (!rt.publicFeedDisplay && deps.getWorldDeps !== undefined) {
           const wd = await deps.getWorldDeps();
           const { sources } = await fetchAuthorSources(wd);
@@ -92,25 +105,25 @@ export function registerFeedTools(ctx: ToolsCtx): void {
         args as Parameters<typeof runPopclawFeedCommand>[0],
         rt.worldFeedClient as Parameters<typeof runPopclawFeedCommand>[1],
         {
-          publicFeedDisplay: rt.publicFeedDisplay,
+          publicFeedDisplay: display,
           // #588: an empty feed is a house outage OR a quiet world, and the agent
           // cannot tell which without this. Lazy — only an empty result pays for it.
           silence: () => houseSilenceText(houseSilenceOf(rt)),
         },
       );
-      return { type: 'text' as const, text: reply.text };
+      return { type: 'text' as const, text: observedAuthorNote + reply.text };
     },
   });
 
   registerLocalDisplayTool({
     name: 'popclaw_search_feed',
     description:
-      'Search locally available world feed content by keyword and return matching posts with text and source links. ' +
+      'Search the selected verified House content by keyword and return matching posts with text and source links. ' +
       'Use when the owner asks about a specific person/topic/event — "show me the latest on Elon", ' +
-      '"tell me more about that SpaceX story", "anything about <X>". Results come instantly from the local cache; ' +
+      '"tell me more about that SpaceX story", "anything about <X>". Reads verified public journals or a bounded signed ordinary House snapshot; ' +
       'summarise them for the owner and offer the source link (original_url) for deeper detail. ' +
       'This needs a real keyword — a wildcard is not a way to list recent posts, use popclaw_show_feed for that. ' +
-      'In public-v1 mode results use locally received public content; retain the returned history, completeness and observation-time qualifications.',
+      'Ordinary Houses provide bounded signed snapshots; public-v1 uses local retained content. Retain history, completeness and observation-time qualifications.',
     parameters: SearchFeedSchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { query?: string; limit?: number };

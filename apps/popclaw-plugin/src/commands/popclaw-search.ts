@@ -64,7 +64,10 @@ export async function runPopclawSearchCommand(
     if (Number.isFinite(n) && n > 0) limit = Math.min(n, MAX_LIMIT);
   }
 
-  if (publicFeedDisplay) return { text: formatPublicDisplay(publicFeedDisplay.search(query, limit), query) };
+  if (publicFeedDisplay) {
+    const display=await publicFeedDisplay.prepare();
+    return {text:formatPublicDisplay(display.search(query,limit),query)};
+  }
   const hits = cache.search(query, limit);
   if (hits.length === 0) {
     return {

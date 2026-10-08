@@ -203,7 +203,7 @@ async function main(): Promise<void> {
       return {
         guideClient: rt.guideClient,
         summaryClient: rt.summaryClient,
-        snapshotClient: rt.worldFeedCache,
+        snapshotClient: rt.worldFeedClient,
         resolveClient: new ResolveClient({ baseUrl: rt.boot.loreHouseUrl, fetch: rt.houseRuntime.houseReadFetch(rt.boot.loreHouseUrl) }),
         webBaseUrl: rt.boot.webBaseUrl,
         // ADR-0041: the primary house's guide ([0]) is pulled live via

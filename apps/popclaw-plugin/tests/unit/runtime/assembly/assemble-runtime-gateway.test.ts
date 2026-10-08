@@ -333,14 +333,16 @@ describe('the gateway bag, as the production root path builds it', () => {
     const { bag } = await boot();
     expect(Object.keys(bag).sort()).toEqual([
       'bondsStore', 'boot', 'cadenceLoader', 'drainNotifications', 'egress', 'followerSync', 'guideClient',
-      'host', 'houseRuntime', 'houseStarted', 'houses', 'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers',
+      'host', 'houseFeedReader', 'houseRuntime', 'houseStarted', 'houses', 'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers',
       'llmComplete', 'markService', 'marksStore', 'nameOf', 'nativeWorldExecution', 'notifier', 'notifyBacklog',
       'onboardingState', 'orchestrator', 'ownerNotifier', 'ownerNotifyTargetStore', 'ownerSession', 'paths',
       'pendingFollows', 'pendingInvites', 'proposalsStore', 'publicFeedDisplay', 'replyPings', 'retryDmNotifications', 'scoreCache',
       'shutdown', 'socialGraph', 'socialLog', 'summaryClient', 'tasteLoader', 'uploadCanvas', 'worldFeedCache',
       'worldFeedClient', 'worldOwnerApproval', 'worldRuntime',
     ]);
-    expect(Object.keys(bag)).toHaveLength(45);
+    expect(Object.keys(bag)).toHaveLength(46);
+    expect(bag.worldFeedClient).toBe(bag.houseFeedReader);
+    expect(bag.publicFeedDisplay).toBe(bag.houseFeedReader);
     expect(probe.events.filter(e => e.startsWith('followerSync.'))).toEqual(['followerSync.construct']);
     expect(bag.followerSync).toBeDefined();
     // G65: the push leg's target resolver and the bag share ONE store instance.

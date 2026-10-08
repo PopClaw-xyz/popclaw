@@ -28,6 +28,7 @@ import type { SqliteNotifier } from '../../notifier/sqlite-notifier.js';
 import type { BondsStore } from '../../bonds/bonds-store.js';
 import type { SocialGraph } from '../../social-graph/social-graph.js';
 import type { KnownFollowersStore } from '../../social-graph/followers-sync.js';
+import type { SnapshotSource } from '../../ingress/world-feed-client.js';
 import type { WorldFeedCatalog } from '../../ingress/world-feed-catalog.js';
 import type { SocialLogRecorder } from '../../social-log/social-log.js';
 import type { NameChain } from '../../identity/person-name.js';
@@ -82,12 +83,12 @@ export function buildCollaborators(input: {
 
 export function buildOnboarding(input: {
   host: HostAdapter; boot: Boot; paths: PopclawPaths; ports: AnyRuntimePorts; houses: HouseRuntime; egress: MultiHouseEgress;
-  notifier: SqliteNotifier; collaborators: ReturnType<typeof buildCollaborators>; worldFeedCache: WorldFeedCatalog;
+  notifier: SqliteNotifier; collaborators: ReturnType<typeof buildCollaborators>; snapshotClient: SnapshotSource; worldFeedCache: WorldFeedCatalog;
   nameOf: NameChain; mountedHouses: () => MountedHouse[]; houseStarted: (slug: string) => boolean;
   bondsStore: BondsStore; socialGraph: SocialGraph; knownFollowers: KnownFollowersStore; socialLog: SocialLogRecorder;
   stateRepo: OnboardingStateRepository;
 }) {
-  const { host, boot, paths, ports, houses, egress, notifier, worldFeedCache, nameOf } = input;
+  const { host, boot, paths, ports, houses, egress, notifier, snapshotClient, worldFeedCache, nameOf } = input;
   const { tasteRoot, tasteLoader, guideClient, summaryClient, markService, llmComplete } = input.collaborators;
   // Onboarding: same orchestrator on every root; the presenter is the host's.
   const { stateRepo } = input;
@@ -109,7 +110,7 @@ export function buildOnboarding(input: {
       fetchVerifiedHandles({ loreHouseUrl: boot.loreHouseUrl, popclawId: boot.popclawId, fetchImpl: houses.fetchHouse }),
     guideClient,
     summaryClient,
-    snapshotClient: worldFeedCache,
+    snapshotClient,
     tasteLoader,
     learnedWriter: { appendPick: (p) => appendPick({ tasteRoot }, p) },
     markService,

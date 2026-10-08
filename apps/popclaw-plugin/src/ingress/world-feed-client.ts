@@ -13,6 +13,7 @@ import { inspectPublicCarrier } from './public-stream-wire.js';
 
 import { popclaw } from '@popclaw/contracts';
 import { LORE_HOUSE_TIMEOUT_MS } from '../world/http-timeout.js';
+import { readBoundedBytes } from '../world/json-profile.js';
 
 export interface WorldFeedClientOptions {
   readonly baseUrl: string;
@@ -62,7 +63,7 @@ export class WorldFeedClient implements SnapshotSource {
       throw new RemoteHouseReadError({code:'HOUSE_REMOTE_HTTP',origin:this.opts.baseUrl,status:res.status});
     }
     let buf: Uint8Array;
-    try { buf = new Uint8Array(await res.arrayBuffer()); }
+    try { buf = await readBoundedBytes(res, 8 * 1024 * 1024); }
     catch (error) {
       if (error instanceof ActionInactiveError) throw error;
       throw new RemoteHouseReadError(houseReadFailure(error,this.opts.baseUrl));

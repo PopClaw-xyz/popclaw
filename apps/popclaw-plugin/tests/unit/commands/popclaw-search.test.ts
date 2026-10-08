@@ -47,7 +47,7 @@ describe('runPopclawSearchCommand', () => {
 
 it('public search uses the narrow reader and reports local-empty without the legacy cache', async () => {
   const calls: unknown[] = [];
-  const display = { search: (...args: unknown[]) => { calls.push(args); return { items: [], sources: [], truncated: false }; } };
+  const display = { prepare: async () => display, search: (...args: unknown[]) => { calls.push(args); return { items: [], sources: [], truncated: false }; } };
   const { text } = await runPopclawSearchCommand({ positional: ['signed', 'topic'], flags: { limit: '4' } },
     { search: () => { throw new Error('legacy cache accessed'); } } as never, display as never);
   expect(calls).toEqual([['signed topic', 4]]); expect(text).toContain('signed topic');
