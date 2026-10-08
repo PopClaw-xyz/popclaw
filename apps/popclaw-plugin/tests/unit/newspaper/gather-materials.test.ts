@@ -383,8 +383,7 @@ describe('gatherNewspaperMaterials', () => {
     });
     const r = gatherNewspaperMaterials(d, { hours: 24 });
     if (r.kind !== 'ready') throw new Error('want ready');
-    expect(r.payload).toContain(`recent: ${'长'.repeat(60)}…`);
-    expect(r.payload).not.toContain('长'.repeat(61));
+    expect(r.payload).toContain(`recent: ${long}`);
   });
 
   it('P2: 坊告示牌 voice 一坊一行,拿不到的坊不出行', () => {
@@ -818,8 +817,6 @@ describe('I5: 正文预算与条数上限', () => {
   beforeEach(() => _resetIssuesForTest());
 
   const long = (n: number): string => '字'.repeat(n);
-  /** Where the material page's closing sentinel starts (`newspaper.material.batch.sentinel`). */
-  const SENTINEL_HEAD = '[popclaw] END OF MATERIAL PAGE';
   function one(over: Record<string, unknown>): string {
     const d = deps({
       cache: { recentForReading: () => [{
@@ -833,30 +830,25 @@ describe('I5: 正文预算与条数上限', () => {
     });
     const r = gatherNewspaperMaterials(d, { hours: 24 });
     if (r.kind !== 'ready') throw new Error('want ready');
-    const tail = r.payload.slice(r.payload.lastIndexOf(`    ${mat('pulse.body', { text: '' })}`));
-    // Only the body. Since 2026-09-13 the page closes with a batch sentinel, which is the
-    // page's own tail marker and has nothing to do with how a body renders — the thing
-    // every assertion in this block is about.
-    const closing = tail.indexOf(SENTINEL_HEAD);
-    return (closing < 0 ? tail : tail.slice(0, closing)).replace(/\n+$/, '');
+    return stored().pulse[0]!.text;
   }
 
   // v0.2：预算跟着密度档走 —— 简讯只写一两句,喂它 1200 字是上一版的形状,
   // 那时模型还兼排版、可能自己把一条提档。现在档位由 gather 定、版面照排,两边同一个决定。
-  it('简讯档砍到 400 字并带省略号', () => {
+  it('简讯档保留完整写作原文', () => {
     const text = one({});
-    expect(text).toContain('…');
-    expect(text.match(/字/g)!.length).toBe(400);
+    expect(text).not.toContain('…');
+    expect(text.match(/字/g)!.length).toBe(4000);
   });
 
-  it('有配图 / 计数显著 / 交情好友以上 → 人物卡档 1600 字', () => {
-    expect(one({ media: [{ url: 'https://img/a.jpg' }] }).match(/字/g)!.length).toBe(1600);
-    expect(one({ markCount: 4, replyCount: 1 }).match(/字/g)!.length).toBe(1600);
-    expect(one({ bondTier: 'friend' }).match(/字/g)!.length).toBe(1600);
+  it('人物卡也保留完整写作原文', () => {
+    expect(one({ media: [{ url: 'https://img/a.jpg' }] }).match(/字/g)!.length).toBe(4000);
+    expect(one({ markCount: 4, replyCount: 1 }).match(/字/g)!.length).toBe(4000);
+    expect(one({ bondTier: 'friend' }).match(/字/g)!.length).toBe(4000);
   });
 
   it('短正文原样,不加省略号', () => {
-    expect(one({ body: '就这一句' })).toBe(`    ${mat('pulse.body', { text: '就这一句' })}`);
+    expect(one({ body: '就这一句' })).toBe('就这一句');
   });
 
   it('读取不设上限：窗口里有多少条,候选页就摆多少条', () => {
@@ -899,17 +891,16 @@ describe('I5: 正文预算与条数上限', () => {
       expect(weightedChars('')).toBe(0);
     });
 
-    it('素材撑爆预算时砍条目，payload 落回预算内', () => {
+    it('素材撑爆单页预算时保留完整一期并给续读位置', () => {
       const r = gather(80);
       if (r.kind !== 'ready') throw new Error('want ready');
       // 单页塞得进宿主一条消息的上限（≥200k 模型是 64,000，量到多少用多少）。
       // ⚠️ 这是「一口给多少」不是「一顿吃多少」——条数由挑选阶梯定，不由这个数定。
       expect(weightedChars(r.payload) * 1.013).toBeLessThan(64_000);
       // 砍过了，而且素材段头那句「共 N 条」与真实条目数对得上（不许砍了却还报 80）。
-      const n = itemCount(r.payload);
-      expect(n).toBeGreaterThanOrEqual(12); // MIN_PULSE
-      expect(n).toBeLessThan(80);
-      expect(r.payload).toContain(mat('pulse.head', { count: String(n) }));
+      expect(stored().pulse).toHaveLength(80);
+      expect(r.payload).toContain('page_cursor=');
+      expect(r.payload).toContain(mat('pulse.head', { count: '80' }));
     });
 
     it('砍的时候先砍无署名的 —— 有人的条目留到最后（铁律②：不许有没有人的新闻）', () => {
@@ -931,19 +922,20 @@ describe('I5: 正文预算与条数上限', () => {
       ];
       const r = gatherRaw(deps({ cache: { recentForReading: () => feed as never } }), { hours: 24 });
       if (r.kind !== 'candidates') throw new Error('want candidates');
-      expect(getIssue(r.candidateToken)!.pulse.length).toBeLessThan(220); // 候选页放不下,砍过了
+      expect(getIssue(r.candidateToken)!.pulse.length).toBe(220);
       // 顺序不变：无署名的先走光，剩下的全是有人的条目。
       // （预算比从前紧，条目又是 600 字的大块头，所以有署名的也会被砍到——
       //  但永远是无署名的先死光，这条铁律没让。）
       // 20 个有署名的一个不少；被砍掉的全是无署名的。
-      for (let i = 0; i < 20; i += 1) expect(r.payload).toContain(`star${i}`);
+      for (let i = 0; i < 20; i += 1) expect(getIssue(r.candidateToken)!.pulse.some(p => p.author === `star${i}`)).toBe(true);
+      expect(r.payload).toContain('page_cursor=');
       expect(weightedChars(r.payload) * 1.013).toBeLessThan(64_000);
     });
 
     it('素材不多时一条都不砍', () => {
       const r = gather(3);
       if (r.kind !== 'ready') throw new Error('want ready');
-      expect(weightedChars(r.payload) * 1.013).toBeLessThan(16_000);
+      expect(weightedChars(r.payload) * 1.013).toBeLessThan(64_000);
       expect(itemCount(r.payload)).toBe(3);
       expect(r.payload).toContain(mat('pulse.head', { count: '3' }));
     });

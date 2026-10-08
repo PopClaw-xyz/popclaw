@@ -11,7 +11,6 @@
  * upload).
  */
 
-import { PICK_RUNAWAY } from './gather-materials.js';
 import { getIssue, getEdit, candidateOf, latestIssueFromCandidate } from './issue-store.js';
 import { needsEditorial, numberedPulse, type IssueData } from './issue.js';
 import type { NewspaperEdit } from './render-newspaper.js';
@@ -193,7 +192,7 @@ export function reprintOf(issue: IssueData, numbers: readonly number[], lang: La
 }
 
 export type Admission =
-  | { kind: 'refused'; text: string }
+  | { kind: 'refused'; text: string; publishToken?: string }
   | {
       kind: 'admitted';
       /** The issue this hand-in is bound to (the token, or the basis when the token was unusable). */
@@ -320,7 +319,7 @@ export function admitHandIn(
   // which then reached the candidate set through `latestIssue()`; that route is gone with
   // that function, so the prefix is precise again — and it catches a candidate set that
   // happens to be small.
-  if (issue.pulse.length > PICK_RUNAWAY || isCandidateId(publishToken)) {
+  if (isCandidateId(publishToken)) {
     // Sending the writer back to the candidate page costs it everything it has already
     // written, because choosing again renumbers the issue. When a material page minted
     // from this very candidate page is still live, name it instead (2026-09-12: the
@@ -453,6 +452,7 @@ export function admitHandIn(
     if (!Object.keys(accepted.items ?? {}).length) {
       return {
         kind: 'refused',
+        publishToken,
         text: `${anchorNotes[0]!}\n\n${reprintOf(issue, numbers, lang)}`,
       };
     }

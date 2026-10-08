@@ -15,7 +15,8 @@
  */
 import { retainPublicMaterialBasis, publicCoverageText } from './public-material-source.js';
 import { weightedChars } from './gather-materials.js';
-import { pageBudgetDecision, pageBudgetLogLine, pageBudgetNow } from './host-budget.js';
+import { pageBudgetDecision, pageBudgetLogLine } from './host-budget.js';
+import { beginReading, previewReading } from './reading-page.js';
 import { getIssue, putIssue } from './issue-store.js';
 import { buildNewspaperPrompt } from './build-newspaper-prompt.js';
 import { houseCounts, type IssueData, type PulseItem } from './issue.js';
@@ -29,7 +30,7 @@ export interface PickOptions {
   mintToken: () => string;
   contentRules: string;
   leadMax: number;
-  /** The most any one person may hold in the issue. */
+  /** Legacy assembly option; explicit author selections are no longer capped. */
   perAuthorMax: number;
   /** Under this the issue reads as empty and is topped up by heat. There is no target above it. */
   floor: number;
@@ -133,24 +134,16 @@ export function buildIssueFromPicks(
     notes.push(`picks: ${picks.length} given, ${wanted.size} usable (the rest were duplicates or not on the page)`);
   }
 
-  // The cap, applied in page order so "which six" is decided the same way every time.
+  // The writer chooses; capacity never removes an explicitly chosen item.
   const perAuthor = new Map<string, number>();
   const chosen = new Map<number, 'taste' | 'bond' | 'lively' | undefined>();
-  let capped = 0;
   candidates.pulse.forEach((p, i) => {
     if (!wanted.has(candidateNumberAt(i))) return;
     const key = authorKey(p, i);
     const n = perAuthor.get(key) ?? 0;
-    if (n >= opts.perAuthorMax) {
-      capped += 1;
-      return;
-    }
     perAuthor.set(key, n + 1);
     chosen.set(i, why.get(candidateNumberAt(i)));
   });
-  if (capped) {
-    notes.push(`picks: ${capped} dropped — nobody holds more than ${opts.perAuthorMax} items in one issue`);
-  }
   if (!chosen.size) {
     return { kind: 'error', message: 'nothing survived the picks — call popclaw_newspaper again with no picks and choose from the candidate page' };
   }
@@ -170,29 +163,26 @@ export function buildIssueFromPicks(
     const liveliest = new Set(
       selectByHeat(spare, {
         target: opts.topUpTo,
-        perAuthorMax: opts.perAuthorMax,
+        perAuthorMax: Number.POSITIVE_INFINITY,
         alreadyHeld: perAuthor,
       }).map((p) => p.eventId),
     );
-    let added = 0;
+    const addedNumbers: number[] = [];
     candidates.pulse.forEach((p, i) => {
       if (chosen.size >= opts.topUpTo || chosen.has(i) || !liveliest.has(p.eventId)) return;
       const key = authorKey(p, i);
       const n = perAuthor.get(key) ?? 0;
-      if (n >= opts.perAuthorMax) return;
       perAuthor.set(key, n + 1);
       chosen.set(i, 'lively');
-      added += 1;
+      addedNumbers.push(candidateNumberAt(i));
     });
-    if (added) {
-      notes.push(`picks: ${added} more added by what was liveliest — fewer than ${opts.floor} items reads as an empty paper`);
+    if (addedNumbers.length) {
+      notes.push(`picks: ${addedNumbers.length} more added by what was liveliest — fewer than ${opts.floor} items reads as an empty paper; added original numbers: ${addedNumbers.join(', ')}`);
     }
-    // "Topped up by 3" reads like the problem was handled. On a day one account wrote almost
-    // everything, the per-author cap leaves nothing to top up *with*, and the issue stays far
-    // under the floor — the owner should hear that from the issue, not deduce it.
+    // An exhausted source window can still leave the paper under the editorial floor.
     if (chosen.size < opts.floor) {
       notes.push(
-        `picks: ${chosen.size} items in the end, still under ${opts.floor} — there was nothing left to add that does not break the ${opts.perAuthorMax}-per-person cap. Today's feed came from too few people.`,
+        `picks: ${chosen.size} items in the end, still under ${opts.floor} — no more available candidates remain in this window.`,
       );
     }
   }
@@ -203,7 +193,7 @@ export function buildIssueFromPicks(
     if (!chosen.has(i)) return;
     const reason = chosen.get(i);
     // The candidate page's [n] remains this item's identity, never its new array position.
-    // Stamp before the material-budget trim; top-ups and capped selections use the same IDs.
+    // Explicit picks and editorial top-ups keep the same original IDs.
     kept.push({ ...p, itemNumber: candidateNumberAt(i), ...(reason ? { pickedFor: reason } : {}) });
   });
 
@@ -217,59 +207,19 @@ export function buildIssueFromPicks(
     byHouse: { ...Object.fromEntries(Object.keys(candidates.byHouse).map((k) => [k, 0])), ...houseCounts(kept) },
   };
   const publishToken = opts.mintToken();
-  // The material page has the same one-message ceiling the candidate page had, and a writer
-  // that picks three hundred items would sail straight past it and get its material cut in
-  // the middle. Trim the oldest until it fits, and say so.
-  let over = false;
-  const coverage = publicCoverageText(candidates.publicCoverage ?? []);
-  const brief = (list: readonly PulseItem[]): string => {
-    const page = buildNewspaperPrompt({ ...issue, pulse: list }, {
-      contentRules: opts.contentRules,
-      publishToken,
-      leadMax: opts.leadMax,
-      pickedCount: kept.length,
-      overBudget: over,
-      sessionKey: opts.sessionKey,
-    });
-    return coverage ? `${coverage}\n\n${page}` : page;
-  };
-  let laidOut: readonly PulseItem[] = kept;
-  let payload = brief(laidOut);
-  const budget = pageBudgetNow(opts.sessionKey);
-  while (weightedChars(payload) > budget && laidOut.length > 12) {
-    laidOut = laidOut.slice(0, Math.max(12, Math.floor(laidOut.length * 0.8)));
-    payload = brief(laidOut);
-  }
-  // The trim bottoms out at twelve rather than gut the page, so it can leave here still over
-  // budget — the one case where the host cuts the middle out. The page must say so instead of
-  // promising it is whole. Same fault, same fix as the candidate page.
-  over = weightedChars(payload) > budget;
-  payload = brief(laidOut);
-  // Same trail as the candidate page, same wording: what this page was sized against and
-  // what it came out weighing. Numbers and session keys only, never the material itself.
-  opts.log?.(
-    pageBudgetLogLine(
-      'material',
-      pageBudgetDecision(opts.sessionKey),
-      weightedChars(payload),
-      kept.length - laidOut.length,
-      kept.length,
-    ),
-  );
-  if (laidOut.length !== kept.length) {
-    notes.push(`picks: ${kept.length - laidOut.length} dropped — the material for that many does not fit one hand-over`);
-  }
-  // The session stamp is the same-batch constraint's basis (2026-09-06 content-mismatch
-  // P1): a tokenless publish may only bind an issue its own session — or its delegating
-  // parent — was served, so the copy lands on the numbering it was written against.
-  // The candidate stamp (2026-09-12): this issue records the candidate page it was
-  // picked from, so a hand-in that carries the candidate id where the material page's
-  // id belongs can be bound by ancestry instead of refused twice over.
-  let retained = { ...issue, pulse: laidOut };
+  // Preserve all selected originals, IDs and public source evidence before serving any page.
+  let retained = issue;
   if (candidates.publicMaterials) retained = retainPublicMaterialBasis(retained, candidates.publicMaterials.references);
+  const coverage = publicCoverageText(candidates.publicCoverage ?? []);
+  const text = buildNewspaperPrompt(retained, {
+    contentRules: opts.contentRules, publishToken, leadMax: opts.leadMax,
+    pickedCount: kept.length, overBudget: false, sessionKey: opts.sessionKey,
+  });
+  const document = coverage ? `${coverage}\n\n${text}` : text;
+  opts.log?.(pageBudgetLogLine('material', pageBudgetDecision(opts.sessionKey), weightedChars(previewReading(publishToken, document, opts)), 0, kept.length));
   opts.validateMaterials?.(retained);
   putIssue(publishToken, retained, opts.manifestDir, opts.sessionKey, candidateToken);
-
+  const payload = beginReading(publishToken, document, opts);
   return { kind: 'ready', payload, publishToken, notes };
 }
 

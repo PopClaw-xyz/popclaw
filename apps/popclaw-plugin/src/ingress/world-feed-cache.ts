@@ -152,6 +152,7 @@ const RETENTION_SECONDS = 365 * 24 * 60 * 60; // 1 year
 export interface WorldFeedReader {
   recent(n: number): CachedFeedItem[];
   recentForReading(n: number): ReadableFeedItem[];
+  forReadingSince?(start: number): ReadableFeedItem[];
   byAuthor(popclawId: string, n: number): CachedFeedItem[];
   byPlatform(platform: string, n: number): CachedFeedItem[];
   search(query: string, n: number): CachedFeedItem[];
@@ -253,6 +254,15 @@ export class WorldFeedCache implements WorldFeedReader {
       [n],
     );
     return scanTolerantly(rows, projectReadableRow, 'recentForReading', this.opts.debug);
+  }
+
+  /** Complete locally available window; no arbitrary global scan ceiling. */
+  forReadingSince(start: number): ReadableFeedItem[] {
+    const rows = this.opts.db.queryAll<FeedCacheRow>(
+      `SELECT ${COLS} FROM world_feed WHERE platform_post_created_at >= ? ORDER BY platform_post_created_at DESC, platform_post_id`,
+      [start],
+    );
+    return scanTolerantly(rows, projectReadableRow, 'forReadingSince', this.opts.debug);
   }
 
   byAuthor(popclawId: string, n: number): CachedFeedItem[] {

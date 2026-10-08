@@ -4,9 +4,6 @@ import { uploadCanvas } from '../egress/canvas-egress.js';
 import { renderCopy } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 
-/** Hard cap of the server-side store; shared by the slash command and the `popclaw_canvas` tool from one definition. */
-export const MAX_HTML_BYTES = 2 * 1024 * 1024;
-
 export interface PopclawCanvasArgs {
   positional: string[];
   flags: Record<string, string>;
@@ -39,7 +36,6 @@ export async function runPopclawCanvasCommand(
   } catch {
     return { text: renderCopy(lang, 'canvas.cmd.unreadable', { file }) };
   }
-  if (buf.byteLength > MAX_HTML_BYTES) return { text: renderCopy(lang, 'canvas.cmd.tooLarge') };
   const html = buf.toString('utf8');
   if (!html.trim()) return { text: renderCopy(lang, 'canvas.cmd.emptyFile') };
 

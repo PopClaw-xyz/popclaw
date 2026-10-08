@@ -29,51 +29,15 @@ import { langOf, ownerLang, ownerLangTag } from '../lexicon/owner-language.js';
 import { ownerTz, startOfLocalDay } from '../time/time-context.js';
 
 
-const MAX_SCAN = 1000;
-const MAX_PINGS = 50;
 const PING_BODY_PREVIEW = 80;
-/** Body cap for a lore-house's official letters (house letters). The 80-char
- *  preview is sized for "a dozen-plus strangers' messages on one screen";
- *  a lore-house sends at most two or three letters a day, and its entire value is in that one sentence itself. */
-const HOUSE_LETTER_BODY_MAX = 400;
 /** A recommendation reason is one line of small print, not a list: at most 2 taste words + 1 relation path per material item. */
 const MAX_TASTE_HITS = 2;
 const MAX_RELATION_PATHS = 1;
-/** Truncation length for a bond-book update / lore-house self-description (both used for one line of small print in the layout). */
-const DYNAMIC_MAX = 60;
-const VOICE_MAX = 40;
-/** The owner's own line in "homes worth visiting": it's card-body text, not small print, one notch wider than the lore-house notice board. */
-const HOME_VOICE_MAX = 80;
 /** The "newcomer" window: first seen on this machine ≤14 days ago. We only know what this machine has seen, so the wording must say "first seen on this machine". */
 const NEWCOMER_DAYS = 14;
 
-/**
- * The body text's **display-layer budget** (I5). Doesn't conflict with
- * ADR-0029: ADR-0029 governs **storage and protocol** — the relay and the local
- * cache always store the full text, not a single character dropped; this governs
- * how much of it this issue hands to the agent. The body was originally the only
- * field in the material section with no cap at all, so one long post could eat
- * the budget of ten brief notes.
- *
- * v0.2 sizes it to **what the agent is going to write from it**. The density tier
- * is decided here now (see `tier`), and a brief note is one or two sentences of
- * output — feeding it 1,200 characters of source to produce sixty was the old
- * shape, from back when the agent was also laying out the page and might promote
- * an item itself. It no longer can: the tier the agent is told is the tier the
- * renderer prints, so the source budget can follow it. Measured on the real feed
- * of 2026-08-25 this is most of the difference between a brief that fits the
- * host's 32k tier and one that does not.
- */
-const TEXT_MAX_CARD = 1600;
-const TEXT_MAX_BRIEF = 400;
 /** The "significant engagement count" threshold: replies + marks. */
 const FEATURE_ENGAGEMENT = 5;
-
-/** Truncate if too long, appending an ellipsis; a short string is returned unchanged. */
-function truncate(s: string, max: number): string {
-  const t = s.trim();
-  return t.length > max ? `${t.slice(0, max)}…` : t;
-}
 
 function isHttpUrl(v: string): boolean {
   return /^https?:\/\//i.test(v);
@@ -98,6 +62,8 @@ export interface MaterialSources {
   publicBatch?: PublicMaterialBatch;
   cache: {
     recentForReading(n: number): ReadableFeedItem[];
+    /** All locally available sources in the requested time window. */
+    forReadingSince?(start: number): ReadableFeedItem[];
     /** First-seen time (seconds) for each author on this machine. Not implemented = no newcomer tag (an honest degradation). */
     authorFirstSeen?(): Map<string, number>;
   };
@@ -274,7 +240,7 @@ export function collectNewspaperMaterials(
     opts.hours === undefined ? startOfLocalDay(sources.now(), tz) : sources.now() - opts.hours * 3600;
   const bondOf = (id: string): NewspaperBond | null =>
     (id && sources.bondOf ? sources.bondOf(id) : null) ?? null;
-  const inWindow = (sources.publicBatch?.items ?? sources.cache.recentForReading(MAX_SCAN))
+  const inWindow = (sources.publicBatch?.items ?? sources.cache.forReadingSince?.(start) ?? sources.cache.recentForReading(Number.MAX_SAFE_INTEGER))
     .filter((i) => i.platformPostCreatedAt >= start)
     .filter((i) => !isMuted(bondOf(i.authorPopclawId)));
 
@@ -292,9 +258,8 @@ export function collectNewspaperMaterials(
 
   // Everything the window carried. It used to be `inWindow.slice(0, MAX_ITEMS)` — the newest
   // eighty, chosen by nothing — which is what the owner threw out on 2026-08-26: a paper
-  // that prints whatever it happened to read is not a paper. Reading is uncapped now
-  // (the feed scan bounds it at
-  // MAX_SCAN); what gets into the issue is decided afterwards, by taste, by the bond book, and
+  // that prints whatever it happened to read is not a paper. Read the full available window;
+  // what gets into the issue is decided afterwards, by taste, by the bond book, and
   // by heat, on the candidate page.
   const items = inWindow;
 
@@ -435,8 +400,9 @@ export function collectNewspaperMaterials(
       platformProfileUrl: a.platformProfileUrl, // the platform profile is only a source-return exit, never the card head
       followerCount: a.followerCount,
       verified: a.verified,
-      // I5 display-layer budget (see the TEXT_MAX comment). The full text per ADR-0029 stays in the cache, not one character trimmed there.
-      text: truncate(i.body, feature ? TEXT_MAX_CARD : TEXT_MAX_BRIEF),
+      // Writing sources stay complete, independently of their eventual card density.
+      text: i.body,
+      sourceCreatedAt: i.platformPostCreatedAt,
       // v0.2: the same three signals also decide the density tier the renderer
       // lays this item out at, and the tier is printed in the brief so the agent
       // sizes its summary to it. One decision, made once, honoured in both halves.
@@ -455,7 +421,7 @@ export function collectNewspaperMaterials(
       kind: i.kind || '',
       ...(houseFields ? { houseFields } : {}),
       ...(bond ? { bondTier: bond.tier, remarkName: bond.remarkName } : {}),
-      ...(bond?.dynamic ? { bondDynamic: truncate(bond.dynamic, DYNAMIC_MAX) } : {}),
+      ...(bond?.dynamic ? { bondDynamic: bond.dynamic } : {}),
       ...(reasons.length ? { reasons } : {}),
       ...(days !== undefined && days <= NEWCOMER_DAYS ? { newcomerDays: days } : {}),
     };
@@ -474,7 +440,7 @@ export function collectNewspaperMaterials(
     for (const id of sources.houseOfficialIds?.(slug) ?? []) if (id) officialHouseOf.set(id, slug);
   }
   const inboxItems = sources.inbox
-    .recent(MAX_PINGS)
+    .recent(Number.MAX_SAFE_INTEGER)
     .filter((m) => !isMuted(bondOf(m.fromPopclawId)));
   // Kept across windows: Mantel level ③ needs "the most recent letter from the world" (the paper's only place allowed to reach outside the window, and it must always carry a date).
   const allLetters = inboxItems.filter((m) => officialHouseOf.has(m.fromPopclawId));
@@ -492,7 +458,7 @@ export function collectNewspaperMaterials(
       houseSlug,
       fromShort: displayNamed(m.fromPopclawId || '', sources.nameOf, bestById.get(m.fromPopclawId)?.name),
       dateLabel: dateOf(m.ts),
-      body: truncate(rest, HOUSE_LETTER_BODY_MAX),
+      body: rest,
       ...(header ? { header } : {}),
       ...(pages.length ? { links: pages } : {}),
       ...(images.length ? { imageLinks: images } : {}),
@@ -517,10 +483,11 @@ export function collectNewspaperMaterials(
           bestById.get(m.fromPopclawId)?.name,
         ),
         bodyPreview: (m.body || '').slice(0, PING_BODY_PREVIEW),
+        body: m.body || '',
         ...(bond ? { bondTier: bond.tier, remarkName: bond.remarkName } : {}),
         // The bond-book update rides along so the page can print it under this
         // letter — that context is the reason pings sit on the front page at all.
-        ...(bond?.dynamic ? { dynamic: truncate(bond.dynamic, DYNAMIC_MAX) } : {}),
+        ...(bond?.dynamic ? { dynamic: bond.dynamic } : {}),
         // E3: links inside the body are pulled out on their own — a url buried in the 80-char preview would render as plain text and be unclickable.
         ...(links.length ? { links } : {}),
       };
@@ -609,7 +576,7 @@ export function collectNewspaperMaterials(
       name: h.name,
       visitUrl: h.visit_url,
       owner: ownerLabel(h.owner),
-      ...(h.voice ? { voice: truncate(h.voice, HOME_VOICE_MAX) } : {}),
+      ...(h.voice ? { voice: h.voice } : {}),
       ...(h.cover_img ? { coverImg: h.cover_img } : {}),
       // 0 isn't printed (v5): "0 visits today" would just make the owner think nobody goes there — when really the world has only just opened.
       ...(h.visits_today ? { visitsToday: h.visits_today } : {}),
@@ -732,7 +699,7 @@ export function collectNewspaperMaterials(
   // P2 lore-house notice board: one lookup per lore-house laid out this issue (including the 0-item lore-houses E4 backfilled); a lore-house with nothing available gets no line.
   const houseVoices: Record<string, string> = {};
   for (const slug of Object.keys(byHouse)) {
-    const v = truncate(sources.houseVoiceOf?.(slug) ?? '', VOICE_MAX);
+    const v = sources.houseVoiceOf?.(slug) ?? '';
     if (v) houseVoices[slug] = v;
   }
 

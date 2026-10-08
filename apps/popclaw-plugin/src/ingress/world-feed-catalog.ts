@@ -149,6 +149,14 @@ export class WorldFeedCatalog implements WorldFeedReader, SnapshotSource {
     return this.merge((f) => f.cache.recentForReading(n), (i) => i, n);
   }
 
+  forReadingSince(start: number): ReadableFeedItem[] {
+    return this.merge(
+      f => (f.cache.forReadingSince?.(start) ?? f.cache.recentForReading(Number.MAX_SAFE_INTEGER))
+        .filter(i => i.platformPostCreatedAt >= start),
+      i => i,
+    );
+  }
+
   byAuthor(popclawId: string, n: number): CachedFeedItem[] {
     return this.merge((f) => f.cache.byAuthor(popclawId, n), (i) => i, n);
   }

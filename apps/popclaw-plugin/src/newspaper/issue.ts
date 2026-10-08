@@ -42,6 +42,8 @@ export interface PulseItem {
   media: string[];
   /** lore-house event_id of this post — used to wire the interactive action buttons. */
   eventId: string;
+  /** Exact source creation time, seconds; distinct from local observation or publication. */
+  sourceCreatedAt?: number;
   /**
    * Why this item is in the issue at all — the writer's own answer, given when it chose:
    * the owner's taste, someone in their bond book, or simply what was lively that day.
@@ -80,7 +82,7 @@ export interface PulseItem {
   bondTier?: string;
   /** The alias the owner gave this person. '' / undefined = none. */
   remarkName?: string;
-  /** The most recent bond-book update note (already truncated). '' / undefined = none → this line is omitted entirely. */
+  /** The complete most recent bond-book update note. '' / undefined = none → this line is omitted entirely. */
   bondDynamic?: string;
   /** Recommendation-reason **materials** (P4): locally verifiable factual markers —
    *  the agent's stated reason may only be drawn from here.
@@ -112,7 +114,7 @@ export function numberedPulse(pulse: readonly PulseItem[]): { p: PulseItem; n: n
 /**
  * F3 house letter: a letter sent by a lore-house's own official name (welcome /
  * homecoming / postcard). **Never enters pings** — the postman doesn't wait for a reply.
- * Body allows more room than a ping (400 chars), links and images are listed
+ * Body retains the complete letter, links and images are listed
  * separately, and a date is mandatory (Mantel level ③ cites it across windows).
  */
 export interface HouseLetterItem {
@@ -121,7 +123,7 @@ export interface HouseLetterItem {
   fromShort: string;
   /** Date the letter was received, same format as the masthead. */
   dateLabel: string;
-  /** Raw body text (≤400 chars). **The machine header on the first line has already been stripped** (the lore-house's own guide §3 says never read it aloud). */
+  /** Complete raw body text. **The machine header on the first line has already been stripped** (the lore-house's own guide §3 says never read it aloud). */
   body: string;
   /** Fields from the G4 house-letter header `[homeletter/v1]` (`kind=postcard · place=…`), verbatim.
    *  undefined = this letter has no header (an old lore-house / an ordinary letter) → this line is omitted. */
@@ -164,7 +166,7 @@ export interface HomeItem {
   visitUrl: string;
   /** How to address the owner: recognized locally → `name#sigil` (alias overrides the self-reported name); unrecognized → whatever display name the lore-house gave. */
   owner: string;
-  /** The owner's own description, verbatim (truncated if very long). */
+  /** The owner's own description, verbatim. */
   voice?: string;
   coverImg?: string;
   /** Visits today. Already omitted by gather when 0 (v5 rule: don't print 0). */
@@ -187,11 +189,13 @@ export interface PingItem {
   /** How to address the sender: `name#sigil`, just `#sigil` if not in the roster (never a bare id prefix). */
   fromShort: string;
   bodyPreview: string;
+  /** Complete private incoming source for the writer; never copied into public article materials. */
+  body?: string;
   /** Raw bond-book tier; pings are sorted by it (closest bonds first). */
   bondTier?: string;
   remarkName?: string;
   /**
-   * The most recent bond-book update for this sender (already truncated). The
+   * The complete most recent bond-book update for this sender. The
    * codex puts it directly under the letter it bears on — who to answer and how
    * is decided on the front page, so the context belongs on the front page.
    * Absent = no note under that letter.
@@ -329,7 +333,7 @@ export interface IssueData {
   primaryHouseSlug?: string;
   /** The per-lore-house distribution, including a subscribed-but-0-items lore-house (E4). */
   byHouse: Readonly<Record<string, number>>;
-  /** lore-house slug → its notice-board self-description (already truncated). */
+  /** lore-house slug → its complete notice-board self-description. */
   houseVoices?: Readonly<Record<string, string>>;
   houseLetters?: readonly HouseLetterItem[];
   mantles?: readonly MantleItem[];

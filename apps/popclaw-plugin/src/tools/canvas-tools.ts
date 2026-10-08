@@ -3,7 +3,6 @@
 import { CanvasSchema } from './tool-schemas.js';
 import { ownerLang, failureText } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
-import { MAX_HTML_BYTES as MAX_CANVAS_HTML_BYTES } from '../commands/popclaw-canvas.js';
 import { type PublishDeps } from '../newspaper/publish-newspaper.js';
 import { type ToolsCtx } from './tools-context.js';
 
@@ -35,11 +34,8 @@ export function registerCanvasTool(ctx: ToolsCtx): void {
       try {
         const p = params as { html?: unknown; title?: unknown; ttl_hours?: unknown };
         const html = typeof p.html === 'string' ? p.html : '';
-        // Both an empty page and over-size content are caught locally: saves a round trip that was doomed to fail, and saves the owner an unreadable 5xx.
+        // Reject empty content; the configured publisher reports its actual capacity.
         if (!html.trim()) return { type: 'text' as const, text: renderCopy(ownerLang(), 'canvas.emptyHtml') };
-        if (Buffer.byteLength(html, 'utf8') > MAX_CANVAS_HTML_BYTES) {
-          return { type: 'text' as const, text: renderCopy(ownerLang(), 'canvas.tooLarge') };
-        }
         const title = (typeof p.title === 'string' && p.title.trim() ? p.title : 'Untitled').slice(0, 200);
         const rt = (await runtime()) as {
           boot: { signer: PublishDeps['signer']; nickname: string; canvasBaseUrl?: string | null };

@@ -189,9 +189,9 @@ describe('publishNewspaper', () => {
 
   it('整份候选集被端回来 → 拒发,不再按热闹重选(重选会在正文之下换掉整套编号)', async () => {
     const many = issue({ pulse: Array.from({ length: 130 }, (_, i) => item({ eventId: `e${i}`, text: `p${i}` })) });
-    putIssue('t9', many);
+    putIssue('ctok_t9', many);
     const upload = vi.fn();
-    const r = await publishNewspaper(deps(upload as never), { publishToken: 't9', edit: edit() });
+    const r = await publishNewspaper(deps(upload as never), { publishToken: 'ctok_t9', edit: edit() });
     expect(upload).not.toHaveBeenCalled();
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.notChosen', { count: '130' }));
   });

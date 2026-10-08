@@ -41,8 +41,8 @@ it('collects the complete unnumbered draft, preserving house context sourced fro
   noteContextTokenBudget('small', 5000);
   gatherNewspaperMaterials({ ...deps, sessionKey: 'small', readContentRules: () => '' }, { hours: 24 });
   const stored = getIssue('cmodule')!;
-  expect(stored.pulse.length).toBeLessThan(180);
-  expect(stored.pulse.some(p => p.eventId === 'event-179')).toBe(false);
+  expect(stored.pulse.length).toBe(180);
+  expect(stored.pulse.some(p => p.eventId === 'event-179')).toBe(true);
   expect(stored.mantles).toStrictEqual(collected.draft.mantles);
   expect(stored.byHouse).toStrictEqual({ trip: stored.pulse.length, empty: 0 });
 });
@@ -63,8 +63,8 @@ it('owns density/body budgets, blocked filtering, nameless backfill, reasons and
   expect(result.draft.totalCount).toBe(3);
   expect(pulse.map(p => p.author)).toStrictEqual(['Alice', 'Alice', 'Person 3']);
   expect(pulse.map(p => p.tier)).toStrictEqual(['brief', 'card', 'brief']);
-  expect(pulse[0]!.text).toHaveLength(401);
-  expect(pulse[1]!.text).toBe(rows[1]!.body.trim());
+  expect(pulse[0]!.text).toBe(rows[0]!.body);
+  expect(pulse[1]!.text).toBe(rows[1]!.body);
   expect(pulse[0]!.reasons).toHaveLength(3);
   expect(pulse[0]!.newcomerDays).toBe(1);
 });

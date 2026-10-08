@@ -43,23 +43,24 @@ describe('页面完整性这句保证', () => {
   it('不知道这台机器的上限 → 不许说「完整」,并给出一条诚实的出路', () => {
     const p = page();
     expect(p).not.toContain(L('integrity.known'));
-    expect(p).toContain(L('integrity.estimated', { budget: String(pageBudgetNow()) }));
+    expect(p).toContain('complete saved candidate document');
     // 出路必须写明,否则模型发现缺页时只剩「自己去取数据」这一条路 —— 认错人就是这么来的
-    expect(p).toContain('绝不要自己去 feed');
+    expect(p).toContain('never substitute a fresh feed');
   });
 
   it('宿主报了真实预算 → 这句保证才说得出口', () => {
     noteContextTokenBudget(undefined, 1_000_000);
     const p = page();
-    expect(p).toContain(L('integrity.known'));
+    expect(p).toContain('Follow page_cursor');
     expect(p).not.toContain('按预估容量');
   });
 
   it('预算变了,保证也跟着变 —— 它不是一句写死的话', () => {
     noteContextTokenBudget(undefined, 1_000_000);
-    expect(page()).toContain(L('integrity.known'));
+    expect(page()).toContain('Follow page_cursor');
     _resetBudgetForTest();
     expect(page()).not.toContain(L('integrity.known'));
+    expect(page()).toContain('Follow page_cursor');
   });
 
 /**
@@ -86,7 +87,7 @@ describe('页面完整性这句保证', () => {
       dayTotal: 400,
       overBudget: true,
     });
-    expect(p).toContain(L('integrity.overBudget', { budget: '16000' }));
+    expect(p).toContain('Follow page_cursor');
     expect(p).not.toContain(L('integrity.known'));
     // 裁掉了多少,必须说 —— 以前页面只印裁剪后的数,当成「今天就这么点事」
     expect(p).toContain('399');

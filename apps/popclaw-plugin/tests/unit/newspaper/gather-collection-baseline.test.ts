@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gatherNewspaperMaterials, type GatherDeps } from '../../../src/newspaper/gather-materials.js';
 import { getIssue, _resetIssuesForTest } from '../../../src/newspaper/issue-store.js';
 import { buildIssueFromPicks } from '../../../src/newspaper/pick-issue.js';
+import { readNewspaperPage } from '../../../src/newspaper/reading-page.js';
 import { _resetBudgetForTest, noteContextTokenBudget } from '../../../src/newspaper/host-budget.js';
 import { setOwnerTz } from '../../../src/time/time-context.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
@@ -166,7 +167,7 @@ describe('raw gather fixed bugfix baseline', () => {
     expect(derivations.slice(-7, -1)).toStrictEqual(['A', 'known', 'C', 'B', 'self', 'last']);
     expect(getIssue('cbaseline')!.homeSections?.[0]?.homes[0]?.owner).toBe('Alias last#collision');
   });
-  it('keeps candidate numbers aligned when trimming moves a three-post author into the pooled group', () => {
+  it('keeps all candidate numbers aligned through bounded continuation pages', () => {
     const { deps, trace } = fixture();
     const rows = Array.from({ length: 240 }, (_, i) => feed(`trim-${i}`, `group-${Math.floor(i / 3)}`, 'trip', {
       body: `EVENT_trim-${i} ${'中'.repeat(90)}`, actorNickname: `Author-${Math.floor(i / 3)}`,
@@ -178,12 +179,18 @@ describe('raw gather fixed bugfix baseline', () => {
     noteContextTokenBudget('collection', 100000);
     const actual = observed(deps, trace);
     const issue = getIssue('cbaseline')!;
-    expect(issue.pulse.length).toBeLessThan(rows.length);
+    expect(issue.pulse.length).toBe(rows.length);
     const counts = new Map<string, number>();
     for (const p of issue.pulse) counts.set(p.authorPopclawId, (counts.get(p.authorPopclawId) ?? 0) + 1);
-    expect([...counts.values()].some(n => n <= 2)).toBe(true);
+    expect([...counts.values()].every(n => n === 3)).toBe(true);
     if (actual.result?.kind !== 'candidates') throw new Error('want candidates');
-    const lines = [...actual.result.payload.matchAll(/^\[(\d+)\].*EVENT_(trim-\d+)/gm)];
+    let page = actual.result.payload;
+    const texts = [page];
+    while (page.match(/page_cursor="([^"]+)"/)) {
+      page = readNewspaperPage(page.match(/page_cursor="([^"]+)"/)![1]!, { sessionKey: 'collection' });
+      texts.push(page);
+    }
+    const lines = [...texts.join('\n').matchAll(/^\[(\d+)\].*EVENT_(trim-\d+)/gm)];
     expect(lines.map(m => Number(m[1]))).toStrictEqual(issue.pulse.map((_, i) => i + 1));
     for (const m of lines) expect(issue.pulse[Number(m[1]) - 1]!.eventId).toBe(m[2]);
     const numbers = [2, 5, issue.pulse.length];

@@ -55,9 +55,11 @@ describe('runPopclawCanvasCommand', () => {
     );
     expect(r.text).toContain('http://canvas.test/blackfeather_ai/abc?t=tok');
   });
-  it('errors when file exceeds 2MB', async () => {
+  it('passes complete HTML over 2MiB to the configured publisher', async () => {
     const bigFile = tmpHtml('x'.repeat(2 * 1024 * 1024 + 1));
-    const r = await runPopclawCanvasCommand({ positional: [bigFile], flags: {} }, deps, stubUpload);
-    expect(r.text).toContain('2MB');
+    const upload = vi.fn(async (_options: { html: string }) => stubUpload());
+    const r = await runPopclawCanvasCommand({ positional: [bigFile], flags: {} }, deps, upload);
+    expect(r.text).toContain('http://canvas.test/blackfeather_ai/abc?t=tok');
+    expect(Buffer.byteLength(upload.mock.calls[0]![0].html)).toBe(2 * 1024 * 1024 + 1);
   });
 });

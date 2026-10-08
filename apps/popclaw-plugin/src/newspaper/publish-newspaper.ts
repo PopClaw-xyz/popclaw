@@ -38,6 +38,7 @@ import {
 import type { NewspaperIssueArchive, SavedNewspaperIssue } from './newspaper-artifacts.js';
 import { renderCopy, type Lang } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
+import { beginReading } from './reading-page.js';
 import { admitHandIn, reprintOf } from './admit-hand-in.js';
 
 // Kept importable from here: tests and callers reach checkEdit through this module.
@@ -45,10 +46,9 @@ export { checkEdit } from './admit-hand-in.js';
 
 const footerOf = (lang: Lang): string => `\n\n——\n${renderCopy(lang, 'newspaper.publish.footer')}`;
 
-/** The canvas service's own body limit (axum `DefaultBodyLimit`). Same number `popclaw_canvas` enforces. */
-const MAX_CANVAS_BYTES = 2 * 1024 * 1024;
-
 export interface PublishDeps {
+  /** Host response capacity for continuation receipts, never an issue content limit. */
+  sessionKey?: string;
   validateMaterials?: (issue: IssueData) => void;
   upload: (a: {
     baseUrl: string;
@@ -188,7 +188,9 @@ export async function publishNewspaper(
   const { style, notes: styleNotes } = deps.style ?? { style: DEFAULT_STYLE, notes: [] };
 
   const admission = admitHandIn(input, deps, lang);
-  if (admission.kind === 'refused') return { text: admission.text };
+  if (admission.kind === 'refused') {
+    return { text: admission.publishToken ? beginReading(admission.publishToken, admission.text, deps) : admission.text };
+  }
   const { publishToken, issue, edit, notes: admissionNotes } = admission;
   const assertCurrent = (): void => deps.validateMaterials?.(issue);
   assertCurrent();
@@ -243,18 +245,7 @@ export async function publishNewspaper(
     else deleteIssue(publishToken, deps.manifestDir);
   };
   const complaints = [...admissionNotes, ...styleNotes, ...page.notes, ...baked.notes];
-  let html = baked.html;
-  // The canvas is capped at 2MB server-side. Nothing here should be able to reach
-  // that, but an unbounded page is a failed upload and a paper the owner never
-  // sees, so it is checked rather than assumed: over the cap, drop back to the
-  // un-baked page (every face a url again) and say so.
-  if (Buffer.byteLength(html, 'utf-8') > MAX_CANVAS_BYTES) {
-    // Back to the un-baked page — but through the monogram swap, never raw:
-    // the drop-back is a size decision, and it is not allowed to be the one path
-    // that quietly puts third-party urls back into a finished page.
-    html = monogramFallback(page.html);
-    complaints.push(renderCopy(lang, 'newspaper.publish.tooLargeInlined'));
-  }
+  const html = baked.html;
   const noteBlockOf = (extra: readonly string[] = []): string => {
     const all = [...complaints, ...extra];
     return all.length
@@ -276,10 +267,10 @@ export async function publishNewspaper(
       // ledger needs to tell "it never published anything" from "it published some and
       // stopped".
       accepted: true,
-      text: `${renderCopy(lang, 'newspaper.publish.moreToWrite', {
+      text: beginReading(publishToken, `${renderCopy(lang, 'newspaper.publish.moreToWrite', {
         count: String(page.unwritten),
         numbers: `[${page.unwrittenNumbers.join('] [')}]`,
-      })}${noteBlock}\n\n${reprintOf(issue, page.unwrittenNumbers, lang)}`,
+      })}${noteBlock}\n\n${reprintOf(issue, page.unwrittenNumbers, lang)}`, deps),
     };
   }
 

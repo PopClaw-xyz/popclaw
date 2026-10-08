@@ -27,6 +27,7 @@
  */
 import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { todayDateLabel, type IssueData } from './issue.js';
 import type { NewspaperEdit } from './render-newspaper.js';
 import { isCandidateId } from './issue-identity.js';
@@ -52,6 +53,10 @@ function fileOf(dir: string, token: string): string | null {
 /** What it looks like on disk. `created_at` is the sole basis for TTL. */
 interface StoredIssue {
   issue?: IssueData;
+  /** Exact reading documents. Cursors bind a document as well as the immutable issue. */
+  reading?: Record<string, string>;
+  /** Only the current stage/version may be continued; a new receipt invalidates old cursors. */
+  readingCurrent?: string;
   /**
    * The copy handed in so far, when one issue is being written a batch at a time.
    * Absent until the first hand-in leaves something unwritten. It rides in the same
@@ -179,6 +184,28 @@ export function putIssue(
 export function getIssue(token: string, dir?: string): IssueData | undefined {
   const issue = entryOf(token, dir)?.issue;
   return issue ? JSON.parse(JSON.stringify(issue)) as IssueData : undefined;
+}
+
+/** Keep complete read text with the issue, including across processes and writing batches. */
+export function putReadingText(token: string, text: string, dir?: string): string {
+  const id = readingTextVersion(text);
+  const cur = entryOf(token, dir);
+  if (!cur) throw new Error('newspaper issue not found or expired');
+  const next = { ...cur, reading: { [id]: text }, readingCurrent: id };
+  store.set(token, next);
+  const f = dir ? fileOf(dir, token) : null;
+  // A continuation advertised across processes must have a durable complete ledger.
+  if (f) writeFileSync(f, JSON.stringify(next), 'utf-8');
+  return id;
+}
+
+export function getReadingText(token: string, id: string, dir?: string): string | undefined {
+  const entry = entryOf(token, dir);
+  return entry?.readingCurrent === id ? entry.reading?.[id] : undefined;
+}
+
+export function readingTextVersion(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
 }
 
 /** The candidate page this issue was picked from, if it was stamped with one. */

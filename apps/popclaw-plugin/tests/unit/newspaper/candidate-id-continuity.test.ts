@@ -72,7 +72,7 @@ describe('candidate IDs survive selection and every hand-in', () => {
     buildIssueFromPicks('c_caps', [1, 2, 8], { ...opts, perAuthorMax: 1, floor: 4, topUpTo: 4 });
     const chosen = getIssue('tok_stable')!;
     expect(chosen.pulse).toHaveLength(4);
-    expect(chosen.pulse.some(p => p.eventId === 'event2')).toBe(false);
+    expect(chosen.pulse.some(p => p.eventId === 'event2')).toBe(true);
     for (const p of chosen.pulse) expect(p.itemNumber).toBe(Number(p.eventId.slice(5)));
   });
 
@@ -83,7 +83,7 @@ describe('candidate IDs survive selection and every hand-in', () => {
     noteContextTokenBudget('small', 1000);
     buildIssueFromPicks('c_budget', Array.from({ length: 20 }, (_, i) => (i + 1) * 2), { ...opts, sessionKey: 'small' });
     const chosen = getIssue('tok_stable')!;
-    expect(chosen.pulse.length).toBeLessThan(20);
+    expect(chosen.pulse.length).toBe(20);
     expect(chosen.pulse.map(p => p.itemNumber)).toEqual(chosen.pulse.map(p => Number(p.eventId.slice(5))));
   });
 

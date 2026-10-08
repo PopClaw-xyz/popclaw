@@ -300,7 +300,7 @@ it('explicit unsupported draft-only request stops before material collection or 
   expect(out.text).toContain('not supported'); expect(read).not.toHaveBeenCalled(); expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
 });
 
-it('budget-discarded observations are absent from the candidate basis and are not later dependencies', async () => {
+it('off-page observations stay in the complete candidate basis and remain verified dependencies', async () => {
   const f = await newspaperFixture();
   for (let seq=2; seq<=60; seq++) {
     const e = {actor:{popclawId:bs58.encode(displayPair.publicKey),nickname:'Journal author'},timestamp:Math.floor(Date.now()/1000),post:{blocks:[{content:`Astronomy item ${seq} `+'x'.repeat(2000)}]}};
@@ -310,14 +310,13 @@ it('budget-discarded observations are absent from the candidate basis and are no
   }
   noteContextTokenBudget(childSessionKey('public-material-fixture'), 1000);
   const c=await gather(f);
-  expect(c.issue.pulse.length).toBeLessThan(60);
+  expect(c.issue.pulse.length).toBe(60);
   expect(c.issue.publicMaterials!.references).toHaveLength(c.issue.pulse.length);
-  const used=new Set(c.issue.publicMaterials!.references.map(r=>r.eventId));
-  const discarded=f.partition.db.queryAll<{event_id:string}>('SELECT event_id FROM world_public_frames_v1').find(r=>!used.has(r.event_id))!;
-  f.partition.db.execute("UPDATE world_public_frames_v1 SET frame_bytes=x'00' WHERE event_id=?",[discarded.event_id]);
-  const m=await pick(f,c.token);
-  expect(m.issue.publicMaterials!.references).toHaveLength(m.issue.pulse.length);
-  expect((await publish(f,m.token)).text).toContain('https://canvas.invalid/paper?t=fixture');
+  const tail = c.issue.publicMaterials!.references.at(-1)!;
+  f.partition.db.execute("UPDATE world_public_frames_v1 SET frame_bytes=x'00' WHERE event_id=?",[tail.eventId]);
+  const out = await f.tools(childSessionKey('public-material-fixture'))('popclaw_newspaper', { candidate_token: c.token, picks_flat: [60] });
+  expect(out.text).toContain('Gather a fresh candidate page');
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
 });
 
 it.each(['empty','partial-no-material'] as const)('actual child collection %s reaches a content-free, accurate dispatcher receipt', async outcome => {

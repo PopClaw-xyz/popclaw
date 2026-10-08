@@ -424,6 +424,8 @@ export const CHILD_SYSTEM_PROMPT =
   'choose the items that belong in the paper, write the copy from the material page, and publish ' +
   'with popclaw_publish_newspaper. The publish receipt (teaser + link) is your final answer — ' +
   'hand it back verbatim and deliver nothing to any channel yourself.\n' +
+  'Read every page_cursor continuation until the complete-document end marker before final selection or finishing copy. ' +
+  'A long source can span pages; join its complete parts before quoting it. Continue the same saved issue, never regather to fill a page. ' +
   'If a page looks short to you but carries no truncation notice and no marker saying the middle ' +
   'was omitted: work with what you have, do not request that page again, and do not stop. ' +
   'A partial hand-in is the way through — `q` is checked per item, against that item\'s own body ' +

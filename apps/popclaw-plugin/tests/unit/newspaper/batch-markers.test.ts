@@ -24,7 +24,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from
 import { buildNewspaperPrompt } from '../../../src/newspaper/build-newspaper-prompt.js';
 import { buildCandidatePage } from '../../../src/newspaper/build-candidate-page.js';
 import { buildIssueFromPicks } from '../../../src/newspaper/pick-issue.js';
-import { putIssue, _resetIssuesForTest } from '../../../src/newspaper/issue-store.js';
+import { putIssue, getIssue, _resetIssuesForTest } from '../../../src/newspaper/issue-store.js';
 import { weightedChars } from '../../../src/newspaper/gather-materials.js';
 import {
   noteContextTokenBudget,
@@ -183,15 +183,9 @@ describe('批次标记:页首报数、页尾收尾', () => {
     });
     expect(r.kind).toBe('ready');
     if (r.kind !== 'ready') return;
-    expect(r.notes.join(' ')).toContain('does not fit one hand-over'); // 真的裁过
-    const shown = [...r.payload.matchAll(/^\[\d+\] 作者: /gm)].length;
-    expect(shown).toBeLessThan(60);
-    const sentinel = renderCopy('zh-CN', 'newspaper.material.batch.sentinel', {
-      count: String(shown),
-      id: 'tok_trim',
-    });
-    // 收尾行报的是**裁剪之后**的条数,而且是整页的最后一行。
-    expect(r.payload.endsWith(sentinel)).toBe(true);
+    expect(r.notes.join(' ')).not.toContain('does not fit one hand-over');
+    expect(getIssue(r.publishToken)!.pulse).toHaveLength(60);
+    expect(r.payload).toContain('page_cursor=');
     expect(weightedChars(r.payload)).toBeLessThanOrEqual(budget);
     _resetIssuesForTest();
   });
@@ -219,10 +213,8 @@ describe('「怀疑短了却找不到说明」这一格', () => {
 
   it('页面上只剩一句指路,两页两语种都印得出来', () => {
     for (const lang of LANGS) {
-      expect(material(lang, 3)).toContain(renderCopy(lang, 'newspaper.material.cutShort.suspected'));
-      expect(candidates(lang, 3)).toContain(
-        renderCopy(lang, 'newspaper.candidates.cutShort.suspected'),
-      );
+      expect(material(lang, 3)).toContain('page_cursor');
+      expect(candidates(lang, 3)).toContain('page_cursor');
     }
   });
 

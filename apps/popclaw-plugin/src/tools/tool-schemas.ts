@@ -366,6 +366,7 @@ export const NoteTasteSchema = Type.Object({
 
 /** popclaw_newspaper: gather the daily-paper materials for the agent to render. */
 export const NewspaperToolSchema = Type.Object({
+  page_cursor: Type.Optional(Type.String({ description: 'agent-only continuation printed on a newspaper reading page; pass it ALONE to read the same immutable issue without gathering, changing picks or publishing. Continue until the complete-document end marker.' })),
   /**
    * The paper is chosen in two steps: call with nothing to get the day's candidates, then
    * call again with the numbers you want. The second call is where an issue actually comes

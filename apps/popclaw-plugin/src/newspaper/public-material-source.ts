@@ -62,7 +62,7 @@ export class NewspaperPublicMaterialSource {
           || capture.producerPolicy.house.incarnation !== capture.capability.house.incarnation
           || capture.producerPolicy.capabilityRevision !== capture.capability.capabilityRevision) throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_CAPTURE_MISMATCH');
         const { status, converted, refs } = readPublicJournalSnapshot(capture.executionDb, db => {
-          const result = readPublicJournal(db, capture, source, { ownProjection: true });
+          const result = readPublicJournal(db, capture, source, { ownProjection: true, completeWindow: true });
           const status: PublicMaterialCoverage = { ...result.status };
           const converted: ReadableFeedItem[] = [], refs: PublicMaterialReference[] = [];
           for (const hit of result.items) {
@@ -116,8 +116,7 @@ export class NewspaperPublicMaterialSource {
           if (!hit || hit.item.eventId !== p.eventId || hit.item.authorPopclawId !== p.authorPopclawId || hit.item.platform !== p.platform)
             throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_REFERENCE_REFUSED');
           // An editable ledger cannot introduce body text absent from signed material.
-          const body = hit.body.trim();
-          if (![body, body.length > 400 ? body.slice(0,400)+'…' : body, body.length > 1600 ? body.slice(0,1600)+'…' : body].includes(p.text))
+          if (hit.body !== p.text)
             throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_BODY_CHANGED');
         });
         capture.assertCurrent(); captures.push(capture);
@@ -128,7 +127,7 @@ export class NewspaperPublicMaterialSource {
   }
 }
 
-/** Selection/budget owns the retained array; discarded observations are not dependencies. */
+/** Editorial selection owns the retained array; unselected observations are not dependencies. */
 export function retainPublicMaterialBasis(issue: IssueData, references: readonly PublicMaterialReference[]): IssueData {
   return { ...issue, publicMaterials: { version: 1, references: issue.pulse.map(p => {
     const ref = references.find(r => r.eventId === p.eventId && r.slug === p.houseSlug);

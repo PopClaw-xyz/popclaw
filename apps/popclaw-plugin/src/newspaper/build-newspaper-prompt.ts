@@ -15,7 +15,6 @@ import { tierLabel, tierRank, type BondTier } from '../bonds/bond-tier.js';
 import { languageDirective } from '../lexicon/directive.js';
 import { renderCopy, type Lang } from '../lexicon/index.js';
 import { langOf, ownerLang } from '../lexicon/owner-language.js';
-import { budgetKnown, pageBudgetNow } from './host-budget.js';
 import { castList, followerLabel, needsEditorial, numberedPulse, type IssueData, type PulseItem } from './issue.js';
 
 export { houseCounts, castList, formatHouseCounts } from './issue.js';
@@ -113,6 +112,7 @@ export function materialItemLines(p: PulseItem, n: number, lang: Lang): string[]
   if (p.reasons?.length) lines.push(`    ${m('pulse.reasons', { reasons: p.reasons.join(', ') })}`);
   if (p.houseSlug) lines.push(`    ${m('pulse.house', { house: p.houseSlug })}`);
   if (p.kind) lines.push(`    ${m('pulse.kind', { kind: p.kind })}`);
+  if (p.sourceCreatedAt !== undefined) lines.push(`    source created at (unix seconds): ${p.sourceCreatedAt}`);
   if (p.replyCount) lines.push(`    ${m('pulse.replies', { count: String(p.replyCount) })}`);
   if (p.markCount) lines.push(`    ${m('pulse.marks', { count: String(p.markCount) })}`);
   lines.push(`    ${m('pulse.body', { text: p.text })}`);
@@ -175,7 +175,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     ``,
     // Anti-panic, placed this high on purpose: when a host does cut this payload it
     // keeps the HEAD, so this line survives every cap tier.
-    `[IF THIS MATERIAL IS CUT SHORT] Should the text below end in a truncation notice, or a marker saying content in the middle was omitted: **write the copy for what you can see and hand it in**. Do not call this tool again — it returns the same thing — and never write the paper off another source. Everything you need (the rules, the shape of \`edit\`, the publish step) is above the cut.`,
+    `[READING CONTINUATIONS] Read the saved document through page_cursor. A single long source can span several pages; join its complete parts before quoting or summarizing. Never replace a continuation with fresh feed data or remembered text.`,
     ``,
     // What this page carries and how it ends, so "is it whole" is a thing the writer
     // can check rather than a thing we assert at it.
@@ -186,7 +186,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     // was actually in, and nothing told it what to do in it. One line only — the rule
     // itself is the workshop's system prompt (dedicated-session.ts CHILD_SYSTEM_PROMPT),
     // which is sent once per session instead of riding on every page.
-    m('cutShort.suspected'),
+    'Write selected items in batches as needed; each accepted batch stays bound to this exact issue.',
     ``,
     `[IRON RULE — break it and the issue has failed]`,
     `**Faithful.** Every item gets a faithful summary / transcription / translation (into ${ownerLanguage}) and nothing more. **Never expand. Never add a number / fact / detail / cause / inference the materials do not contain.** Short and plain beats embellished, exaggerated or invented. Where you quote, quote verbatim and never turn a first-person line into a third-person one. Never invent a person, a place, a time or a channel; a field the materials do not give is simply left out.`,
@@ -200,7 +200,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     // basis nor a real token instead of guessing (r9). The token is still named for
     // hosts that can carry it.
     `[What you hand in] Call popclaw_publish_newspaper with \`edit\` = one JSON object of exactly this shape. **Copy the \`basis\` value below into every edit you hand in, verbatim** — it names the exact materials your item numbers refer to. It is **this page's own id**, not the \`candidate_basis\` you carried to get here: that one named the candidate page you chose from, and it is never what \`edit.basis\` carries. (A real publish_token="${opts.publishToken}" also binds this exact issue if your host can carry it; the basis needs no token at all.)`,
-    `**Item numbers are identities, not list positions.** Copy each printed [number] exactly into items/leads/pulls/xrefs/topics. Selected items keep their candidate-page numbers, so gaps are intentional (unselected, capped, trimmed or non-editorial items), not missing material. Never renumber them 1..N. Use only the full materials below, not candidate previews. Any unknown number rejects the entire hand-in without saving it.`,
+    `**Item numbers are identities, not list positions.** Copy each printed [number] exactly into items/leads/pulls/xrefs/topics. Selected items keep their candidate-page numbers, so gaps are intentional (unselected or non-editorial items), not missing material. Never renumber them 1..N. Use only the full materials below, not candidate previews. Any unknown number rejects the entire hand-in without saving it.`,
     `**\`q\` is the anchor.** Before writing an item, copy a passage of its body verbatim into \`q\`; publish checks \`q\` against that very item's body and refuses copy whose \`q\` is not found there, so a summary can never land under another item's number. Write \`h\` and \`s\` from the same body you just quoted. \`q\` is checked and never printed — copy it from the text after \`${m('pulse.body', { text: '' }).trim()}\` (never the label), at least about four English words or five Chinese characters, or the whole body when it is shorter; a passage that other items also contain does not count. \`pulls\` is the quotation the page prints.`,
     ``,
     `{`,
@@ -219,11 +219,11 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     `  "teaser": "<the trailer — see below>"`,
     `}`,
     ``,
-    `- **Every item number in the materials must be written up in \`items\` — but not necessarily all in one call.** An item you never write is left out of the issue entirely; the page says how many were dropped.`,
+    `- **Every selected editorial item must be written up in \`items\`, across as many batches as needed.** The full issue stays saved and is published only when all selected items are complete.`,
     `- **\`basis\` rides in every hand-in, batches included** — copy it from the line above. It is the one thing that tells publish which page your numbers refer to; a hand-in with neither a basis nor a real publish_token is refused, not guessed.`,
     `- **Try to finish in one hand-in — but hand in early rather than squeeze.** A reply cut off mid-tool-call loses the call itself and there is no paper at all (real hardware, 2026-08-27, and again 2026-08-30 when a flash-tier model died mid-way through thirty-two items in one call). About a dozen items per hand-in is safe on every host — a stock host takes up to about ${BATCH_MAX} — so when in doubt hand the first dozen in and continue after the receipt. Whatever you hand in is kept, and the receipt tells you how many are still unwritten; a later batch needs only \`items\` (each with its own \`q\`, plus \`pulls\`/\`xrefs\`/\`topics\` if you have them).`,
     `- \`h\` is a faithful headline, never clickbait. \`s\` is the summary: an item you put in \`leads\` gets 5-8 sentences; an item marked \`${m('tier.card')}\` gets 3-6; an item marked \`${m('tier.brief')}\` gets 2-3. **These are ceilings, not quotas — when the source is short, stop.**`,
-    `- **Every item earns its own space or it should not have been chosen.** The paper exists so the owner finds people worth knowing: an item summed up in a line gives him nothing to be interested in, and nobody to follow. If there are more items here than you can write up properly, write the ones you can — a shorter issue written well beats a long one written thinly.`,
+    `- **Every item earns its own space or it should not have been chosen.** The paper exists so the owner finds people worth knowing: an item summed up in a line gives him nothing to be interested in, and nobody to follow. Read all continuation pages and write the selected items in batches with faithful depth. The issue has no total content quota.`,
     `- \`masthead\`, \`items\` and \`teaser\` are required on the **first** hand-in; everything else may be left out.`,
     `- \`topics\` groups a lore-house's **brief notes** into named subsections, in the order you first use each name. Give the same name to the items that belong together and leave the rest out; omit the field entirely and the column runs unbroken. **A person's several items always share one card, so name them together.**`,
     `- \`pulls\` at most ${MAX_PULLS} in the issue, \`xrefs\` at most ${MAX_XREFS}, and anything past the quota is dropped. A pull quote is a sentence **already present in that item's own text**; a cross-reference names a real shared thing between two items (the same fog, the same person writing and waiting on a reply) — a bare pointer ("see the front page") is not one.`,
@@ -250,7 +250,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
   // `@` dropped: the address already carries `#sigil` as its identity marker (`@#3m8v5x1p` would stack two marker systems).
   issue.pings.forEach((p, i) => {
     const bond = bondLines(p, '', lang).join(' · ');
-    lines.push(`[${i + 1}] ${p.fromShort}${bond ? ` (${bond})` : ''}: ${p.bodyPreview}`);
+    lines.push(`[${i + 1}] ${p.fromShort}${bond ? ` (${bond})` : ''}: ${p.body ?? p.bodyPreview}`);
   });
 
   // The lore-house distribution: the agent needs the slugs for `deckNotes`, and the
@@ -309,11 +309,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
       total: String(issue.totalCount),
       toWrite: String(editable.length),
       laidOut: String(issue.pulse.length - editable.length),
-      integrity: opts.overBudget
-        ? m('integrity.overBudget', { budget: String(pageBudgetNow(opts.sessionKey)) })
-        : budgetKnown(opts.sessionKey)
-          ? m('integrity.known')
-          : m('integrity.estimated', { budget: String(pageBudgetNow(opts.sessionKey)) }),
+      integrity: 'All selected originals are saved. Read every page_cursor continuation until the complete-document end marker.',
     }),
     m('pulse.head', { count: String(editable.length) }),
   );

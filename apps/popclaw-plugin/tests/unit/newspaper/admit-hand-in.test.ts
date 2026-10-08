@@ -193,13 +193,10 @@ describe('admitHandIn — direct admission decisions', () => {
       expect(getIssue('cand_1', dir)).toBeDefined();
     });
 
-    it('a material token over PICK_RUNAWAY items → notChosen without scanning', () => {
-      const big = issue({ pulse: Array.from({ length: 121 }, (_, i) => item({ eventId: `b${i}` })) });
+    it('a selected material issue over 120 items remains admissible', () => {
+      const big = issue({ pulse: Array.from({ length: 121 }, (_, i) => item({ eventId: `b${i}`, text: i === 0 ? 'the booster landed on the pad.' : `unique source material number ${i}` })) });
       putIssue('tok_big', big, dir);
-      expect(admit('tok_big', { ...head, items: { '1': good1 } })).toEqual({
-        kind: 'refused',
-        text: t('notChosen', { count: '121' }),
-      });
+      expect(admit('tok_big', { ...head, items: { '1': { ...good1, q: 'the booster landed on the pad.' } } }).kind).toBe('admitted');
     });
   });
 
@@ -291,7 +288,7 @@ describe('admitHandIn — direct admission decisions', () => {
         items: { '3': { h: 'no anchor', s: 'x.' }, '1': { h: 'wrong', s: 'y.', q: Q2 } },
       });
       const line = anchorLine(2, `[1] (${why('notInBody')}) [3] (${why('missing')})`);
-      expect(r).toEqual({ kind: 'refused', text: `${line}\n\n${reprintOf(stored, [1, 3], 'en')}` });
+      expect(r).toEqual({ kind: 'refused', publishToken: 'tok_a', text: `${line}\n\n${reprintOf(stored, [1, 3], 'en')}` });
       expect(getEdit('tok_a', dir)).toBeUndefined();
     });
   });

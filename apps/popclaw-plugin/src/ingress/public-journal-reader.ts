@@ -74,7 +74,12 @@ function canPresentHouseBody(body: Uint8Array | null | undefined): boolean {
     return true;
   } catch { return false; }
 }
-export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, source: { origin: string; slug: string }, options: { ownProjection?: boolean; reference?: { eventId: string; sequence: string } } = {}): { items: PublicDisplayItem[]; status: PublicDisplaySource } {
+export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, source: { origin: string; slug: string }, options: {
+  ownProjection?: boolean;
+  reference?: { eventId: string; sequence: string };
+  /** Newspaper collection needs all locally available evidence. Response pagination happens after selection. */
+  completeWindow?: boolean;
+} = {}): { items: PublicDisplayItem[]; status: PublicDisplaySource } {
   verifyPublicStreamJournalSchema(db);
   const capability = capture.capability, log = capability.publicStream.log_incarnation;
   const binding = JSON.stringify([capability.house.origin, capability.house.houseKey, capability.house.incarnation]);
@@ -97,7 +102,7 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
   });
   const newest = new Map<string, PublicDisplayItem>();
   let before: string | null = null, scanned = 0, bytes = 0, finished = false;
-  while (!finished && scanned < MAX_FRAMES && bytes < MAX_BYTES) {
+  while (!finished && (options.completeWindow || (scanned < MAX_FRAMES && bytes < MAX_BYTES))) {
     const page: FrameRow[] = db.queryAll<FrameRow>(
       `SELECT f.seq,f.event_id,f.frame_bytes,f.observed_at,e.envelope,e.current_projection,e.projection_log,e.projection_seq
        FROM world_public_frames_v1 f JOIN world_public_events_v1 e USING(binding_id,event_id)
@@ -106,7 +111,7 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
       [binding, log, ...(options.reference ? [options.reference.eventId, options.reference.sequence] : []), ...(before === null ? [] : [before.length, before.length, before]), PAGE_SIZE]);
     if (!page.length) { finished = true; break; }
     for (const frame of page) {
-      if (scanned >= MAX_FRAMES || bytes + frame.frame_bytes.length + frame.envelope.length > MAX_BYTES) { status.truncated = true; finished = true; break; }
+      if (!options.completeWindow && (scanned >= MAX_FRAMES || bytes + frame.frame_bytes.length + frame.envelope.length > MAX_BYTES)) { status.truncated = true; finished = true; break; }
       scanned++; bytes += frame.frame_bytes.length + frame.envelope.length;
       before = uint64(frame.seq);
       const memberships = db.queryAll<{ lane: string; scope_id: string }>(

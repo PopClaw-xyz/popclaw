@@ -1,3 +1,4 @@
+import { readNewspaperPage } from '../newspaper/reading-page.js';
 import type { HouseRuntime } from '../runtime/house-lifecycle/house-runtime.js';
 import { publicMaterialSource, PublicMaterialRefusal } from '../newspaper/public-material-source.js';
 /**
@@ -67,7 +68,7 @@ function bondBookLines(
   },
   nameOf?: (id: string, baked: string) => string,
 ): string[] {
-  return (store.list?.({ limit: 200 }) ?? []).map((b) => {
+  return (store.list?.() ?? []).map((b) => {
     const name = nameOf?.(b.popclawId, b.nickname ?? '') || b.remarkName || b.nickname || '';
     const dyn = store.recentDynamics?.(b.popclawId, 1)[0]?.summary;
     return [name && b.sigil ? `${name}#${b.sigil}` : name || b.popclawId.slice(0, 8), tierLabel(b.tier), dyn]
@@ -88,6 +89,7 @@ export interface NewspaperCall {
 }
 
 interface NewspaperParams {
+  page_cursor?: string;
   hours?: number;
   picks?: Picks;
   picks_flat?: readonly number[];
@@ -560,6 +562,18 @@ export async function runNewspaperCall(call: NewspaperCall, params: unknown): Pr
     if (constraints && (constraints.draft_only === true || constraints.no_upload === true || constraints.public_only === true
       || constraints.preview === true || constraints.publish === false || constraints.upload === false))
       return { type: 'text', text: renderCopy(ownerLang(), 'newspaper.source.unsupportedDraft') };
+    const pageCursor = constraints?.page_cursor;
+    if (pageCursor !== undefined) {
+      if (typeof pageCursor !== 'string' || !pageCursor.trim()) throw new Error('invalid newspaper page_cursor');
+      if (Object.keys(constraints).some(key => key !== 'page_cursor' && constraints[key] !== undefined))
+        throw new Error('page_cursor must be supplied alone; continuation never gathers or changes picks');
+      const rt = (await call.runtime()) as NewspaperRuntime;
+      const materialSource = publicMaterialSource(rt);
+      return { type: 'text', text: readNewspaperPage(pageCursor, {
+        manifestDir: rt.paths.newspaperManifestsDir(), sessionKey: call.toolCtx.sessionKey,
+        ...(materialSource ? { validateMaterials: (issue) => materialSource.validate(issue) } : {}),
+      }) };
+    }
     const args = readNewspaperArgs(params);
     const refused = picksLostReply(args);
     if (refused) return refused;

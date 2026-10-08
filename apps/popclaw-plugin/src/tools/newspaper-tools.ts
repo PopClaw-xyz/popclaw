@@ -42,7 +42,8 @@ export function registerNewspaperTools(ctx: ToolsCtx): void {
       "Normally call twice: (1) no arguments returns the day's candidates grouped by author, with taste and bond-book " +
       "context; read all candidates and choose. (2) pass picks with the printed candidate_basis copied verbatim, or a real " +
       "candidate_token; without either, selection is refused, never guessed. Write only from the returned full material. " +
-      "In this same turn submit one edit to popclaw_publish_newspaper: each item's headline and faithful summary, " +
+      "Whenever a returned page or unfinished receipt includes page_cursor, call this tool with ONLY that cursor until the complete-document end marker. Never regather to continue. " +
+      "In this same turn submit edits in as many batches as needed to popclaw_publish_newspaper: each item's headline and faithful summary, " +
       "masthead, drifts, front-page picks and teaser. PopClaw lays out the page: do not write HTML or URLs; " +
       "summarise/translate faithfully, never fabricate.\n" +
       "Workshop-host exception: the FIRST call dispatches the complete job and returns a finished-paper receipt, failure " +
@@ -151,6 +152,7 @@ export function registerNewspaperTools(ctx: ToolsCtx): void {
             }),
             // Slice H: the ledger is persisted to disk, so gathering materials and publishing still line up across sessions/subagents.
             manifestDir: rt.paths.newspaperManifestsDir(),
+            sessionKey: toolCtx.sessionKey,
             // The owner's knobs, read fresh every issue so an edit takes effect on the
             // very next paper — and its complaints ride along onto the receipt.
             style: readNewspaperStyle(rt.paths.newspaperDir()),

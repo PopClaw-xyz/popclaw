@@ -10,6 +10,7 @@ import { cidFromCanonical } from '@popclaw/algorithms';
 import { LocalHostDb } from '../../../src/host/local-host-db.js';
 import { PublicFeedDisplay, type PublicDisplayCapture } from '../../../src/ingress/public-feed-display.js';
 import { preparePublicStreamJournal, PublicStreamJournal, EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST } from '../../../src/world/scoped-stream-journal.js';
+import { readPublicJournal } from '../../../src/ingress/public-journal-reader.js';
 
 const clean: Array<() => void> = [];
 afterEach(() => { for (const close of clean.splice(0).reverse()) close(); });
@@ -45,6 +46,35 @@ function fixture(log = 'log_display', highWater = '100') {
 function stored(db: LocalHostDb) {
   return db.queryAll<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map(({ name }) => [name, db.queryAll(`SELECT * FROM ${name}`)]);
 }
+
+it.each(['intact', 'bad-signature', 'wrong-projection'] as const)('newspaper complete window reads and verifies evidence beyond the former 2048-frame scan: %s', mode => {
+  const f = fixture('log_long_window', '2050');
+  const tail = signed({ post: { blocks: [{ content: 'The oldest complete newspaper window item.' }] } }, 1);
+  f.append(1, tail);
+  for (let seq = 2; seq <= 2050; seq++) f.append(seq, signed({ post: { blocks: [{ content: 'Newer window item.' }] } }, seq));
+  const source = { origin: f.capability.house.origin, slug: 'display' };
+  const ordinary = readPublicJournal(f.db, f.capture(), source, { ownProjection: true });
+  expect(ordinary.status.truncated).toBe(true);
+  expect(ordinary.items.some(i => i.item.eventId === tail.eventId)).toBe(false);
+  if (mode !== 'intact') {
+    const row = f.db.queryOne<{ frame_bytes: Uint8Array }>("SELECT frame_bytes FROM world_public_frames_v1 WHERE seq='1'")!;
+    const frame = popclaw.event.WorldStreamFrame.decode(row.frame_bytes);
+    if (mode === 'bad-signature') {
+      const envelope = popclaw.event.EventEnvelope.decode(frame.envelope!);
+      envelope.signature![0] = envelope.signature![0]! ^ 255;
+      frame.envelope = popclaw.event.EventEnvelope.encode(envelope).finish();
+      f.db.execute('UPDATE world_public_events_v1 SET envelope=? WHERE event_id=?', [frame.envelope, tail.eventId]);
+    } else frame.projection = { eventId: 'f'.repeat(64), platform: 'popclaw', platformPostId: tail.eventId };
+    f.db.execute("UPDATE world_public_frames_v1 SET frame_bytes=? WHERE seq='1'", [popclaw.event.WorldStreamFrame.encode(frame).finish()]);
+    expect(() => readPublicJournal(f.db, f.capture(), source, { ownProjection: true, completeWindow: true } as never)).toThrow();
+    return;
+  }
+  const complete = readPublicJournal(f.db, f.capture(), source, { ownProjection: true, completeWindow: true } as never);
+  expect(complete.items.some(i => i.item.eventId === tail.eventId)).toBe(true);
+  expect(complete.status.truncated).toBe(false);
+  // This fixture deliberately remains replaying: exhaustive local reads cannot claim remote coverage.
+  expect(complete.status.incomplete).toBe(true);
+}, 60000);
 it('shows exact signed native content without projection and does not write any journal state', () => {
   const f = fixture(), event = signed({ post: { blocks: [{ content: 'Public text beyond old snapshots' }] } });
   f.append(1, event); f.live(); const before = stored(f.db);

@@ -19,19 +19,16 @@
  *
  * Grouped by author, not by time. A person's whole day sits together, so the writer
  * decides "this person is worth two of today's ninety" once, rather than meeting them
- * twenty separate times down a chronological list — and the per-author ceiling becomes
- * something it can see rather than a rule it has to remember.
+ * twenty separate times down a chronological list. How many belong remains editorial judgement.
  */
 import { tierLabel, type BondTier } from '../bonds/bond-tier.js';
 import { languageDirective } from '../lexicon/directive.js';
 import { renderCopy, type Lang } from '../lexicon/index.js';
 import { langOf, ownerLang } from '../lexicon/owner-language.js';
-import { budgetKnown } from './host-budget.js';
 import type { IssueData, PulseItem } from './issue.js';
 import { authorKey, candidateNumberAt } from './issue-identity.js';
 
-/** One line of a candidate: enough to judge it by, never enough to write from. */
-const PREVIEW = 80;
+/** Complete originals are handed over in continuous reading pages, not writing excerpts. */
 /** Authors with at most this many items collapse into one "loose pages" group at the end. */
 const LOOSE = 2;
 
@@ -53,16 +50,11 @@ export interface CandidatePageOptions {
   floor: number;
   /** The weight this page was laid out against — quoted only when it is a guess, so the next incident has a number. */
   budget: number;
-  /** How many the day actually held. Differs from what is listed whenever the page had to be trimmed. */
+  /** How many the available source window held. */
   dayTotal: number;
-  /**
-   * True when the page still weighs more than the budget after trimming — the trim stops at a
-   * floor of twelve rather than gut the page, so this is reachable, and it is exactly the case
-   * where the host cuts the middle out. Promising completeness here is the lie that sends a
-   * writer to the feed for the "missing" items.
-   */
+  /** Legacy assembly hint; paging, not content deletion, now handles response budgets. */
   overBudget: boolean;
-  /** The most any one person may hold in the issue. */
+  /** Legacy assembly option; no per-author content ceiling is enforced or advertised. */
   perAuthorMax: number;
   /**
    * The session this page is built for (dedicated-session cut 1): the budget
@@ -96,7 +88,7 @@ function who(p: PulseItem, lang: Lang): string {
  */
 function line(c: { lang: Lang }, p: PulseItem, n: number, named: boolean): string {
   const head = named ? '' : `${who(p, c.lang)} · `;
-  const body = (p.text || '').replace(/\s+/g, ' ').trim().slice(0, PREVIEW);
+  const body = p.text || '';
   const marks = [
     p.media.length ? renderCopy(c.lang, 'newspaper.candidates.mark.media') : '',
     p.replyCount ? renderCopy(c.lang, 'newspaper.candidates.mark.replies', { count: String(p.replyCount) }) : '',
@@ -222,11 +214,7 @@ export function buildCandidatePage(issue: IssueData, opts: CandidatePageOptions)
       // did on 2026-08-29, which was to stop believing the page and fetch its own data.
       shown: String(issue.pulse.length),
       trimmed: String(Math.max(0, opts.dayTotal - issue.pulse.length)),
-      integrity: opts.overBudget
-        ? m('integrity.overBudget', { budget: String(opts.budget) })
-        : budgetKnown(opts.sessionKey)
-          ? m('integrity.known')
-          : m('integrity.estimated', { budget: String(opts.budget) }),
+      integrity: 'The complete saved candidate document follows in continuous reading pages. Follow page_cursor until the complete-document end marker.',
     }),
     ``,
     // What this page carries and how it ends — checkable, unlike a promise.
@@ -236,7 +224,7 @@ export function buildCandidatePage(issue: IssueData, opts: CandidatePageOptions)
     // writer believes the page is short anyway (2026-09-13). One line only — what to DO in
     // that state is the workshop's system prompt (dedicated-session.ts CHILD_SYSTEM_PROMPT),
     // which is sent once per session instead of riding on every page.
-    m('cutShort.suspected'),
+    'Read the complete candidate document before selecting; never substitute a fresh feed or remembered text for a continuation.',
     ``,
     m('ladder', {
       min: String(opts.suggestMin),

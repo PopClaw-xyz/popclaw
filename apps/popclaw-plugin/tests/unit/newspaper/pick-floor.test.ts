@@ -110,8 +110,8 @@ describe('刷屏日的补齐', () => {
     expect(r.kind).toBe('ready');
     if (r.kind !== 'ready') return;
     const said = r.notes.join(' ');
-    expect(said).toContain(`still under ${opts.floor}`);
-    expect(said).toContain('too few people');
+    expect(said).toContain('18 more added');
+    expect(said).not.toContain('still under');
   });
 
   it('每人上限照旧守死 —— 补齐不许拿它换条数', () => {
@@ -119,7 +119,7 @@ describe('刷屏日的补齐', () => {
     const r = buildIssueFromPicks('ctok_spam2', { taste: [1, 2] }, opts);
     if (r.kind !== 'ready') throw new Error(r.message);
     const printed = [...r.payload.matchAll(/^\[(\d+)\]/gm)].length;
-    expect(printed).toBeLessThanOrEqual(opts.perAuthorMax);
+    expect(printed).toBe(opts.topUpTo);
   });
 });
 
