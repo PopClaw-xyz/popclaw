@@ -121,6 +121,8 @@ export interface RegisterToolsDeps {
    * **never saves to disk**); where it's saved is decided by the **host**.
    */
   inboundMediaDirs?: readonly string[];
+  /** Native host outbound copy of an already verified inbox attachment. */
+  stageInboxAttachment?: (path: string) => string | null;
   /**
    * Where long drafts' read-only review copies are written
    * (`draft-review.ts`). Host knowledge like the field above, injected by the

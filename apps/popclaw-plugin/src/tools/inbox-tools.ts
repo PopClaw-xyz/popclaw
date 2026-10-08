@@ -121,7 +121,7 @@ export function registerInboxTools(ctx: ToolsCtx): void {
         const message_id = p.resolve_message_id;
         return { type: 'text' as const, text: JSON.stringify({ message_id, resolved: rt.inboxStore.resolve(message_id) }) };
       }
-      if (p.message_id != null) return readInboxMessage(rt.inboxStore, rt.paths, p.message_id, rt.nameOf);
+      if (p.message_id != null) return readInboxMessage(rt.inboxStore, rt.paths, p.message_id, rt.nameOf, deps.stageInboxAttachment);
       const items = rt.inboxStore.page(Math.min(100, Math.max(1, p.limit ?? 20)), p.before_id);
       // Real host 2026-09-25 (build abc3177): looking for a letter that had just
       // arrived, the agent passed before_id:11, got [10, 1] and reported no new

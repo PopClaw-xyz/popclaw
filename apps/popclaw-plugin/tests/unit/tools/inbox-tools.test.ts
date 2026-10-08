@@ -12,6 +12,8 @@ import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
 import { runMigrations } from '../../../src/host/migrations.js';
 import { ownerLang, setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { renderCopy } from '../../../src/lexicon/index.js';
+import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
+import { stageMediaForSend } from '../../../src/notifier/media-staging.js';
 import { InboxStore } from '../../../src/messaging/inbox-store.js';
 import {
   MIGRATIONS_DIR,
@@ -78,6 +80,26 @@ describe('registerPopclawTools', () => {
     expect(exact).toMatchObject({ from_popclaw_id: 'bob', house: 'house-world', ts: 100, received_at_ms: 600000, notification_state: 'silent' });
     const again = JSON.parse((await inbox.execute('list-again', {})).text);
     expect(again.messages[0]).toMatchObject({ notification_state: 'silent', retrieved: true, resolved: false });
+  });
+
+  it('the registered inbox tool uses the native staging capability for exact reads', async () => {
+    const db = new InMemoryHostDb();
+    runMigrations(db, MIGRATIONS_DIR);
+    const store = new InboxStore(db);
+    const root = mkdtempSync(join(tmpdir(), 'inbox-native-read-'));
+    const paths = new PopclawPaths(root);
+    mkdirSync(paths.dmMediaDir(), { recursive: true });
+    const original = join(paths.dmMediaDir(), 'photo.jpg');
+    writeFileSync(original, Buffer.from([255, 216, 255]));
+    store.record({ ts: 100, receivedAtMs: 1000, fromPopclawId: 'alice', toPopclawId: 'me', body: 'photo', mediaPath: original });
+    const dir = join(root, 'host-media');
+    const stageInboxAttachment = vi.fn((p: string) => stageMediaForSend(p, dir));
+    const { api, tools } = buildFakeApi();
+    registerPopclawTools({ api, stageInboxAttachment, runtime: async () => ({ inboxStore: store, paths }) as unknown as Awaited<ReturnType<Parameters<typeof registerPopclawTools>[0]['runtime']>> });
+    const result = await findTool(tools, 'popclaw_show_inbox').execute('read', { message_id: store.recent(1)[0]!.id });
+    expect(stageInboxAttachment).toHaveBeenCalledOnce();
+    expect(JSON.parse(result.text).attachment.path).toBe(join(dir, 'photo.jpg'));
+    expect((result as unknown as {images: unknown[]}).images).toHaveLength(1);
   });
 
   it('the show_inbox description keeps the resolve rule it inherited', () => {

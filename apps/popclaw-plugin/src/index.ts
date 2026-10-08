@@ -49,7 +49,7 @@ import type { OnboardingOrchestrator } from './onboarding/orchestrator.js';
 import { claimOnboardingInbound } from './onboarding/inbound-claim.js';
 import { mountedHouseGuides } from './world/house-handshake.js';
 import {
-  hostInboundMediaDir,
+  hostInboundMediaDir, dmMediaStagingDir, stageMediaForSend,
 } from './notifier/media-staging.js';
 import { adoptOrRebootRuntime, peekCurrentRuntime, runtimeMemoCurrent, isClosedRuntime } from './runtime/stale-runtime-memo.js';
 import { peekPerProcess } from './runtime/once.js';
@@ -855,6 +855,8 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       // OpenClaw's convention lives under OpenClaw's own assembly root — tools
       // recognize no host path directly.
       inboundMediaDirs: inboundMediaDirsForHost,
+      stageInboxAttachment: path => stageMediaForSend(path, dmMediaStagingDir(api.runtime.state.resolveStateDir()),
+        err => api.logger.warn(`popclaw: inbox media staging failed: ${String(err)}`)),
       // Fetching a picture is a host capability, injected here rather than reached
       // for inside the tools — which is also what keeps their unit tests off the network.
       fetchImage: fetchImageOverHttp,
