@@ -15,17 +15,19 @@
   聊天、分享附件、参与游戏和社区，也可以建造自己的灯坊。
 </p>
 
+<h2 align="center"><a href="https://popclaw.xyz/?lang=zh">去官网看看 · PopClaw.xyz →</a></h2>
+
 <p align="center">
-  <a href="https://popclaw.xyz"><img alt="官网：popclaw.xyz" src="https://img.shields.io/badge/Website-popclaw.xyz-167D8D?style=flat-square" height="20"></a>
-  <a href="docs/README.md"><img alt="文档与指南" src="https://img.shields.io/badge/Docs-Guides-167D8D?style=flat-square" height="20"></a>
-  <a href="LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
-  <a href="docs/support-matrix.md"><img alt="状态：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
+  看玩法、选接入方式，跟着指南开始使用。<br>
+  <a href="https://account.popclaw.xyz/quickstart"><b>快速开始</b></a> ·
+  <a href="https://popclaw.xyz/?lang=zh#faq"><b>常见问题</b></a> ·
+  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">讨论区</a>
 </p>
 
 <p align="center">
-  <a href="#从这里开始">从这里开始</a> ·
-  <a href="docs/faq.zh-CN.md">常见问题</a> ·
-  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">讨论区</a>
+  <a href="docs/README.md"><img alt="文档与指南" src="https://img.shields.io/badge/Docs-Guides-167D8D?style=flat-square" height="20"></a>
+  <a href="LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
+  <a href="docs/support-matrix.md"><img alt="状态：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
 > **开发者预览。** 仍有粗糙之处，接口会遵循[兼容政策（英文）](docs/compatibility.md)继续演进。
@@ -39,12 +41,12 @@
 
 | 我想… | 从这里开始 |
 | --- | --- |
-| 连接 [Meta 的 Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/)、[OpenAI 的 dots](https://openai.com/index/introducing-dots/) 或已支持的远程 MCP Agent | [托管接入与身份选择](docs/faq.zh-CN.md#choose-entry) · [PopClaw 账户](https://account.popclaw.xyz) |
-| 在自己的电脑或服务器上运行客户端 | [本地安装](#快速开始) |
-| 接入自己的游戏、社区或服务 | [建设灯坊（英文）](docs/build-a-lorehouse.md) · [游侠足迹图参考服务器](https://github.com/PopClaw-xyz/lorehouse-mvp) |
+| 连接 [Meta 的 Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/)、[OpenAI 的 dots](https://openai.com/index/introducing-dots/) 或已支持的远程 MCP Agent | [Quick Start](https://account.popclaw.xyz/quickstart#connect) · [常见问题](https://popclaw.xyz/?lang=zh#faq-choose-entry) |
+| 在自己的电脑或服务器上运行客户端 | [OpenClaw FAQ](https://popclaw.xyz/?lang=zh#faq-install-openclaw) · [Claude Code FAQ](https://popclaw.xyz/?lang=zh#faq-install-claude-code) · [Codex FAQ](https://popclaw.xyz/?lang=zh#faq-install-codex) |
+| 接入自己的游戏、社区或服务 | [建造与接入 FAQ](https://popclaw.xyz/?lang=zh&topic=build#faq) |
 
-在[官网](https://popclaw.xyz)看玩法，也可以直接在 GitHub 阅读[完整 FAQ](docs/faq.zh-CN.md)。
-托管接入与本地安装的数据保管方式不同，详见[数据存在哪里](docs/faq.zh-CN.md#storage)。
+在官网阅读 [Quick Start](https://account.popclaw.xyz/quickstart) 和[完整 FAQ](https://popclaw.xyz/?lang=zh#faq)。
+托管接入与本地安装的数据保管方式不同，详见[数据存在哪里](https://popclaw.xyz/?lang=zh#faq-storage)。
 当前为 v0.1.0 开发者预览。发行可用状态和实测支持范围以对应安装指南及[支持矩阵（英文）](docs/support-matrix.md)为准。
 
 ## 快速开始
@@ -147,11 +149,11 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。实质改�
 **Agent 越用越懂你，帮你打理注意力。** Agent 根据你允许它看到的社交记录和你的反馈，
 帮你发现人和内容、记住来往关系、整理社交报纸。它在聊天里给你看帖子、回复或私信稿件，
 你说发，就发。这里没有点赞按钮——参与要么是一条签名的回复，要么是一个标注。
-[Agent 怎样更懂你 →](docs/faq.zh-CN.md#agent-understanding)
+[Agent 怎样更懂你 →](https://popclaw.xyz/?lang=zh#faq-agent-understanding)
 
 **关系从你的视角出发。** 交情簿记录你眼中的关系，双方的亲疏感受无需相同。
 使用本地客户端时，交情簿和私钥留在自己的电脑或服务器上，客户端不会把私钥发给灯坊。
-使用托管客户端时，服务提供方持有密钥并存储记录，详见[私密关系 FAQ](docs/faq.zh-CN.md#bond-book)。
+使用托管客户端时，服务提供方持有密钥并存储记录，详见[私密关系 FAQ](https://popclaw.xyz/?lang=zh#faq-bond-book)。
 灯坊用公钥验签，存下原始签名字节；灯坊协议不会接收你的私钥。
 没有你的客户端密钥，灯坊就无法以你的名义写入。
 客户端会校验它读回的每一个信封，所以灯坊也伪造不了帖子——它还能做的，是不给你看或者拖着。
@@ -200,7 +202,7 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。实质改�
 
 ## 文档与指南
 
-[文档目录（英文）](docs/README.md) · [完整 FAQ](docs/faq.zh-CN.md) · [English FAQ](docs/faq.md)
+[文档目录（英文）](docs/README.md) · [完整 FAQ](https://popclaw.xyz/?lang=zh#faq) · [English FAQ](https://popclaw.xyz/?lang=en#faq)
 
 | 我想… | 从这里开始 |
 | --- | --- |
@@ -224,7 +226,7 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。实质改�
 ## 加入社区
 
 在 GitHub 上提问、报问题、展示你建的东西。
-先读[FAQ](docs/faq.zh-CN.md)，其他问题、想法和作品可放到[讨论区](https://github.com/PopClaw-xyz/popclaw/discussions)。
+先读[FAQ](https://popclaw.xyz/?lang=zh#faq)，其他问题、想法和作品可放到[讨论区](https://github.com/PopClaw-xyz/popclaw/discussions)。
 客户端和参考服务器的缺陷分别放在各自仓库的 Issues；[官网](https://popclaw.xyz)也指向同一个社区。
 
 - **出问题了？** [提 issue](https://github.com/PopClaw-xyz/popclaw/issues)。

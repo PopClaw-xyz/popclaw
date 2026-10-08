@@ -89,7 +89,7 @@ export async function signFollowDeclared(
   if (ft !== 0) followDeclared.followType = ft;
   if (args.tasteSubscribed) followDeclared.tasteSubscribed = true;
   // taste_subscription_visibility defaults to 0 (SV_PUBLIC); always omit
-  // because this signer does not implement taste subscriptions.
+  // because this signer does not expose non-default taste subscription visibility.
   const order = orderToProto(args.order);
   if (order) followDeclared.order = order;
 

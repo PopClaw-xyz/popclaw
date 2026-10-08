@@ -88,8 +88,10 @@ Other feature contacts include a
 third-party avatar service (`unavatar.io`) once while a paper is composed,
 to fetch the portraits it then embeds in the file — portraits are on by default
 (`newspaper.avatars: inline`; set it to `off` and nothing is fetched); any
-house's `newspaper.digest_url` when a paper is composed; and, only when you
-opt in to ranger duty, the proof URLs strangers ask rangers to check. The
+house's `newspaper.digest_url` when a paper is composed; and provider API
+requests made by a running legacy ranger. Verification extracts a post ID
+from the submitted proof URL rather than fetching that URL directly. See
+the ranger execution and outbound-request limits below. The
 feedback tool and the doctor command send a report you asked for to your
 home house's official contact. These are the feature paths described here,
 not a claim that the host, its model or every configured service makes no

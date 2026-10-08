@@ -19,6 +19,13 @@ reused results and final-release checks still pending. In particular:
   earlier 0.25% bus and 0.40% whole-plugin fixture budgets remain unmet. MCP
   measurements were whole-process averages without a control process.
   These results do not prove absence of leaks or resolve heating on every Mac.
+- **Gateway restart delivery has an unresolved historical observation.** In
+  an OpenClaw/WhatsApp sample on 2026-09-16, a Gateway restart silently lost
+  an in-flight outbound message in two observed instances. The exact host
+  version and reproduction record are not established in the public evidence;
+  this does not show that every currently supported build has the same defect.
+  This release has no verification that resolves that observation. Avoid
+  restarting during an outbound send and check delivery after an interruption.
 - **A hook invoked after runtime shutdown can fail.** A manually invoked
   post-shutdown hook can encounter a closed database or miss turn context.
   A new user turn reaching that state through the normal shutdown path has

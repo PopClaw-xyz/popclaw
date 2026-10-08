@@ -8,7 +8,7 @@ import { inspectPublicCarrier } from './public-stream-wire.js';
  *
  * Mirrors ServerPushEgress's shape (just GET instead of POST). Decodes
  * `WorldFeedSnapshot` via the generated TS bindings — wire format stays
- * protobuf end-to-end using protobuf.
+ * protobuf end-to-end.
  */
 
 import { popclaw } from '@popclaw/contracts';

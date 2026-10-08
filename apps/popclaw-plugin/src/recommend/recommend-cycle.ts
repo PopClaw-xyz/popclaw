@@ -46,8 +46,7 @@ export interface RecommendCycleDeps {
    * Optional persistent score cache. When supplied, items already scored
    * under the current taste sources are skipped — only newly-arrived items
    * hit the LLM. Steady-state cost reduction is large (typically 80-95%
-   * fewer scoring calls). Omit to request a full rescore (full rescore
-   * every cycle).
+   * fewer scoring calls). Omit to rescore every item on each cycle.
    */
   scoreCache?: ScoreCache;
 }
