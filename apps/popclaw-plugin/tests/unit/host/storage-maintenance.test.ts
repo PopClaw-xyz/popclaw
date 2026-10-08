@@ -42,12 +42,15 @@ describe('offline storage maintenance', () => {
     maintenance.assertCurrent();
   });
   it('releases admission when adapter SQL migration fails before a runtime exists', () => {
-    const {db, paths} = fixture(), migrations = join(paths.rootDir(), 'bad-migrations');
+    const existing = fixture(), paths = new PopclawPaths(join(existing.paths.rootDir(), 'fresh-start'));
+    const migrations = join(existing.paths.rootDir(), 'bad-migrations');
     mkdirSync(migrations);
     writeFileSync(join(migrations, '001-bad.sql'), 'INSERT INTO missing_table VALUES(1);');
     const logger = {info() {}, warn() {}, error() {}, debug() {}};
     expect(() => new LocalHostAdapter({dataRoot: paths.rootDir(), logger, migrationsDir: migrations,
       beforeDbInitialize: candidate => registerStorageRuntime(candidate, paths)})).toThrow('missing_table');
+    const db = new LocalHostDb(paths.socialDb());
+    cleanup.push(() => db.close());
     expect(db.queryAll('SELECT token FROM storage_runtime_participants_v1')).toEqual([]);
     MaintenanceSession.begin(db, paths, 'failed migration is closed').assertCurrent();
   });

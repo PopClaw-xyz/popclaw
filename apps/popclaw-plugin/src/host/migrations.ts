@@ -25,20 +25,16 @@ import type { HostDb } from './host-db.js';
  * literals would break naive split — DDL migrations don't have these.
  */
 export function runMigrations(db: HostDb, migrationsDir: string): void {
+  // Check before even creating the bookkeeping table. An older program must
+  // never apply its remaining migrations to data already changed by a newer one.
+  const all = migrationFilenames(migrationsDir);
+  const applied = assertKnownAppliedMigrations(db, all);
   db.execute(`
     CREATE TABLE IF NOT EXISTS _migrations (
       filename   TEXT PRIMARY KEY,
       applied_at INTEGER NOT NULL
     )
   `);
-
-  const all = readdirSync(migrationsDir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
-
-  const applied = new Set(
-    db.queryAll<{ filename: string }>('SELECT filename FROM _migrations').map((r) => r.filename),
-  );
 
   for (const filename of all) {
     if (applied.has(filename)) continue;
@@ -55,6 +51,18 @@ export function runMigrations(db: HostDb, migrationsDir: string): void {
       );
     });
   }
+}
+
+export function migrationFilenames(migrationsDir: string): string[] {
+  return readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+}
+
+/** Read-only; shared by runtime admission and the migration runner. */
+export function assertKnownAppliedMigrations(db: HostDb, known: readonly string[]): Set<string> {
+  if (!db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='_migrations'")) return new Set();
+  const applied = new Set(db.queryAll<{filename: string}>('SELECT filename FROM _migrations').map(r => r.filename));
+  if ([...applied].some(filename => !known.includes(filename))) throw new Error('STORAGE_MIGRATION_UNSUPPORTED');
+  return applied;
 }
 
 /**

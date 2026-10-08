@@ -6,9 +6,15 @@ import { sigil, SIGIL_LEN, normalizeSigilInput } from '@popclaw/algorithms';
 import { InMemoryHostAdapter, InMemoryLogger } from '../../src/host/host-adapter.in-memory.js';
 import { LocalHostAdapter } from '../../src/host/local-host-adapter.js';
 import { Keystore } from '../../src/identity/keystore.js';
+import { bootstrapPlugin } from '../../src/runtime/plugin-bootstrap.js';
 
 const scratch: string[] = [];
+const localHosts: LocalHostAdapter[] = [];
+function localHost(root: string, logger = new InMemoryLogger()) {
+  const host = new LocalHostAdapter({ dataRoot: root, logger }); localHosts.push(host); return host;
+}
 afterEach(() => {
+  for (const host of localHosts.splice(0)) host.db.close();
   while (scratch.length) rmSync(scratch.pop()!, { recursive: true, force: true });
 });
 
@@ -32,25 +38,26 @@ describe('Scenario 6: identity persistence + sigil', () => {
     expect(sigil(key.popclawId)).toBe(s);
   });
 
-  // Two hosts first-running one POPCLAW_DATA_ROOT together is the real shape of
-  // "one passport, every host": the OpenClaw plugin resident while popclaw-mcp
-  // starts under Claude Code. Without O_EXCL both mint a keypair and the later
-  // write buries the earlier identity — unrecoverable, no revocation path.
-  it('concurrent first-run on one data root converges on a single identity', async () => {
+  // Admission now refuses a second host while the first schema is incomplete,
+  // rather than interpreting that keyless schema as a fresh identity. Within
+  // the admitted first runtime the existing O_EXCL key contract still converges.
+  it('concurrent identity creation in the admitted first runtime and subsequent hosts converges on one identity', async () => {
     const root = mkdtempSync(join(tmpdir(), 'popclaw-concurrent-'));
     scratch.push(root);
-    const hosts = [0, 1, 2].map(
-      () => new LocalHostAdapter({ dataRoot: root, logger: new InMemoryLogger() }),
-    );
-
-    const keys = await Promise.all(hosts.map((h) => new Keystore(h).loadOrGenerate()));
+    const first = localHost(root);
+    expect(() => localHost(root)).toThrow('STORAGE_IDENTITY_MISSING');
+    const keys = await Promise.all([0, 1, 2].map(() => new Keystore(first).loadOrGenerate()));
 
     const ids = new Set(keys.map((k) => k.popclawId));
     expect(ids.size).toBe(1); // one winner, the losers adopted it
     expect(keys.filter((k) => k.generated)).toHaveLength(1);
     // The adopted seed must be the winner's, not the loser's discarded bytes.
-    const persisted = await new Keystore(hosts[0]!).loadOrGenerate();
+    const persisted = await new Keystore(first).loadOrGenerate();
     for (const k of keys) expect(Array.from(k.seed)).toEqual(Array.from(persisted.seed));
+    await bootstrapPlugin(first);
+    const hosts = [0, 1, 2].map(() => localHost(root));
+    const restarted = await Promise.all(hosts.map(host => bootstrapPlugin(host)));
+    expect(restarted.every(boot => boot.popclawId === persisted.popclawId && !boot.identityGenerated)).toBe(true);
   });
 
   it('a 0-byte master.key says what it is instead of dying on JSON.parse', async () => {
@@ -61,7 +68,7 @@ describe('Scenario 6: identity persistence + sigil', () => {
     // that deleting it is safe.
     const root = mkdtempSync(join(tmpdir(), 'popclaw-empty-key-'));
     scratch.push(root);
-    const host = new LocalHostAdapter({ dataRoot: root, logger: new InMemoryLogger() });
+    const host = localHost(root);
     // pathFor is optional on the Storage interface (in-memory adapters have no
     // paths); LocalHostAdapter has it, and this test is specifically about a
     // file on disk.
@@ -86,7 +93,7 @@ describe('Scenario 6: identity persistence + sigil', () => {
     const warnings: unknown[][] = [];
     const logger = new InMemoryLogger();
     logger.warn = (...args: unknown[]) => void warnings.push(args);
-    const host = new LocalHostAdapter({ dataRoot: root, logger });
+    const host = localHost(root, logger);
 
     const spy = vi.spyOn(fsp, 'link').mockRejectedValue(
       Object.assign(new Error('operation not permitted'), { code: 'EPERM' }),
@@ -98,11 +105,12 @@ describe('Scenario 6: identity persistence + sigil', () => {
       // The degraded path is not silent: it reopens a race this method exists
       // to close, so it has to be visible in the log.
       expect(JSON.stringify(warnings)).toMatch(/no hard links/);
+      await bootstrapPlugin(host);
     } finally {
       spy.mockRestore();
     }
     // …and the identity really persisted: a restart loads the same one.
-    const again = await new Keystore(new LocalHostAdapter({ dataRoot: root, logger })).loadOrGenerate();
+    const again = await new Keystore(localHost(root, logger)).loadOrGenerate();
     expect(again.generated).toBe(false);
   });
 });

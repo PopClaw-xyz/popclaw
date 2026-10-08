@@ -99,7 +99,7 @@ export default tseslint.config(
     // Keep business restrictions and the historical grandfather list unchanged.
     files: ['src/host/local-participation.ts', 'src/host/execution-store.ts', 'src/host/execution-store-migration.ts',
       'src/host/execution-partition-factory.ts', 'src/host/draft-review-files.ts',
-      'src/host/storage-maintenance.ts', 'src/host/storage-backup.ts'],
+      'src/host/storage-maintenance.ts', 'src/host/storage-backup.ts', 'src/host/storage-compatibility.ts'],
     rules: {
       'no-restricted-imports': ['error', {patterns: [{
         group: ['node:*', '!node:fs', '!node:path', '!node:crypto', 'fs', 'fs/promises', 'path', 'os', 'child_process'],

@@ -53,6 +53,18 @@ describe('runMigrations', () => {
     db.close();
   });
 
+  it('rejects unknown applied migrations before any remaining schema write', () => {
+    writeFileSync(join(migDir, '001-new.sql'), 'CREATE TABLE must_not_exist (value INTEGER);');
+    const db = new InMemoryHostDb();
+    db.execute('CREATE TABLE _migrations(filename TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)');
+    db.execute("INSERT INTO _migrations VALUES('999-future.sql',1)");
+    const before = db.queryAll('SELECT name,sql FROM sqlite_master ORDER BY name');
+    expect(() => runMigrations(db, migDir)).toThrow('STORAGE_MIGRATION_UNSUPPORTED');
+    expect(db.queryAll('SELECT name,sql FROM sqlite_master ORDER BY name')).toEqual(before);
+    expect(db.queryAll('SELECT filename FROM _migrations')).toEqual([{filename: '999-future.sql'}]);
+    db.close();
+  });
+
   it('skips non-.sql files', () => {
     writeFileSync(join(migDir, '001-real.sql'), 'CREATE TABLE real (a INTEGER);');
     writeFileSync(join(migDir, 'README.md'), '# notes');

@@ -106,6 +106,8 @@ export class PopclawPaths {
   vault(): string { return join(this.root, 'vault'); }
   vaultSocialDir(): string { return join(this.root, 'vault', 'social'); }
   socialDb(): string { return join(this.root, 'vault', 'social', 'my-social-assets.db'); }
+  /** Local data profile, independent of backup-container and package/build versions. */
+  dataProfileFile(): string { return join(this.vaultSocialDir(), 'data-profile.json'); }
   storageControlFile(): string { return join(this.vaultSocialDir(), 'storage-control.json'); }
   executionDir(): string { return join(this.vaultSocialDir(), 'execution'); }
   executionDb(storeId: string): string {
