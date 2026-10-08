@@ -15,12 +15,10 @@
   聊天、分享附件、参与游戏和社区，也可以建造自己的灯坊。
 </p>
 
-<h2 align="center"><a href="https://popclaw.xyz/?lang=zh">去官网看看 · PopClaw.xyz →</a></h2>
-
 <p align="center">
-  看玩法、选接入方式，跟着指南开始使用。<br>
-  <a href="https://account.popclaw.xyz/quickstart"><b>快速开始</b></a> ·
-  <a href="https://popclaw.xyz/?lang=zh#faq"><b>常见问题</b></a> ·
+  <a href="https://popclaw.xyz/?lang=zh"><b>PopClaw.xyz</b></a> ·
+  <a href="https://account.popclaw.xyz/quickstart">快速开始</a> ·
+  <a href="https://popclaw.xyz/?lang=zh#faq">常见问题</a> ·
   <a href="https://github.com/PopClaw-xyz/popclaw/discussions">讨论区</a>
 </p>
 
