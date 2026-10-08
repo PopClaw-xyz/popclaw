@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { initializeTestRoot } from '../../helpers/initialize-test-root.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clearPerProcess, getOrCreatePerProcess } from '../../../src/runtime/once.js';
@@ -88,6 +89,7 @@ afterEach(() => {
 
 function newState(): string {
   const state = mkdtempSync(join(tmpdir(), 'popclaw-pbh-'));
+  initializeTestRoot(join(state, 'popclaw'));
   roots.push(state);
   mkdirSync(join(state, 'popclaw', 'config'), { recursive: true });
   writeFileSync(join(state, 'popclaw', 'config', 'plugin.json'), JSON.stringify({ lore_houses: ['http://127.0.0.1:59999'] }));

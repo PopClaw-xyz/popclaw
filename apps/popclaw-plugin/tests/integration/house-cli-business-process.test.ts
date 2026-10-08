@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { initializeTestRoot } from '../helpers/initialize-test-root.js';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -17,6 +18,7 @@ afterEach(() => roots.splice(0).forEach(root => rmSync(root, { recursive: true, 
 function sandbox(connected = false) {
   const root = mkdtempSync(join(tmpdir(), 'house-cli-business-')); roots.push(root);
   const home = join(root, 'home'), data = join(root, 'data');
+  initializeTestRoot(data);
   const attempts = join(root, 'network-attempts'), lifecycle = join(root, 'process-lifecycle');
   mkdirSync(home); mkdirSync(join(data, 'config'), { recursive: true });
   writeFileSync(join(data, 'config/plugin.json'), JSON.stringify({ lore_houses: [origin], ranger_profile: { nickname: 'CLI Test Owner' } }));

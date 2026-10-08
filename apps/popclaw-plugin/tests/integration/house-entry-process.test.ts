@@ -1,4 +1,5 @@
 import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
+import { initializeTestRoot } from '../helpers/initialize-test-root.js';
 import { mintHouse } from '../helpers/signed-manifest.js';
 import { publishStorageJson, MaintenanceSession } from '../../src/host/storage-maintenance.js';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -17,9 +18,10 @@ const pkgRoot = resolve(__dirname, '../..');
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach(root => rmSync(root, {recursive: true, force: true})));
 
-function sandbox() {
+function sandbox(initialized = true) {
   const root = mkdtempSync(join(tmpdir(), 'house-entry-process-')); roots.push(root);
   const home = join(root, 'home'), data = join(root, 'data'), attempts = join(root, 'network-attempts');
+  if (initialized) initializeTestRoot(data);
   mkdirSync(home); mkdirSync(join(data, 'config'), {recursive: true});
   writeFileSync(join(data, 'config/plugin.json'), JSON.stringify({lore_houses: ['http://127.0.0.1:19991']}));
   const guard = join(root, 'offline.mjs');
@@ -81,7 +83,7 @@ function assertNoHouseCommands(box: ReturnType<typeof sandbox>) {
 
 describe('actual source process house entrypoints, isolated and offline', () => {
   it('MCP initialize/tools/list expose house and exact world schemas without runtime, SQLite or network', async () => {
-    const box = sandbox(), run = child('mcp.ts', [], box);
+    const box = sandbox(false), run = child('mcp.ts', [], box);
     let seq = 0;
     async function request(method: string, params: unknown) {
       const id = ++seq;
@@ -117,7 +119,7 @@ describe('actual source process house entrypoints, isolated and offline', () => 
   }, 25000);
 
   it.each([['--help', 0], ['not-a-command', 2]] as const)('CLI %s exits cheaply', async (arg, expectedCode) => {
-    const box = sandbox(), run = child('main.ts', [arg], box);
+    const box = sandbox(false), run = child('main.ts', [arg], box);
     try {
       expect(await boundedExit(run)).toBe(expectedCode);
       expect(run.stdout() + run.stderr()).toContain('popclaw');
@@ -148,7 +150,7 @@ describe('actual source process house entrypoints, isolated and offline', () => 
   }, 20000);
 
   it.each(['revoke', 'takeover', 'resume'] as const)('CLI world participation %s is now an unknown command that cannot reach an existing policy', async operation => {
-    const box = sandbox(), origin = 'http://127.0.0.1:19991';
+    const box = sandbox(false), origin = 'http://127.0.0.1:19991';
     const dbPath = new PopclawPaths(box.data).lorehouseDb(hostDbSlug(origin));
     const db = new LocalHostDb(dbPath);
     try {
@@ -231,7 +233,7 @@ process.stderr.write = function (chunk, ...args) {
   }, 22000);
 
   it.each([['--help', 0], ['not-a-command', 2]] as const)('CLI world %s uses its cheap command lane', async (arg, expectedCode) => {
-    const box = sandbox(), run = child('main.ts', ['world', arg], box);
+    const box = sandbox(false), run = child('main.ts', ['world', arg], box);
     try {
       expect(await run.done).toBe(expectedCode);
       expect(run.stdout() + run.stderr()).toContain(WORLD_COMMAND_HELP);
@@ -243,7 +245,7 @@ process.stderr.write = function (chunk, ...args) {
   }, 20000);
 
   it.each(['maintenance','recovery','failed-boot'] as const)('MCP %s gate is applied on actual tool activation',async mode=>{
-    const box=sandbox(), paths=new PopclawPaths(box.data),origin='http://127.0.0.1:19991';
+    const box=sandbox(mode !== 'maintenance'), paths=new PopclawPaths(box.data),origin='http://127.0.0.1:19991';
     if(mode==='recovery') {
       const first=child('main.ts',['world','capabilities',origin],box);
       try{expect(await boundedExit(first)).toBe(0);}finally{await stop(first);}
@@ -290,7 +292,7 @@ process.stderr.write = function (chunk, ...args) {
   },30000);
 
   it('CLI maintenance is checked before identity/database bootstrap', async () => {
-    const box=sandbox(), paths=new PopclawPaths(box.data);
+    const box=sandbox(false), paths=new PopclawPaths(box.data);
     publishStorageJson(paths.storageControlFile(), {version:1,epoch:'a'.repeat(32),mode:'maintenance',reason:'synthetic migration',held:['execution','consumers','notifications'],releases:{}});
     const run=child('main.ts',['login','http://127.0.0.1:19991'],box);
     try {
@@ -419,7 +421,7 @@ it('actual MCP reads the same new global view under restored-root holds without 
   } finally { await stop(run); }
 }, 30000);
 
-it('normal MCP startup keeps ordinary loopback handshake/SSE while new typed commands stay unsupported', async () => {
+it('normal MCP startup uses public-v1 loopback reception while new typed commands stay unsupported', async () => {
   const { createServer } = await import('node:http');
   const received: Array<{ method: string; url: string }> = [];
   const server = createServer((request, response) => {
@@ -427,7 +429,7 @@ it('normal MCP startup keeps ordinary loopback handshake/SSE while new typed com
     if (request.method === 'GET' && request.url === '/v1/manifest') {
       response.writeHead(200, { 'content-type': 'application/json', 'X-Popclaw-Manifest-Proof': signedHouse.proofHeader });
       response.end(Buffer.from(signedHouse.bodyBytes));
-    } else if (request.method === 'GET' && (request.url?.startsWith('/world-feed/stream') || /^\/inbox\/[1-9A-HJ-NP-Za-km-z]{32,44}\/stream$/.test(request.url ?? ''))) {
+    } else if (request.method === 'GET' && (request.url?.startsWith('/v1/world-stream?mode=public-v1') || /^\/inbox\/[1-9A-HJ-NP-Za-km-z]{32,44}\/stream$/.test(request.url ?? ''))) {
       response.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' }); response.write(': synthetic ordinary stream\n\n');
     } else { response.writeHead(404); response.end(); }
   });
@@ -489,10 +491,12 @@ syncBuiltinESMExports();`);
     // Either way nothing is signed, attempted or queued, which is what follows.
     expect(invoke.isError).toBe(true); expect(JSON.stringify(invoke)).toContain('OWNER_CONFIRMATION_UNAVAILABLE');
     const loginRequestId = await loginMcpHouse(box.data, origin, () => rpc('tools/call', { name: 'popclaw_house_login', arguments: { host: origin } }));
-    // Normal participation changes no selected public-v1 transport capability.
+    // Normal participation enables the declared public-v1 transport capability.
     const joinedCapabilities = await rpc('tools/call', { name: 'popclaw_world_capabilities', arguments: { house: origin } });
     expect(joinedCapabilities.structuredContent).toMatchObject({ code: 'WORLD_LOCAL_UNSUPPORTED',
-      blocks: { public_stream: { validation: 'valid', support: 'unsupported', ready: false } } });
+      blocks: { public_stream: { validation: 'valid', support: 'supported', ready: false } } });
+    const joinedRevision = (joinedCapabilities.structuredContent as {capability_revision: string}).capability_revision;
+    expect(joinedRevision).toMatch(/^[a-f0-9]{64}$/);
     // The doorbell and the page-state sync are legs every resident root owes,
     // this real MCP process included: nothing else collects a reader's ➕ off
     // the canvas, and nothing else tells the canvas which authors on a page
@@ -502,7 +506,7 @@ syncBuiltinESMExports();`);
     const pageState = (url: string) => url.startsWith('/v1/sync-requests?owner=');
     const expected: Array<(url: string) => boolean> = [
       url => url === '/v1/manifest',
-      url => url.startsWith('/world-feed/stream'),
+      url => url.startsWith('/v1/world-stream?mode=public-v1'),
       doorbell,
       pageState,
     ];
@@ -510,10 +514,10 @@ syncBuiltinESMExports();`);
     while (Date.now() < startupDeadline && !expected.every(want => received.some(r => want(r.url)))) {
       await new Promise(resolveWait => setTimeout(resolveWait, 20));
     }
-    expect(received).toEqual(expect.arrayContaining([{ method: 'GET', url: '/v1/manifest' }, expect.objectContaining({ method: 'GET', url: expect.stringContaining('/world-feed/stream') })]));
+    expect(received).toEqual(expect.arrayContaining([{ method: 'GET', url: '/v1/manifest' }, expect.objectContaining({ method: 'GET', url: expect.stringContaining('/v1/world-stream?mode=public-v1') })]));
     expect(received.filter(request => doorbell(request.url))).not.toEqual([]);
     expect(received.filter(request => pageState(request.url))).not.toEqual([]);
-    expect(received.filter(request => !(request.method === 'GET' && (request.url === '/v1/manifest' || request.url.startsWith('/world-feed/stream') || doorbell(request.url) || pageState(request.url) || /^\/inbox\/[1-9A-HJ-NP-Za-km-z]{32,44}\/stream$/.test(request.url))))).toEqual([]);
+    expect(received.filter(request => !(request.method === 'GET' && (request.url === '/v1/manifest' || request.url.startsWith('/v1/world-stream?mode=public-v1') || doorbell(request.url) || pageState(request.url) || /^\/inbox\/[1-9A-HJ-NP-Za-km-z]{32,44}\/stream$/.test(request.url))))).toEqual([]);
     expect(existsSync(box.attempts) ? readFileSync(box.attempts, 'utf8') : '').toBe('');
     const db = new LocalHostDb(new PopclawPaths(box.data).socialDb(), { readOnly: true });
     try {
@@ -531,14 +535,22 @@ syncBuiltinESMExports();`);
         const execution = new LocalHostDb(new PopclawPaths(box.data).executionDb(row.store_id), { readOnly: true });
         try {
           verifyExecutionPartition(execution, row, row.actor_id);
+          const publicCounts: Record<string, number> = {world_public_bindings_v1: 1,
+            world_public_log_profiles_v1: 1, world_public_cursors_v1: 2};
           for (const table of FRESH_PARTITION_REQUIRED_TABLES)
-            expect(execution.queryOne<{ n: number }>(`SELECT COUNT(*) AS n FROM "${table}"`)?.n).toBe(0);
-          // Nothing a lifecycle owns was created along the way. The public
-          // tables are storage the factory provisions; a binding, a log profile
-          // and a cursor are what a subscription is made of, and none exists.
+            expect(execution.queryOne<{ n: number }>(`SELECT COUNT(*) AS n FROM "${table}"`)?.n, table).toBe(publicCounts[table] ?? 0);
+          // The normal join captured one declared public subscription, without
+          // creating any action, owner grant, business policy or received frame.
           expect(execution.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='world_participation_policy'")).toBeNull();
-          for (const table of ['world_public_bindings_v1', 'world_public_log_profiles_v1', 'world_public_cursors_v1'] as const)
-            expect(execution.queryAll(`SELECT * FROM "${table}"`)).toEqual([]);
+          expect(execution.queryAll('SELECT origin,house_key,house_incarnation,active_log,capability_revision,selection_json,phase,boundary_bytes,checkpoint_bytes FROM world_public_bindings_v1')).toEqual([
+            {origin, house_key: signedHouse.houseKey, house_incarnation: 'first_release_house', active_log: 'log_1',
+              capability_revision: joinedRevision, selection_json: JSON.stringify({fullPublic: true, scopes: ['sc_public']}),
+              phase: 'idle', boundary_bytes: null, checkpoint_bytes: null}]);
+          expect(execution.queryAll('SELECT log_incarnation,lane,scope_id,after_seq,stale,gap_reason FROM world_public_cursors_v1 ORDER BY lane')).toEqual([
+            {log_incarnation: 'log_1',lane: 'public',scope_id: '',after_seq: '0',stale: 0,gap_reason: null},
+            {log_incarnation: 'log_1',lane: 'scope',scope_id: 'sc_public',after_seq: '0',stale: 0,gap_reason: null}]);
+          expect(execution.queryAll('SELECT log_incarnation,envelope_baseline,capability_revision,retired FROM world_public_log_profiles_v1')).toEqual([
+            {log_incarnation: 'log_1',envelope_baseline: 'public-envelope-01',capability_revision: joinedRevision,retired: 0}]);
         } finally { execution.close(); }
       }
     } finally { db.close(); }

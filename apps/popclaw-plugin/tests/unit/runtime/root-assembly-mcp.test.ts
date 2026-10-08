@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { initializeTestRoot } from '../../helpers/initialize-test-root.js';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -56,6 +57,7 @@ afterEach(async () => {
 
 function spawnMcp(mode = '') {
   const root = mkdtempSync(join(tmpdir(), 'popclaw-assembly-mcp-'));
+  initializeTestRoot(root);
   roots.push(root);
   mkdirSync(join(root, 'config'), { recursive: true });
   writeFileSync(join(root, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [HOUSE], canvas_base_url: HOUSE }));
@@ -91,9 +93,9 @@ function spawnMcp(mode = '') {
   const exited = new Promise<number | null>(done => child.on('close', code => done(code)));
   children.push({ child, closed: exited });
   const events = (): string[] => existsSync(file) ? readFileSync(file, 'utf-8').split('\n').filter(Boolean) : [];
-  const waitFor = async (event: string, timeoutMs = 20_000): Promise<void> => {
+  const waitFor = async (event: string, timeoutMs = 20_000, after?: string): Promise<void> => {
     const until = Date.now() + timeoutMs;
-    while (!events().includes(event)) {
+    while (!(after ? events().slice(events().indexOf(after) + 1) : events()).includes(event)) {
       if (Date.now() > until || child.exitCode !== null || child.signalCode !== null) {
         throw new Error(`timed out waiting for ${event}; events=${JSON.stringify(events())}; stderr=${stderr.slice(-2000)}`);
       }
@@ -173,7 +175,8 @@ describe("MCP root — shutdown sequence ('mcp-legacy', row 28)", () => {
 describe('MCP root — failed-boot cleanup (row 29)', () => {
   it('after houses are built: drains worlds/houses, closes the store DB then execution stores, releases, closes the host DB', async () => {
     const mcp = spawnMcp('boot-fails');
-    await mcp.waitFor(HOST_DB);
+    await mcp.waitFor('boot.fail');
+    await mcp.waitFor(HOST_DB, 20_000, 'boot.fail');
     const events = mcp.events();
     expect(sequence(events.slice(events.indexOf('boot.fail') + 1))).toEqual([
       'worlds.stop', 'houses.stop', 'worlds.whenIdle',

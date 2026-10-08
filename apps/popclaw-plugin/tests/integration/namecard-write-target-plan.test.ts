@@ -1,4 +1,5 @@
 import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
+import { initializeTestRoot } from '../helpers/initialize-test-root.js';
 /**
  * One namecard write = one captured target plan, on the real MCP root.
  *
@@ -194,6 +195,7 @@ async function scenario(opts: { h2Avatar: string; restartAfterLogin?: boolean })
   const dir = mkdtempSync(join(tmpdir(), 'namecard-plan-'));
   cleanup.push(() => rmSync(dir, { recursive: true, force: true }));
   const dataRoot = join(dir, 'data');
+  initializeTestRoot(dataRoot);
   mkdirSync(join(dataRoot, 'config', 'cadence'), { recursive: true });
   writeFileSync(join(dataRoot, 'config', 'plugin.json'), JSON.stringify({
     lore_houses: [o1],

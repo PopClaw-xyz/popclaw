@@ -87,7 +87,10 @@ const tools = sdk.tools(assertCurrent);
 const draftTool = tools.find((tool: any) => tool.name === 'popclaw_draft_message')!;
 const draft = await draftTool.execute('real-preparation', {recipient: fixtureKey(5).id, body: 'Complete original body'});
 const resultText = (r: any): string => r.text ?? r.content?.find((part: any) => part.type === 'text')?.text;
-const draftId = /draft_id: (\S+)/.exec(resultText(draft))![1]!;
+const draftResult = JSON.parse(resultText(draft));
+assert.equal(typeof draftResult.owner_text, 'string');
+const draftId = draftResult.draft_id;
+assert.equal(typeof draftId, 'string');
 const before = sdk.runtime.manuscript(draftId);
 assert(before?.output);
 const ctx = { agentId: 'main', sessionKey, sessionId: entry.sessionId, toolCallId: 'send-first',
@@ -148,7 +151,9 @@ await assert.rejects(staleTool.execute('stale-confirmation', event.params), /SYN
 assert.equal(sdk.runtime.effects(), 0);
 assert.deepEqual(sdk.runtime.manuscript(draftId), before);
 current = true;
-assert.match(text(await send(invocation)), /event_id:/);
+const sentResult = JSON.parse(text(await send(invocation)));
+assert.equal(typeof sentResult.event_id, 'string');
+assert.equal(sentResult.owner_text, '✉️ Letter sent\nTo: Alice#68p3z7jy\n\nThe relay accepted the letter; recipient delivery is not confirmed.');
 assert.equal(sdk.runtime.effects(), 1);
 const effect = sdk.runtime.effectsData()[0];
 assert.equal(effect.house, before.house);

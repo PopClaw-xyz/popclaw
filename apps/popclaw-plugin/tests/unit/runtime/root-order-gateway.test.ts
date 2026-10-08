@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { initializeTestRoot } from '../../helpers/initialize-test-root.js';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { clearPerProcess, getOrCreatePerProcess } from '../../../src/runtime/once.js';
@@ -252,6 +253,7 @@ afterEach(() => {
 function newState(): string {
   const state = mkdtempSync(join(tmpdir(), 'popclaw-order-gw-'));
   roots.push(state);
+  initializeTestRoot(join(state, 'popclaw'));
   mkdirSync(join(state, 'popclaw', 'config'), { recursive: true });
   writeFileSync(join(state, 'popclaw', 'config', 'plugin.json'), JSON.stringify({ lore_houses: [HOUSE], canvas_base_url: HOUSE }));
   return state;

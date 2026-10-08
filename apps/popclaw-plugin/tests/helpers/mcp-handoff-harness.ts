@@ -10,6 +10,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { MasterKeySigner } from '../../src/identity/master-key-signer.js';
 import { readCredentialMessage } from '../../src/identity/read-credential.js';
 import { seedTrustedHouse, SEEDED_HOUSE_KEY } from './seed-trusted-house.js';
+import { initializeTestRoot } from './initialize-test-root.js';
 
 export const pluginRoot = fileURLToPath(new URL('../../', import.meta.url));
 export async function seedIdentity(root: string, house: string, nickname: string) {
@@ -20,6 +21,7 @@ export async function seedIdentity(root: string, house: string, nickname: string
   mkdirSync(join(root, 'vault/social/identity'), { recursive: true });
   mkdirSync(join(root, 'config/cadence'), { recursive: true });
   writeFileSync(join(root, 'vault/social/identity/master.key'), JSON.stringify({ version: 1, type: 'master-raw-seed', created_at: new Date().toISOString(), public_key: id, seed: Buffer.from(seed).toString('hex') }), { mode: 0o600 });
+  initializeTestRoot(root);
   writeFileSync(join(root, 'config/plugin.json'), JSON.stringify({ lore_houses: [house], nickname }));
   writeFileSync(join(root, 'config/cadence/cadence.json'), JSON.stringify({ schemaVersion: 1, delivery: { primaryLanguage: 'en' }, notifications: { vipExternalFollowerThreshold: 100 } }));
   // A modern house this machine has already trusted. Without both halves the

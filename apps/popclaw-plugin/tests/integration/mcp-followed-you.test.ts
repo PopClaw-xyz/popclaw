@@ -32,6 +32,7 @@ import { LocalHostDb } from '../../src/host/local-host-db.js';
 import { hostDbSlug } from '../../src/ingress/host-slug.js';
 import { readCredentialMessage } from '../../src/identity/read-credential.js';
 import { seedTrustedHouse, SEEDED_HOUSE_KEY } from '../helpers/seed-trusted-house.js';
+import { initializeTestRoot } from '../helpers/initialize-test-root.js';
 
 const pkgRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 /** Base58, so the announcement path renders it the way it renders a real one. */
@@ -130,6 +131,7 @@ function startFakeHouse(followers: string[]) {
 /** A data root pointed at `house`, which this machine already trusts and has synced once. */
 async function seedDataRoot(house: string): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), 'popclaw-followed-'));
+  initializeTestRoot(dir);
   mkdirSync(join(dir, 'config', 'cadence'), { recursive: true });
   writeFileSync(join(dir, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [house] }));
   writeFileSync(

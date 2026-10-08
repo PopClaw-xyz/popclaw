@@ -129,10 +129,11 @@ describe('a rename reaches another process sharing the data root', () => {
     // Two hosts over one root stand in for the gateway and an MCP server:
     // separate adapters, so the in-process listener of one never fires in the other.
     const gateway = new LocalHostAdapter({ dataRoot: root, logger });
-    const mcp = new LocalHostAdapter({ dataRoot: root, logger });
+    let mcp: InstanceType<typeof LocalHostAdapter> | undefined;
     try {
       await gateway.config.saveJson('plugin', { lore_houses: ['http://lh.example'] });
       const gatewayBoot = await bootstrapPlugin(gateway);
+      mcp = new LocalHostAdapter({ dataRoot: root, logger });
       const mcpBoot = extendBoot(await bootstrapPlugin(mcp), {});
       expect(mcpBoot.nickname).toMatch(/^ranger-/);
       await persistNickname(gateway, NEW_NAME, 'owner');
@@ -140,7 +141,7 @@ describe('a rename reaches another process sharing the data root', () => {
       expect(mcpBoot.nickname).toBe(NEW_NAME);
     } finally {
       gateway.db.close();
-      mcp.db.close();
+      mcp?.db.close();
       rmSync(root, { recursive: true, force: true });
     }
   });

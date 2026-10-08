@@ -281,7 +281,7 @@ describe('路由表 · DM → 来信那座坊（切片④）', () => {
       { positional: [RECIPIENT, 'hey'] },
       { signer: makeTestSigner('BlackFeather'), egress: e.egress, nickname: 'BlackFeather', houseOfRecipient: (id) => store.houseOf(id) },
     );
-    expect(out.text).toContain('sent DM');
+    expect(out.text).toBe('✉️ Letter sent\nTo: #tamcb0xk\n\nThe relay accepted the letter; recipient delivery is not confirmed.');
     expect(e.all()).toEqual({ [HOME]: 0, [WORLD]: 1 });
   });
 

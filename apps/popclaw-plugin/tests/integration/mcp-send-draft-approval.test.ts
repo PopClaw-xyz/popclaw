@@ -22,8 +22,10 @@ describe('ordinary local MCP send without an extra approval surface', () => {
     await original.call('popclaw_show_inbox');
     const before = relay.frames.size;
     const draft = text(await original.call('popclaw_draft_message', {recipient: bob.id, house: relay.url, body: manuscript, attachment_path: attachment}));
-    expect(draft).toContain(manuscript.trim());
-    const id = /draft_id: (\S+)/.exec(draft)![1]!;
+    const parsed = JSON.parse(draft);
+    expect(parsed.owner_text).toContain(manuscript);
+    expect(parsed.recipient_popclaw_id).toBe(bob.id);
+    const id = parsed.draft_id; expect(id).toBeTypeOf('string');
     for (let n = 0; n < 20; n++) await original.call('popclaw_draft_message', {recipient: bob.id, body: `Pressure ${n}`, house: relay.url});
     expect(relay.frames.size).toBe(before); await original.close();
     writeFileSync(attachment, 'Changed path bytes');
@@ -35,10 +37,10 @@ describe('ordinary local MCP send without an extra approval surface', () => {
     expect(text(await wrong.call('popclaw_send_draft', {draft_id: id}))).toContain('different conversation');
     expect(relay.frames.size).toBe(before); await wrong.close();
     const fresh = await connectMcp(alice.root, 'retained-chat'); cleanups.push(() => fresh.close());
-    expect(text(await fresh.call('popclaw_send_draft', {draft_id: id}))).toContain('event_id:');
+    expect(JSON.parse(text(await fresh.call('popclaw_send_draft', {draft_id: id}))).event_id).toBeTypeOf('string');
     expect(fresh.dialogs).toHaveLength(0); expect(relay.frames.size).toBe(before + 1);
     const env = popclaw.event.EventEnvelope.decode([...relay.frames.values()].at(-1)!);
-    expect(bob.signer.openDm(env.directMessage!, alice.id)).toMatchObject({ok: true, plaintext: manuscript.trim()});
+    expect(bob.signer.openDm(env.directMessage!, alice.id)).toMatchObject({ok: true, plaintext: manuscript});
     const dm = env.directMessage!;
     const media = bob.signer.openDmMedia({ciphertext: dm.mediaCiphertext, nonce: dm.mediaNonce}, alice.id);
     expect(media.ok && new TextDecoder().decode(media.bytes)).toBe('Actual approved file bytes');
@@ -56,7 +58,7 @@ describe('ordinary local MCP send without an extra approval surface', () => {
     const draft = text(await client.call('popclaw_draft_message', {recipient: bob.id, house: relay.url, body: manuscript}));
     expect(JSON.parse(draft).owner_text).toContain(manuscript); expect(relay.frames.size).toBe(before);
     const id = JSON.parse(draft).draft_id;
-    expect(text(await client.call('popclaw_send_draft', {draft_id: id}))).toContain('event_id');
+    expect(JSON.parse(text(await client.call('popclaw_send_draft', {draft_id: id}))).event_id).toBeTypeOf('string');
     expect(client.dialogs).toHaveLength(0); expect(relay.frames.size).toBe(before + 1);
     await client.call('popclaw_send_draft', {draft_id: id});
     expect(relay.frames.size).toBe(before + 1);

@@ -20,6 +20,7 @@ import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { LocalHostDb } from '../../src/host/local-host-db.js';
 import { seedTrustedHouse } from '../helpers/seed-trusted-house.js';
+import { initializeTestRoot } from '../helpers/initialize-test-root.js';
 import { renderCopy } from '../../src/lexicon/index.js';
 import type { ToolNotice } from '../../src/notifier/tool-notice.js';
 
@@ -117,6 +118,7 @@ async function startServer(dataRoot: string, extraEnv: NodeJS.ProcessEnv = {}): 
  */
 async function seedDataRoot(house: string): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), 'popclaw-mcp-'));
+  initializeTestRoot(dir);
   mkdirSync(join(dir, 'config', 'cadence'), { recursive: true });
   writeFileSync(join(dir, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [house] }));
   writeFileSync(
@@ -126,7 +128,8 @@ async function seedDataRoot(house: string): Promise<string> {
   // A modern house this machine already trusts: without a verified binding
   // and a declared read scheme, the inbox stream refuses to open and the
   // consumer-stream assertions below would be measuring the refusal.
-  await seedTrustedHouse(dir, house);
+  await seedTrustedHouse(dir, house, {world_interaction: {version: 1, public_stream: {endpoint: '/v1/world-stream',
+    mode: 'public-v1', log_incarnation: 'log_stdio', envelope_baseline: 'public-envelope-01', initial_public_scopes: []}}});
   return dir;
 }
 
@@ -331,7 +334,7 @@ describe('MCP unread piggyback + notifications tool', () => {
   it('popclaw_notifications remains pending until explicit host acknowledgement', async () => {
     const res = await mcp.request('tools/call', { name: 'popclaw_notifications', arguments: {} });
     const content = res.result?.['content'] as Block[];
-    expect(content[0]?.text).toContain('私信');
+    expect(JSON.parse(content[0]!.text).owner_text).toContain('📨 收到信件\n来自：');
     expect(content[0]?.text).toContain('新粉');
     // Explicit reads are not decorated or cooled down, and are not ACK.
     expect(hasPiggyback(content)).toBe(false);
@@ -476,17 +479,18 @@ describe('MCP citizen mode does not advertise as a ranger', () => {
     }
   }, 90_000);
 
-  it('opens the consumer streams but never the ranger quest stream', async () => {
+  it('opens the public and personal streams but never the ranger quest stream', async () => {
     paths.length = 0;
     const mcp = await bootAndSettle({});
-    expect(paths.some((p) => p.includes('/world-feed/stream'))).toBe(true);
+    expect(paths.some((p) => p.includes('/v1/world-stream'))).toBe(true);
+    expect(paths.filter((p) => p.includes('/world-feed/stream'))).toEqual([]);
     expect(paths.some((p) => p.includes('/inbox/'))).toBe(true);
     expect(paths.filter((p) => p.includes('/v1/discovery'))).toEqual([]);
     expect(paths.filter((p) => p.startsWith('POST /v1/push'))).toEqual([]);
     expect(mcp.stderr).toContain('mode=citizen (consumer-only)');
   }, 60_000);
 
-  it('opts in only on the literal flag value (fail-closed)', async () => {
+  it('recognizes only the literal ranger flag while public-v1 forbids legacy quest reception', async () => {
     paths.length = 0;
     const off = await bootAndSettle({ POPCLAW_MCP_ENABLE_RANGER: '1' });
     expect(paths.filter((p) => p.includes('/v1/discovery'))).toEqual([]);
@@ -494,7 +498,10 @@ describe('MCP citizen mode does not advertise as a ranger', () => {
 
     paths.length = 0;
     const on = await bootAndSettle({ POPCLAW_MCP_ENABLE_RANGER: 'true' });
-    expect(paths.some((p) => p.includes('/v1/discovery'))).toBe(true);
+    expect(paths.filter((p) => p.includes('/v1/discovery'))).toEqual([]);
+    expect(paths.filter((p) => p.startsWith('POST /v1/push'))).toEqual([]);
+    expect(paths.some((p) => p.includes('/v1/world-stream'))).toBe(true);
+    expect(paths.some((p) => p.includes('/inbox/'))).toBe(true);
     expect(on.stderr).toContain('mode=ranger');
   }, 90_000);
 });

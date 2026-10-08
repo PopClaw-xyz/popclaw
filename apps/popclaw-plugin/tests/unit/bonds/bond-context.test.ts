@@ -170,17 +170,17 @@ describe('bondContext — 截图那条推送的 en/zh 对照（验收核心）',
     );
   }
 
-  it('zh：与迁移前产线原文逐字节相同', () => {
+  it('zh：完整信件展示保留发件人、附件和关系尾行', () => {
     const line = pushLine('zh-CN', '白鹭昭武大将军');
     expect(line).toBe(
-      `📨 白鹭昭武大将军#${SIGIL} 给你发了一条语音 📎\n${BOND_CONTEXT_PREFIX}认识 · 今天他给你来过信`,
+      `📨 收到信件\n来自：白鹭昭武大将军#${SIGIL}\n\n📎 附件：1.ogg\n${BOND_CONTEXT_PREFIX}认识 · 今天他给你来过信`,
     );
   });
 
   it('en：整条推送不含任何 CJK（这正是截图报障的混杂）', () => {
     const line = pushLine('en', 'Egret');
     expect(line).toBe(
-      `📨 Egret#${SIGIL} sent you a voice clip 📎\n${bondContextPrefix('en')}acquaintance · messaged you today`,
+      `📨 Letter received\nFrom: Egret#${SIGIL}\n\n📎 Attachment: 1.ogg\n${bondContextPrefix('en')}acquaintance · messaged you today`,
     );
     expect(line).not.toMatch(/[一-鿿]/);
     expect(line).not.toContain('　'); // the CJK ratchet's Han-only regex above wouldn't catch a stray full-width space

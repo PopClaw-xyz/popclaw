@@ -24,6 +24,7 @@ import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
  * went missing.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { initializeTestRoot } from '../helpers/initialize-test-root.js';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -196,6 +197,7 @@ function startFixture() {
  */
 function seedDataRoot(minted: MintedHouse): string {
   const dir = mkdtempSync(join(tmpdir(), 'popclaw-doorbell-'));
+  initializeTestRoot(dir);
   mkdirSync(join(dir, 'config', 'cadence'), { recursive: true });
   writeFileSync(join(dir, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [minted.origin] }));
   writeFileSync(

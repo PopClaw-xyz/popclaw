@@ -1,4 +1,4 @@
-import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
+import { initializeTestRoot } from '../helpers/initialize-test-root.js';
 import { afterEach, expect, it } from 'vitest';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -49,6 +49,7 @@ async function fixture(mode: string | null = 'public-v1', intent = true, held = 
   mkdirSync(paths.identityDir(), { recursive: true });
   writeFileSync(join(paths.identityDir(), 'master.key'), JSON.stringify({ version: 1, type: 'master-raw-seed',
     created_at: '2026-01-01T00:00:00Z', public_key: actorId, seed: Buffer.from(actorSeed).toString('hex') }), { mode: 0o600 });
+  initializeTestRoot(paths.rootDir());
   const envelope = new popclaw.event.EventEnvelope({ actor: { popclawId: actorId, nickname: 'Synthetic' }, timestamp: 1_700_000_000,
     post: { blocks: [{ content: 'Synthetic public root evidence' }] } });
   const canonical = canonicalizeEnvelope(envelope);
@@ -294,13 +295,22 @@ it.each([false, true])('actual public root with held=%s never opens an unauthori
   f.noForbidden();
 }, 30_000);
 
-it.each([null, '1'])('actual mode %s preserves its separately selected ordinary me transport', async mode => {
-  const f = await fixture(mode, false), run = f.start(); await run.activate();
-  await loginMcpHouse(f.paths.rootDir(), f.origin, () => run.rpc('tools/call', { name: 'popclaw_house_login', arguments: { host: f.origin } }));
-  const endpoint = mode === '1' ? '/v1/world-stream' : '/world-feed/stream';
-  await until(() => f.requests.some(request => request.url.startsWith(endpoint)), run.stderr);
-  expect(f.requests.some(request => request.url.includes('mode=public-v1'))).toBe(false);
-  expect(await run.capabilities()).toMatchObject({ public_reception: { mode: 'unselected', support: 'unsupported' } });
+it('unset mode selects public-v1 and receives the exact original envelope', async () => {
+  const f = await fixture(null), run = f.start(); await run.activate();
+  await until(() => f.execution(db => db.queryAll('SELECT * FROM world_public_events_v1').length) === 1, run.stderr);
+  expect(f.execution(db => new Uint8Array(db.queryOne<{envelope: Uint8Array}>('SELECT envelope FROM world_public_events_v1')!.envelope))).toEqual(f.original);
+  expect(await run.capabilities()).toMatchObject({ public_reception: { mode: 'public-v1', support: 'supported' } });
+  expect(f.requests.filter(request => request.url.includes('/world-feed/') || request.url.includes('/inbox/'))).toEqual([]);
+  f.noForbidden();
+}, 30_000);
+
+it('explicit mode 1 refuses activation before any house networking', async () => {
+  const f = await fixture('1', false), run = f.start(); await run.activate();
+  await until(() => run.stderr().includes('RECEIVE_MODE_INVALID'), run.stderr);
+  const result = await run.rpc('tools/call', {name: 'popclaw_world_capabilities', arguments: {host: f.origin}});
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result)).toContain('RECEIVE_MODE_INVALID');
+  expect(f.requests).toEqual([]);
   f.noForbidden();
 }, 30_000);
 
@@ -314,7 +324,9 @@ it('normal actual startup refuses a missing protected journal table without recr
   try { damaged.execute('DROP TABLE world_public_imports_v1'); } finally { damaged.close(); }
   const run = f.start(); await run.activate();
   await until(() => run.stderr().includes('EXECUTION_REQUIRED_TABLE_MISSING'), run.stderr);
-  expect(await run.capabilities()).toMatchObject({ public_reception: { support: 'unsupported', transport: 'inactive' } });
+  const result = await run.rpc('tools/call', {name: 'popclaw_world_capabilities', arguments: {host: f.origin}});
+  expect(result.isError).toBe(true);
+  expect(JSON.stringify(result)).toContain('EXECUTION_REQUIRED_TABLE_MISSING');
   expect(f.requests.some(request => request.url.includes('/v1/world-stream'))).toBe(false);
   expect(f.execution(db => db.queryOne("SELECT name FROM sqlite_master WHERE name='world_public_imports_v1'"))).toBeNull();
   f.noForbidden();

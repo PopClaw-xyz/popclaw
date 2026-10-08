@@ -28,9 +28,12 @@ it('document/audio byte delivery is supported, but MCP returns only a local path
     const bytes = Buffer.from(`ATTACHMENT-ONLY-CANARY-${ext}\n# transport fixture\n`);
     const path = join(root, `fixture.${ext}`); writeFileSync(path, bytes);
     const draft = text(await sender.call('popclaw_draft_message', { recipient: bob.id, house:relay.url, body: `AUDIT-${ext}`, attachment_path: path }));
-    const token = /draft_id: (\S+)/.exec(draft)?.[1]; expect(token).toBeTruthy();
+    const parsed = JSON.parse(draft);
+    const token = parsed.draft_id; expect(token).toBeTypeOf('string');
+    expect(parsed.recipient_popclaw_id).toBe(bob.id);
+    expect(parsed.owner_text).toContain(`AUDIT-${ext}`);
     const dialogsBefore = sender.dialogs.length;
-    expect(text(await sender.call('popclaw_send_draft', { draft_id: token }))).toContain('event_id:');
+    expect(JSON.parse(text(await sender.call('popclaw_send_draft', { draft_id: token }))).event_id).toBeTypeOf('string');
     expect(draft).toContain(`AUDIT-${ext}`);
     expect(draft).toContain(bob.id);
     expect(sender.dialogs.length).toBe(dialogsBefore);
@@ -53,7 +56,7 @@ it('document/audio byte delivery is supported, but MCP returns only a local path
   const before = relay.frames.size;
   for (const ext of ['doc', 'docx']) {
     const path = join(root, `unsupported.${ext}`); writeFileSync(path, 'extension rejection fixture');
-    expect(text(await sender.call('popclaw_draft_message', { recipient: bob.id, house:relay.url, body: 'unsupported Word test', attachment_path: path }))).not.toContain('draft_id:');
+    expect(text(await sender.call('popclaw_draft_message', { recipient: bob.id, house:relay.url, body: 'unsupported Word test', attachment_path: path }))).not.toContain('draft_id');
   }
   expect(relay.frames.size).toBe(before);
 }, 60_000);

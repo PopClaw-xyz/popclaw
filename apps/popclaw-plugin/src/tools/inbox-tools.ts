@@ -98,7 +98,7 @@ export function registerInboxTools(ctx: ToolsCtx): void {
       // hint below is the fix; this wording is a general aid for finding a just-sent letter.
       'With no arguments it lists the newest DMs first, so to find "the letter X just sent" or ' +
       '"the message X sent at 22:57", list and match `from` and `ts` — never ask the owner for an id. ' +
-      'A notice titled "Letter received" or "收到信件" also refers to this inbox. Match sender and receipt time; message_id is internal. ' +
+      'A letter-received notice in the owner’s language also refers to this inbox. Match sender and receipt time; message_id is internal. ' +
       DM_DISPLAY_INSTRUCTION + ' ' +
       "This is the owner's DM inbox — not popclaw_world_private_messages, which reads a House session's own material. " +
       'If the tool fails, tell the owner it failed — never make up a result. ' +

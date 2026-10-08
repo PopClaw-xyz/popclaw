@@ -49,14 +49,16 @@ it('two MCP processes: encrypted screenshot → durable handoff → full image �
   expect(hook).toContain('pending notifications');
   const before = relay.frames.size;
   const draft = text(await b.call('popclaw_draft_message', { reply_to_message_id: item.id, body: 'CASE-IMG-1: fixed the Save spacing; please verify.' }));
-  const token = /draft_id: (\S+)/.exec(draft)?.[1]; expect(token).toBeTruthy();
+  const parsed = JSON.parse(draft);
+  const token = parsed.draft_id; expect(token).toBeTypeOf('string');
+  expect(parsed.recipient_popclaw_id).toBe(alice.id);
   expect(relay.frames.size).toBe(before); // Draft has not sent.
   const dialogsBefore = b.dialogs.length;
   const sent = text(await b.call('popclaw_send_draft', { draft_id: token! }));
-  expect(sent).toContain('event_id:');
+  expect(JSON.parse(sent).event_id).toBeTypeOf('string');
   expect(draft).toContain('CASE-IMG-1: fixed the Save spacing; please verify.');
   expect(draft).toContain(alice.id);
-  expect(draft).toContain(signed.eventId);
+  expect(parsed.owner_text).not.toContain(signed.eventId);
   expect(draft).toContain('CASE-IMG-1: the Save button overlaps the warning.');
   expect(b.dialogs.length).toBe(dialogsBefore);
   const reply = [...relay.frames.values()].map((v) => popclaw.event.EventEnvelope.decode(v)).find((e) => e.actor?.popclawId === bob.id)!;

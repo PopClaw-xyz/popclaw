@@ -213,7 +213,7 @@ describe('dm_sent — runPopclawMessageCommand', () => {
       { positional: [RECIPIENT, 'hi'] },
       msgDeps(exploding),
     );
-    expect(r.text).toContain('✉️ sent DM');
+    expect(r.text).toBe('✉️ Letter sent\nTo: #dxpzk557\n\nThe relay accepted the letter; recipient delivery is not confirmed.');
   });
 });
 

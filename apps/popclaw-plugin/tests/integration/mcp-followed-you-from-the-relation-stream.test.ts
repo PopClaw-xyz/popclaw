@@ -26,6 +26,7 @@ import { loginMcpHouse } from '../helpers/mcp-normal-login.js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { initializeTestRoot } from '../helpers/initialize-test-root.js';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { createServer, type ServerResponse } from 'node:http';
@@ -185,6 +186,7 @@ function startRelayingHouse() {
 /** A data root that knows this house's address and nothing else about it. */
 function freshDataRoot(house: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'popclaw-relation-followed-'));
+  initializeTestRoot(dir);
   mkdirSync(join(dir, 'config', 'cadence'), { recursive: true });
   writeFileSync(join(dir, 'config', 'plugin.json'), JSON.stringify({ lore_houses: [house] }));
   writeFileSync(
