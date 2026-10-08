@@ -56,7 +56,7 @@ describe('ordinary social draft persistence across real Node processes and SQLit
       : kind === 'reply' ? {platform: 'x', post_id: 'post-a', body} : kind === 'feedback' ? {kind: 'need', body} : {body, reply_to_event_id: 'ab'.repeat(32)};
     const draft = await child({root: dir, name, params, pressure: 20});
     expect(draft.error).toBeUndefined(); const id = idOf(draft.result!.text);
-    const reviewText = kind === 'message' || kind === 'feedback' ? JSON.parse(draft.result!.text).owner_text : draft.result!.text;
+    const reviewText = kind === 'message' ? JSON.parse(draft.result!.text).owner_text : draft.result!.text;
     expect(reviewText).toContain(body);
     expect(id).toMatch(/^(message|reply|post)-s\d+$/);
     expect(draft.effects).toEqual([]); writeFileSync(attachment, 'changed disk attachment');
