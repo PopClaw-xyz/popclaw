@@ -26,6 +26,7 @@ import {
   type DraftAttachmentSnapshot, type DraftSnapshot,
 } from './draft-store.js';
 import { loadDmAttachment } from '../messaging/dm-media.js';
+import { checkDirectMessageFits } from '../messaging/sign-message.js';
 import { deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
 import { withDraftReview } from './draft-review.js';
 import {retainSocialDraft, socialDraftToken} from './durable-social-drafts.js';
@@ -185,6 +186,15 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
           // recipient and house, so confirming one draft can only ever send
           // that one letter to that one contact.
           draftDm: async (plan, send) => {
+            if (attachment) {
+              try {
+                await checkDirectMessageFits(rt.boot.signer, {toPopclawId: plan.contactPopclawId, body: plan.body,
+                  nickname: rt.boot.nickname, media: attachment});
+              } catch (err) {
+                if (String(err).includes('WIRE_LIMIT')) return {text: renderCopy(ownerLang(), 'message.wireLimit')};
+                throw err;
+              }
+            }
             const token = await socialDraftToken(deps, 'message');
             // A letter is parked under the `message` prefix because it is an
             // outbound DM and must clear the DM door, but what the owner is

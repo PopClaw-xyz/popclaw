@@ -218,31 +218,6 @@ function fail(reason: DmDecryptFailure): DmDecryptResult {
 // screenshot." The length is still visible (metadata privacy was never
 // promised).
 
-/**
- * The cap for a single image (raw bytes before sealing).
- *
- * This number isn't set by the send path — it's set by **reconnect replay**:
- * the inbox replays `replay_limit` items on every (re)connection, and SSE
- * frames are still base64 (+33%). 1MB x 50 items x 1.33 ≈ 66MB per replay is
- * already about the upper limit tolerable on a phone hotspot; doubling it
- * again wouldn't just be slow, it would be unusable.
- *
- * A separate, independent constraint: the lore-house's `POST /v1/push` goes
- * through axum's `DefaultBodyLimit`, default 2MB, and the upload is raw
- * protobuf (no base64). A 1MB payload ≈ a 1MB request body, leaving a full 2x
- * margin — pushing this up to 2MB would hit that gate and require a
- * server-side change too.
- *
- * Transcoding is **not done here**: Node has no built-in image transcoding,
- * and pulling in sharp (libvips) would add another native dependency to a
- * plugin that already maintains a 16-cell better-sqlite3 prebuild matrix,
- * which runs against ADR-0035's "installation must stay cheap." Over the
- * limit gets an honest rejection, and the agent should use its own image
- * tooling to compress — the same iron rule of "tools produce material, the
- * agent renders it" applied to images.
- */
-export const MAX_DM_MEDIA_BYTES = 1024 * 1024;
-
 /** The separator between mime and bytes in the plaintext. */
 const MIME_SEP = 0x0a; // '\n'
 
@@ -267,13 +242,8 @@ export function encryptDmMedia(
   recipientPopclawId: string,
   senderEd25519SecretKey: Uint8Array,
 ): SealedDmBody {
-  if (bytes.length > MAX_DM_MEDIA_BYTES) {
-    // Throw at the sealing step, rather than letting an envelope doomed to be
-    // rejected by the lore-house go out and fail later.
-    throw new Error(
-      `encryptDmMedia: media is ${bytes.length} bytes, over the ${MAX_DM_MEDIA_BYTES}-byte (1MB) cap`,
-    );
-  }
+  // Preserve the original bytes. Capacity belongs to the complete signed
+  // EventEnvelope, not to a separate file budget.
   if (!mime || mime.includes('\n')) {
     throw new Error('encryptDmMedia: mime must be non-empty and contain no newline');
   }

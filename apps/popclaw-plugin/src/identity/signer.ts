@@ -39,9 +39,9 @@ export interface Signer {
   openDm(sealed: MaybeSealedDmBody, senderPopclawId: string): DmDecryptResult;
   /**
    * Seal a picture into its OWN box for the same recipient (#231). THROWS on
-   * an unusable recipient id, an empty/newline-bearing mime, or media over
-   * {@link MAX_DM_MEDIA_BYTES} — all three are send-path programmer/user
-   * errors that must be loud, never a silent downgrade.
+   * an unusable recipient id or an empty/newline-bearing mime — these errors
+   * must be loud, never a silent downgrade. Complete signed-envelope capacity
+   * is checked by signEnvelope, not by this byte-preserving encryption method.
    */
   sealDmMedia(bytes: Uint8Array, mime: string, recipientPopclawId: string): SealedDmBody;
   /** Open a sealed picture. NEVER throws — same contract as {@link openDm}. */

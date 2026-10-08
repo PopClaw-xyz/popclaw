@@ -36,7 +36,7 @@ interface EgressLike {
 export interface PopclawMessageArgs {
   positional: string[];
   /** `--image <local path>`: attach a file to the message (image / voice /
-   *  text, ≤1MB). The flag keeps the name `--image` because it's the form
+   *  text, within the complete signed-envelope limit). The flag keeps the name `--image` because it's the form
    *  the owner is already using; what it can actually send is no longer
    *  just images (see the allowlist in dm-media.ts). */
   flags?: Record<string, string>;
@@ -124,9 +124,9 @@ export async function runPopclawMessageCommand(
     return { text: renderCopy(lang, 'message.usage') };
   }
   // Read and validate the image first: before doing anything network-bound
-  // or irreversible, filter out "unrecognized format / can't read / over
-  // 1MB". The tool side calls the same `loadDmImage` at draft stage, so
-  // failing only after the owner has confirmed can't happen.
+  // or irreversible, filter out unrecognized formats and unreadable files.
+  // Draft tools additionally check the complete envelope capacity before
+  // showing the owner the manuscript. Sending checks actual signed bytes.
   let media: { bytes: Uint8Array; mime: string; name: string } | undefined = deps.media;
   // Only when the caller did not already hand over what it approved.
   if (!media && imagePath) {

@@ -59,9 +59,8 @@ export function draftDigest(value: string | Uint8Array): string {
  * the bytes makes "what is sent is what was approved" true by construction
  * rather than by a comparison that can be skipped.
  *
- * Affordable because the format allowlist already caps one attachment at
- * `MAX_DM_MEDIA_BYTES` (1 MiB, dm-crypto.ts) and rejects anything larger at
- * DRAFT time. Local ordinary manuscripts move these bytes to HostDb instead
+ * Attachment drafts check the complete signed-envelope capacity before mint.
+ * Local ordinary manuscripts move these bytes to HostDb instead
  * of retaining an unbounded closure cache.
  */
 export interface DraftAttachmentSnapshot {
@@ -294,8 +293,8 @@ export type DraftContentKind = 'dm' | 'reply' | 'post' | 'feedback';
  * unbounded amount of retained memory: forty draft calls carrying a 1 MiB
  * attachment held forty idle megabytes, because nothing dropped an expired
  * draft until the NEXT one was minted. Sixteen is chosen against the two
- * numbers already here — `MAX_DM_MEDIA_BYTES` (1 MiB) bounds one attachment,
- * so this bounds the DM drafts at roughly sixteen megabytes — and against how
+ * numbers already here — the public signed-envelope limit bounds one attachment
+ * draft, so this bounds retained DM drafts — and against how
  * the feature is used: drafts are confirmed one at a time by a person, and
  * sixteen unconfirmed ones inside a single thirty-minute window is already
  * far past any real flow. It is counted PER KIND (see `evictOverflow`).

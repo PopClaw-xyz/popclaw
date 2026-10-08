@@ -664,20 +664,20 @@ describe('registerPopclawTools', () => {
     setOwnerLang('zh-CN', 'config'); // restore file default for tests after this one
   });
 
-  it('超 1MB 的图在**草稿阶段**就被拒：无 draft_id、egress 零调用', async () => {
+  it('超过完整公开协议信封容量的附件在草稿阶段拒绝，无 draft_id、egress 零调用', async () => {
     const { api, tools } = buildFakeApi();
     const fx = makeImageDmFixture();
     registerPopclawTools({ api, runtime: fx.runtime });
 
-    const huge = writeTmpImage('huge.png', new Uint8Array(1024 * 1024 + 1));
+    const huge = writeTmpImage('huge.png', new Uint8Array(1572864));
     const draft = await findTool(tools, 'popclaw_draft_message').execute('cid', {
       recipient: fx.recipientRef,
       body: 'hi',
       image_path: huge,
     });
     expect(draft.text).not.toMatch(/draft_id/);
-    expect(draft.text).toContain('1024.0 KB'); // 上限的具体数字
-    expect(draft.text).toMatch(/压/); // 下一步建议
+    expect(draft.text).toContain('公开协议信封的大小上限');
+    expect(draft.text).toContain('未发送');
     expect(fx.push).not.toHaveBeenCalled();
   });
 
@@ -1696,7 +1696,7 @@ describe('popclaw_note_taste', () => {
     // longer reach that bound by itself, so the negative case below pins it
     // with a body that does; a small attachment still goes through the
     // ordinary encrypted path.
-    it('a feedback over the envelope cap → honest size error, ZERO egress', async () => {
+    it.each([false, true])('a feedback over the envelope cap → honest size error, ZERO egress (attachment=%s)', async attach => {
       // A letter this long cannot fit the host's approval prompt, so the owner
       // reads it through the trusted draft preview and the approval binds that
       // delivery (tools/send-draft-subject.ts). Without the capability there
@@ -1705,9 +1705,7 @@ describe('popclaw_note_taste', () => {
       const { api, tools } = buildFakeApi(ownerDeliveringToolCtx());
       const push = vi.fn(async (_b: Uint8Array) => ({ status: 200, eventId: 'ab'.repeat(32) }));
       const doctorDir = mkdtempSync(join(tmpdir(), 'popclaw-doctor-'));
-      registerPopclawTools({
-        api,
-        runtime: makeMockRuntime({
+      const runtime = makeMockRuntime({
           egress: { push },
           guideClient: { fetchGuideText: async () => guideWithContact },
           paths: {
@@ -1717,18 +1715,26 @@ describe('popclaw_note_taste', () => {
             doctorDir: () => doctorDir,
             cadenceDir: () => join(doctorDir, 'config', 'cadence'),
           },
-        }),
-      });
+        });
+      const rt = await runtime(), sign = vi.spyOn(rt.boot.signer, 'sign');
+      registerPopclawTools({api, runtime});
 
       const draft = await findTool(tools, 'popclaw_feedback').execute('c', {
         kind: 'bug',
         // 1.6 MiB of body: sealed text alone lands the envelope past the 1.5 MiB bound.
         body: '报纸出不来 ' + 'x'.repeat(1_600_000),
+        attach_doctor_report: attach,
       });
-      // 信封大小只有签名那一刻才量得出来，所以这个诚实报错出现在确认之后
-      // （和 popclaw_draft_message 的正文一样）—— 两步都零外发。
-      const token = draftToken(draft.text)!;
-      const r = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
+      // Attachment drafts must preflight before preview/confirmation, without
+      // signing. The existing body-only lane retains its final send guard.
+      let r: {text: string} = draft;
+      if (attach) {
+        expect(draftToken(draft.text)).toBeFalsy();
+        expect(sign).not.toHaveBeenCalled();
+      } else {
+        const token = draftToken(draft.text)!;
+        r = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token);
+      }
 
       expect(push).not.toHaveBeenCalled(); // zero egress — nothing partially delivered
       expect(r.text).toContain('公开协议信封的大小上限');

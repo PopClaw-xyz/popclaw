@@ -2069,10 +2069,8 @@ export const ZH_CN: Lexicon = {
     // src/messaging/dm-media.ts (S13 slice) —— loadDmAttachment 给主人看的拒收文案
     // （回在 `{ ok: false, text }` 里，不是日志）。
     'dm.attachment.badFormat':
-      '⚠️ 这个格式发不了：{name}。认这些：图 jpg/png/gif/webp · 语音 ogg/opus/m4a/mp3/wav/amr · 文本 md/txt/csv/json/pdf。\nzip 和可执行文件一律不收（1MB 装不下值得压的东西，收信方解开前也读不懂）。',
+      '⚠️ 这个格式发不了：{name}。认这些：图 jpg/png/gif/webp · 语音 ogg/opus/m4a/mp3/wav/amr · 文本 md/txt/csv/json/pdf。\nzip 和可执行文件不收；格式白名单与容量无关。',
     'dm.attachment.notFound': '⚠️ 读不到这个文件：{path}',
-    'dm.attachment.tooBig':
-      '⚠️ {name} 有 {size}，超过私信附件 {limit} 的上限。\n压到 1MB 以内再发（popclaw 不做转码 —— 用你自己的工具压）。',
     'dm.attachment.empty': '⚠️ 这个文件是空的：{name}',
 
     // src/social-graph/followers-sync.ts (S13 slice) —— renderFollowedYou。

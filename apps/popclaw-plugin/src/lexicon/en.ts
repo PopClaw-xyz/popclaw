@@ -2492,10 +2492,8 @@ export const EN: Lexicon = {
     // src/messaging/dm-media.ts (S13 slice) — loadDmAttachment's owner-facing
     // rejection text (returned as `{ ok: false, text }`, not a log).
     'dm.attachment.badFormat':
-      "⚠️ Can't send that format: {name}. Allowed: images jpg/png/gif/webp · voice ogg/opus/m4a/mp3/wav/amr · text md/txt/csv/json/pdf.\nzip and executables are never accepted — nothing worth zipping fits in 1MB, and the recipient can't read it without unzipping first.",
+      "⚠️ Can't send that format: {name}. Allowed: images jpg/png/gif/webp · voice ogg/opus/m4a/mp3/wav/amr · text md/txt/csv/json/pdf.\nzip and executables are not accepted; this format allowlist is independent of capacity.",
     'dm.attachment.notFound': "⚠️ Can't read that file: {path}",
-    'dm.attachment.tooBig':
-      "⚠️ {name} is {size}, over the {limit} DM attachment cap.\nGet it under 1MB and resend — popclaw doesn't transcode, so use your own tool.",
     'dm.attachment.empty': '⚠️ That file is empty: {name}',
 
     // src/social-graph/followers-sync.ts (S13 slice) — renderFollowedYou.

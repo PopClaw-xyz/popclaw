@@ -57,6 +57,9 @@ export async function signEnvelope(
   };
   const ns = popclaw as unknown as Pb;
   const envelopeBytes = ns.event.EventEnvelope.encode(signedEnvelope).finish();
+  // CID and inner signature add bytes: check the actual signed envelope
+  // before creating an outer signature or permitting any egress.
+  checkEnvelopeWire(envelopeBytes);
 
   // 5. Outer signature over the encoded envelope.
   const outerSig = await signer.sign(envelopeBytes);

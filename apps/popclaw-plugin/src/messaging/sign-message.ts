@@ -19,6 +19,8 @@
 
 import { signEnvelope, type SignEnvelopeResult } from '../identity/sign-envelope.js';
 import type { Signer } from '../identity/signer.js';
+import { popclaw, checkEnvelopeWire } from '../protocol/public-envelope-generated.js';
+import nacl from 'tweetnacl';
 
 export interface PostRefArgs {
   readonly platform: string;
@@ -106,6 +108,23 @@ export async function signDirectMessage(
   signer: Signer,
   args: DirectMessageArgs,
 ): Promise<SignEnvelopeResult> {
+  return signEnvelope(signer, await buildDirectMessageEnvelope(signer, args));
+}
+
+/** Exact protobuf capacity check before showing a draft. No signature,
+ * SignedPayload, egress, confirmation or receipt is produced. Ed25519
+ * signatures have fixed length; the CID is a 64-character SHA-256 hex.
+ * Sending still checks the actual signed bytes in signEnvelope. */
+export async function checkDirectMessageFits(signer: Signer, args: DirectMessageArgs): Promise<number> {
+  const envelope = await buildDirectMessageEnvelope(signer, args);
+  const bytes = popclaw.event.EventEnvelope.encode({
+    ...envelope, eventId: '0'.repeat(64), signature: new Uint8Array(nacl.sign.signatureLength),
+  }).finish();
+  checkEnvelopeWire(bytes);
+  return bytes.length;
+}
+
+async function buildDirectMessageEnvelope(signer: Signer, args: DirectMessageArgs): Promise<Record<string, unknown>> {
   if (!args.nickname.trim()) {
     throw new Error('signDirectMessage: actor.nickname must be non-empty');
   }
@@ -144,5 +163,5 @@ export async function signDirectMessage(
     directMessage: dm,
     ...(args.replyToEventId ? { prevEventId: args.replyToEventId } : {}),
   };
-  return signEnvelope(signer, env);
+  return env;
 }

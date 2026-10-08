@@ -5,7 +5,6 @@ import ed2curve from 'ed2curve';
 import {
   encryptDmMedia,
   decryptDmMedia,
-  MAX_DM_MEDIA_BYTES,
   DM_NONCE_BYTES,
 } from '../../../src/messaging/dm-crypto.js';
 
@@ -88,13 +87,15 @@ describe('DM media encryption', () => {
     expect(out).toEqual({ ok: false, reason: 'malformed_media' });
   });
 
-  it('rejects oversized media at seal time instead of shipping an unsendable envelope', () => {
-    const tooBig = new Uint8Array(MAX_DM_MEDIA_BYTES + 1);
-    expect(() => encryptDmMedia(tooBig, 'image/gif', bob.popclawId, alice.secretKey)).toThrow(/1 ?MB|too large|上限/i);
+  it('seals media above the former 1 MiB cap without changing bytes', () => {
+    const bytes = new Uint8Array(1024 * 1024 + 1).fill(0xa7);
+    const sealed = encryptDmMedia(bytes, 'image/gif', bob.popclawId, alice.secretKey);
+    const opened = decryptDmMedia(sealed, alice.popclawId, bob.secretKey);
+    expect(opened.ok && opened.bytes).toEqual(bytes);
   });
 
-  it('accepts media exactly at the cap', () => {
-    const atCap = new Uint8Array(MAX_DM_MEDIA_BYTES);
+  it('accepts media exactly at the former cap', () => {
+    const atCap = new Uint8Array(1024 * 1024);
     expect(() => encryptDmMedia(atCap, 'image/gif', bob.popclawId, alice.secretKey)).not.toThrow();
   });
 

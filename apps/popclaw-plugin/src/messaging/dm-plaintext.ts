@@ -62,7 +62,7 @@ export function readDmBody(
  * is computed over the decrypted text (see {@link readDmBody}); mixing the
  * image in would make "the same line paired with a different image" get
  * misjudged as two separate messages — which would actually be correct
- * behavior, but more importantly, it would mean hashing up to 1MB of bytes on
+ * behavior, but more importantly, it would mean hashing attachment bytes on
  * every single message, which we should avoid.
  */
 export function readDmMedia(
@@ -81,4 +81,3 @@ export function readDmMedia(
   }
   return null;
 }
-

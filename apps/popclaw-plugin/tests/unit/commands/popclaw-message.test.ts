@@ -431,7 +431,6 @@ describe('runPopclawMessageCommand', () => {
       for (const flags of [
         { image: '/definitely/not/here.png' },
         { image: tmpImage('x.heic', new Uint8Array([1])) },
-        { image: tmpImage('big.png', new Uint8Array(1024 * 1024 + 1)) },
       ]) {
         const out = await runPopclawMessageCommand(
           { positional: [await recipient.popclawId(), 'hi'], flags },

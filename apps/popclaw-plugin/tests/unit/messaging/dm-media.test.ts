@@ -9,7 +9,6 @@ import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
 import type { MasterKey } from '../../../src/identity/keystore.js';
-import { MAX_DM_MEDIA_BYTES } from '../../../src/messaging/dm-crypto.js';
 import { loadDmAttachment, saveDmMedia, receiveDmMedia, dmMediaFileName } from '../../../src/messaging/dm-media.js';
 import { setOwnerTz } from '../../../src/time/time-context.js';
 import { deriveSigil } from '../../../src/invite/sigil.js';
@@ -71,21 +70,20 @@ describe('loadDmAttachment — 发送侧的闸', () => {
     expect(r.ok).toBe(false);
   });
 
-  it('rejects a file over MAX_DM_MEDIA_BYTES with the real numbers', () => {
+  it('reads a file over the former 1 MiB cap unchanged', () => {
     const dir = tmp();
     const p = join(dir, 'huge.png');
-    writeFileSync(p, Buffer.alloc(MAX_DM_MEDIA_BYTES + 1));
+    const bytes = Buffer.alloc(1024 * 1024 + 1);
+    writeFileSync(p, bytes);
     const r = loadDmAttachment(p);
-    expect(r.ok).toBe(false);
-    // 诚实文案：多大、上限多少、下一步怎么办。
-    expect(!r.ok && r.text).toContain('1024.0 KB'); // the cap
-    expect(!r.ok && r.text).toMatch(/压/);
+    expect(r.ok).toBe(true);
+    expect(r.ok && Buffer.from(r.bytes)).toEqual(bytes);
   });
 
-  it('accepts a file exactly at the cap', () => {
+  it('accepts a file exactly at the former cap', () => {
     const dir = tmp();
     const p = join(dir, 'edge.png');
-    writeFileSync(p, Buffer.alloc(MAX_DM_MEDIA_BYTES));
+    writeFileSync(p, Buffer.alloc(1024 * 1024));
     expect(loadDmAttachment(p).ok).toBe(true);
   });
 

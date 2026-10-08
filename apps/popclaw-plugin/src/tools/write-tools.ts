@@ -18,6 +18,8 @@ import { renderCopy } from '../lexicon/index.js';
 import { unresolvedText, displayNickname } from '../identity/person-resolver.js';
 import { DM_DISPLAY_INSTRUCTION, attachmentLine } from '../messaging/dm-presentation.js';
 import { loadDmAttachment } from '../messaging/dm-media.js';
+import { checkDirectMessageFits } from '../messaging/sign-message.js';
+import type { Signer } from '../identity/signer.js';
 import { runPopclawReplyCommand } from '../commands/popclaw-reply.js';
 import { runPopclawMessageCommand } from '../commands/popclaw-message.js';
 import { runPopclawPostCommand } from '../commands/popclaw-post.js';
@@ -296,9 +298,8 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       }
       const pinnedEgress = rt.egress?.capturePlan?.().egress ?? rt.egress;
       const replyToEventId = replySource?.eventId;
-      // The image is validated at the **draft stage**: an unrecognized format / unreadable /
-      // over 1MB is rejected right now, with no draft_id issued. Failing only after the owner
-      // has confirmed would be the worst possible order of events.
+      // Read once and check the complete sealed-envelope capacity before
+      // showing a draft. Never transform bytes to make them fit.
       let image: DraftAttachmentSnapshot | undefined;
       if (attachmentPath) {
         const loaded = loadDmAttachment(attachmentPath);
@@ -306,6 +307,16 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         // These bytes, and no later reading of that path, are what will be
         // sent — see DraftAttachmentSnapshot.
         image = { name: loaded.name, digest: draftDigest(loaded.bytes), mime: loaded.mime, bytes: loaded.bytes };
+      }
+      if (image) {
+        const boot = rt.boot as {signer: Signer; nickname: string};
+        try {
+          await checkDirectMessageFits(boot.signer, {toPopclawId: person.popclawId, body, nickname: boot.nickname,
+            ...(replyToEventId ? {replyToEventId} : {}), media: image});
+        } catch (err) {
+          if (String(err).includes('WIRE_LIMIT')) return {type: 'text' as const, text: renderCopy(ownerLang(), 'message.wireLimit')};
+          throw err;
+        }
       }
       const token = await socialDraftToken(deps, 'message');
       // The person resolved above is the person this letter is bound to. A

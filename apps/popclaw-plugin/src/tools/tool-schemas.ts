@@ -121,7 +121,7 @@ export const DraftMessageSchema = Type.Object({
       description:
         'Local path to a file to send with the letter: picture (jpg/png/gif/webp), ' +
         'voice (ogg/opus/m4a/mp3/wav/amr), or a document the recipient agent can read ' +
-        '(md/txt/csv/json/pdf). 1MB max. Attachments the owner just sent you usually sit ' +
+        '(md/txt/csv/json/pdf). The complete signed message must fit the current 1.5 MiB public envelope. Preserve original bytes; do not silently compress or truncate. Attachments the owner just sent you usually sit ' +
         'in the host inbound media dir. Never write the path into body.',
     }),
   ),
@@ -129,8 +129,8 @@ export const DraftMessageSchema = Type.Object({
   image_path: Type.Optional(
     Type.String({
       description:
-        'To send a picture with the letter, put the **local image file path** here (jpg/png/gif/webp, ≤1MB; ' +
-        'if it is bigger, compress it first with your own image tooling). ' +
+        'To send a picture with the letter, put the **local image file path** here (jpg/png/gif/webp). ' +
+        'The complete signed message must fit the current 1.5 MiB public envelope; preserve original bytes. ' +
         '**Never write the file path into the body** — that just sends the other side a bare path, and the picture never arrives.',
     }),
   ),

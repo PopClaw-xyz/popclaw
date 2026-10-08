@@ -287,16 +287,16 @@ describe('signDirectMessage — 图（#231）', () => {
     assertCanonicalRoundTrip(env.signedPayloadBytes);
   });
 
-  it('throws instead of sending when the picture is over the 1MB cap', async () => {
+  it('throws when the complete signed envelope exceeds the current protocol limit', async () => {
     const signer = makeSigner();
     await expect(
       signDirectMessage(signer, {
         toPopclawId: BOB_ID,
         body: 'hi',
         nickname: 'TestNick',
-        media: { bytes: new Uint8Array(1024 * 1024 + 1), mime: 'image/png' },
+        media: { bytes: new Uint8Array(2 * 1024 * 1024), mime: 'image/png' },
       }),
-    ).rejects.toThrow(/cap/);
+    ).rejects.toThrow('WIRE_LIMIT');
   });
 });
 
