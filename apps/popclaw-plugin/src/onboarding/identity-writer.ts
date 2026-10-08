@@ -40,7 +40,12 @@ export async function persistNickname(
     ...existing,
     ranger_profile: { ...rangerProfile, nickname: trimmed, name_source: source },
   });
-  for (const listener of nicknameListeners.get(host) ?? []) listener(trimmed);
+  notifyNicknamePersisted(host, trimmed);
+}
+
+/** Notify the existing live-name readers only after a successful config write. */
+export function notifyNicknamePersisted(host: HostAdapter, nickname: string): void {
+  for (const listener of nicknameListeners.get(host) ?? []) listener(nickname);
 }
 
 /** Reads ranger_profile.name_source; null when absent (legacy config → never nag). */

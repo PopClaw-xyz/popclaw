@@ -54,6 +54,7 @@ export async function ensureNamecardOnHouse(
   const log = deps.logger ?? { info: () => {}, warn: () => {} };
 
   const evidence = await readHouseProfileEvidence(houseUrl, deps.popclawId, {
+    oneLineIntro: deps.card.oneLineIntro,
     ...(deps.fetch ? { fetch: deps.fetch } : {}),
   });
   if (evidence.status === 'blocked') {
@@ -64,7 +65,9 @@ export async function ensureNamecardOnHouse(
   }
   const shouldPush =
     evidence.status === 'no-card' ||
-    Math.floor(evidence.declaredAtMs / 1000) < deps.card.declaredAt;
+    evidence.declaredAtMs < deps.card.declaredAt * 1000 ||
+    (evidence.declaredAtMs === deps.card.declaredAt * 1000 &&
+      (evidence.nickname !== deps.card.nickname || evidence.oneLineIntro !== (deps.card.oneLineIntro ?? '')));
 
   if (!shouldPush) return false;
   try {

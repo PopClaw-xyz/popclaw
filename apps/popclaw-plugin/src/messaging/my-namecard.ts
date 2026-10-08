@@ -12,19 +12,21 @@
  *
  * D2/D3 fixed by `signMyNamecard` + routing every push site through it
  * (orchestrator.ts / popclaw-name.ts / the renewal roots): one signing point
- * means one set of fields. The public client declares nickname/declaredAt
- * only; because the house's upsert is whole-row (ADR-0008), every push site
+ * means one set of fields. The public client declares nickname, persisted
+ * oneLineIntro and declaredAt; because the house's upsert is whole-row (ADR-0008), every push site
  * also passes `guardNamecardWrite` (namecard-write-guard.ts) so a row that
  * carries content this client cannot re-emit is never overwritten.
  */
 import type { HostAdapter } from '../host/host-adapter.js';
 import type { Signer } from '../identity/signer.js';
 import type { SignEnvelopeResult } from '../identity/sign-envelope.js';
-import { isPlaceholderNickname } from '../onboarding/identity-writer.js';
+import { isPlaceholderNickname, notifyNicknamePersisted } from '../onboarding/identity-writer.js';
 import { signProfile } from './sign-profile.js';
 
 export interface MyNamecard {
   readonly nickname: string;
+  /** Exact owner-authored public biography, including line breaks. Absent means empty on the wire. */
+  readonly oneLineIntro?: string;
   /** Unix seconds. Pinned in config — see loadMyNamecard/bumpNamecardDeclaredAt. */
   readonly declaredAt: number;
 }
@@ -48,13 +50,9 @@ function asRecord(v: unknown): Record<string, unknown> {
  * fallback name with name_source still 'auto', and that name is real and
  * already pushed, so gating on source would wrongly suppress self-heal for it).
  *
- * AMENDMENT A3 (binding, namecard-rebroadcast-proposal §7): the six other
- * Profile fields (one_line_intro / taste_tags / role_persona / location_hint /
- * avatar_uri) are NOT read here — nobody sets them today. The day a caller
- * starts populating one of them, it MUST be added here (and to any diff the
- * self-heal loop uses to decide whether to push), or the self-heal loop will
- * re-push a card with those fields blank and silently clobber house-side
- * content the owner curated through some other path.
+ * Biography is local authority in ranger_profile.one_line_intro. Other Profile
+ * fields remain outside this client; every whole-row write must preserve them
+ * by failing closed when they contain content.
  */
 export async function loadMyNamecard(deps: LoadMyNamecardDeps): Promise<MyNamecard | null> {
   const raw = await deps.host.config.loadJson('plugin');
@@ -78,7 +76,12 @@ export async function loadMyNamecard(deps: LoadMyNamecardDeps): Promise<MyNameca
     });
   }
 
-  return { nickname, declaredAt };
+  if (profile.one_line_intro !== undefined && typeof profile.one_line_intro !== 'string') {
+    throw new Error('NAMECARD_LOCAL_INTRO_INVALID');
+  }
+  return { nickname, declaredAt,
+    ...(typeof profile.one_line_intro === 'string' ? {oneLineIntro: profile.one_line_intro} : {}),
+  };
 }
 
 /**
@@ -106,6 +109,30 @@ export async function bumpNamecardDeclaredAt(host: HostAdapter, now: () => numbe
 export function signMyNamecard(signer: Signer, card: MyNamecard): Promise<SignEnvelopeResult> {
   return signProfile(signer, {
     nickname: card.nickname,
+    oneLineIntro: card.oneLineIntro,
     declaredAt: card.declaredAt,
   });
+}
+
+/** Save one owner-requested field and its monotonic timestamp in one config write. */
+export async function persistMyNamecardUpdate(
+  host: HostAdapter,
+  update: {readonly nickname?: string; readonly oneLineIntro?: string},
+  now: () => number,
+): Promise<MyNamecard | null> {
+  const cfg = asRecord(await host.config.loadJson('plugin'));
+  const profile = asRecord(cfg.ranger_profile);
+  const nickname = update.nickname ?? (typeof profile.nickname === 'string' ? profile.nickname.trim() : '');
+  if (!nickname || isPlaceholderNickname(nickname)) return null;
+  if (profile.one_line_intro !== undefined && typeof profile.one_line_intro !== 'string') {
+    throw new Error('NAMECARD_LOCAL_INTRO_INVALID');
+  }
+  const oneLineIntro = update.oneLineIntro ?? profile.one_line_intro as string | undefined;
+  const stored = typeof profile.namecard_declared_at === 'number' ? profile.namecard_declared_at : 0;
+  const declaredAt = Math.max(now(), stored + 1);
+  await host.config.saveJson('plugin', {...cfg, ranger_profile: {...profile, nickname,
+    ...(update.nickname === undefined ? {} : {name_source: 'owner'}),
+    ...(oneLineIntro === undefined ? {} : {one_line_intro: oneLineIntro}), namecard_declared_at: declaredAt}});
+  if (update.nickname !== undefined) notifyNicknamePersisted(host, nickname);
+  return {nickname, declaredAt, ...(oneLineIntro === undefined ? {} : {oneLineIntro})};
 }

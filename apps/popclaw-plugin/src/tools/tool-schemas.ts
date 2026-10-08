@@ -345,6 +345,11 @@ export const SetNameSchema = Type.Object({
   }),
 });
 
+/** popclaw_set_bio: an explicit owner edit of the base public Profile biography. */
+export const SetBioSchema = Type.Object({
+  bio: Type.String({description: 'The exact public biography requested by the owner. Preserve all line breaks and whitespace. An empty string clears it.'}),
+});
+
 // ---------------------------------------------------------------------------
 // Taste tool (append to the owner-sovereign taste core)
 // ---------------------------------------------------------------------------

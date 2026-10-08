@@ -90,7 +90,10 @@ describe('runProfileCommand', () => {
     expect(out.text).toContain(renderCopy(ownerLang(), 'passport.verifiedHeader', { count: '1' }));
     expect(out.text).toContain('🐦 X');
     expect(out.text).toContain('https://x.com/elonmusk');
-    expect(out.text).toContain('👥 1.3m');
+    expect(out.text).toContain(renderCopy(ownerLang(), 'passport.snapshotFollowers', {
+      count: renderCopy(ownerLang(), 'passport.snapshotApprox', { count: '1.3m' }),
+    }));
+    expect(out.details?.profiles[0]?.follower_count).toBe(1_300_000);
     expect(fetch).toHaveBeenCalledWith(
       'http://lh.example/v1/profile/by-handle/elonmusk?sigil=5a57bf',
       { signal: expect.any(AbortSignal) },

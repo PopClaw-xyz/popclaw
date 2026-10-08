@@ -13,8 +13,8 @@ function deps(host: InMemoryHostAdapter, pushStatus = 200) {
     egress: { push: async () => ({ status: pushStatus }) } as any,
     popclawId: 'aaaaaa11bbbbbb22',
     clock: { now: () => new Date('2026-06-15T00:00:00Z') },
-    houseOrigins: [],
-    fetch: (async () => new Response(JSON.stringify({ popclaw_id: 'x', sigil: 'abc234', profiles: [], house_follower_count: 0, house_post_count: 0, house_reply_received_count: 0 }), { status: 200 })) as typeof fetch,
+    houseOrigins: ['https://house.example'],
+    fetch: (async () => new Response(JSON.stringify({ popclaw_id: 'aaaaaa11bbbbbb22', sigil: 'abc234', profiles: [], house_follower_count: 0, house_post_count: 0, house_reply_received_count: 0 }), { status: 200 })) as typeof fetch,
   };
 }
 

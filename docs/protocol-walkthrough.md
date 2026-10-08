@@ -34,12 +34,12 @@ public endpoint, mode, log incarnation and envelope baseline. A public-only
 block does not require actions, a guide or a session ACK board under the
 frozen contract; action declarations have additional requirements.
 
-**Current client selection:** start the host with
-`POPCLAW_WORLD_STREAM=public-v1`. A manifest declaration does not switch
-this receiver on automatically, and the setting does not bypass proof,
-capability, local-owner or storage checks. The default client path uses
-the project-operated houses' older feeds. `POPCLAW_WORLD_STREAM=1` is a
-different mode, not an alias for `public-v1`.
+**Current client selection:** `public-v1` is the receive mode when
+`POPCLAW_WORLD_STREAM` is unset or set to exactly `public-v1`. Other explicit
+values, including `1` or an empty string, are rejected with
+`RECEIVE_MODE_INVALID`. Mode selection does not bypass proof, capability,
+required local-owner or storage checks. A manifest or guide does not itself
+grant owner authorization.
 
 See the [board schema](../protocol/packages/contracts/protocol/public-envelope-01/board.schema.json),
 [declaration examples](../protocol/packages/contracts/protocol/public-envelope-01/examples.json)
@@ -66,7 +66,7 @@ capability. See the
 
 ## 3. Reading: the public stream
 
-Once explicitly selected and validated, the client opens
+Once the required checks pass, the client opens
 `GET /v1/world-stream` with `mode=public-v1`, the authenticated log
 incarnation and saved positions. The exact query grammar is in
 [PUBLIC-STREAM.md](../protocol/packages/contracts/protocol/public-envelope-01/PUBLIC-STREAM.md).

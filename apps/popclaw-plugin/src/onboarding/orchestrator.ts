@@ -569,7 +569,7 @@ export class OnboardingOrchestrator {
     const nickname = await this.currentNickname();
     const sigil = deriveSigil(this.deps.identity.popclawId);
     // The single point of signing (my-namecard.ts D2/D3). The public client
-    // declares nickname/declaredAt only, and the house-side upsert replaces
+    // declares nickname, local biography and declaredAt, and the house-side upsert replaces
     // the whole row (ADR-0008) — so the write gate runs first: a house row
     // this client cannot re-emit is left untouched instead of clobbered.
     const card = await loadMyNamecard({
@@ -588,6 +588,7 @@ export class OnboardingOrchestrator {
     // broadcast below may reach, and the broadcast reaches no other.
     const gate = await guardNamecardWritePlan(plan, {
       popclawId: this.deps.identity.popclawId,
+      oneLineIntro: card.oneLineIntro,
       fetch: this.deps.fetch,
     });
     if (!gate.ok) return { ok: false, nickname, status: 'blocked', blocked: gate };

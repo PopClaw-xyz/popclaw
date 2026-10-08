@@ -39,6 +39,7 @@ import { deriveSigil } from '../invite/sigil.js';
 import { formatPerson, displayPerson } from '../identity/person-resolver.js';
 import type { NameChain } from '../identity/person-name.js';
 import { platformLabel, type VerifiedProfileInput } from '../identity/passport-renderer.js';
+import { mapVerifiedProfiles, renderVerifiedProfileSummary } from '../identity/profile-snapshot.js';
 import { profileLinkText } from '../lshow/sources/web-fallback.js';
 import { readNameSource, isPlaceholderNickname } from '../onboarding/identity-writer.js';
 import type { DreamCronState } from '../dreamer/dream-cron.js';
@@ -482,25 +483,11 @@ export async function runStatusCommand(deps: StatusCommandDeps): Promise<{
         if (text.trim() !== '') {
           const body = JSON.parse(text) as {
             house_follower_count?: number;
-            profiles?: Array<{
-              platform?: string;
-              handle?: string;
-              verified_at?: string;
-              profile_url?: string | null;
-              proof_url?: string;
-              follower_count?: number;
-            }>;
+            profiles?: unknown;
             card?: { nickname?: string } | null;
           };
           houseFollowerCount = body.house_follower_count ?? null;
-          profiles = (body.profiles ?? []).map((p) => ({
-            platform: p.platform ?? '',
-            handle: p.handle ?? '',
-            verified_at: p.verified_at ?? '',
-            ...(p.profile_url ? { profile_url: p.profile_url } : {}),
-            ...(p.proof_url ? { proof_url: p.proof_url } : {}),
-            follower_count: p.follower_count ?? 0,
-          }));
+          profiles = mapVerifiedProfiles(body.profiles);
           // This is the owner's own address, so the name they declared on
           // their namecard wins. The house's popclaw-native profile row is
           // written once at registration (usually under the auto name) and
@@ -577,7 +564,7 @@ export async function runStatusCommand(deps: StatusCommandDeps): Promise<{
   // only fits 16 per line). The date belongs on the profile, not on the
   // headline — it's been moved to the status graph.
   if (loreHouseReachable) {
-    for (const p of external) lines.push(`✓ ${platformLabel(p.platform)} @${p.handle}`);
+    for (const p of external) lines.push(...renderVerifiedProfileSummary(p, lang, '✓'));
   }
   // If a request is pending, add a line right under the verified list — it's part of the identity headline just like ✓ verified (ADR-0040).
   for (const p of pendingInvites) {

@@ -71,7 +71,7 @@ describe('classifyNamecardCard', () => {
   });
 
   it('accepts a complete, cleanly-typed card', () => {
-    expect(classifyNamecardCard(CLEAN_CARD)).toEqual({ kind: 'clean', declaredAtMs: 1000 });
+    expect(classifyNamecardCard(CLEAN_CARD)).toEqual({ kind: 'clean', declaredAtMs: 1000, nickname: 'a', oneLineIntro: '' });
   });
 
   it('blocks unknown field names (legacy payout spellings and anything else)', () => {
@@ -137,7 +137,7 @@ describe('readHouseProfileEvidence', () => {
 
   it('returns clean-card for a complete clean card', async () => {
     const fetchMock = vi.fn(async () => jsonResponse(completeBody(CLEAN_CARD)));
-    await expect(readHouseProfileEvidence('https://h.example', ID, deps(fetchMock as unknown as typeof globalThis.fetch))).resolves.toEqual({ status: 'clean-card', declaredAtMs: 1000 });
+    await expect(readHouseProfileEvidence('https://h.example', ID, deps(fetchMock as unknown as typeof globalThis.fetch))).resolves.toEqual({ status: 'clean-card', declaredAtMs: 1000, nickname: 'a', oneLineIntro: '' });
   });
 
   it('fails closed on 404 (review negative: route 404)', async () => {

@@ -117,11 +117,12 @@ de-duplicates durably by event id. There is no general multi-stream
 framework in 0.1.0; a house that wants to expose more declares it for a
 later version.
 
-**Client selection in 0.1.0.** Start the host with
-`POPCLAW_WORLD_STREAM=public-v1` to use the published public stream. The
-default client path reads the project-operated houses through their older
-feed endpoints. A manifest declaration does not switch this client
-automatically; a bundle-only house such as Ranger Map requires the setting.
+**Client selection in 0.1.0.** The client uses `public-v1` when
+`POPCLAW_WORLD_STREAM` is unset or set to exactly `public-v1`. Any other
+explicit value, including `1` or an empty string, is rejected with
+`RECEIVE_MODE_INVALID`; there is no older-feed receive mode. This selection
+does not bypass manifest-proof, capability, required local-owner or storage
+checks. A manifest or guide does not itself grant owner authorization.
 See [known limitations](known-limitations.md).
 
 ## Direct messages

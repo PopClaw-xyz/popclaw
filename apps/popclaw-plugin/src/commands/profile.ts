@@ -11,7 +11,8 @@
  * Network: 404 → friendly "not found"; other errors → "lore-house unreachable".
  */
 
-import { renderPassport, type VerifiedProfileInput } from '../identity/passport-renderer.js';
+import { renderPassport, namecardDetails, type NamecardDetails, type PassportInput } from '../identity/passport-renderer.js';
+import { mapVerifiedProfiles } from '../identity/profile-snapshot.js';
 import { deriveSigil, parseSigilInput } from '../invite/sigil.js';
 import { looksLikeBase58Id, displayNickname } from '../identity/person-resolver.js';
 import { LORE_HOUSE_TIMEOUT_MS } from '../world/http-timeout.js';
@@ -44,6 +45,13 @@ export interface ProfileCommandDeps {
   readonly knownPerson?: { readonly popclawId: string; readonly nickname: string };
 }
 
+export interface ProfileCommandDetails extends NamecardDetails {
+  readonly namecard_source: 'house' | 'local';
+  readonly public_namecard: 'observed' | 'unconfirmed';
+  readonly source_house: string;
+  readonly local_nickname?: string;
+}
+
 export interface ProfileCommandArgs {
   readonly target: string;  // raw "elonmusk#gdx8rgtp"
 }
@@ -51,7 +59,7 @@ export interface ProfileCommandArgs {
 export async function runProfileCommand(
   args: ProfileCommandArgs,
   deps: ProfileCommandDeps,
-): Promise<{ text: string }> {
+): Promise<{ text: string; isError?: true; details?: ProfileCommandDetails }> {
   const raw = args.target.trim();
   const base = deps.loreHouseUrl.replace(/\/$/, '');
   // Two ways in, one renderer. `handle#sigil` is what the owner types at the
@@ -84,17 +92,16 @@ export async function runProfileCommand(
   const me = deps.self?.popclawId ? deps.self : null;
   const isSelf = me !== null && (raw === me.popclawId || (sigil !== '' && deriveSigil(me.popclawId) === sigil));
   /** The owner's card from local identity data alone — no house involved. */
-  const ownCard = (): { text: string } => ({
-    text: renderPassport({
-      popclawId: me!.popclawId,
-      sigil: deriveSigil(me!.popclawId),
-      // The bootstrap's own fallback, so this card and status print the same address.
+  const ownCard = (): { text: string; details: ProfileCommandDetails } => {
+    const passport: PassportInput = {
+      popclawId: me!.popclawId, sigil: deriveSigil(me!.popclawId),
       handle: me!.nickname.trim() || `ranger-${me!.popclawId.slice(0, 6)}`,
       ...(deps.webBaseUrl === undefined ? {} : { webBaseUrl: deps.webBaseUrl }),
-      card: null,
-      profiles: [],
-    }).join('\n'),
-  });
+      card: null, profiles: [],
+    };
+    return {text: [...renderPassport(passport), renderCopy(ownerLang(), 'namecard.read.localOnly', {house: base})].join('\n'),
+      details: {...namecardDetails(passport), namecard_source: 'local', public_namecard: 'unconfirmed', source_house: base}};
+  };
 
   let resp: Response;
   try {
@@ -140,14 +147,7 @@ export async function runProfileCommand(
     popclaw_id: string;
     sigil: string;
     house_follower_count?: number;
-    profiles?: Array<{
-      platform?: string;
-      handle?: string;
-      verified_at?: string;
-      profile_url?: string | null;
-      proof_url?: string;
-      follower_count?: number;
-    }>;
+    profiles?: unknown;
     card?: {
       nickname?: string;
       one_line_intro?: string;
@@ -158,19 +158,12 @@ export async function runProfileCommand(
       declared_at_ms?: number;
     } | null;
   };
-  // The name slot must never hold a base58 id. `handle` starts as whatever the
-  // caller passed, and on the by-id lane — the only form the MCP hosts can
-  // produce — that is the id itself, while the real name sits unread in the
-  // response. For someone else, the house-verified popclaw-native handle is
-  // the addressable name, then their self-reported namecard nickname. For the
-  // owner the order flips, matching status: the card is what they themselves
-  // declared, while the native row is a registration-time snapshot nothing
-  // refreshes; the current local identity name comes before that native row
-  // and is the one thing no house
-  // can know about a never-published `ranger-xxxxxx`. A name the owner TYPED
-  // is left alone.
+  const profiles = mapVerifiedProfiles(body.profiles);
+  // The House card is the owner's published name. A newer local name is a
+  // display fallback only when the House has no card; label that provenance.
+  // Other people's verified native handle retains the established precedence.
   if (!raw.includes('#')) {
-    const native = displayNickname((body.profiles ?? []).find((p) => p.platform === 'popclaw')?.handle);
+    const native = displayNickname(profiles.find((p) => p.platform === 'popclaw')?.handle);
     const cardName = displayNickname(body.card?.nickname);
     const ownName = isSelf ? displayNickname(me!.nickname) : '';
     // A hint for another ID must never label the response. Public evidence
@@ -180,16 +173,7 @@ export async function runProfileCommand(
     handle = isSelf ? cardName || ownName || native || knownName : native || cardName || knownName;
   }
 
-  const profiles: VerifiedProfileInput[] = (body.profiles ?? []).map((p) => ({
-    platform: p.platform ?? '',
-    handle: p.handle ?? '',
-    verified_at: p.verified_at ?? '',
-    ...(p.profile_url ? { profile_url: p.profile_url } : {}),
-    ...(p.proof_url ? { proof_url: p.proof_url } : {}),
-    follower_count: p.follower_count ?? 0,
-  }));
-
-  const lines = renderPassport({
+  const passport: PassportInput = {
     popclawId: body.popclaw_id,
     sigil: body.sigil,
     handle,
@@ -205,6 +189,12 @@ export async function runProfileCommand(
       declared_at: body.card.declared_at_ms ?? 0,
     } : null,
     profiles,
-  });
-  return { text: lines.join('\n') };
+  };
+  const publicName = displayNickname(body.card?.nickname);
+  const localFallback = isSelf && !publicName;
+  const lines = renderPassport(passport);
+  if (localFallback) lines.push(renderCopy(ownerLang(), 'namecard.read.localOnly', {house: base}));
+  return {text: lines.join('\n'), details: {...namecardDetails(passport),
+    namecard_source: localFallback ? 'local' : 'house', public_namecard: publicName ? 'observed' : 'unconfirmed',
+    source_house: base, ...(isSelf ? {local_nickname: me!.nickname} : {})}};
 }

@@ -3,8 +3,8 @@
  *
  * A house stores the Profile as a whole-row upsert (ADR-0008): every re-issue
  * replaces every field. This public client owns only the fields it actually
- * writes — nickname and declaredAt (namecard A3 amendment: the other public
- * Profile fields are read by nobody here today). If the profile row a house
+ * writes — nickname, locally authoritative biography and declaredAt. Other
+ * Profile fields remain unowned. If the profile row a house
  * already holds carries content this client cannot re-emit — legacy payout
  * addresses from the pre-beta wallet, or any field outside the public card
  * vocabulary — a rename/rebroadcast would silently clear it. Fail closed:
@@ -32,7 +32,8 @@
  *
  *   - a conformant body whose `card` key is omitted;
  *   - a complete, correctly-typed card whose only non-empty fields are the
- *     client-owned pair. Content in any other field (payout_addresses
+ *     client-owned fields. Biography replacement is authorized only for an
+ *     explicit bio edit; rename and self-heal require the persisted exact intro. Content in any other field (payout_addresses
  *     included) blocks the write.
  *
  * Everything else — 404 (an unimplemented or renamed profile route is
@@ -78,7 +79,7 @@ const MAX_PROFILE_BODY_BYTES = 256 * 1024;
 
 export type CardClassification =
   /** A complete, correctly-typed card whose content this client can re-emit without losing anything. */
-  | { readonly kind: 'clean'; readonly declaredAtMs: number }
+  | { readonly kind: 'clean'; readonly declaredAtMs: number; readonly nickname: string; readonly oneLineIntro: string }
   /** The card carries fields this client cannot re-emit (names listed). */
   | { readonly kind: 'unowned'; readonly fields: readonly string[] }
   /** Unknown response shape: partial card, wrong types, null — not evidence of anything. */
@@ -125,7 +126,7 @@ function isPayoutArray(v: unknown): boolean {
  * The input is the JSON value of `ProfileResponse.card` as the wire produced
  * it. Pure — the test file pins every branch.
  */
-export function classifyNamecardCard(card: unknown): CardClassification {
+export function classifyNamecardCard(card: unknown, authority: NamecardIntroAuthority = {}): CardClassification {
   if (card === null || card === undefined) {
     return { kind: 'malformed', detail: 'card is null/undefined — the conformant no-card answer omits the key' };
   }
@@ -156,6 +157,7 @@ export function classifyNamecardCard(card: unknown): CardClassification {
       return { kind: 'malformed', detail: `card.${key} is not ${expected === 'stringArray' ? 'string[]' : expected === 'payouts' ? '{chain,address}[]' : expected}` };
     }
     if (CLIENT_OWNED.has(key)) continue;
+    if (key === 'one_line_intro' && (authority.allowIntroReplacement || value === (authority.oneLineIntro ?? ''))) continue;
     const nonEmpty =
       (typeof value === 'string' && value.length > 0) ||
       (Array.isArray(value) && value.length > 0);
@@ -163,7 +165,8 @@ export function classifyNamecardCard(card: unknown): CardClassification {
   }
   if (unowned.length > 0) return { kind: 'unowned', fields: unowned };
   const declaredAtMs = record.declared_at_ms;
-  return { kind: 'clean', declaredAtMs: typeof declaredAtMs === 'number' ? declaredAtMs : 0 };
+  return { kind: 'clean', declaredAtMs: typeof declaredAtMs === 'number' ? declaredAtMs : 0,
+    nickname: record.nickname as string, oneLineIntro: record.one_line_intro as string };
 }
 
 /** One house's answer, reduced to what a write decision may legally rest on. */
@@ -171,14 +174,21 @@ export type HouseProfileEvidence =
   /** Conformant body with the `card` key omitted — the contract's explicit "no Profile yet". */
   | { readonly status: 'no-card' }
   /** A complete clean card; `declaredAtMs` for staleness comparisons. */
-  | { readonly status: 'clean-card'; readonly declaredAtMs: number }
+  | { readonly status: 'clean-card'; readonly declaredAtMs: number; readonly nickname: string; readonly oneLineIntro: string }
   | {
       readonly status: 'blocked';
       readonly kind: 'unreadable' | 'unowned';
       readonly detail: string;
     };
 
-export interface HouseProfileReadDeps {
+export interface NamecardIntroAuthority {
+  /** Current local biography, read from MyNamecard. Never populated from the remote row. */
+  readonly oneLineIntro?: string;
+  /** Only an explicit owner bio edit may replace a correctly typed remote intro. */
+  readonly allowIntroReplacement?: boolean;
+}
+
+export interface HouseProfileReadDeps extends NamecardIntroAuthority {
   readonly fetch?: typeof globalThis.fetch;
   readonly timeoutMs?: number;
 }
@@ -275,17 +285,18 @@ export async function readHouseProfileEvidence(
     }
   }
   if (!('card' in record)) return { status: 'no-card' };
-  const classification = classifyNamecardCard(record.card);
+  const classification = classifyNamecardCard(record.card, deps);
   if (classification.kind === 'malformed') {
     return { status: 'blocked', kind: 'unreadable', detail: classification.detail };
   }
   if (classification.kind === 'unowned') {
     return { status: 'blocked', kind: 'unowned', detail: `card carries ${classification.fields.join(', ')}` };
   }
-  return { status: 'clean-card', declaredAtMs: classification.declaredAtMs };
+  return { status: 'clean-card', declaredAtMs: classification.declaredAtMs,
+    nickname: classification.nickname, oneLineIntro: classification.oneLineIntro };
 }
 
-export interface NamecardWriteGuardDeps {
+export interface NamecardWriteGuardDeps extends NamecardIntroAuthority {
   readonly popclawId: string;
   /** Every house a whole-row re-issue would land on (config order). */
   readonly houseOrigins: readonly string[];
@@ -312,6 +323,7 @@ export type NamecardWriteCheck =
 export async function guardNamecardWrite(deps: NamecardWriteGuardDeps): Promise<NamecardWriteCheck> {
   for (const origin of deps.houseOrigins) {
     const evidence = await readHouseProfileEvidence(origin, deps.popclawId, {
+      oneLineIntro: deps.oneLineIntro, allowIntroReplacement: deps.allowIntroReplacement,
       ...(deps.fetch ? { fetch: deps.fetch } : {}),
       ...(deps.timeoutMs ? { timeoutMs: deps.timeoutMs } : {}),
     });
@@ -327,7 +339,7 @@ export interface NamecardWritePlan {
   /** Sends to exactly `houses`; each house's send-time checks still apply. */
   readonly egress: EventEgress;
   /** In send order (`[0]` = home). No `origin` = the house cannot be read. */
-  readonly houses: readonly { readonly house: string; readonly origin?: string }[];
+  readonly houses: readonly { readonly house: string; readonly origin?: string; readonly slug?: string }[];
 }
 
 /**
@@ -347,8 +359,8 @@ export function captureNamecardWritePlan(
   return {
     egress: plan.egress,
     houses: plan.targets.map(({ slug, origin }) => {
-      if (origin === undefined) return { house: slug };
-      return { house: origin, origin };
+      if (origin === undefined) return { house: slug, slug };
+      return { house: origin, origin, slug };
     }),
   };
 }

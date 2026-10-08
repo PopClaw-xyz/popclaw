@@ -5,11 +5,11 @@
  * Split out of register-tools.ts (2026-08-25).
  */
 
-import { SetNameSchema, NoteTasteSchema } from './tool-schemas.js';
+import { SetNameSchema, SetBioSchema, NoteTasteSchema } from './tool-schemas.js';
 import { ownerLang, failureText } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
 import { appendCorePrivate } from '../taste/taste-writer.js';
-import { runPopclawNameCommand } from '../commands/popclaw-name.js';
+import { runPopclawNameCommand, runPopclawBioCommand } from '../commands/popclaw-name.js';
 import type { PopclawPaths } from '../host/popclaw-paths.js';
 import type { ToolsCtx } from './tools-context.js';
 
@@ -52,7 +52,27 @@ export function registerNameTasteTools(ctx: ToolsCtx): void {
           ...(rt.boot.webBaseUrl === undefined ? {} : { webBaseUrl: rt.boot.webBaseUrl }),
         },
       );
-      return { type: 'text' as const, text: r.text };
+      return { type: 'text' as const, ...r, content: [{type: 'text' as const, text: r.text}], structuredContent: r.details };
+    },
+  });
+
+  api.registerTool({
+    name: 'popclaw_set_bio',
+    description:
+      'Call only when the owner explicitly asks to edit their public biography. Pass the exact requested text as bio; ' +
+      'preserve line breaks and whitespace. An empty string clears the biography. Execute directly without another confirmation. ' +
+      'This updates the base public Profile namecard, independent of House World extensions or their capability context. ' +
+      'Returns local save, per-House publication, and exact public read-back evidence; only public confirmation establishes success.',
+    parameters: SetBioSchema,
+    execute: async (_callId: string, params: unknown) => {
+      const p = params as {bio?: unknown} | null;
+      const rt = await runtime();
+      const r = await runPopclawBioCommand({bio: p?.bio as string}, {
+        host: rt.host, signer: rt.boot.signer, egress: rt.egress, popclawId: rt.boot.popclawId,
+        clock: rt.host.clock, houseOrigins: rt.boot.loreHouseUrls,
+        ...(rt.boot.webBaseUrl === undefined ? {} : {webBaseUrl: rt.boot.webBaseUrl}),
+      });
+      return {type: 'text' as const, ...r, content: [{type: 'text' as const, text: r.text}], structuredContent: r.details};
     },
   });
 

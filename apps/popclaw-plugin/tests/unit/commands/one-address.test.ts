@@ -121,6 +121,8 @@ describe('the rename confirmation prints the same address', () => {
     const id = 'aaaaaa11bbbbbb22';
     const sigil = deriveSigil(id);
     const host = new InMemoryHostAdapter();
+    let card: Record<string, unknown> | undefined;
+    const {popclaw} = await import('../../../src/protocol/public-envelope-generated.js');
     const r = await runPopclawNameCommand(
       { nickname: NAME },
       {
@@ -130,13 +132,22 @@ describe('the rename confirmation prints the same address', () => {
           sign: async () => new Uint8Array(64),
           popclawId: async () => id,
         },
-        egress: { push: async () => ({ status: 200 }) },
+        egress: { push: async (bytes: Uint8Array) => {
+          const profile = popclaw.event.EventEnvelope.decode(popclaw.identity.SignedPayload.decode(bytes).payload!).profile!;
+          card = {nickname: profile.nickname, one_line_intro: profile.oneLineIntro ?? '',
+            declared_at_ms: Number(profile.declaredAt) * 1000, taste_tags: [], role_persona: '',
+            location_hint: '', avatar_uri: '', payout_addresses: []};
+          return {status: 200};
+        } },
         popclawId: id,
         clock: { now: () => new Date('2026-06-15T00:00:00Z') },
-        houseOrigins: [],
+        houseOrigins: ['https://house.example'],
+        fetch: async () => new Response(JSON.stringify({popclaw_id: id, sigil, profiles: [],
+          house_follower_count: 0, house_post_count: 0, house_reply_received_count: 0, ...(card ? {card} : {})})),
         webBaseUrl: 'http://localhost:8788',
       } as never,
     );
+    expect(r.details.public.status).toBe('confirmed');
     expect(address(r.text, sigil)).toBe(`localhost:8788/${NAME}/${sigil}`);
     expect(r.text).not.toContain(`popclaw.me/${NAME}#${sigil}`);
   });

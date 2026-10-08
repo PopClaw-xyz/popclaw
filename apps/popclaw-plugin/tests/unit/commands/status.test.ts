@@ -132,7 +132,9 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
       [
         `🏮 **blackfeather_ai** #${SIGIL}`,
         '✓ X @elonmusk',
+        '认证时粉丝数：约12k',
         '✓ GitHub @octocat',
+        '认证时粉丝数：未确认',
         '',
         '**你的江湖**',
         '关注 4 人',
@@ -754,15 +756,18 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
     const host = new InMemoryHostAdapter();
     // One house, one state: the native row still carries the registration-time
     // auto name; the namecard row is whatever the last push declared.
-    const house: { card: { nickname: string } | null } = { card: null };
+    const house: { card: { nickname: string; one_line_intro: string; declared_at_ms: number;
+      taste_tags: string[]; role_persona: string; location_hint: string; avatar_uri: string; payout_addresses: unknown[] } | null } = { card: null };
     const houseFetch = vi.fn(async () => {
       const body = {
         popclaw_id: OWNER,
         sigil: OWNER_SIGIL,
-        profiles: [{ platform: 'popclaw', handle: 'ranger-3gkVcd', verified_at: '2026-09-20T00:00:00Z' }],
-        card: house.card,
+        profiles: [{ platform: 'popclaw', handle: 'ranger-3gkVcd', verified_at: '2026-09-20T00:00:00Z',
+          source_task_id: '', follower_count: 0, avatar_url: '', bio: '' }],
+        house_follower_count: 0, house_post_count: 0, house_reply_received_count: 0,
+        ...(house.card ? {card: house.card} : {}),
       };
-      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+      return new Response(JSON.stringify(body));
     });
     const readName = async () =>
       ((await host.config.loadJson('plugin')) as { ranger_profile?: { nickname?: string } } | null)
@@ -772,13 +777,16 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
       signer: { publicKey: async () => new Uint8Array(32), sign: async () => new Uint8Array(64), popclawId: async () => OWNER } as never,
       egress: {
         push: async () => {
-          house.card = { nickname: await readName() };
+          const config = await host.config.loadJson('plugin') as {ranger_profile: {namecard_declared_at: number}};
+          house.card = { nickname: await readName(), one_line_intro: '',
+            declared_at_ms: config.ranger_profile.namecard_declared_at * 1000,
+            taste_tags: [], role_persona: '', location_hint: '', avatar_uri: '', payout_addresses: [] };
           return { status: 200 };
         },
       } as never,
       popclawId: OWNER,
       clock: { now: () => new Date('2026-09-26T00:00:00Z') },
-      houseOrigins: [],
+      houseOrigins: ['https://house.example'],
       webBaseUrl: 'https://popclaw.me',
       fetch: houseFetch as never,
     });
@@ -787,6 +795,7 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
 
     const address = (text: string) => text.match(/popclaw\.me\/[^\s/]+\/[0-9a-z]+/)?.[0];
     const confirmed = address(named.text);
+    expect(named.details.public.status).toBe('confirmed');
     expect(confirmed).toBe(`popclaw.me/CanaryMe-26e2/${OWNER_SIGIL}`);
     expect(address(lines.filter((l) => l.startsWith('popclaw.me/')).join('\n'))).toBe(confirmed);
   });
@@ -1248,7 +1257,9 @@ describe('runStatusCommand · en lane (S3 lexicon parity)', () => {
       [
         `🏮 **blackfeather_ai** #${SIGIL}`,
         '✓ X @elonmusk',
+        'Followers at verification: about 12k',
         '✓ GitHub @octocat',
+        'Followers at verification: unconfirmed',
         '',
         '**Your World**',
         'following 4 people',

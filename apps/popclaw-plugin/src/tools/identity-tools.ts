@@ -51,10 +51,10 @@ export function registerNamecardTool(ctx: ToolsCtx): void {
       '"is that really them?", "are they verified?". ' +
       'Pass the person exactly as the owner referred to them, the tool resolves them itself ' +
       '(a nickname / name#sigil / a bare sigil / a full popclaw_id are all accepted). ' +
-      'Returns their namecard: name#sigil, profile URL, verified accounts, and for each verified account ' +
-      'the public proof post anyone can open and check for themselves. ' +
-      'Relay the proof link verbatim — the whole point is that the owner does not have to take our word for it. ' +
-      "The owner's own name works here too; popclaw_check_status is the fuller report on the owner themselves.",
+      'Returns their namecard: name#sigil, introduction, verified accounts with follower snapshots and biographies. ' +
+      'Complete identity and public proof links follow in the details; preserve proof URLs verbatim there. ' +
+      "The owner's own name works here too; popclaw_check_status is the fuller report on the owner themselves. " +
+      renderCopy(ownerLang(), 'namecard.tool.snapshotGuidance'),
     parameters: ShowNamecardSchema,
     execute: async (_callId: string, params: unknown) => {
       const ref = namecardPersonArg(params);
@@ -92,7 +92,7 @@ export function registerNamecardTool(ctx: ToolsCtx): void {
           fetch: rt.houseRuntime?.houseReadFetch(rt.boot.loreHouseUrl) ?? globalThis.fetch,
         },
       );
-      return { type: 'text' as const, text: r.text };
+      return { type: 'text' as const, text: r.details && !r.isError ? `${r.text}\n\n${renderCopy(ownerLang(), 'namecard.tool.snapshotGuidance')}` : r.text, ...(r.details ? {details: r.details} : {}), ...(r.isError ? { isError: true } : {}) };
     },
   });
 }
@@ -107,7 +107,8 @@ export function registerStatusTool(ctx: ToolsCtx, dreamCron: DreamCron): void {
       "Show the owner's popclaw identity report: name#sigil, popclaw_id, profile URL, " +
       'verified accounts, follow/bond-book/DM counts, notify channel, and what is still missing. ' +
       'If the tool fails, tell the owner it failed — never make up a result. ' +
-      'The result carries its own instructions for how to lay it out; follow them.',
+      'The result carries its own instructions for how to lay it out; follow them. ' +
+      renderCopy(ownerLang(), 'namecard.tool.snapshotGuidance'),
     parameters: EmptySchema,
     execute: async () => {
       const rt = await runtime();
@@ -117,7 +118,7 @@ export function registerStatusTool(ctx: ToolsCtx, dreamCron: DreamCron): void {
       // `currentChannel` is omitted too: tools are registered as plain objects
       // (only the factory form gets a ctx with deliveryContext), so the notify-channel
       // line stays neutral instead of guessing "this channel".
-      await runStatusCommand({
+      const status = await runStatusCommand({
         ...(await statusDepsFrom(rt, logger)),
         // For the host LLM to relay: follow entries carry the full popclaw_id (so it can act directly), and the todo list gives all 3 items.
         audience: 'agent',
@@ -128,7 +129,8 @@ export function registerStatusTool(ctx: ToolsCtx, dreamCron: DreamCron): void {
       // instruction, and `read-tools.ts`'s old description-side "relay verbatim" line was
       // already observed being ignored on a real host: a description is read once when the
       // model picks a tool, while the result sits in context next to the material it governs.
-      return { type: 'text' as const, text: `${logger.lines.join('\n')}\n\n${renderDirective()}` };
+      return { type: 'text' as const, text: `${logger.lines.join('\n')}\n\n${renderDirective()}\n${renderCopy(ownerLang(), 'namecard.tool.snapshotGuidance')}`,
+        details: {popclaw_id: status.popclawId, sigil: status.sigil, profiles: status.verifiedProfiles} };
     },
   });
 }

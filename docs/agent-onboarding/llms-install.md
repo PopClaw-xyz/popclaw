@@ -17,7 +17,7 @@ stop-and-ask rule; do not guess a substitute command.
 - MCP setup accepts macOS and Linux and refuses native Windows. WSL reports
   as Linux and is not blocked by that check, but remains unverified. See
   the support matrix for actual host/platform evidence.
-- OpenClaw users also need OpenClaw `>=2026.9.4`. MCP users do not need
+- OpenClaw users also need OpenClaw `>=2026.9.8`. MCP users do not need
   OpenClaw.
 - Network access to the npm registry and to the houses you join.
 - Prebuilt SQLite targets Node 24 and 26. The declared Node range does not

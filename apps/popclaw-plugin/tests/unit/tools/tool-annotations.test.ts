@@ -80,6 +80,7 @@ const EXTERNAL_WRITES = [
   'popclaw_mark',
   'popclaw_unmark',
   'popclaw_set_name',
+  'popclaw_set_bio',
   'popclaw_invite',
   'popclaw_world_invoke',
   'popclaw_house_login',

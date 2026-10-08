@@ -35,6 +35,8 @@ export const ScraperConfig = z.object({
 
 export const RangerProfile = z.object({
   nickname: z.string().min(1).max(32).optional(),
+  /** Exact public biography; newlines and whitespace are owner content. */
+  one_line_intro: z.string().optional(),
   /** Pinned namecard declared_at (unix seconds), namecard self-heal proposal
    *  §2.1 (issue #280). Read/written raw via loadJson (like name_source) —
    *  not through the parsed PluginConfig — so this entry documents the shape

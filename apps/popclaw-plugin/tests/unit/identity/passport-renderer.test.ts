@@ -198,7 +198,7 @@ describe('renderPassport', () => {
     expect(joined).not.toContain('已认证');
   });
 
-  it('prepends 👥 follower segment before the verified date (format C)', () => {
+  it('shows the follower snapshot before the detailed verified date', () => {
     const lines = renderPassport({
       popclawId: 'id', sigil: 'abc123', handle: 'elonmusk',
       profiles: [
@@ -206,20 +206,23 @@ describe('renderPassport', () => {
       ],
     });
     const joined = lines.join('\n');
-    expect(joined).toContain('👥 1.3m · verified 2026-04-12');
+    expect(joined).toContain('认证时粉丝数：约1.3m');
+    expect(joined).toContain('verified 2026-04-12');
+    expect(joined.indexOf('认证时粉丝数：约1.3m')).toBeLessThan(joined.indexOf('verified 2026-04-12'));
   });
 
-  it('shows 👥 count alone when verified_at is null', () => {
+  it('shows the follower snapshot without inventing a verified date when it is null', () => {
     const lines = renderPassport({
       popclawId: 'id', sigil: 'abc123', handle: 'h',
       profiles: [{ platform: 'x', handle: 'h', verified_at: null, profile_url: '', follower_count: 67_000 }],
     });
     const joined = lines.join('\n');
-    expect(joined).toContain('👥 67k');
+    expect(joined).toContain('认证时粉丝数：约67k');
+    expect(joined).not.toContain('verified');
     expect(joined).not.toContain('·');
   });
 
-  it('omits 👥 segment when follower_count is 0 / missing', () => {
+  it('labels a historical zero follower snapshot as unconfirmed', () => {
     const lines = renderPassport({
       popclawId: 'id', sigil: 'abc123', handle: 'h',
       profiles: [{ platform: 'x', handle: 'h', verified_at: '2026-04-12T00:00:00Z', profile_url: '', follower_count: 0 }],
@@ -227,6 +230,7 @@ describe('renderPassport', () => {
     const joined = lines.join('\n');
     expect(joined).toContain('verified 2026-04-12');
     expect(joined).not.toContain('👥');
+    expect(joined).toContain('认证时粉丝数：未确认');
   });
 
   it('renders the card block (nickname · role / intro / tags) between header and 已认证', () => {
@@ -352,8 +356,8 @@ describe('renderPassport', () => {
     const joined = lines.join('\n');
     // Local count rendered explicitly, on its own line.
     expect(joined).toContain('👥 本灯坊 12 人关注');
-    // External snapshot still rendered per-platform, unchanged.
-    expect(joined).toContain('👥 3.4m');
+    // External snapshot remains distinct from the local House count.
+    expect(joined).toContain('认证时粉丝数：约3.4m');
     // Never concatenated/summed into a single combined number.
     expect(joined).not.toContain('3400012');
     expect(joined).not.toContain('12 · 3.4m');

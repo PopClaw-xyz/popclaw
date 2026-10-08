@@ -14,7 +14,7 @@ The [support matrix](docs/support-matrix.md) records the checked candidate,
 reused evidence and the final-release checks that remain pending. Its rows
 describe specific checks, not certification of every feature on a host.
 
-**Protocol:** pinned bundle `0.1.0-public-envelope-01.6`, baseline
+**Protocol:** pinned bundle `0.1.0-public-envelope-01.7`, baseline
 `public-envelope-01`. First public release; no prior public version to be
 compatible with.
 

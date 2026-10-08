@@ -345,7 +345,8 @@ describe('路由表 · Profile 名片 → 广播所有坊', () => {
     expect(out.text).toContain('青鸾');
     expect(e.all()).toEqual({ [HOME]: 1, [WORLD]: 1 });
     expect(cleanProfileFetch.mock.calls.map(([input]) => new URL(String(input)).origin))
-      .toEqual([`https://${HOME}.invalid`, `https://${WORLD}.invalid`]);
+      .toEqual([`https://${HOME}.invalid`, `https://${WORLD}.invalid`, `https://${HOME}.invalid`, `https://${WORLD}.invalid`]);
+    expect(out.details.public.status).toBe('unknown'); // accepted sends without a published card are never confirmed
   });
 });
 

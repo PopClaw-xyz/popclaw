@@ -107,6 +107,7 @@ describe('registerPopclawTools', () => {
       'popclaw_show_marks',
       // standalone rename tool
       'popclaw_set_name',
+      'popclaw_set_bio',
       // bond retrieval (Task 2)
       'popclaw_find_bonds',
       // taste core 追加（做梦第 2 步：onboarding 之后主人随时还能补）
@@ -286,6 +287,7 @@ describe('registerPopclawTools', () => {
       'popclaw_show_marks',
       // name-taste-tools
       'popclaw_set_name',
+      'popclaw_set_bio',
       'popclaw_note_taste',
       // feedback-cadence-tools
       'popclaw_feedback',
@@ -313,7 +315,7 @@ describe('registerPopclawTools', () => {
         typeof registerPopclawTools
       >[0]['getWorldDeps'],
     });
-    expect(tools.length).toBe(46);
+    expect(tools.length).toBe(47);
     expect(registered).toBe(tools.length);
   });
 
@@ -333,7 +335,7 @@ describe('registerPopclawTools', () => {
         typeof registerPopclawTools
       >[0]['getWorldDeps'],
     });
-    expect(tools.length).toBe(46);
+    expect(tools.length).toBe(47);
     expect(registered).toBe(tools.length);
   });
 

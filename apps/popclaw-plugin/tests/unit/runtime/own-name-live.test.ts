@@ -29,15 +29,27 @@ async function renamedBoot() {
   const boot = extendBoot(raw, { signer: raw.signer });
   const before = boot.nickname;
   const pushed: Uint8Array[] = [];
-  const egress = { push: vi.fn(async (b: Uint8Array) => { pushed.push(b); return { status: 200, eventId: 'e'.repeat(64) }; }) };
+  let card: Record<string, unknown> | undefined;
+  const egress = { push: vi.fn(async (b: Uint8Array) => {
+    pushed.push(b);
+    const profile = decode(b).profile!;
+    card = {nickname: profile.nickname, one_line_intro: profile.oneLineIntro ?? '',
+      declared_at_ms: Number(profile.declaredAt) * 1000, taste_tags: [], role_persona: '',
+      location_hint: '', avatar_uri: '', payout_addresses: []};
+    return { status: 200, eventId: 'e'.repeat(64) };
+  }) };
   const named = await runPopclawNameCommand({ nickname: NEW_NAME }, {
     host,
     signer: boot.signer,
     egress: egress as never,
     popclawId: boot.popclawId,
     clock: { now: () => new Date('2026-09-26T00:00:00Z') },
-    houseOrigins: [],
+    houseOrigins: ['http://lh.example'],
+    fetch: async () => new Response(JSON.stringify({popclaw_id: boot.popclawId, sigil: 'abc123', profiles: [],
+      house_follower_count: 0, house_post_count: 0, house_reply_received_count: 0, ...(card ? {card} : {})})),
   });
+  expect(named.details.public.status).toBe('confirmed');
+  expect(card?.nickname).toBe(NEW_NAME);
   return { boot, before, named, namecard: pushed[0]! };
 }
 

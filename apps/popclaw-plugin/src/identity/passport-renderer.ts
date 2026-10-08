@@ -1,38 +1,15 @@
-/**
- * Shared Passport renderer — turns a ProfileResponse (own or other) into
- * an array of lines for TUI display. Used by:
- *   - /popclaw status (own profile, plugin-side signer + identity fetch)
- *   - /popclaw profile <handle>#<sigil> (other profile via by-handle endpoint)
- *
- * Rules (spec §4.6, §5.1, §5.2, §5.4):
- *   - 0 verified → only header (popclaw_id / sigil / popclaw.me URL); omit
- *     the entire Verified (N) block.
- *   - N > 0 → header + Verified (N): block, one platform per indented entry,
- *     emoji + capitalized-platform-label + handle + verified date + URL.
- *   - Order: same as input (caller passes verified_at ASC).
- *   - Unknown platform: emoji='?', show URL block as "(no canonical URL)" if empty.
+/** Namecard presentation: identity and account snapshots first, complete
+ * public evidence afterwards. Status reuses the per-account summary directly.
  */
 
-import { emojiFor } from './platform-emoji.js';
-import { formatFollowerCount } from './format-count.js';
+import { mapVerifiedProfiles, renderVerifiedProfileSummary, platformLabel, snapshotText, safeAvatarUrl, type VerifiedProfileInput } from './profile-snapshot.js';
 import { lexiconFor, renderCopy } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { timeContext } from '../time/time-context.js';
 import { profileLinkText } from '../lshow/sources/web-fallback.js';
 
-export interface VerifiedProfileInput {
-  readonly platform: string;
-  readonly handle: string;
-  readonly verified_at: string | null | undefined;
-  readonly profile_url?: string | null;
-  readonly follower_count?: number | null;
-  /**
-   * ADR-0034: the public URL of the post the applicant put the binding string
-   * in — the proof anyone can open and check. "" / absent = none on file
-   * (verified before migration 021, or the ranger found the post by search).
-   */
-  readonly proof_url?: string | null;
-}
+export type { VerifiedProfileInput } from './profile-snapshot.js';
+export { platformLabel } from './profile-snapshot.js';
 
 export interface ProfileCardInput {
   readonly nickname: string;
@@ -79,26 +56,6 @@ export interface PassportInput {
 const TOP = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
 const MIDDLE = '─────────────────────────────────────────────────────────';
 
-export function platformLabel(platform: string): string {
-  switch (platform) {
-    case 'x':
-    case 'twitter':
-      return 'X';
-    case 'instagram':
-      return 'Instagram';
-    case 'github':
-      return 'GitHub';
-    case 'youtube':
-      return 'YouTube';
-    case 'tiktok':
-      return 'TikTok';
-    case 'bluesky':
-      return 'Bluesky';
-    default:
-      return platform;
-  }
-}
-
 function formatVerifiedDate(iso: string | null | undefined): string {
   if (!iso) return '';
   // The lore-house hands over a UTC ISO string; the date the owner sees must
@@ -110,81 +67,52 @@ function formatVerifiedDate(iso: string | null | undefined): string {
   return m && m[1] ? `verified ${m[1]}` : '';
 }
 
-export function renderPassport(input: PassportInput): string[] {
-  const lines: string[] = [];
-  lines.push(TOP);
-  lines.push(`  popclaw  ${input.handle ? `@${input.handle}` : ''}#${input.sigil}`);
-  lines.push(`  popclaw_id  ${input.popclawId}`);
-  lines.push(`  popclaw.me  ${profileLinkText(input.handle || input.popclawId, input.sigil, input.webBaseUrl)}`);
-  // This house's follower count (house_follower_count): the local follower
-  // count on this lore-house, semantically distinct from the verified
-  // accounts' external follower-count snapshot below — never summed, each
-  // gets its own line.
-  if (input.houseFollowerCount !== undefined && input.houseFollowerCount !== null) {
-    lines.push(
-      renderCopy(ownerLang(), 'passport.houseFollowerCount', { count: String(input.houseFollowerCount) }),
-    );
-  }
+export interface NamecardDetails {
+  readonly popclaw_id: string;
+  readonly sigil: string;
+  readonly nickname: string;
+  readonly house_follower_count: number | null;
+  readonly card: ProfileCardInput | null;
+  readonly profiles: VerifiedProfileInput[];
+}
 
-  // jianghu namecard block (ProfilePayload): nickname · role / intro / tags.
-  // Omitted entirely when no card. The header @handle above is the addressing
-  // username; this nickname is the display name (spec §4.4, intentionally distinct).
+export function namecardDetails(input: PassportInput): NamecardDetails {
+  return {popclaw_id: input.popclawId, sigil: input.sigil, nickname: input.handle,
+    house_follower_count: input.houseFollowerCount ?? null,
+    card: input.card ?? null, profiles: mapVerifiedProfiles(input.profiles)};
+}
+
+export function renderPassport(input: PassportInput): string[] {
+  const lang = ownerLang();
+  const lines: string[] = [TOP, `  popclaw  ${input.handle ? `@${snapshotText(input.handle)}` : ''}#${snapshotText(input.sigil)}`];
   const card = input.card;
   const nick = card?.nickname?.trim() ?? '';
   if (card && nick) {
-    lines.push(MIDDLE);
-    const roleLabel = card.role_persona ? roleLabelFor(card.role_persona) : '';
-    lines.push(roleLabel ? `  ${nick} · ${roleLabel}` : `  ${nick}`);
-    const intro = card.one_line_intro?.trim() ?? '';
-    if (intro.length > 0) {
-      lines.push(`  ${intro}`);
-    }
-    const tags = card.taste_tags ?? [];
-    if (tags.length > 0) {
-      lines.push(`  🏷 ${tags.join(' · ')}`);
-    }
+    const role = card.role_persona ? roleLabelFor(card.role_persona) : '';
+    lines.push(role ? `  ${snapshotText(nick)} · ${role}` : `  ${snapshotText(nick)}`);
+    if (card.one_line_intro?.trim()) lines.push(`  ${snapshotText(card.one_line_intro)}`);
+    if (card.taste_tags?.length) lines.push(`  🏷 ${card.taste_tags.map(t => snapshotText(t)).join(' · ')}`);
   }
-
-  // The popclaw-native row is the identity anchor, already shown in the header
-  // (`popclaw @handle#sigil`). It is NOT a verified *external* account, so it is
-  // excluded from the Verified list per spec §4.6 (mock shows only X/IG/GitHub/…).
-  const displayed = input.profiles.filter((p) => p.platform !== 'popclaw');
-
-  if (displayed.length > 0) {
-    lines.push(MIDDLE);
-    lines.push(renderCopy(ownerLang(), 'passport.verifiedHeader', { count: String(displayed.length) }));
-    // Compute label column width: longest platformLabel.
-    const labels = displayed.map((p) => platformLabel(p.platform));
-    const labelW = labels.reduce((a, b) => Math.max(a, b.length), 0);
-    for (const p of displayed) {
-      const emoji = emojiFor(p.platform);
-      const label = platformLabel(p.platform).padEnd(labelW, ' ');
-      const handle = `@${p.handle}`;
-      const followerStr = formatFollowerCount(Number(p.follower_count ?? 0));
-      const followerSeg = followerStr ? `👥 ${followerStr}` : '';
-      const dateSeg = formatVerifiedDate(p.verified_at);
-      const tail = [followerSeg, dateSeg].filter(Boolean).join(' · ');
-      lines.push(`    ${emoji} ${label} ${handle.padEnd(20, ' ')} ${tail}`);
-      const rawUrl = p.profile_url ?? '';
-      const url = rawUrl.length > 0 ? rawUrl : '(no canonical URL)';
-      lines.push(`       ${' '.repeat(labelW)}  ${url}`);
-      // The point of a verification is that you don't have to take our word
-      // for it — so when the proof post is on file, show where to go look.
-      // Nothing at all when it isn't: never dress the account URL up as proof.
-      //
-      // The link is shown unconditionally and its liveness is never probed. The
-      // author is free to delete the post afterwards — the ✓ does not depend on
-      // it — so a 404 here is an allowed ending, not a broken link, and the copy
-      // says so up front. Probing would cost a paid fetch per render and still
-      // be wrong five minutes later; the verified-on date printed on the line
-      // above is the anchor a reader needs to make sense of a gone post.
-      const proof = p.proof_url ?? '';
-      if (proof.length > 0) {
-        lines.push(`       ${' '.repeat(labelW)}  ${renderCopy(ownerLang(), 'passport.proofLine', { url: proof })}`);
-      }
-    }
+  const displayed = mapVerifiedProfiles(input.profiles).filter(p => p.platform !== 'popclaw');
+  if (displayed.length) {
+    lines.push(MIDDLE, renderCopy(lang, 'passport.verifiedHeader', {count: String(displayed.length)}));
+    for (const p of displayed) lines.push(...renderVerifiedProfileSummary(p, lang).map(line => `  ${line}`));
   }
-
+  if (input.houseFollowerCount !== undefined && input.houseFollowerCount !== null) {
+    lines.push(renderCopy(lang, 'passport.houseFollowerCount', {count: String(input.houseFollowerCount)}));
+  }
+  // Full source material follows the readable card; no fake expansion controls.
+  lines.push('', renderCopy(lang, 'passport.detailsHeader'));
+  lines.push(`  popclaw_id  ${snapshotText(input.popclawId)}`);
+  lines.push(`  popclaw.me  ${profileLinkText(input.handle || input.popclawId, input.sigil, input.webBaseUrl)}`);
+  for (const p of displayed) {
+    lines.push(`  ${snapshotText(platformLabel(p.platform))} @${snapshotText(p.handle)} ${formatVerifiedDate(p.verified_at)}`.trimEnd());
+    lines.push(`  ${p.profile_url || '(no canonical URL)'}`);
+    if (p.bio?.trim()) lines.push(renderCopy(lang, 'passport.snapshotBioFull', {platform: snapshotText(platformLabel(p.platform)), bio: snapshotText(p.bio)}));
+    const avatar = safeAvatarUrl(p.avatar_url);
+    if (avatar) lines.push(renderCopy(lang, 'passport.snapshotAvatar', {url: avatar}));
+    if (p.proof_url) lines.push(renderCopy(lang, 'passport.proofLine', {url: p.proof_url}));
+  }
   lines.push(TOP);
   return lines;
 }

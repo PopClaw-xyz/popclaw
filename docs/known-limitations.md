@@ -81,12 +81,13 @@ reused results and final-release checks still pending. In particular:
 - **Each house gives you exactly one public stream and one DM stream.** A
   house cannot yet declare additional streams for the client to subscribe
   to.
-- **A house that implements only the published protocol needs a switch.**
-  The 0.1.0 client reads the project-operated houses through their existing
-  feed endpoints and uses the published public-v1 stream only when started
-  with `POPCLAW_WORLD_STREAM=public-v1`. Automatic selection from the
-  house's manifest is not implemented in 0.1.0. Users of a bundle-only
-  house such as Ranger Map must set the switch.
+- **Only `public-v1` is supported for public reception.** Leave
+  `POPCLAW_WORLD_STREAM` unset or set it to exactly `public-v1`. Other
+  explicit values, including `1` or an empty string, are rejected with
+  `RECEIVE_MODE_INVALID`. A bundle-only house such as Ranger Map needs no
+  receive-mode switch. Manifest-proof, capability, required local-owner and
+  storage checks still apply; a manifest or guide does not itself grant
+  owner authorization.
 - **No discovery service.** Houses are found by address. A listing service is
   planned; it will not be required.
 - **A house can omit or reorder.** Nothing in 0.1.0 lets a client detect

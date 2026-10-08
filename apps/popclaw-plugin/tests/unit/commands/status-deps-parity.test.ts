@@ -17,6 +17,7 @@ vi.mock('../../../src/commands/status.js', async (importOriginal) => {
     ...actual,
     runStatusCommand: vi.fn(async (deps: Record<string, unknown>) => {
       captured.push(deps);
+      return {popclawId: 'me', sigil: 'abc123', verifiedProfiles: [], following: []};
     }),
   };
 });

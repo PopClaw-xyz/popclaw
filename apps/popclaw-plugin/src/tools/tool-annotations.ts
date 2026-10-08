@@ -119,6 +119,7 @@ export const TOOL_ANNOTATIONS: Readonly<Record<string, PopclawToolAnnotations>> 
   popclaw_unfollow: RETRACT_REMOTE,
   popclaw_mark: WRITE_REMOTE, // public +1, signed by the owner
   popclaw_unmark: { ...RETRACT_REMOTE, idempotentHint: true }, // safe to repeat, per its own contract
+  popclaw_set_bio: WRITE_REMOTE, // base public Profile biography, explicit owner request
   popclaw_set_name: WRITE_REMOTE, // re-signs and publishes the namecard
   popclaw_invite: WRITE_REMOTE, // the confirmed call puts rangers to work
   popclaw_onboarding_continue: WRITE_REMOTE, // an act may name, follow or stamp

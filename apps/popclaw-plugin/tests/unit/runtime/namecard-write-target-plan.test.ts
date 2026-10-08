@@ -91,6 +91,8 @@ async function house(opts: { session: boolean; avatar: string; seed: number; hol
   const posts: ProfilePost[] = [];
   const kp = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(opts.seed));
   const ackHex = Buffer.from(kp.publicKey).toString('hex');
+  let projection = { nickname: 'OldName', one_line_intro: '', taste_tags: [] as string[], role_persona: '',
+    location_hint: '', avatar_uri: opts.avatar, declared_at_ms: 1, payout_addresses: [] };
   const server = createServer(async (req, res) => {
     const path = new URL(req.url ?? '/', 'http://x').pathname;
     log.push({ at: Date.now(), line: `${req.method} ${path}` });
@@ -118,8 +120,7 @@ async function house(opts: { session: boolean; avatar: string; seed: number; hol
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ popclaw_id: decodeURIComponent(path.slice(12)), sigil: 's', profiles: [],
         house_follower_count: 0, house_post_count: 0, house_reply_received_count: 0,
-        card: { nickname: 'OldName', one_line_intro: '', taste_tags: [], role_persona: '', location_hint: '',
-          avatar_uri: opts.avatar, declared_at_ms: 1, payout_addresses: [] } }));
+        card: projection }));
       return;
     }
     if (path === '/v1/push') {
@@ -128,7 +129,11 @@ async function house(opts: { session: boolean; avatar: string; seed: number; hol
       const profile = env['profile'] as Record<string, unknown> | undefined;
       const eventId = String(env['eventId']);
       expect(eventId).toBe(cidFromCanonical(canonicalizeEnvelope(env)));
-      if (profile) posts.push({ at: Date.now(), nickname: String(profile['nickname'] ?? ''), declaredAt: String(profile['declaredAt'] ?? ''), eventId });
+      if (profile) {
+        posts.push({ at: Date.now(), nickname: String(profile['nickname'] ?? ''), declaredAt: String(profile['declaredAt'] ?? ''), eventId });
+        projection = {...projection, nickname: String(profile['nickname'] ?? ''),
+          one_line_intro: String(profile['oneLineIntro'] ?? ''), declared_at_ms: Number(profile['declaredAt']) * 1000};
+      }
       res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ event_id: eventId }));
       return;
     }
@@ -270,12 +275,16 @@ describe('slash /popclaw name — the guard reads exactly the houses the card is
     expect(d2[0]!.declaredAt).toBe(d1[0]!.declaredAt);
     expect(d2[0]!.eventId).toBe(d1[0]!.eventId);
     // H2 was read by this command before it was written.
-    const h2Get = h2.profileGets(g2)[0];
+    const h2Gets = h2.profileGets(g2);
+    expect(h2Gets).toHaveLength(2);
+    const h2Get = h2Gets[0];
     expect(h2Get).toBeDefined();
     expect(h2Get!.at).toBeLessThanOrEqual(d2[0]!.at);
-    // Home receipt semantics unchanged: success copy with the owner's address.
+    expect(h2Gets[1]!.at).toBeGreaterThanOrEqual(d2[0]!.at);
+    // Publication now includes each House's exact public readback.
     expect(text).toMatch(/NewName/);
-    expect(text).not.toContain(h2.origin);
+    expect(text).toContain(h2.origin);
+    expect(text).toContain('confirmed');
     expect(r.warnings.join('\n')).not.toMatch(/broadcast to .* (failed|rejected)/);
   }, 30_000);
 });

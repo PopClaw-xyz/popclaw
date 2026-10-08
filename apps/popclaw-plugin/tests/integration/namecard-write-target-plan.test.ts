@@ -90,6 +90,8 @@ function startHouse(opts: { session: boolean; avatar: string; seed: number }) {
   const kp = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(opts.seed));
   const ackHex = Buffer.from(kp.publicKey).toString('hex');
   let minted: MintedHouse | undefined;
+  let projection = {nickname: 'OldName', one_line_intro: '', taste_tags: [] as string[], role_persona: '',
+    location_hint: '', avatar_uri: opts.avatar, declared_at_ms: 1_000_000, payout_addresses: []};
   const server: Server = createServer((req, res) => {
     const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
     const at = Date.now();
@@ -122,8 +124,7 @@ function startHouse(opts: { session: boolean; avatar: string; seed: number }) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         popclaw_id: id, sigil: 'abcd', profiles: [], house_follower_count: 0, house_post_count: 0, house_reply_received_count: 0,
-        card: { nickname: 'OldName', one_line_intro: '', taste_tags: [], role_persona: '', location_hint: '',
-          avatar_uri: opts.avatar, declared_at_ms: 1_000_000, payout_addresses: [] },
+        card: projection,
       }));
       return;
     }
@@ -138,7 +139,11 @@ function startHouse(opts: { session: boolean; avatar: string; seed: number }) {
           const profile = obj['profile'] as Record<string, unknown> | undefined;
           const eventId = String(obj['eventId']);
           if (eventId !== cidFromCanonical(canonicalizeEnvelope(obj))) throw new Error('invalid declaration CID');
-          if (profile) posts.push({ at, nickname: String(profile['nickname'] ?? ''), declaredAt: String(profile['declaredAt'] ?? ''), eventId });
+          if (profile) {
+            posts.push({ at, nickname: String(profile['nickname'] ?? ''), declaredAt: String(profile['declaredAt'] ?? ''), eventId });
+            projection = {...projection, nickname: String(profile['nickname'] ?? ''),
+              one_line_intro: String(profile['oneLineIntro'] ?? ''), declared_at_ms: Number(profile['declaredAt']) * 1000};
+          }
           res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ event_id: eventId }));
         } catch {
           res.writeHead(400).end('{}');
@@ -245,12 +250,13 @@ async function scenario(opts: { h2Avatar: string; restartAfterLogin?: boolean })
   }
   const m1 = h1.requests.length, m2 = h2.requests.length;
   const t0 = Date.now();
-  const renameText = await mcp.callText('popclaw_set_name', { nickname: 'NewName' });
+  const rename = await mcp.request('tools/call', {name:'popclaw_set_name', arguments:{nickname:'NewName'}});
+  const renameText = ((rename.result?.['content'] as Array<{text:string}>) ?? []).map(block=>block.text).join('\n');
   const t1 = Date.now();
   await new Promise(r => setTimeout(r, 1000));
   const inWindow = (p: ProfilePost) => p.nickname === 'NewName' && p.at >= t0 && p.at <= t1;
   return {
-    h2Row, renameText, o1, o2,
+    h2Row, renameText, renameResult: rename.result, o1, o2,
     h1Gets: h1.requests.slice(m1).filter(r => r.at <= t1 && r.method === 'GET' && r.path.startsWith('/v1/profile/')),
     h2Gets: h2.requests.slice(m2).filter(r => r.at <= t1 && r.method === 'GET' && r.path.startsWith('/v1/profile/')),
     h1Declaration: h1.posts.filter(inWindow),
@@ -271,6 +277,8 @@ describe('popclaw_set_name on the real MCP root: guard and send use one captured
     expect(r.h1Declaration).toEqual([]);
     expect(r.h2Gets).toHaveLength(1);
     expect(r.renameText).toContain(r.o2);
+    expect(r.renameResult?.['isError']).toBe(true);
+    expect(r.renameResult?.['structuredContent']).toMatchObject({local:{status:'saved'}, public:{status:'blocked'}});
     expect(r.renameText).toContain('avatar_uri');
   }, 120_000);
 
@@ -283,6 +291,8 @@ describe('popclaw_set_name on the real MCP root: guard and send use one captured
     expect(r.h1Declaration).toEqual([]);
     expect(r.h2Gets).toHaveLength(1);
     expect(r.renameText).toContain(r.o2);
+    expect(r.renameResult?.['isError']).toBe(true);
+    expect(r.renameResult?.['structuredContent']).toMatchObject({local:{status:'saved'}, public:{status:'blocked'}});
   }, 120_000);
 
   it('both houses clean: the name is issued to H1 and H2, H2 read before it is written', async () => {
@@ -292,9 +302,12 @@ describe('popclaw_set_name on the real MCP root: guard and send use one captured
     expect(r.h2Declaration).toHaveLength(1);
     expect(r.h2Declaration[0]!.declaredAt).toBe(r.h1Declaration[0]!.declaredAt);
     expect(r.h2Declaration[0]!.eventId).toBe(r.h1Declaration[0]!.eventId);
-    expect(r.h2Gets).toHaveLength(1);
+    expect(r.h2Gets).toHaveLength(2); // guard before send, public read-back after send
     expect(r.h2Gets[0]!.at).toBeLessThanOrEqual(r.h2Declaration[0]!.at);
+    expect(r.h2Gets[1]!.at).toBeGreaterThanOrEqual(r.h2Declaration[0]!.at);
     expect(r.renameText).toMatch(/NewName/);
-    expect(r.renameText).not.toContain(r.o2);
+    expect(r.renameText).toContain(r.o2);
+    expect(r.renameResult?.['isError']).not.toBe(true);
+    expect(r.renameResult?.['structuredContent']).toMatchObject({local:{status:'saved'}, public:{status:'confirmed'}});
   }, 120_000);
 });

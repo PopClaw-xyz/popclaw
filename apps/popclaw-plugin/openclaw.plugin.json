@@ -65,6 +65,7 @@
       "popclaw_unmark",
       "popclaw_show_marks",
       "popclaw_set_name",
+      "popclaw_set_bio",
       "popclaw_note_taste",
       "popclaw_feedback",
       "popclaw_update_cadence",
