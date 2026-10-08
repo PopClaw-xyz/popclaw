@@ -318,7 +318,7 @@ describe('gateway root — runtime bag shape', () => {
       'host', 'houseRuntime', 'houseStarted', 'houses', 'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers',
       'llmComplete', 'markService', 'marksStore', 'nameOf', 'nativeWorldExecution', 'notifier', 'notifyBacklog',
       'onboardingState', 'orchestrator', 'ownerNotifier', 'ownerNotifyTargetStore', 'ownerSession', 'paths',
-      'pendingFollows', 'pendingInvites', 'proposalsStore', 'replyPings', 'retryDmNotifications', 'scoreCache',
+      'pendingFollows', 'pendingInvites', 'proposalsStore', 'publicFeedDisplay', 'replyPings', 'retryDmNotifications', 'scoreCache',
       'shutdown', 'socialGraph', 'socialLog', 'summaryClient', 'tasteLoader', 'uploadCanvas', 'worldFeedCache',
       'worldFeedClient', 'worldOwnerApproval', 'worldRuntime',
     ]);

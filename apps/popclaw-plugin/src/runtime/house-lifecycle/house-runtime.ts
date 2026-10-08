@@ -3,6 +3,7 @@ import { HouseRecovery, type HouseRecoveryPort } from '../../world/house-recover
 import { projectWorldAgentContext, type WorldAgentContextQuery, type WorldAgentContextResult } from '../../world/world-agent-context.js';
 import { storageDatabasePathAllowed, storageDatabaseGeneration, readStorageControl, assertStorageBootstrap, type RecoveryPath } from '../../host/storage-maintenance.js';
 /** One composition seam for OpenClaw, MCP and the standalone daemon/CLI. */
+import { parseWorldManifest } from '../../world/json-profile.js';
 import { popclaw } from '@popclaw/contracts';
 import type { Signer } from '../../identity/signer.js';
 import { executionDbFor, type HouseStore } from '../../ingress/world-feed-store.js';
@@ -194,16 +195,8 @@ export class HouseRuntime {
   private publicResources: PublicReadResources | null = null;
 
   constructor(private readonly opts: HouseRuntimeOptions) {
-    this.manager = new HouseLifecycleManager({ ...opts, configuredPinningMode: opts.publicV1Mode === true ? 'public-v1' : 'static', legacyRecoveryConfigured: origin => opts.origins.some(input => normalizeHouseOrigin(input) === origin), installationId: resolveInstallationId(opts.db),
-      revokeTrustedManifest: opts.revokeTrustedManifest ?? revokeHouseCapabilityView,
-      prepareTrustedManifest: opts.prepareTrustedManifest ?? makeWorldManifestPreparer({ fetch: opts.fetch }),
-      // Every root gets this, including the ones that do not RECEIVE
-      // relations. Deciding what a house is trusted to be is not consumption
-      // — it is idempotent after the first time, and an owner who runs
-      // `popclaw login` from an MCP host should end up with the same binding
-      // they would get from the gateway. Only reading the stream needs to be
-      // elected to a single process.
-      prepareRelationBinding: opts.prepareRelationBinding ?? makeRelationBindingPreparer({
+    const prepareWorld = opts.prepareTrustedManifest ?? makeWorldManifestPreparer({fetch:opts.fetch});
+    const prepareRelation = opts.prepareRelationBinding ?? makeRelationBindingPreparer({
         db: opts.db,
         ...(opts.fetch ? { fetch: opts.fetch } : {}),
         // The operator's pin is stored as ACK hex and a relation is scoped to
@@ -219,7 +212,36 @@ export class HouseRuntime {
         // lore-house. Not inferred from the scheme: "it said http" is not a
         // reason to accept http.
         allowInsecureOrigin: isLoopbackOrigin,
-      }),
+      });
+    this.manager = new HouseLifecycleManager({ ...opts, configuredPinningMode: opts.publicV1Mode === true ? 'public-v1' : 'static', legacyRecoveryConfigured: origin => opts.origins.some(input => normalizeHouseOrigin(input) === origin), installationId: resolveInstallationId(opts.db),
+      revokeTrustedManifest: opts.revokeTrustedManifest ?? revokeHouseCapabilityView,
+      prepareTrustedManifest: prepareWorld,
+      // Relation trust and public capability remain separate proofs over the
+      // same response. A public-only House commits both at the original checked
+      // participation boundary, without manufacturing a session or ACK key.
+      prepareRelationBinding: async input => {
+        const relation = await prepareRelation(input);
+        if (!opts.publicV1Mode) return relation;
+        const document = parseWorldManifest(input.rawBytes,new Map());
+        if (document.house_session !== undefined) return relation;
+        const proof = document.world_interaction === undefined ? undefined
+          : popclaw.world.ManifestProof.decode(Buffer.from(input.proofHeader ?? '', 'base64'));
+        const pin = normalizeAckKeyHex(proof?.house?.houseKey ?? '');
+        if (document.world_interaction !== undefined && !pin) throw new Error('PUBLIC_MANIFEST_PIN_UNAVAILABLE');
+        const configured = opts.configuredPinFor?.(input.origin), existing = pinnedBinding(opts.db,input.origin);
+        const world = await prepareWorld({...input,ackKeyHex:pin,
+          provenance:configured ? 'configured_pin' : existing ? 'persisted_pin'
+            : input.origin.startsWith('https:') ? 'https_tofu' : 'loopback_fixture'});
+        return {commit: tx => {
+          const refusal = relation.commit(tx);
+          if (refusal !== undefined) return refusal;
+          const binding = pinnedBinding(tx,input.origin);
+          if (pin && (!binding || binding.blockedReason || binding.incarnation !== proof?.house?.incarnation
+            || normalizeAckKeyHex(binding.houseKey) !== pin)) throw new Error('PUBLIC_MANIFEST_BINDING_MISMATCH');
+          world.commit(tx);
+          return undefined;
+        }};
+      },
       onRelationBindingRefused: opts.onRelationBindingRefused
         ?? ((origin, reason) => opts.log?.(`popclaw: ${origin} is not trusted for relations — ${reason}`)) });
     this.configuredHousePinning = opts.publicV1Mode === true
@@ -254,7 +276,7 @@ export class HouseRuntime {
       if (catalog.options.db !== opts.db) throw new Error('PUBLIC_CATALOG_DATABASE_MISMATCH');
       this.publicResources = new PublicReadResources({ db: opts.db, catalog,
         authority: this.resident.authority, selected: () => !this.stopped && opts.publicV1Mode === true,
-        pinFor: origin => opts.configuredPinFor?.(origin) || readParticipation(opts.db, origin)?.ack_key_hex || '',
+        pinFor: origin => this.publicPinFor(origin),
         consumersAllowed: () => storageDatabasePathAllowed(opts.db, 'consumers', catalog.options.paths), storeFor: origin => this.storeFor(origin),
         fetch: opts.fetch, log: opts.log });
     }
@@ -475,6 +497,19 @@ export class HouseRuntime {
       this.opts.publicV1Mode ? 'Public execution catalog unavailable' : 'Public-v1 mode is not selected');
   }
 
+  /** Public trust comes from the relation binding on public-only Houses;
+   * session ACK state remains untouched and is never invented for reception. */
+  private publicPinFor(origin: string): string {
+    const binding = this.opts.db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='house_binding_pin'")
+      ? pinnedBinding(this.opts.db,origin) : undefined;
+    if (binding?.blockedReason) return '';
+    const configured = this.opts.configuredPinFor?.(origin);
+    if (configured) return normalizeAckKeyHex(configured);
+    const participation = readParticipation(this.opts.db,origin);
+    if (participation?.session_id) return normalizeAckKeyHex(participation.ack_key_hex);
+    return normalizeAckKeyHex(binding?.houseKey || participation?.ack_key_hex || '');
+  }
+
   /** Local display borrows an already mounted protected handle, without an
    * owner/session gate. Retained public history survives ordinary logout. */
   capturePublicDisplay(house: HouseStore): PublicDisplayCapture {
@@ -489,7 +524,7 @@ export class HouseRuntime {
       const view = readHouseCapabilityView(this.opts.db, origin), capability = view?.publicStreamCapability;
       if (!view || view.publicStream.validation !== 'valid' || !capability) throw new Error('PUBLIC_DISPLAY_TRUST_UNAVAILABLE');
       const participation = readParticipation(this.opts.db, origin);
-      const pin = normalizeAckKeyHex(this.opts.configuredPinFor?.(origin) || participation?.ack_key_hex || '');
+      const pin = this.publicPinFor(origin);
       if (!pin || pin !== normalizeAckKeyHex(capability.house.houseKey)) throw new Error('PUBLIC_DISPLAY_PIN_MISMATCH');
       const row = this.opts.db.queryOne<ExecutionCatalogRow>('SELECT * FROM execution_store_catalog_v1 WHERE origin=?', [origin]);
       const required: unknown = JSON.parse(row?.required_tables ?? '[]');
@@ -538,7 +573,7 @@ export class HouseRuntime {
       const view = readHouseCapabilityView(this.opts.db, origin), capability = view?.publicStreamCapability;
       if (!view || view.publicStream.validation !== 'valid' || !capability) throw new Error('NEWSPAPER_PUBLIC_TRUST_UNAVAILABLE');
       const participation = readParticipation(this.opts.db, origin)!;
-      const pin = normalizeAckKeyHex(this.opts.configuredPinFor?.(origin) || participation.ack_key_hex || '');
+      const pin = this.publicPinFor(origin);
       if (!pin || pin !== normalizeAckKeyHex(capability.house.houseKey)) throw new Error('NEWSPAPER_PUBLIC_PIN_CHANGED');
       const row = this.opts.db.queryOne<ExecutionCatalogRow>('SELECT * FROM execution_store_catalog_v1 WHERE origin=?', [origin]);
       const required: unknown = JSON.parse(row?.required_tables ?? '[]');

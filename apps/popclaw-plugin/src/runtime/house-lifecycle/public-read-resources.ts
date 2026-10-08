@@ -1,4 +1,5 @@
 /** Anonymous raw reception, owned by the existing resident and never a business gate. */
+import { initializePublicStreamJournal } from '../../host/execution-store-migration.js';
 import bs58 from 'bs58';
 import type { HostDb } from '../../host/host-db.js';
 import type { ExecutionStoreCatalog, ExecutionCatalogRow, ExecutionPartition } from '../../host/execution-store.js';
@@ -110,6 +111,16 @@ export class PublicReadResources implements PublicResourceFactory {
           if (partition.storeId !== catalogRow.store_id || executionDbFor(house) !== partition.db) throw new Error('PUBLIC_EXECUTION_HANDLE_MISMATCH');
           opts.catalog.verifySelected(origin, partition);
           verifyPublicStreamJournalSchema(partition.db);
+          if (!current()) return null;
+          // An empty selected journal is not proof of freshness. The initializer
+          // requires a real factory credential and consumes it atomically with
+          // the verified binding/profile/cursors before any receiver is built.
+          if (!partition.db.queryOne('SELECT 1 FROM world_public_bindings_v1 LIMIT 1')) {
+            initializePublicStreamJournal({catalog:opts.catalog, origin, configuredPin:pin,
+              activation:{partition, assertCurrent:() => {
+                if (!current()) throw new Error('PUBLIC_PREPARATION_CAPTURE_CHANGED');
+              }}});
+          }
           if (!current()) return null;
           return { partition, capability, producerPolicy, selection };
         });

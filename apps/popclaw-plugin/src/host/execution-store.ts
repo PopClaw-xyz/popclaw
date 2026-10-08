@@ -10,7 +10,7 @@ import { assertNativeActionJournalSchema } from '../world/native-action-journal.
 import { verifyLegacyPublicStreamJournalSchema, verifyPublicStreamJournalSchema } from '../world/scoped-stream-journal.js';
 import { assertPrivateMessageJournalSchema, PRIVATE_MESSAGE_FEATURE_TABLES, PRIVATE_MESSAGE_FEATURE_PROFILE, PRIVATE_MESSAGE_SCHEMA_FINGERPRINT } from '../world/private-message-storage.js';
 import { MaintenanceSession, readStorageControl } from './storage-maintenance.js';
-import { assertFreshPartitionAdmissible, buildFreshExecutionPartition, FRESH_PARTITION_REQUIRED_TABLES } from './execution-partition-factory.js';
+import { assertFreshPartitionAdmissible, assertFreshPublicPartition, buildFreshExecutionPartition, FRESH_PARTITION_REQUIRED_TABLES } from './execution-partition-factory.js';
 import { hostDbSlug } from '../ingress/host-slug.js';
 import { normalizeHouseOrigin } from '../runtime/house-lifecycle/control-client.js';
 
@@ -135,6 +135,15 @@ export class ExecutionStoreCatalog {
     const required: unknown = JSON.parse(row.required_tables ?? '[]');
     return Array.isArray(required) && required.every(name => typeof name === 'string' && present.has(name))
       && [...present].every(name => allowed.has(name)) && PUBLIC_JOURNAL_TABLES.every(name => required.includes(name) && present.has(name));
+  }
+
+  /** Live preparation may only consume a real factory credential on this selected handle. */
+  assertFreshPublicPreparation(input: string, partition: ExecutionPartition): void {
+    const origin = normalizeHouseOrigin(input);
+    assertFreshPartitionAdmissible(this.options.db, this.options.paths);
+    this.verifySelected(origin, partition);
+    if (!this.isPublicJournalCurrent(origin, partition)) throw new Error('PUBLIC_JOURNAL_INITIALIZATION_REQUIRED');
+    assertFreshPublicPartition(partition.db, {actorId:this.options.actorId, origin, storeId:partition.storeId});
   }
 
   /** Opens only the already-certified selected database. It never mounts a
@@ -383,10 +392,12 @@ export class ExecutionStoreCatalog {
 
 /** Shared read-only validation for selection and backup eligibility. */
 export function verifyExecutionPartition(probe: HostDb, row: ExecutionCatalogRow, actorId: string): void {
-  const identity = probe.queryOne<ExecutionCatalogRow>('SELECT * FROM execution_partition_identity_v1 WHERE singleton=1');
+  const identity = probe.queryOne<ExecutionCatalogRow & {public_initialization?:string}>('SELECT * FROM execution_partition_identity_v1 WHERE singleton=1');
   if (!identity || identity.actor_id !== actorId || identity.origin !== row.origin || identity.store_id !== row.store_id || identity.layout_version !== EXECUTION_LAYOUT_VERSION) {
     throw new Error('EXECUTION_PARTITION_BINDING_MISMATCH');
   }
+  if (identity.public_initialization !== undefined && !['fresh-public-v1','prepared-public-v1'].includes(identity.public_initialization))
+    throw new Error('PUBLIC_PREPARATION_PROFILE_UNSUPPORTED');
   const tables = new Set(probe.queryAll<{name: string}>("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").map(table => table.name));
   const allowed = new Set<string>([...DURABLE_TABLES, '_READ_THIS_FIRST', 'execution_partition_identity_v1']);
   if ([...tables].some(table => !allowed.has(table))) throw new Error('EXECUTION_SCHEMA_UNKNOWN');

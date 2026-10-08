@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, chmodSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { LocalHostDb } from './local-host-db.js';
-import { ExecutionStoreCatalog, type ExecutionCatalogRow } from './execution-store.js';
+import { ExecutionStoreCatalog, type ExecutionCatalogRow, type ExecutionPartition } from './execution-store.js';
 import { CACHE_TABLES, PUBLIC_JOURNAL_TABLES, ACTION_RECEIPT_FEATURE_TABLES, NATIVE_ACTION_FEATURE_TABLES, EXECUTION_LAYOUT_VERSION, inspectLegacySchema } from './execution-store-schema.js';
 import { MaintenanceSession, publishStorageJson } from './storage-maintenance.js';
 import { createStorageBackup, fileSha256, quoteSqlIdentifier, tableFingerprint, verifyStorageBackup } from './storage-backup.js';
@@ -160,8 +160,8 @@ function verifyTables(db: LocalHostDb, names: string[], fingerprints: Record<str
   checkDatabase(db);
   for (const name of names) if (tableFingerprint(db, name) !== fingerprints[name]) throw new Error(`MIGRATION_CONTENT_MISMATCH: ${name}`);
 }
-function capturePublicMaintenance(catalog: ExecutionStoreCatalog, origin: string, maintenance: MaintenanceSession, configuredPin?: string) {
-  maintenance.assertCurrent();
+function capturePublicPreparation(catalog: ExecutionStoreCatalog, origin: string, assertCurrent: () => void, configuredPin?: string) {
+  assertCurrent();
   const view = readHouseCapabilityView(catalog.options.db, origin), capability = view?.publicStreamCapability;
   if (!view || view.publicStream.validation !== 'valid' || !capability) throw new Error('PUBLIC_CAPABILITY_UNAVAILABLE');
   const currentPin = () => normalizeAckKeyHex(configuredPin || readParticipation(catalog.options.db, origin)?.ack_key_hex || '');
@@ -170,61 +170,80 @@ function capturePublicMaintenance(catalog: ExecutionStoreCatalog, origin: string
   const producerPolicy = publicProducerPolicy(view);
   const identity = JSON.stringify([capability, producerPolicy]);
   return { capability, producerPolicy, assertCurrent: () => {
-    maintenance.assertCurrent();
+    assertCurrent();
     const current = readHouseCapabilityView(catalog.options.db, origin);
     if (currentPin() !== pin || current?.publicStream.validation !== 'valid'
       || JSON.stringify([current.publicStreamCapability, publicProducerPolicy(current)]) !== identity) throw new Error('PUBLIC_MAINTENANCE_CAPTURE_CHANGED');
   } };
 }
 
-/** Explicit offline provisioning only. Normal roots never call this operation.
- * G reservation survives target rollback; neither success nor failure releases holds. */
+/** The existing checked preparation: offline reservation or a factory-born live partition.
+ * The live path consumes provenance in its target transaction; it never repairs old storage.
+ * G reservation survives target rollback; neither path releases storage holds. */
 export function initializePublicStreamJournal(options: {
-  catalog: ExecutionStoreCatalog; origin: string; maintenance: MaintenanceSession;
+  catalog: ExecutionStoreCatalog; origin: string; maintenance?: MaintenanceSession;
+  activation?: { readonly partition: ExecutionPartition; assertCurrent(): void };
   configuredPin?: string; failpoint?: (stage: 'reserved' | 'prepared' | 'verified') => void;
 }): ReturnType<typeof preparePublicStreamJournal> {
-  const { catalog, maintenance } = options;
-  if (resolve(catalog.options.paths.rootDir()) !== resolve(maintenance.paths.rootDir())) throw new Error('PUBLIC_JOURNAL_ROOT_MISMATCH');
-  maintenance.assertCurrent();
+  const { catalog, maintenance, activation } = options;
+  if (!!maintenance === !!activation) throw new Error('PUBLIC_PREPARATION_AUTHORITY_REQUIRED');
+  if (maintenance && (!(maintenance instanceof MaintenanceSession)
+    || resolve(catalog.options.paths.rootDir()) !== resolve(maintenance.paths.rootDir()))) throw new Error('PUBLIC_JOURNAL_ROOT_MISMATCH');
   const origin = normalizeHouseOrigin(options.origin);
-  const captured = capturePublicMaintenance(catalog, origin, maintenance, options.configuredPin);
+  const assertCurrent = () => {
+    if (maintenance) maintenance.assertCurrent();
+    else { activation!.assertCurrent(); catalog.verifySelected(origin, activation!.partition); }
+  };
+  const captured = capturePublicPreparation(catalog, origin, assertCurrent, options.configuredPin);
+  const partition = activation?.partition ?? catalog.open(origin, {maintenance});
   const { capability, producerPolicy } = captured;
   const selection = { fullPublic: true, scopes: [...capability.publicStream.initial_public_scopes].sort() };
-  const partition = catalog.open(origin, {maintenance});
-  const reservation = catalog.reservePublicJournal(origin, partition, maintenance);
+  const reservation = maintenance ? catalog.reservePublicJournal(origin, partition, maintenance)
+    : (catalog.assertFreshPublicPreparation(origin, partition), {upgradeLegacyLogProfiles:false});
   const bindingId = JSON.stringify([origin, capability.house.houseKey, capability.house.incarnation]);
   type PreparedBinding = {origin: string; house_key: string; house_incarnation: string; active_log: string; capability_revision: string; selection_json: string};
   const previous = partition.db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='world_public_bindings_v1'")
     ? partition.db.queryOne<PreparedBinding>('SELECT * FROM world_public_bindings_v1 WHERE binding_id=?', [bindingId]) : null;
-  options.failpoint?.('reserved');
-  captured.assertCurrent();
-  // G1 owns exactly one H31 transaction, including DDL and checked import.
-  const result = preparePublicStreamJournal({ executionDb: partition.db, capability, producerPolicy, selection,
-    upgradeLegacyLogProfiles: reservation.upgradeLegacyLogProfiles, consumerContracts: [], approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST });
-  options.failpoint?.('prepared');
-  captured.assertCurrent();
-  catalog.verifySelected(origin, partition);
-  verifyPublicStreamJournalSchema(partition.db);
-  if (result.bindingId !== bindingId || result.mappingDigest !== EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST
-    || JSON.stringify([...result.tables].sort()) !== JSON.stringify([...PUBLIC_JOURNAL_TABLES].sort())) throw new Error('PUBLIC_JOURNAL_PREPARATION_MISMATCH');
-  const binding = partition.db.queryOne<PreparedBinding>(
-    'SELECT * FROM world_public_bindings_v1 WHERE binding_id=?', [result.bindingId]);
-  if (!binding || binding.origin !== origin || binding.house_key !== capability.house.houseKey
-    || binding.house_incarnation !== capability.house.incarnation
-    || binding.active_log !== (previous?.active_log ?? capability.publicStream.log_incarnation)
-    || binding.capability_revision !== (previous?.capability_revision ?? capability.capabilityRevision)
-    || binding.selection_json !== (previous?.selection_json ?? JSON.stringify(selection))) throw new Error('PUBLIC_JOURNAL_PREPARATION_BINDING_MISMATCH');
-  // Preparation preserves an older runtime selection. New captured lanes are
-  // prepared independently; only a subsequently admitted receiver activates them.
-  for (const lane of [{ lane: 'public', scope: '' }, ...selection.scopes.map(scope => ({ lane: 'scope', scope }))]) {
-    const cursor = partition.db.queryOne<{after_seq: string; stale: number}>(
-      'SELECT after_seq,stale FROM world_public_cursors_v1 WHERE binding_id=? AND log_incarnation=? AND lane=? AND scope_id=?',
-      [bindingId, capability.publicStream.log_incarnation, lane.lane, lane.scope]);
-    if (!cursor || typeof cursor.after_seq !== 'string' || !/^(0|[1-9][0-9]*)$/.test(cursor.after_seq) || BigInt(cursor.after_seq) > 18_446_744_073_709_551_615n
-      || ![0, 1].includes(cursor.stale)) throw new Error('PUBLIC_JOURNAL_PREPARATION_CURSOR_INVALID');
-  }
-  options.failpoint?.('verified');
-  return result;
+  const prepare = () => {
+    options.failpoint?.('reserved');
+    captured.assertCurrent();
+    // G1 owns exactly one H31 transaction, including DDL and checked import.
+    const result = preparePublicStreamJournal({ executionDb: partition.db, capability, producerPolicy, selection,
+      upgradeLegacyLogProfiles: reservation.upgradeLegacyLogProfiles, consumerContracts: [], approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST });
+    options.failpoint?.('prepared');
+    captured.assertCurrent();
+    catalog.verifySelected(origin, partition);
+    verifyPublicStreamJournalSchema(partition.db);
+    if (result.bindingId !== bindingId || result.mappingDigest !== EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST
+      || JSON.stringify([...result.tables].sort()) !== JSON.stringify([...PUBLIC_JOURNAL_TABLES].sort())) throw new Error('PUBLIC_JOURNAL_PREPARATION_MISMATCH');
+    const binding = partition.db.queryOne<PreparedBinding>(
+      'SELECT * FROM world_public_bindings_v1 WHERE binding_id=?', [result.bindingId]);
+    if (!binding || binding.origin !== origin || binding.house_key !== capability.house.houseKey
+      || binding.house_incarnation !== capability.house.incarnation
+      || binding.active_log !== (previous?.active_log ?? capability.publicStream.log_incarnation)
+      || binding.capability_revision !== (previous?.capability_revision ?? capability.capabilityRevision)
+      || binding.selection_json !== (previous?.selection_json ?? JSON.stringify(selection))) throw new Error('PUBLIC_JOURNAL_PREPARATION_BINDING_MISMATCH');
+    // Preparation preserves an older runtime selection. New captured lanes are
+    // prepared independently; only a subsequently admitted receiver activates them.
+    for (const lane of [{ lane: 'public', scope: '' }, ...selection.scopes.map(scope => ({ lane: 'scope', scope }))]) {
+      const cursor = partition.db.queryOne<{after_seq: string; stale: number}>(
+        'SELECT after_seq,stale FROM world_public_cursors_v1 WHERE binding_id=? AND log_incarnation=? AND lane=? AND scope_id=?',
+        [bindingId, capability.publicStream.log_incarnation, lane.lane, lane.scope]);
+      if (!cursor || typeof cursor.after_seq !== 'string' || !/^(0|[1-9][0-9]*)$/.test(cursor.after_seq) || BigInt(cursor.after_seq) > 18_446_744_073_709_551_615n
+        || ![0, 1].includes(cursor.stale)) throw new Error('PUBLIC_JOURNAL_PREPARATION_CURSOR_INVALID');
+    }
+    options.failpoint?.('verified');
+    return result;
+  };
+  if (!activation) return prepare();
+  return partition.db.transaction(tx => {
+    captured.assertCurrent();
+    catalog.assertFreshPublicPreparation(origin, partition);
+    const result = prepare();
+    tx.execute("UPDATE execution_partition_identity_v1 SET public_initialization='prepared-public-v1' WHERE singleton=1 AND public_initialization='fresh-public-v1'");
+    captured.assertCurrent();
+    return result;
+  });
 }
 
 /** Offline only. Original files are retained; the catalog selects both verified replacement handles. */
@@ -375,7 +394,7 @@ export async function clearWorldFeedProjection(options: {
   const hasPublicTables = !!partition.db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='world_public_bindings_v1'");
   if (hasPublicTables && !options.mode && partition.db.queryOne('SELECT 1 FROM world_public_bindings_v1')) throw new Error('PUBLIC_REBUILD_MODE_REQUIRED');
   const publicRebuild = options.mode === 'public-v1'
-    ? { mode: 'public-v1' as const, ...capturePublicMaintenance(catalog, origin, maintenance, options.configuredPin) }
+    ? { mode: 'public-v1' as const, ...capturePublicPreparation(catalog, origin, () => maintenance.assertCurrent(), options.configuredPin) }
     : options.mode === 'legacy' || hasPublicTables ? { mode: 'legacy' as const } : undefined;
   const slug = hostDbSlug(origin);
   const path = existsSync(paths.worldFeedProjectionDb(slug)) ? paths.worldFeedProjectionDb(slug) : paths.lorehouseDb(slug);

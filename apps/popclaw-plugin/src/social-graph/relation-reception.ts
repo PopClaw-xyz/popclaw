@@ -39,6 +39,8 @@ export interface RelationReception {
   readonly hooks: RelationResourceHooks;
   /** Stop the drain schedule. The transports belong to the resource sets. */
   stop(): void;
+  /** After stop(), wait for this chain's already-started drain work. */
+  whenIdle(): Promise<void>;
 }
 
 export async function openRelationReception(
@@ -74,5 +76,6 @@ export async function openRelationReception(
       host.stop();
       transports.clear();
     },
+    whenIdle: () => host.whenIdle(),
   };
 }

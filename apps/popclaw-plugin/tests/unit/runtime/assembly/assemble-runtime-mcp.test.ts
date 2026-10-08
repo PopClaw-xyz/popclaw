@@ -31,7 +31,7 @@ import { ALL_STARTERS, startersCalledBy } from '../../../../src/runtime/resident
  * These pin what the spawned-process characterization
  * (root-assembly-mcp.test.ts) cannot see: the bag's key set, drift rows #16,
  * #17, #18 and #25, the pull consumer, and the closure-only shutdown steps
- * (inline loop stops, owner-lane stop, and the ABSENCE of a reception stop).
+ * (inline loop stops, owner-lane stop, and the relation reception stop/join).
  * They cannot run against the pre-move tree — `buildRuntime` was neither
  * exported nor importable (mcp.ts starts `main()` at module scope) — so every
  * expected value below is transcribed from src/mcp.ts @ 2f857931. That file is
@@ -40,9 +40,8 @@ import { ALL_STARTERS, startersCalledBy } from '../../../../src/runtime/resident
  *
  * Probes are pass-through recorders (tests/helpers/root-assembly-probe.ts).
  * Two collaborators are not run for real: `routeReplyPing` (recorded, the
- * item is synthetic) and relation reception's `stop` as the ROOT sees it
- * (recorded only — the test stops the real reception itself afterwards, so
- * its drain timer never outlives a test).
+ * item is synthetic). Relation stop/join are pass-through recorders; the
+ * test-only rescue still handles intentionally failed boots and shutdowns.
  */
 
 const HOUSE = 'http://127.0.0.1:9';
@@ -71,7 +70,8 @@ vi.mock('../../../../src/social-graph/relation-reception.js', async (orig) => {
     const reception = await real.openRelationReception(deps);
     realReceptions.push(reception);
     push('reception.open');
-    return { ...reception, stop: () => push('reception.stop') };
+    return { ...reception, stop: () => {push('reception.stop');reception.stop();},
+      whenIdle:async()=>{push('reception.whenIdle');await reception.whenIdle();} };
   } };
 });
 vi.mock('../../../../src/config/loader.js', async (orig) => {
@@ -209,7 +209,7 @@ beforeEach(() => {
   logLines = [];
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('OFFLINE'); }));
   vi.stubEnv('POPCLAW_MCP_ENABLE_RANGER', '');
-  vi.stubEnv('POPCLAW_WORLD_STREAM', '');
+  vi.stubEnv('POPCLAW_WORLD_STREAM', undefined);
   vi.stubEnv('POPCLAW_CANVAS_BASE_URL', HOUSE);
 });
 afterEach(async () => {
@@ -280,22 +280,22 @@ const config = (): ResourceConfig => {
 };
 
 describe('the MCP bag, as the production root path builds it', () => {
-  it('carries exactly the keys src/mcp.ts @ 2f857931 returned (no publicFeedDisplay unless public-v1)', async () => {
+  it('carries the shared runtime keys with the default publicFeedDisplay', async () => {
     const rt = await boot();
     expect(Object.keys(rt).sort()).toEqual([
       'boot', 'bondsStore', 'cadenceLoader', 'egress', 'guideClient', 'host', 'houseRuntime', 'houseStarted', 'houses',
       'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers', 'llmComplete', 'markService', 'marksStore', 'nameOf',
       'notifier', 'onboardingState', 'orchestrator', 'ownerNotifyTargetStore', 'paths', 'pendingFollows', 'pendingInvites',
       'proposalsStore', 'replyPings', 'scoreCache', 'shutdown', 'socialGraph', 'socialLog', 'summaryClient', 'tasteLoader',
-      'uploadCanvas', 'worldFeedCache', 'worldFeedClient', 'worldOwnerAuthorization', 'worldRuntime',
+      'publicFeedDisplay', 'uploadCanvas', 'worldFeedCache', 'worldFeedClient', 'worldOwnerAuthorization', 'worldRuntime',
     ].sort());
-    expect(Object.keys(rt)).toHaveLength(37);
+    expect(Object.keys(rt)).toHaveLength(38);
     expect(rt.worldFeedClient).toBe(rt.worldFeedCache);
   });
 
-  it('the world-stream env is read DURING boot, where the root read it — not when the ports were built', async () => {
-    // Unset when mcpRuntimePorts runs; set while bootstrapPlugin loads the
-    // config, i.e. before HouseRuntime is constructed and the bag returned.
+  it('captures receive configuration before host construction and shares it throughout boot', async () => {
+    // The unset default is captured first. A later environment mutation
+    // cannot split HouseRuntime and the returned public display into two modes.
     fault.publicV1DuringBoot = true;
     const rt = await boot();
     expect((rt.houseRuntime as unknown as { opts: { publicV1Mode?: boolean } }).opts.publicV1Mode).toBe(true);
@@ -440,15 +440,15 @@ describe('boot and shutdown sequences (rows 7, 26, 28)', () => {
     expect(probe.events.indexOf('dm.recover')).toBeGreaterThan(probe.events.indexOf('houses.start'));
   });
 
-  it('normal shutdown: loops, owner lane, worlds, houses, idle, store DB, execution stores, release, host DB — and reception is never stopped', async () => {
+  it('normal shutdown stops relation reception before closing storage', async () => {
     const rt = await boot();
     const sequence = await stop(rt);
     expect(sequence.filter(e => e !== 'dm.recover')).toEqual([
       'housePinning.stop', 'followerSync.stop', 'doorbell.stop', 'pageState.stop',
-      'ownerAuthorization.stop', 'worlds.stop', 'houses.stop', 'worlds.whenIdle',
+      'ownerAuthorization.stop', 'worlds.stop', 'reception.stop', 'houses.stop', 'worlds.whenIdle', 'reception.whenIdle',
       `storeDb.close:${HOUSE_SLUG}`, 'executionStores.close', 'release', 'hostDb.close',
     ]);
-    expect(probe.events).not.toContain('reception.stop');
+    expect(probe.events).toContain('reception.stop');
     // Memoized: a second call is the same task and runs nothing again.
     const again = probe.events.length;
     await rt.shutdown();
@@ -463,7 +463,7 @@ describe('boot and shutdown sequences (rows 7, 26, 28)', () => {
     await expect(rt.shutdown()).rejects.toThrow('C0_houses.stop_FAILED');
     expect(probe.events.slice(from).filter(e => e !== 'dm.recover')).toEqual([
       'housePinning.stop', 'followerSync.stop', 'doorbell.stop', 'pageState.stop',
-      'ownerAuthorization.stop', 'worlds.stop', 'houses.stop',
+      'ownerAuthorization.stop', 'worlds.stop', 'reception.stop', 'houses.stop',
     ]);
     // Row 28 leaves the stores open. Proof the rescue is needed, and that it works.
     const partitions = partitionDbs();
@@ -477,7 +477,7 @@ describe('boot and shutdown sequences (rows 7, 26, 28)', () => {
     const rt = await boot(closed.signal);
     expect(probe.events.filter(e => /\.start$|^dm\.recover$/.test(e))).toEqual([]);
     expect(await stop(rt)).toEqual([
-      'ownerAuthorization.stop', 'worlds.stop', 'houses.stop', 'worlds.whenIdle',
+      'ownerAuthorization.stop', 'worlds.stop', 'reception.stop', 'houses.stop', 'worlds.whenIdle', 'reception.whenIdle',
       `storeDb.close:${HOUSE_SLUG}`, 'executionStores.close', 'release', 'hostDb.close',
     ]);
   });

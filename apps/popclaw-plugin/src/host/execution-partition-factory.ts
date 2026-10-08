@@ -24,7 +24,7 @@ import { MaintenanceSession, readStorageControl, storagePathAllowed } from './st
 import { prepareActionReceiptJournal, snapshotActionReceiptOriginalContent, snapshotActionJournalTableOriginalContent, ACTION_RECEIPT_SCHEMA_FINGERPRINT } from '../world/action-receipt-journal.js';
 import { prepareNativeActionJournal, snapshotNativeActionOriginalContent, NATIVE_ACTION_SCHEMA_FINGERPRINT } from '../world/native-action-journal.js';
 import { preparePrivateMessageJournal, snapshotPrivateMessageOriginalContent, PRIVATE_MESSAGE_FEATURE_TABLES, PRIVATE_MESSAGE_SCHEMA_FINGERPRINT } from '../world/private-message-storage.js';
-import { createPublicStreamSchema } from '../world/scoped-stream-journal.js';
+import { createPublicStreamSchema, verifyPublicStreamJournalSchema } from '../world/scoped-stream-journal.js';
 
 /** Exactly what a first-release partition is published with. Bindings, cursors
  * and every other selection-bearing record stay outside: they are established
@@ -108,8 +108,8 @@ export function buildFreshExecutionPartition(input: { paths: PopclawPaths; actor
   try {
     db.execute(`CREATE TABLE execution_partition_identity_v1 (
       singleton INTEGER PRIMARY KEY CHECK(singleton=1), actor_id TEXT NOT NULL,
-      origin TEXT NOT NULL, store_id TEXT NOT NULL, layout_version INTEGER NOT NULL)`);
-    db.execute('INSERT INTO execution_partition_identity_v1 VALUES(1,?,?,?,?)', [actorId, origin, storeId, EXECUTION_LAYOUT_VERSION]);
+      origin TEXT NOT NULL, store_id TEXT NOT NULL, layout_version INTEGER NOT NULL, public_initialization TEXT NOT NULL CHECK(public_initialization IN ('fresh-public-v1','prepared-public-v1')))`);
+    db.execute('INSERT INTO execution_partition_identity_v1 VALUES(1,?,?,?,?,?)', [actorId, origin, storeId, EXECUTION_LAYOUT_VERSION, 'fresh-public-v1']);
     const expectedPartition = { origin, actorId, storeId, layoutVersion: 1 as const };
     prepareActionReceiptJournal({ executionDb: db, expectedPartition, expectedSchemaFingerprint: ACTION_RECEIPT_SCHEMA_FINGERPRINT });
     prepareNativeActionJournal({ executionDb: db, expectedPartition, expectedSchemaFingerprint: NATIVE_ACTION_SCHEMA_FINGERPRINT });
@@ -134,4 +134,21 @@ export function buildFreshExecutionPartition(input: { paths: PopclawPaths; actor
     persistPartitionFile(db, path);
     return { db, path };
   } catch (error) { db.close(); throw error; }
+}
+
+/** Factory provenance is explicit and durable. Empty tables never confer it. */
+export function assertFreshPublicPartition(db: HostDb, expected: { actorId: string; origin: string; storeId: string }): void {
+  const columns = db.queryAll<{name:string}>('PRAGMA table_info(execution_partition_identity_v1)');
+  if (!columns.some(c => c.name === 'public_initialization')) throw new Error('PUBLIC_JOURNAL_INITIALIZATION_REQUIRED');
+  const row = db.queryOne<{actor_id:string;origin:string;store_id:string;layout_version:number;public_initialization:string}>(
+    'SELECT * FROM execution_partition_identity_v1 WHERE singleton=1');
+  if (!row || row.actor_id !== expected.actorId || row.origin !== expected.origin || row.store_id !== expected.storeId
+    || row.layout_version !== EXECUTION_LAYOUT_VERSION || row.public_initialization !== 'fresh-public-v1')
+    throw new Error('PUBLIC_JOURNAL_INITIALIZATION_REQUIRED');
+  verifyPublicStreamJournalSchema(db);
+  const historical = [...PUBLIC_JOURNAL_TABLES, 'world_stream', 'world_scoped_events', 'world_scoped_bindings', 'world_scoped_cursors'];
+  for (const table of historical) {
+    if (db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [table])
+      && db.queryOne(`SELECT 1 FROM "${table}" LIMIT 1`)) throw new Error('PUBLIC_JOURNAL_INITIALIZATION_REQUIRED');
+  }
 }

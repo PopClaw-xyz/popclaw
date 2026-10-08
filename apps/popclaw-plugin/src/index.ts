@@ -1,3 +1,4 @@
+import { resolveReceiveMode } from './runtime/receive-mode.js';
 import { registerOpenClawPromptHooks } from './host/openclaw-prompt-hooks.js';
 import { assertStorageBootstrap, registerStorageRuntime } from './host/storage-maintenance.js';
 import { ownerConfirmedWorldInvoke, worldDeclaredActionParameters } from './runtime/world-runtime.js';
@@ -236,12 +237,13 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
           `popclaw: ⚠️ ${nodeIssue} Upgrade Node — below the floor, dates and native modules go wrong quietly.`,
         );
       }
+      const receiveMode = resolveReceiveMode();
       const storagePaths = new PopclawPaths(PopclawPaths.resolveRoot(process.env, api.runtime.state.resolveStateDir()));
       assertStorageBootstrap(storagePaths);
       let releaseStorage!: () => void;
       const host = createOpenClawHostAdapter(api, db => (releaseStorage = registerStorageRuntime(db, storagePaths)));
       return assembleRuntime(host, gatewayRuntimePorts({
-        initialEvidence: () => initialEvidence, api, host, build: POPCLAW_BUILD, storagePaths, releaseStorage: () => releaseStorage(), llmComplete,
+        receiveMode, initialEvidence: () => initialEvidence, api, host, build: POPCLAW_BUILD, storagePaths, releaseStorage: () => releaseStorage(), llmComplete,
         favoritesFile: (paths) => join(paths.data(), 'favorites.jsonl'),
         root: {
           l2: {

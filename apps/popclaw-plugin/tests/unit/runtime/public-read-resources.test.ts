@@ -22,7 +22,7 @@ const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
 const origin = 'https://public-resource.invalid', pair = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(23));
 const pinHex = Buffer.from(pair.publicKey).toString('hex');
-async function fixture() {
+async function fixture(fresh = false) {
   const root = mkdtempSync(join(tmpdir(), 'public-read-resource-'));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const paths = new PopclawPaths(root), db = new LocalHostDb(paths.socialDb());
@@ -42,9 +42,11 @@ async function fixture() {
       proofHeader: Buffer.from(popclaw.world.ManifestProof.encode({ ...core, authoritySignature: nacl.sign.detached(signing, pair.secretKey) }).finish()).toString('base64') })).commit);
   }
   await observe();
-  const maintenance = MaintenanceSession.begin(db, paths, 'public resource fixture');
-  initializePublicStreamJournal({ catalog, origin, maintenance, configuredPin: pinHex });
-  maintenance.finish({ recovery: false, reason: 'synthetic initialized' });
+  if (!fresh) {
+    const maintenance = MaintenanceSession.begin(db, paths, 'public resource fixture');
+    initializePublicStreamJournal({ catalog, origin, maintenance, configuredPin: pinHex });
+    maintenance.finish({ recovery: false, reason: 'synthetic initialized' });
+  }
   let owner = 1, pin = pinHex, allowed = true, selected = true;
   const cacheRecord = vi.fn();
   const house = { baseUrl: origin, slug: 'public-resource-invalid', executionDb: partition.db,
@@ -64,7 +66,7 @@ async function fixture() {
     expect(selection).not.toBeNull();
     const resource = selection.open(); cleanup.push(() => resource.stop()); return resource;
   }
-  return { db, catalog, partition, resources, requests, fetch, house, cacheRecord, open, observe,
+  return { db, paths, catalog, partition, resources, requests, fetch, house, cacheRecord, open, observe,
     setOwner: (value: number) => { owner = value; }, setPin: (value: string) => { pin = value; },
     setAllowed: (value: boolean) => { allowed = value; }, setSelected: (value: boolean) => { selected = value; },
     setAcquire: (value: () => Promise<HouseStore>) => { acquire = value; } };
@@ -146,4 +148,57 @@ it('keeps malformed producer policy unsupported while accepting a proven empty s
   expect(f.resources.capture(origin)).toBeNull();
   expect(f.resources.status(origin).detail).toContain('PUBLIC_PRODUCER_POLICY_INVALID');
   expect(f.fetch).not.toHaveBeenCalled();
+});
+
+it('prepares a factory-born public-only House through normal reception without maintenance', async () => {
+  const f = await fixture(true), resource = f.open();
+  await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+  const binding = f.partition.db.queryOne<{active_log:string;capability_revision:string}>(
+    'SELECT active_log,capability_revision FROM world_public_bindings_v1');
+  expect(binding).toMatchObject({active_log:'log_1',capability_revision:readHouseCapabilityView(f.db,origin)!.verified.capabilityRevision});
+  expect(f.partition.db.queryAll('SELECT * FROM world_public_log_profiles_v1')).toHaveLength(1);
+  expect(f.partition.db.queryAll('SELECT * FROM world_public_cursors_v1')).toHaveLength(1);
+  expect(f.db.queryOne('SELECT session_id FROM house_participation')).toEqual({session_id:''});
+  expect(new Headers(f.requests[0]!.init?.headers).has('authorization')).toBe(false);
+  await resource.stop();
+});
+
+it('does not treat an old selected empty schema as factory authorization', async () => {
+  const f = await fixture(true);
+  if (f.partition.db.queryAll<{name:string}>('PRAGMA table_info(execution_partition_identity_v1)').some(c=>c.name==='public_initialization'))
+    f.partition.db.execute('ALTER TABLE execution_partition_identity_v1 DROP COLUMN public_initialization');
+  const before=f.partition.db.queryAll("SELECT type,name,sql FROM sqlite_master ORDER BY type,name");
+  const resource=f.open();
+  await vi.waitFor(()=>expect(f.resources.status(origin).detail).toContain('PUBLIC_JOURNAL_INITIALIZATION_REQUIRED'));
+  expect(f.partition.db.queryAll("SELECT type,name,sql FROM sqlite_master ORDER BY type,name")).toEqual(before);
+  expect(f.fetch).not.toHaveBeenCalled();
+  expect(f.partition.db.queryAll('SELECT * FROM world_public_bindings_v1')).toEqual([]);
+  await resource.stop();
+});
+
+it('retains factory provenance across restart before first preparation',async()=>{
+  const f=await fixture(true);f.catalog.close();
+  const restarted=new ExecutionStoreCatalog({db:f.db,paths:f.paths,actorId:bs58.encode(pair.publicKey)});
+  cleanup.push(()=>restarted.close());
+  const partition=restarted.open(origin);
+  const report=initializePublicStreamJournal({catalog:restarted,origin,configuredPin:pinHex,activation:{partition,assertCurrent() {}}});
+  expect(report.imported).toBe(0);
+  expect(partition.db.queryOne('SELECT public_initialization FROM execution_partition_identity_v1')).toEqual({public_initialization:'prepared-public-v1'});
+});
+it('rolls back both fresh prepared records and provenance consumption on preparation failure',async()=>{
+  const f=await fixture(true);
+  expect(()=>initializePublicStreamJournal({catalog:f.catalog,origin,configuredPin:pinHex,
+    activation:{partition:f.partition,assertCurrent() {}},failpoint:stage=>{if(stage==='prepared') throw new Error('SYNTHETIC_PREPARATION_FAILURE');}})).toThrow('SYNTHETIC_PREPARATION_FAILURE');
+  expect(f.partition.db.queryAll('SELECT * FROM world_public_bindings_v1')).toEqual([]);
+  expect(f.partition.db.queryAll('SELECT * FROM world_public_log_profiles_v1')).toEqual([]);
+  expect(f.partition.db.queryAll('SELECT * FROM world_public_cursors_v1')).toEqual([]);
+  expect(f.partition.db.queryOne('SELECT public_initialization FROM execution_partition_identity_v1')).toEqual({public_initialization:'fresh-public-v1'});
+  const resource=f.open();await vi.waitFor(()=>expect(f.requests).toHaveLength(1));await resource.stop();
+});
+it('does not reissue consumed provenance when selected public records disappear',async()=>{
+  const f=await fixture(true),resource=f.open();await vi.waitFor(()=>expect(f.requests).toHaveLength(1));await resource.stop();
+  f.partition.db.execute('PRAGMA foreign_keys=OFF');
+  for(const table of ['world_public_cursors_v1','world_public_log_profiles_v1','world_public_bindings_v1']) f.partition.db.execute(`DELETE FROM ${table}`);
+  expect(()=>initializePublicStreamJournal({catalog:f.catalog,origin,configuredPin:pinHex,activation:{partition:f.partition,assertCurrent() {}}})).toThrow('PUBLIC_JOURNAL_INITIALIZATION_REQUIRED');
+  expect(f.partition.db.queryAll('SELECT * FROM world_public_bindings_v1')).toEqual([]);
 });

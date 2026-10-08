@@ -53,12 +53,21 @@ describe('relation host snapshot authority capture', () => {
       if (change === 'pin-incarnation') db.execute("UPDATE house_binding_pin SET incarnation = 'replacement'");
       if (change === 'pin-block') db.execute("UPDATE house_binding_pin SET blocked_reason = 'changed'");
       if (change === 'newer-gap') host.reception.onCursorReset('capture', { ...reset, logGeneration: '3' }, 1);
-      if (change === 'stop') host.stop();
+      let joined = false;
+      let join: Promise<void> | undefined;
+      if (change === 'stop') {
+        host.stop();
+        join = host.whenIdle().then(() => { joined = true; });
+        await settle();
+        expect(joined).toBe(false);
+        expect(db.queryOne('SELECT 1 AS open')).toEqual({open:1});
+      }
       release(new Response(JSON.stringify({
         checkpoint_id: 'checkpoint', log_generation: '2', floor: '7', watermark: '20',
         entries: [], complete: true,
       }), { status: 200 }));
       await settle();
+      if (join) { await join; expect(joined).toBe(true); }
       const gaps = db.queryAll('SELECT * FROM relation_stream_gaps');
       expect(gaps).toHaveLength(change === 'unchanged' ? 0 : 1);
       expect(host.reception.resumePosition('capture')).toBe(change === 'unchanged' ? '2.20' : undefined);

@@ -16,7 +16,7 @@
  * order; C3 the gateway root, ruling 2026-09-29 13:23 / 14:14). Where the two
  * roots' orders differ observably, each keeps its own through a named
  * `DriftPins` field (cadence vs social graph, score-cache read, follow
- * backfill, world-stream read); every other difference is a pure construction
+ * backfill); every other difference is a pure construction
  * moved within the boot (epoch table, refactor-assembly-c3-epoch-table). A
  * host's own work runs as a `LifecyclePort` phase operation at the point that
  * root did it, and the L2 slots are handed out at their own anchors
@@ -114,12 +114,8 @@ export async function assembleRuntime<S extends object, P extends object = Recor
   const { notifier, replyPings, pendingInvites } = buildQueues(host, ports);
   const { bondsStore, knownFollowers, socialLogRef, socialLog } = buildSharedStores(host, paths, ports);
 
-  // #553 batch C: POPCLAW_WORLD_STREAM=1 swaps in the public-world-stream
-  // receiver. Read before or after the stores open (DriftPins.worldStreamReadBeforeHouseStores).
-  const streamModeReadEarly = drift.worldStreamReadBeforeHouseStores === true ? ports.platform.worldStreamMode() : undefined;
   const houseStores = await openStores(boot, paths, ports, executionStores);
   registerStoreCloses(houseStores, fail);
-  const worldStreamMode = streamModeReadEarly !== undefined ? streamModeReadEarly : ports.platform.worldStreamMode();
   // L2 slot: the queue as the host's prompt-build hook reads it. A thunk, so
   // each hook call captures the house scopes and builds its view then.
   lifecycle.expose?.notifier(() => {
@@ -206,7 +202,7 @@ export async function assembleRuntime<S extends object, P extends object = Recor
   const relationReception = await openReception({ host, boot, ports, houses, readAuthorityFor, relationProducer,
     deps: relationFollowerDeps, houseStores, worldFeedCache });
   configureHouseResources({ host, boot, paths, ports, houses, executionStores, egress, houseStores, worldFeedCache,
-    worldStreamMode, receptionHooks: relationReception.hooks,
+    receptionHooks: relationReception.hooks,
     routeReplyPing: replyPingRoute({ boot, ports, replyPings, notifier, socialLog, bondContext, pushOnFirstReply: pushToOwner }),
     onInbox, rangerEnabled, inviteNotify, notifier });
   const loops = startHousesAndLoops({ host, boot, ports, houses, closing, dmPolicy, followerDeps: relationFollowerDeps,
@@ -215,14 +211,14 @@ export async function assembleRuntime<S extends object, P extends object = Recor
   const shutdown = guardedHostOps
     ? guardedShutdown({ host, platform: ports.platform, log: ports.log, hostOps: guardedHostOps,
       afterShutdown: () => lifecycle.afterShutdown?.(), lane, worlds, reception: relationReception, houses, houseStores, executionStores })
-    : firstErrorAbortsShutdown({ host, ports, loops, lane, worlds, houses, houseStores, executionStores });
+    : firstErrorAbortsShutdown({ host, ports, loops, lane, worlds, reception:relationReception, houses, houseStores, executionStores });
 
   if (drift.ownerLangSignalsLate) registerOwnerLangSignals(paths, ports);
 
   const bag = {
     shutdown,
     houseRuntime: houses,
-        ...(ports.platform.publicWorldStream() ? { publicFeedDisplay: new PublicFeedDisplay({
+        ...(ports.platform.receiveMode() === 'public-v1' ? { publicFeedDisplay: new PublicFeedDisplay({
           sources: () => houseStores.map(house => ({ origin: house.baseUrl, slug: house.slug, capture: () => houses.capturePublicDisplay(house) })),
         }) } : {}),
     worldRuntime: worlds,

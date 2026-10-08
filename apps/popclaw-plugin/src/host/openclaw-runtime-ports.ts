@@ -15,6 +15,7 @@
  * and so is the register-scope state the root keeps (the L2 slots, the
  * storage-shutdown flag, the backup tasks).
  */
+import { resolveReceiveMode, type ReceiveMode } from '../runtime/receive-mode.js';
 import { localDatabasePath } from './local-host-db.js';
 import { localParticipationPort, type LocalSetupEvidence } from './local-participation.js';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
@@ -71,7 +72,6 @@ export const GATEWAY_DRIFT_PINS: DriftPins = Object.freeze({
   ownerCadenceBeforeSocialGraph: true,
   scoreCacheLoadedBeforeReception: true,
   followBackfillLate: true,
-  worldStreamReadBeforeHouseStores: true,
   followerPollHousesFromCatalog: true,
   receptionHouseLookupFromCatalog: true,
 });
@@ -87,6 +87,7 @@ export interface GatewayRootState {
 }
 
 export function gatewayRuntimePorts(input: {
+  receiveMode?: ReceiveMode;
   initialEvidence?: () => LocalSetupEvidence | undefined;
   /** The register-scope api, logger already swapped to the visible one. */
   api: OpenClawPluginApi;
@@ -102,6 +103,7 @@ export function gatewayRuntimePorts(input: {
   root: GatewayRootState;
 }): GatewayRuntimePorts {
   const { api, host, build, root } = input;
+  const receiveMode = resolveReceiveMode(input.receiveMode ?? process.env['POPCLAW_WORLD_STREAM']);
   const line = (m: string) => api.logger.info(`popclaw: ${m}`);
   const warn = (m: string) => api.logger.warn(`popclaw: ${m}`);
   // The owner notifier the push leg opens; the install notice and the
@@ -130,8 +132,7 @@ export function gatewayRuntimePorts(input: {
       paths: () => new PopclawPaths(PopclawPaths.resolveRoot(process.env, api.runtime.state.resolveStateDir())),
       releaseStorage: () => input.releaseStorage(),
       defaultStateDir: () => api.runtime.state.resolveStateDir(),
-      publicWorldStream: () => process.env['POPCLAW_WORLD_STREAM'] === 'public-v1',
-      worldStreamMode: () => process.env['POPCLAW_WORLD_STREAM'] === '1',
+      receiveMode: () => receiveMode,
       // Plus the locale signals the host already has (speechLocale / OPENCLAW_LOCALE
       // / LANG) — priority order lives in useOwnerLangSignals.
       speechLocale: () => api.config?.talk?.speechLocale,

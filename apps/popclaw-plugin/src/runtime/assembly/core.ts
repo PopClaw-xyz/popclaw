@@ -72,7 +72,7 @@ export function buildHouses<S extends object>(host: HostAdapter, boot: Boot, por
       const live = boot.loreHouseUrls as string[];
       for (const url of urls) if (!live.includes(url)) live.push(url);
     },
-    publicV1Mode: ports.platform.publicWorldStream(), executionStores});
+    publicV1Mode: ports.platform.receiveMode() === 'public-v1', executionStores});
   fail.drain = () => houses.stop();
   // The owner lane. Its duplicate lookup reads `worlds` lazily — only while a
   // dialog is being built, long after the next statement constructed it.
@@ -127,14 +127,14 @@ export function registerOwnerLangSignals(paths: PopclawPaths, ports: AnyRuntimeP
 
 /**
  * The normal shutdown, `first-error-aborts` (DriftPins.shutdown, row 28):
- * memoized; the first throwing step aborts every later one; relation
- * reception is not stopped here.
+ * memoized; the first throwing step aborts every later one. Relation
+ * reception is stopped before SQLite handles can close.
  */
 export function firstErrorAbortsShutdown(input: {
   host: HostAdapter; ports: AnyRuntimePorts; loops: InlineLoops; lane: WorldLane<object>;
-  worlds: WorldRuntime; houses: HouseRuntime; houseStores: HouseStore[]; executionStores: ExecutionStoreCatalog;
+  worlds: WorldRuntime; reception: {stop():void;whenIdle():Promise<void>}; houses: HouseRuntime; houseStores: HouseStore[]; executionStores: ExecutionStoreCatalog;
 }): () => Promise<void> {
-  const { host, ports, loops, lane, worlds, houses, houseStores, executionStores } = input;
+  const { host, ports, loops, lane, worlds, reception, houses, houseStores, executionStores } = input;
   let closeTask: Promise<void> | undefined;
   return (): Promise<void> => closeTask ??= (async () => {
     loops.housePinning?.stop();
@@ -143,8 +143,10 @@ export function firstErrorAbortsShutdown(input: {
     loops.pageState?.stop();
     lane.stop();
     worlds.stop();
+    reception.stop();
     await houses.stop();
     await worlds.whenIdle();
+    await reception.whenIdle();
     for (const house of houseStores) house.db.close();
     executionStores.close(); ports.platform.releaseStorage(); host.db.close();
   })();
@@ -173,7 +175,7 @@ export function firstErrorAbortsShutdown(input: {
  */
 export function guardedShutdown(input: {
   host: HostAdapter; platform: PlatformPort; log: LogPort; hostOps: GuardedShutdownHostOps; afterShutdown?: () => void;
-  lane: WorldLane<object>; worlds: WorldRuntime; reception: { stop(): void }; houses: HouseRuntime;
+  lane: WorldLane<object>; worlds: WorldRuntime; reception: { stop(): void; whenIdle(): Promise<void> }; houses: HouseRuntime;
   houseStores: HouseStore[]; executionStores: ExecutionStoreCatalog;
 }): () => Promise<void> {
   const { host, platform, log, hostOps, lane, worlds, reception, houses, houseStores, executionStores } = input;
@@ -197,6 +199,11 @@ export function guardedShutdown(input: {
     reception.stop();
     await drop('house lifecycle', () => houses.stop());
     await drop('world runtime', () => worlds.whenIdle());
+    let relationIdle = false;
+    await drop('relation reception', async () => { await reception.whenIdle(); relationIdle = true; });
+    // A failed join proves no quiescence. Keep its databases and storage claim
+    // open rather than let an unknown task resume against a closed handle.
+    if (!relationIdle) return;
     for (const h of houseStores) await drop(`lorehouse db [${h.slug}]`, () => h.db.close());
     for (let tasks = hostOps.snapshotStorageBackups(); tasks.length > 0; tasks = hostOps.snapshotStorageBackups()) {
       await Promise.allSettled(tasks);

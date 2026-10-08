@@ -14,12 +14,15 @@
  * middle of its boot (an environment variable, a path, the host's locale) is
  * a thunk, called by the assembly at the same point the root used to read it,
  * so moving the wiring did not turn a live read into a boot-time snapshot.
+ * Receive mode is the deliberate exception: strict configuration is captured
+ * before mutable host construction and shared for the whole boot.
  * The same holds for the host's phase operations (`LifecyclePort`): each is
  * called at the one point of the boot or shutdown where that root did the
  * work, with the narrow inputs it used there, and hands nothing back.
  *
  * Types only.
  */
+import type { ReceiveMode } from '../receive-mode.js';
 import type { HouseParticipationAdmissionPort } from '../house-lifecycle/participation-admission.js';
 import type { CardPresenter } from '../../onboarding/orchestrator.js';
 import type { HouseRuntime } from '../house-lifecycle/house-runtime.js';
@@ -45,10 +48,8 @@ export interface PlatformPort {
   releaseStorage(): void;
   /** Where the host would put the root without POPCLAW_DATA_ROOT (bootstrapPlugin's second-root notice). */
   defaultStateDir(): string;
-  /** POPCLAW_WORLD_STREAM === 'public-v1'. Read twice, where the root read it: HouseRuntime, then the bag. */
-  publicWorldStream(): boolean;
-  /** POPCLAW_WORLD_STREAM === '1' (row 23). Read once, where the root read it (see `worldStreamReadBeforeHouseStores`). */
-  worldStreamMode(): boolean;
+  /** Strict shared receive configuration, captured before host construction. */
+  receiveMode(): ReceiveMode;
   /** The host's configured speech locale (row 22). Absent = this host has no such config; the key is then not passed at all. */
   speechLocale?(): string | null | undefined;
 }
@@ -340,13 +341,6 @@ export interface DriftPins {
    * one position is ruled.
    */
   readonly followBackfillLate?: boolean;
-  /**
-   * New, found in C3 (G32; ruling 14:14 "keep the gateway's read point") —
-   * `worldStreamMode()` is read before the house stores open, not after.
-   * gateway true · MCP absent. Owner: unassigned. Delete once one read point
-   * is ruled.
-   */
-  readonly worldStreamReadBeforeHouseStores?: boolean;
   /**
    * New, found in C3 (epoch table §7) — the follower poll's `houses()` lists
    * the world-feed catalog's houses instead of the house-store list. gateway

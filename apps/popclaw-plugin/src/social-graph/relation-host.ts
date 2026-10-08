@@ -205,6 +205,8 @@ export interface OpenedRelationHost {
   onHouseDeparted(cb: (houseSlug: string) => void): void;
   /** Stop the drain schedule and every stream this host opened. */
   stop(): void;
+  /** Join the already-started drain work; stop() fences new work first. */
+  whenIdle(): Promise<void>;
   /**
    * Begin (or resume) after an autostart:false open: start every stream and
    * the drain schedule. Idempotent.
@@ -311,6 +313,13 @@ export async function openRelationAwareInbox(
     }
   };
   // One snapshot-recovery sweep at a time per host (the drain tick retries).
+  const pendingDrain = new Set<Promise<unknown>>();
+  const trackDrain = (task: Promise<unknown>): void => {
+    pendingDrain.add(task);
+    // Both handlers consume this observer's result; finally() would create an
+    // unobserved rejected promise when a callback itself failed.
+    void task.then(() => pendingDrain.delete(task), () => pendingDrain.delete(task));
+  };
   let recoveryInFlight = false;
   let resendInFlight = false;
   /** One announce pass at a time; see the leg itself for why the row cannot fence it. */
@@ -460,13 +469,13 @@ export async function openRelationAwareInbox(
       const sweep = deps.resendRelations(stillValid);
       if (sweep instanceof Promise) {
         resendInFlight = true;
-        sweep
+        trackDrain(sweep
           .catch((err) => {
             deps.log?.warn?.(`popclaw: relation resend sweep failed — ${String(err)}`);
           })
           .finally(() => {
             resendInFlight = false;
-          });
+          }));
       }
     }
     // Announce what has been learned and not yet decided about — by ANY
@@ -500,14 +509,14 @@ export async function openRelationAwareInbox(
       const batch = followers.unannounced(drainLimit);
       if (batch.length > 0) {
         announceInFlight = true;
-        void Promise.resolve(deps.notifyNewFollowers(batch))
+        trackDrain(Promise.resolve(deps.notifyNewFollowers(batch))
           .catch((err) => {
             deps.log?.warn?.(`popclaw: verified-follower notification failed — ${String(err)}`);
           })
           // Released however the pass ended. A flag a failure could leave set
           // would be a silence nothing recovers from — the opposite failure,
           // and the worse one.
-          .finally(() => { announceInFlight = false; });
+          .finally(() => { announceInFlight = false; }));
       }
     }
     // Snapshot recovery: ONE open gap per tick, at its house's trusted
@@ -548,7 +557,7 @@ export async function openRelationAwareInbox(
         // and it does not, refuse the sweep rather than guess an identity.
         const expectedPin = pinnedBinding(deps.db, origin);
         if (expectedPin === undefined) continue;
-        void recoverRelationGap({
+        trackDrain(recoverRelationGap({
           db: deps.db,
           readAuth: deps.readAuthorityFor(origin),
           fetch: deps.fetch ?? globalThis.fetch,
@@ -591,7 +600,7 @@ export async function openRelationAwareInbox(
           })
           .finally(() => {
             recoveryInFlight = false;
-          });
+          }));
         break; // one per tick
       }
     }
@@ -663,6 +672,9 @@ export async function openRelationAwareInbox(
       // badge transition.
       if (leaseListener !== undefined) deps.dutyLease?.removeTransitionListener(leaseListener);
       departedListeners.length = 0;
+    },
+    async whenIdle() {
+      while (pendingDrain.size) await Promise.allSettled([...pendingDrain]);
     },
     start: startHost,
     attach: houses.attach,

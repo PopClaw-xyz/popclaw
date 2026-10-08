@@ -67,14 +67,14 @@ export function reportSubscribedCaches(ports: AnyRuntimePorts, houseStores: Hous
 export function configureHouseResources(input: {
   host: HostAdapter; boot: Boot; paths: PopclawPaths; ports: AnyRuntimePorts; houses: HouseRuntime;
   executionStores: ExecutionStoreCatalog; egress: MultiHouseEgress; houseStores: HouseStore[];
-  worldFeedCache: WorldFeedCatalog; worldStreamMode: boolean;
+  worldFeedCache: WorldFeedCatalog;
   receptionHooks: Partial<Parameters<HouseRuntime['configureResources']>[0]>;
   routeReplyPing: ReplyPingRoute; onInbox: InboxConsumer;
   rangerEnabled: boolean; inviteNotify: InviteNotifyWiring; notifier: SqliteNotifier;
 }): void {
   const { host, boot, paths, ports, houses, executionStores, egress, houseStores, worldFeedCache, notifier, inviteNotify } = input;
   const { onInbox } = input;
-  houses.configureResources({host, recipientPopclawId: boot.popclawId, worldStreamMode: input.worldStreamMode,
+  houses.configureResources({host, recipientPopclawId: boot.popclawId, worldStreamMode: false,
     ...input.receptionHooks,
     stores: houseStores, openStore: origin => openWorldFeedStore(origin, paths, ports.log.lateStoreOpen, executionStores),
     onStore: house => {

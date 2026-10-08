@@ -302,12 +302,8 @@ describe('the gateway ports themselves', () => {
       replyPingBondContextAbsent: false, inviteNotifierUnattributed: false, rangerInviteNotifyAbsent: false,
       refreshMs: 6 * 60 * 60 * 1000, recoveryIgnoresClosing: true, ownerLangSignalsLate: false, shutdown: 'guarded',
       ownerCadenceBeforeSocialGraph: true, scoreCacheLoadedBeforeReception: true, followBackfillLate: true,
-      worldStreamReadBeforeHouseStores: true, followerPollHousesFromCatalog: true, receptionHouseLookupFromCatalog: true,
+      followerPollHousesFromCatalog: true, receptionHouseLookupFromCatalog: true,
     });
-    // `worldStreamReadBeforeHouseStores` is pinned by value only: no test
-    // observes the read point (the env does not change mid-boot here). The
-    // read point is kept per ruling 2026-09-29 14:14 (G32), which asks for no
-    // further evidence — this assertion is its only guard.
     expect(ports.ranger.decide()).toBe(true);
     expect(ports.platform.speechLocale?.()).toBe('en-US');
     // The bootReport / replyPing lanes exist only on this root.
@@ -318,18 +314,18 @@ describe('the gateway ports themselves', () => {
 });
 
 describe('the gateway bag, as the production root path builds it', () => {
-  it('carries exactly the 44 keys the gateway root returned; the follower poll is built, not started; one owner-target store', async () => {
+  it('carries the shared keys with default publicFeedDisplay; the follower poll is built, not started; one owner-target store', async () => {
     const { bag } = await boot();
     expect(Object.keys(bag).sort()).toEqual([
       'bondsStore', 'boot', 'cadenceLoader', 'drainNotifications', 'egress', 'followerSync', 'guideClient',
       'host', 'houseRuntime', 'houseStarted', 'houses', 'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers',
       'llmComplete', 'markService', 'marksStore', 'nameOf', 'nativeWorldExecution', 'notifier', 'notifyBacklog',
       'onboardingState', 'orchestrator', 'ownerNotifier', 'ownerNotifyTargetStore', 'ownerSession', 'paths',
-      'pendingFollows', 'pendingInvites', 'proposalsStore', 'replyPings', 'retryDmNotifications', 'scoreCache',
+      'pendingFollows', 'pendingInvites', 'proposalsStore', 'publicFeedDisplay', 'replyPings', 'retryDmNotifications', 'scoreCache',
       'shutdown', 'socialGraph', 'socialLog', 'summaryClient', 'tasteLoader', 'uploadCanvas', 'worldFeedCache',
       'worldFeedClient', 'worldOwnerApproval', 'worldRuntime',
     ]);
-    expect(Object.keys(bag)).toHaveLength(44);
+    expect(Object.keys(bag)).toHaveLength(45);
     expect(probe.events.filter(e => e.startsWith('followerSync.'))).toEqual(['followerSync.construct']);
     expect(bag.followerSync).toBeDefined();
     // G65: the push leg's target resolver and the bag share ONE store instance.

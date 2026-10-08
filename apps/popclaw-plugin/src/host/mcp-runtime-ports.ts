@@ -3,11 +3,12 @@
  * handed to the shared runtime assembly (`runtime/assembly`).
  *
  * Built inside the root's lazy build, never at import or tools/list
- * (ADR-0035). Every environment fact is read by a thunk, at the point of boot
- * where `buildRuntime` used to read it. No `node:*` import here: the one fact
+ * (ADR-0035). Receive mode is validated before the host exists and captured once.
+ * Other environment facts retain their boot-time thunks. No `node:*` import here: the one fact
  * that needs the filesystem path API (the notification consumer id) is passed
  * in by `mcp.ts`.
  */
+import { resolveReceiveMode, type ReceiveMode } from '../runtime/receive-mode.js';
 import { localParticipationPort } from './local-participation.js';
 import type { LocalSetupEvidence } from './local-participation.js';
 import { PopclawPaths } from './popclaw-paths.js';
@@ -74,6 +75,7 @@ export const MCP_DRIFT_PINS: DriftPins = Object.freeze({
 });
 
 export function mcpRuntimePorts(input: {
+  receiveMode?: ReceiveMode;
   initialEvidence?: () => LocalSetupEvidence | undefined;
   logger: ReturnType<typeof pinoHostLogger>;
   dataRoot: string;
@@ -85,6 +87,7 @@ export function mcpRuntimePorts(input: {
   consumerId: () => string;
 }): RuntimePorts<McpWorldSlots> {
   const { logger, dataRoot, serverBox, approvalWindowMs } = input;
+  const receiveMode = resolveReceiveMode(input.receiveMode ?? process.env['POPCLAW_WORLD_STREAM']);
   const line = (m: string) => logger.info({}, `popclaw: ${m}`);
   const warn = (m: string) => logger.warn({}, `popclaw: ${m}`);
   const presenter: CardPresenter = {
@@ -99,8 +102,7 @@ export function mcpRuntimePorts(input: {
       paths: () => new PopclawPaths(dataRoot),
       releaseStorage: () => input.releaseStorage(),
       defaultStateDir: () => './.data',
-      publicWorldStream: () => process.env['POPCLAW_WORLD_STREAM'] === 'public-v1',
-      worldStreamMode: () => process.env['POPCLAW_WORLD_STREAM'] === '1',
+      receiveMode: () => receiveMode,
       // No host config under MCP, so no speechLocale — the env signals still apply.
     },
     log: {
@@ -194,11 +196,12 @@ export async function buildMcpRuntime(input: {
   consumerId: () => string;
 }): Promise<McpPluginRuntime> {
   const { logger, dataRoot } = input;
+  const receiveMode = resolveReceiveMode();
   const storagePaths = new PopclawPaths(dataRoot);
   assertStorageBootstrap(storagePaths);
   let releaseStorage!: () => void;
   const host = new LocalHostAdapter({ dataRoot, logger,
     beforeDbInitialize: db => (releaseStorage = registerStorageRuntime(db, storagePaths)) });
-  return assembleRuntime(host, mcpRuntimePorts({ initialEvidence:input.initialEvidence, logger, dataRoot, storagePaths, releaseStorage: () => releaseStorage(),
+  return assembleRuntime(host, mcpRuntimePorts({ receiveMode, initialEvidence:input.initialEvidence, logger, dataRoot, storagePaths, releaseStorage: () => releaseStorage(),
     serverBox: input.serverBox, approvalWindowMs: input.approvalWindowMs, consumerId: input.consumerId }), input.closing);
 }

@@ -33,7 +33,7 @@ async function scenario(shutdownBeforeDelivery: boolean, delivered: boolean) {
   await deliveryEntered; // Real child scan finished and entered the held delivery.
   const shutdown = guardedShutdown({host, platform: {releaseStorage: noop} as any, log: {warn: noop} as any,
    hostOps: ports.lifecycle.guardedShutdown!, lane: {stop: noop} as any, worlds: {stop: noop, whenIdle: async () => {}} as any,
-   reception: {stop: noop}, houses: {stop: async () => {}} as any, houseStores: [], executionStores: {close: () => events.push('execution.close')} as any});
+   reception: {stop: noop, whenIdle: async () => {}}, houses: {stop: async () => {}} as any, houseStores: [], executionStores: {close: () => events.push('execution.close')} as any});
   if (shutdownBeforeDelivery) {
    const before = readFileSync(paths.dbIntegrityFile(), 'utf8');
    let finished = false;
