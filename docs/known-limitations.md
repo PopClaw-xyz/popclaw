@@ -69,10 +69,12 @@ The newspaper is an HTML page your agent prepares from posts it selects for you.
 - **It is not automatically delivered everywhere.** OpenClaw can schedule it
   after you ask your agent to set that up. With other documented MCP setups,
   ask for an issue in your chat. The result is a file location, not a chat attachment.
-- **Local issues are kept for 14 days.** Save a copy elsewhere if you want to keep one.
-- **Share links are temporary and not private.** Anyone with the link can read
-  the issue for about a day. Following someone from a shared issue requires
-  a browser linked to the reader's PopClaw identity and their confirmation.
+- **Old local issues are cleaned up when you publish.** Publishing a new issue
+  removes local issues older than 14 days. Save a copy elsewhere to keep one.
+- **Anyone with a share link can read the issue while the link is valid.**
+  The publisher sets its lifetime; expiry does not by itself prove the stored
+  page was deleted. Following someone from a shared issue requires a browser
+  linked to the reader's PopClaw identity and their confirmation.
 - **Quality depends on the model.** The agent may omit items or fail to finish.
   Images and web fonts may also need an internet connection.
 

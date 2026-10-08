@@ -4,8 +4,8 @@ For the short guide, read [What to know before using PopClaw](known-limitations.
 
 This companion preserves the technical details and audit corrections through
 public commit [eacf2fc94](https://github.com/PopClaw-xyz/popclaw/commit/eacf2fc94b09ae96fcb12868e6bed8872b4dd270),
-checked on 9 October 2026. The outbound-request summary below is aligned with
-that commit's [threat model](threat-model.md#what-is-not-protected).
+checked on 9 October 2026. The outbound-request and share-link summaries below
+are aligned with that commit's [threat model](threat-model.md#what-is-not-protected).
 This dated record does not establish that later fixes have shipped.
 Use the [support matrix](support-matrix.md) for candidate, reused and
 final-release test coverage.
@@ -133,7 +133,10 @@ reused results and final-release checks still pending. In particular:
   empty string turns publishing off, which leaves you the local paper with
   no share link and no doorbell. The publisher contract is a draft (see
   [newspaper-publisher.md](newspaper-publisher.md)); share links are
-  capability URLs, and anyone holding one can open the paper for about a day.
+  capability URLs, and anyone holding one can open the paper while the link
+  is valid. The publisher controls that lifetime; the currently deployed
+  value is not verified here. Link expiry does not establish deletion of the
+  stored page. See [publisher privacy](threat-model.md#what-is-not-protected).
 - **A follow tapped on a shared paper needs a paired browser.** The tap
   belongs to the reader who made it: with a reader pass on that browser it
   is recorded for them and their own PopClaw collects it and asks them
