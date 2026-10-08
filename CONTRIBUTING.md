@@ -88,6 +88,31 @@ stage transitions, numbering references or complete HTML output. Direct rule
 tests do not replace that evidence: retain the relevant gather, command and
 full-render tests alongside focused interface checks.
 
+## Publication checks
+
+The separate publication workflow checks private-source exclusions, unavailable
+working-record references, tracked relative Markdown link targets and public
+commit links. Reproduce it from a full clone with Python 3.11 or newer:
+
+```sh
+python3 -B -m unittest discover -s scripts/tests -p 'test_publication.py' -v
+python3 -B scripts/check-publication.py
+python3 -B scripts/selfcheck-gitleaks.py --gitleaks /path/to/gitleaks
+gitleaks git . --config .gitleaks.toml --log-opts=--all --redact=100 --no-banner
+```
+
+Use the Gitleaks version and official archive checksum pinned in
+[the workflow](.github/workflows/publication.yml). Its exceptions cover exact
+public test values at exact fixture paths. The self-check inserts synthetic new
+secrets in every exception path and requires detection by two rules. Do not
+replace those exceptions with exclusions for entire test or protocol trees.
+
+These checks cover tracked content and fetched history. They do not check every
+Markdown construct, anchors, live URLs, unpublished packages or the state of
+remote repository settings. CodeQL results and Dependabot PRs arrive separately;
+CODEOWNERS routes review but does not itself make review mandatory. Bundle
+integrity and the existing release verification remain separate requirements.
+
 ## Pull requests
 
 - Keep a change focused on one thing. Explain the problem and how you

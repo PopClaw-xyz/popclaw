@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+# The sealed protocol/ workspace is upgraded as a reviewed bundle.
+# packages/popclaw-mcp pins popclaw to the release version; update it with the
+# main package via the release process, not an independent dependency PR.

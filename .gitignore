@@ -34,3 +34,6 @@ Cargo.lock
 
 # macOS Finder metadata
 .DS_Store
+
+# Python check caches
+__pycache__/

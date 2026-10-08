@@ -1,0 +1,148 @@
+# Fixed public test vectors, reviewed individually; never use these as live keys.
+# Match the exact extracted value AND an exact known fixture path, only for
+# generic-api-key. Other rules and other values in these files remain active.
+# Keep default rules enabled; verify changes with scripts/selfcheck-gitleaks.py.
+title = "PopClaw public fixture exceptions"
+
+[extend]
+useDefault = true
+
+# Zero-pad UTF-8 tag seeds.house_a to 32 bytes; Ed25519 derive, base58 encode. Independently reproduced.
+[[allowlists]]
+description = "relation_house_a"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^5fwyfpnobtTSxd6v3Mo7r991QfqX9sQ2rBJWL6ai2TSn$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/fixtures/relation\-read\-v2\-vectors\.json$''',
+  '''^protocol/packages/contracts/fixtures/relation\-read\-v2\-vectors\.json$''',
+]
+
+# Zero-pad UTF-8 tag seeds.house_b to 32 bytes; Ed25519 derive, base58 encode. Independently reproduced.
+[[allowlists]]
+description = "relation_house_b"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^BqPR9LdPgbyjdPfSxUmmhGKURmsScrYXUbtDp6E7FDit$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/fixtures/relation\-read\-v2\-vectors\.json$''',
+  '''^protocol/packages/contracts/fixtures/relation\-read\-v2\-vectors\.json$''',
+]
+
+# negative[0] signs relation-list for signed_for origin with published requester seed and fixed timestamp 1789650000. Independently reproduced; protocol/client vectors equal except contract metadata.
+[[allowlists]]
+description = "relation_negative_token"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^v2\.8z6mDmoHWPQCrXWPCdMKW8a3twtkJEcy6eaUtugoJ1ci\.1789650000\.VyGYEQcBLHe7j0XLFwVOjQv3GfSKxgFCyyxt0hCVqoW3XbNtDcNFHtifEhls0FeeuRLgWJjF0m5phfBsxdU2Dg==$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/fixtures/relation\-read\-v2\-vectors\.json$''',
+  '''^protocol/packages/contracts/fixtures/relation\-read\-v2\-vectors\.json$''',
+]
+
+# ParticipationDescriptor house_key, not secret material; pure-protocol fixture for reading-world, .test origin. The paired train fixture records deterministic W0 seed derivation; no derivation claim added for this standalone literal.
+[[allowlists]]
+description = "reading_participation_house"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^3XSkczaGMHJYVxgwQLJYsEgdspA2nuJA4J7LehAf9Z4S$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/fixtures/world/participation/reading\-window\-wk8\.json$''',
+]
+
+# Explicit seeded/fake house identifier used as public house audience or RelationOrder house_key; not a signing seed or provider credential. Historical index17 removed from that path at fixed current commit.
+[[allowlists]]
+description = "shared_house_key_literal"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^9xQeWy8P3vNhKd2RmTzA6BcFgJ4LnSuVoXpYrEt5Hw1Z$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/helpers/seed\-trusted\-house\.ts$''',
+  '''^apps/popclaw\-plugin/tests/helpers/with\-outcomes\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/identity/read\-authority\-signing\-race\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/identity/read\-authority\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/ingress/inbound\-relation\-admission\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/ingress/public\-envelope\-relation\-vectors\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/messaging/inbox\-frame\-discipline\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/messaging/inbox\-frame\-ordering\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/messaging/inbox\-stream\-token\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/runtime/dm\-and\-relation\-one\-boundary\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/runtime/relation\-vertical\-chain\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/social\-graph/follower\-first\-poll\-race\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/social\-graph/follower\-sync\-service\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/social\-graph/followers\-proof\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/social\-graph/relation\-origin\-canonical\.test\.ts$''',
+  '''^apps/popclaw\-plugin/tests/unit/social\-graph/relation\-producer\-no\-legacy\.test\.ts$''',
+  '''^protocol/packages/contracts/ts/algorithms/tests/canonical\-parity\.test\.ts$''',
+]
+
+# ParticipationDescriptor house_key; fixture comment says all identities deterministic W0 test keys (seed=SHA-256(label)), no real credentials; .test origin. No private secret is the reported value.
+[[allowlists]]
+description = "train_participation_house"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^8N84tgheLwG2mVU47YsDfNPqR2ci5Q3t52u9xec45iWN$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/fixtures/world/participation/train\-window\-w42\.json$''',
+]
+
+# Default parameter of participate(), inserted into test house_participation with synthetic installation, joined.example origin, house-key-two; status rendering fixture, not obtained from provider/server.
+[[allowlists]]
+description = "status_session_placeholder"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^itk\-b590a51d\.1789876157\.my7vkmNf$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/unit/commands/status\-houses\.test\.ts$''',
+]
+
+# Literal candidate_token in negative test: no ledger entry, expected candidate set not found or expired.
+[[allowlists]]
+description = "missing_candidate_token"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^ctok_missing01$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/unit/newspaper/issue\-identity\-baseline\.test\.ts$''',
+]
+
+# Literal candidate_token first inserted by putIssue into temporary test issue store, then read to assert selection floor.
+[[allowlists]]
+description = "enough_candidate_token"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^ctok_enough001$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/unit/newspaper/pick\-topup\-floor\.test\.ts$''',
+]
+
+# Snapshot of mintHouse() fixture using default 32-byte seed filled with 7. Independently reproduced the Ed25519 public key.
+[[allowlists]]
+description = "snapshot_seed7_house"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^GmaDrppBC7P5ARKV8g3djiwP89vz1jLK23V2GBjuAEGB$''']
+paths = [
+  '''^apps/popclaw\-plugin/tests/unit/social\-graph/__snapshots__/relation\-host\-recovery\-capture\.test\.ts\.snap$''',
+]
+
+# master_private_key_hex exactly equals gen_fixtures.rs fixed deterministic seed. Independently reproduced master_public_key_hex and signature_hex and verified signature. This is deliberately public test-only signing material, never suitable for live identity.
+[[allowlists]]
+description = "signature_roundtrip_seed"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^0011223344556677889900aabbccddeeff00112233445566778899aabbccddee$''']
+paths = [
+  '''^protocol/packages/contracts/fixtures/test\-vectors\.json$''',
+]
