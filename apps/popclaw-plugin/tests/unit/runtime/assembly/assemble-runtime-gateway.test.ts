@@ -9,6 +9,9 @@ import { WorldRuntime } from '../../../../src/runtime/world-runtime.js';
 import { ExecutionStoreCatalog } from '../../../../src/host/execution-store.js';
 import { PopclawPaths } from '../../../../src/host/popclaw-paths.js';
 import { createOpenClawHostAdapter } from '../../../../src/host/openclaw-host-adapter.js';
+import { LocalHostAdapter } from '../../../../src/host/local-host-adapter.js';
+import { Keystore } from '../../../../src/identity/keystore.js';
+import { completeStorageInitialization } from '../../../../src/host/storage-compatibility.js';
 import { assertStorageBootstrap, registerStorageRuntime } from '../../../../src/host/storage-maintenance.js';
 import { resetOwnerApprovals } from '../../../../src/host/owner-approval.js';
 import { assembleRuntime } from '../../../../src/runtime/assembly/index.js';
@@ -229,9 +232,19 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-function newState(): string {
+async function newState(): Promise<string> {
   const state = mkdtempSync(join(tmpdir(), 'popclaw-assembly-c3-'));
   roots.push(state);
+  // Publish the real initial identity/data profile before adding test config.
+  // Setup owns no runtime participant and does not enter assembly probes.
+  const initialization = new LocalHostAdapter({ dataRoot: join(state, 'popclaw'),
+    logger: { info() {}, warn() {}, error() {} } });
+  try {
+    const key = await new Keystore(initialization).loadOrGenerate();
+    completeStorageInitialization(initialization, key.popclawId);
+  } finally {
+    initialization.db.close();
+  }
   mkdirSync(join(state, 'popclaw', 'config'), { recursive: true });
   writeFileSync(join(state, 'popclaw', 'config', 'plugin.json'), JSON.stringify({ lore_houses: [HOUSE], canvas_base_url: HOUSE }));
   return state;
@@ -255,7 +268,7 @@ function fakeApi(state: string, logs: string[], services: Service[], hooks: Map<
 /** The production root: register, start its runtime service, read the memoized bag. */
 async function boot(onLog?: (line: string, hooks: Map<string, Hook>) => void) {
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('UNEXPECTED_NETWORK'); }));
-  const state = newState();
+  const state = await newState();
   const services: Service[] = [];
   const hooks = new Map<string, Hook>();
   const logs: string[] = [];
@@ -268,8 +281,8 @@ async function boot(onLog?: (line: string, hooks: Map<string, Hook>) => void) {
 }
 
 /** The ports and host exactly as src/index.ts `bootRuntime` builds them, for tests that must vary one port. */
-function gatewayRoot(events: string[]) {
-  const state = newState();
+async function gatewayRoot(events: string[]) {
+  const state = await newState();
   const logs: string[] = [];
   const api = fakeApi(state, logs, [], new Map()) as unknown as Parameters<typeof gatewayRuntimePorts>[0]['api'];
   const storagePaths = new PopclawPaths(PopclawPaths.resolveRoot(process.env, state));
@@ -288,8 +301,8 @@ function gatewayRoot(events: string[]) {
 const ownerTurn = (hooks: Map<string, Hook>) => { hooks.get('before_prompt_build')!({ prompt: 'hi' }, OWNER_TURN); return captured.l2.at(-1)!; };
 
 describe('the gateway ports themselves', () => {
-  it('select push delivery with a leg, host-service loops, the guarded host steps, and the gateway drift values', () => {
-    const { ports } = gatewayRoot([]);
+  it('select push delivery with a leg, host-service loops, the guarded host steps, and the gateway drift values', async () => {
+    const { host, ports } = await gatewayRoot([]);
     expect(ports.delivery.kind).toBe('push');
     expect(ports.delivery.kind === 'push' && typeof ports.delivery.open).toBe('function');
     expect(ports.lifecycle.loops).toBe('host-services');
@@ -309,7 +322,9 @@ describe('the gateway ports themselves', () => {
     // The bootReport / replyPing lanes exist only on this root.
     expect(typeof ports.log.bootReport).toBe('function');
     expect(typeof ports.log.replyPing).toBe('function');
-    probe.hostDbs.length = 0; // the host DB was never opened here
+    // The real host has opened storage even though no bag was assembled.
+    ports.platform.releaseStorage();
+    host.db.close();
   });
 });
 
@@ -517,7 +532,7 @@ it('returns from backup service start before any backup and cancels the delayed 
 describe('port combinations the assembly refuses, like a failed boot', () => {
   it('guarded shutdown without its host steps: the host\'s cleanup step first, then release and host DB — nothing built', async () => {
     const events = probe.events;
-    const { host, ports } = gatewayRoot(events);
+    const { host, ports } = await gatewayRoot(events);
     const without: GatewayRuntimePorts = { ...ports, lifecycle: { ...ports.lifecycle, guardedShutdown: undefined } };
     await expect(assembleRuntime(host, without, new AbortController().signal))
       .rejects.toThrow('RUNTIME_ASSEMBLY_UNWIRED: drift.shutdown (guarded without its host steps)');
@@ -526,7 +541,7 @@ describe('port combinations the assembly refuses, like a failed boot', () => {
 
   it('push delivery without a leg is refused the same way', async () => {
     const events = probe.events;
-    const { host, ports } = gatewayRoot(events);
+    const { host, ports } = await gatewayRoot(events);
     const noLeg = { ...ports, delivery: { kind: 'push' as const } };
     await expect(assembleRuntime(host, noLeg, new AbortController().signal))
       .rejects.toThrow('RUNTIME_ASSEMBLY_UNWIRED: delivery.kind (push without a leg)');

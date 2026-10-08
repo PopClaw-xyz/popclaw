@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import nacl from 'tweetnacl';
@@ -16,6 +16,9 @@ import { assembleRuntime } from '../../../src/runtime/assembly/index.js';
 import { executionDbFor } from '../../../src/ingress/world-feed-store.js';
 import { commitLocalLogout, readParticipation } from '../../../src/runtime/house-lifecycle/participation-store.js';
 import { LocalHostDb } from '../../../src/host/local-host-db.js';
+import { LocalHostAdapter } from '../../../src/host/local-host-adapter.js';
+import { Keystore } from '../../../src/identity/keystore.js';
+import { completeStorageInitialization } from '../../../src/host/storage-compatibility.js';
 import { resolveInstallationId } from '../../../src/runtime/house-lifecycle/installation.js';
 import * as worldCapabilities from '../../../src/world/world-capabilities.js';
 import plugin from '../../../src/index.js';
@@ -54,11 +57,25 @@ afterEach(async()=>{ for(const close of cleanup.splice(0).reverse()) await close
 const ME='https://house.popclaw.me', WORLD='https://house.popclaw.world';
 const logger={info() {},warn() {},error() {}};
 type Runtime=Awaited<ReturnType<typeof buildMcpRuntime>>|Awaited<ReturnType<typeof assembleRuntime>>;
-async function fixture(kind:'Native'|'MCP', missingCapability=false) {
+async function fixture(kind:'Native'|'MCP', missingCapability=false, rootMode:'new'|'current'='current') {
   const root=mkdtempSync(join(tmpdir(),'fresh-public-entry-')), paths=new PopclawPaths(root);
   cleanup.push(()=>rmSync(root,{recursive:true,force:true}));
-  mkdirSync(join(root,'config'),{recursive:true});
-  writeFileSync(join(root,'config/plugin.json'),JSON.stringify({lore_houses:[ME,WORLD],canvas_base_url:''}));
+  if(rootMode==='current') {
+    // A fresh public execution root still has a legal identity/data profile.
+    // Initialize it before config; do not create participation or house history.
+    const initialization=new LocalHostAdapter({dataRoot:root,logger});
+    try {
+      const key=await new Keystore(initialization).loadOrGenerate();
+      completeStorageInitialization(initialization,key.popclawId);
+    } finally {
+      initialization.db.close();
+    }
+    mkdirSync(join(root,'config'),{recursive:true});
+    writeFileSync(join(root,'config/plugin.json'),JSON.stringify({lore_houses:[ME,WORLD],canvas_base_url:''}));
+  } else {
+    // Zero-config first install uses the real me default; canvas stays offline.
+    vi.stubEnv('POPCLAW_CANVAS_BASE_URL','');
+  }
   vi.stubEnv('POPCLAW_DATA_ROOT',root); vi.stubEnv('POPCLAW_WORLD_STREAM',undefined);
   vi.stubEnv('LOG_LEVEL','silent');
   const actorPair=nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(66)), actor=bs58.encode(actorPair.publicKey);
@@ -96,13 +113,29 @@ async function fixture(kind:'Native'|'MCP', missingCapability=false) {
       favoritesFile:p=>join(p.data(),'favorites.jsonl'),root:{l2:{notifier() {},nameOf() {},pendingFollows() {},proposals() {},clear() {}},
         markStorageShuttingDown() {},snapshotStorageBackups:()=>[]}}),new AbortController().signal);
   };
+  if(rootMode==='new') {
+    // The first tested entry, not fixture setup, must create every runtime file.
+    expect(readdirSync(root)).toEqual([]);
+    expect(existsSync(paths.socialDb())).toBe(false);
+    expect(existsSync(paths.dataProfileFile())).toBe(false);
+    expect(existsSync(paths.executionDir())).toBe(false);
+    expect(existsSync(paths.lorehousesDir())).toBe(false);
+    expect(existsSync(join(paths.identityDir(),'master.key'))).toBe(false);
+  }
   let rt=await build(); cleanup.push(()=>rt.shutdown());
+  if(rootMode==='new') {
+    expect(rt.boot.identityGenerated).toBe(true);
+    expect(JSON.parse(readFileSync(paths.dataProfileFile(),'utf8'))).toMatchObject({generation:1,actorId:rt.boot.popclawId});
+  }
   const send=(type:string,bytes:Uint8Array)=>controllers.at(-1)!.enqueue(new TextEncoder().encode(`event: ${type}\ndata: ${Buffer.from(bytes).toString('base64')}\n\n`));
   return {paths,requests,controllers,send,build, get rt(){return rt;},setRuntime(value:Runtime){rt=value;},actorPair,actor};
 }
 
-it.each(['Native','MCP'] as const)('%s fresh initial me receives verified public material with no manual switch or maintenance',async kind=>{
-  const f=await fixture(kind);
+it.each([
+  {kind:'Native',rootMode:'new'}, {kind:'MCP',rootMode:'new'},
+  {kind:'Native',rootMode:'current'}, {kind:'MCP',rootMode:'current'},
+] as const)('$kind fresh initial me receives verified public material with no manual switch or maintenance (root=$rootMode)',async({kind,rootMode})=>{
+  const f=await fixture(kind,false,rootMode);
   expect(await f.rt.houseRuntime.activateInitialMe()).toMatchObject({admission:'configured'});
   await vi.waitFor(()=>expect(f.controllers,JSON.stringify({status:f.rt.houseRuntime.publicReadStatus(ME),requests:f.requests.map(r=>r.url)})).toHaveLength(1),{timeout:4000});
   expect(readParticipation(f.rt.host.db,WORLD)).toBeNull();
