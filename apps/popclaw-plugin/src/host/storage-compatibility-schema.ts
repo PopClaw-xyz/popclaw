@@ -10,6 +10,7 @@ import { ensureHouseLifecycleSchema } from '../runtime/house-lifecycle/participa
 import { ensureInstallationIdSchema } from '../runtime/house-lifecycle/installation.js';
 import { ensureOwnerLeaseSchema, ensureHouseCommandSchema, ensureWorldConversationInboxSchema,
   ensureHouseRecoverySchema, ensureWorldCapabilitySchema } from './runtime-storage-schema.js';
+import { schemaSqlTokens } from './storage-compatibility-sql.js';
 
 function tableNames(db: HostDb): string[] {
   return db.queryAll<{name: string}>("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").map(row => row.name);
@@ -20,13 +21,13 @@ function structure(db: HostDb, table: string): unknown {
   const indices = db.queryAll<{name: string; unique: number; origin: string; partial: number}>(`PRAGMA index_list(${name})`)
     .map(({name, unique, origin, partial}) => ({
       name, unique, origin, partial,
-      sql: db.queryOne<{sql: string | null}>('SELECT sql FROM sqlite_master WHERE type=\'index\' AND name=?', [name])?.sql,
+      sql: schemaSqlTokens(db.queryOne<{sql: string | null}>('SELECT sql FROM sqlite_master WHERE type=\'index\' AND name=?', [name])?.sql),
       columns: db.queryAll(`PRAGMA index_xinfo(${quoteSqlIdentifier(name)})`),
     })).sort((a, b) => a.name.localeCompare(b.name));
   return {
     // Includes CHECK expressions, collations, generated expressions and FTS
     // options which column names and index existence alone cannot certify.
-    sql: db.queryOne<{sql: string}>('SELECT sql FROM sqlite_master WHERE type=\'table\' AND name=?', [table])?.sql,
+    sql: schemaSqlTokens(db.queryOne<{sql: string}>('SELECT sql FROM sqlite_master WHERE type=\'table\' AND name=?', [table])?.sql),
     columns: db.queryAll(`PRAGMA table_xinfo(${name})`),
     foreignKeys: db.queryAll(`PRAGMA foreign_key_list(${name})`),
     indices,

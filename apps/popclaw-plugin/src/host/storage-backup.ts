@@ -6,6 +6,7 @@ import { LocalHostDb, assertNoLiveDatabaseDescriptor, hasOpenDatabaseConnection 
 import type { PopclawPaths } from './popclaw-paths.js';
 import type { HostDb } from './host-db.js';
 import { MaintenanceSession, publishStorageJson, readStorageControl, type StorageControl } from './storage-maintenance.js';
+import { ensureInstallationIdSchema } from '../runtime/house-lifecycle/installation.js';
 
 export interface BackupFile { path: string; sha256: string; sqlite: boolean; tables?: Record<string, number> }
 export interface StorageBackupManifest {
@@ -347,7 +348,7 @@ export async function restoreStorageBackup(options: {
       if (has('storage_runtime_participants_v1')) tx.execute('DELETE FROM storage_runtime_participants_v1');
       if (has('house_lifecycle_owner')) tx.execute("UPDATE house_lifecycle_owner SET generation=generation+1, holder='', renewed_at=0");
       if (options.operation === 'clone') {
-        tx.execute('CREATE TABLE IF NOT EXISTS house_lifecycle_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+        ensureInstallationIdSchema(tx);
         tx.execute("INSERT INTO house_lifecycle_meta(key,value) VALUES('installation_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [receipt.installationId]);
       }
       tx.execute('INSERT INTO storage_restore_applied_v1 VALUES(?,?,?)', [epoch!, manifest.setId, options.operation]);
