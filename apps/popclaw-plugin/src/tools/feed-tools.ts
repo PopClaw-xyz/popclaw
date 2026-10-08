@@ -63,9 +63,7 @@ export function registerFeedTools(ctx: ToolsCtx): void {
             popclawId: item.authorPopclawId ?? '', platform: item.platform ?? '', nickname: item.handle || item.actorNickname || '',
           })));
           const hasOrdinary = local.sources.some(source => source.protocol === 'ordinary-snapshot');
-          const clarifyOrdinary = ownerLang() === 'zh-CN'
-            ? '请说明是哪位作者，或给出作者资料、帖子链接。本次有界快照不能确认全部同名作者。'
-            : 'Which author do you mean? A profile or post link can help. This bounded snapshot does not identify every author with that name.';
+          const clarifyOrdinary = renderCopy(ownerLang(), 'feed.ordinary.clarifyAuthor');
           if (candidates.length > 1) return { type: 'text' as const, text: hasOrdinary
             ? `${candidates.map((candidate,index)=>`${index+1}. ${candidate.nickname}`).join('\n')}\n${clarifyOrdinary}`
             : disambiguationText(author, candidates) };
@@ -75,9 +73,7 @@ export function registerFeedTools(ctx: ToolsCtx): void {
             if (!observedOrdinary && (local.truncated || local.sources.some(source => source.unavailable || source.incomplete))) return {
               type: 'text' as const, text: renderCopy(ownerLang(), 'feed.public.authorLimited'),
             };
-            if (observedOrdinary) observedAuthorNote = ownerLang() === 'zh-CN'
-              ? `按本次已验签快照中观察到的作者“${candidates[0]!.nickname}”筛选。这不是全站唯一性判断；若你指同名的另一人，请指出对象。\n`
-              : `Filtered by the signed author “${candidates[0]!.nickname}” observed in this bounded snapshot, not a claim of site-wide uniqueness. If you mean someone else with that name, please clarify.\n`;
+            if (observedOrdinary) observedAuthorNote = renderCopy(ownerLang(), 'feed.ordinary.observedAuthor', { nickname: candidates[0]!.nickname });
             author = candidates[0]!.popclawId;
           } else return { type: 'text' as const, text: hasOrdinary ? clarifyOrdinary : renderCopy(ownerLang(), 'feed.public.authorLimited') };
         } else if (!rt.publicFeedDisplay && deps.getWorldDeps !== undefined) {

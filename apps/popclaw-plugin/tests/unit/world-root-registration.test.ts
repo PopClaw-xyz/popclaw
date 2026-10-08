@@ -202,7 +202,8 @@ describe('world tools at the actual native plugin registration boundary', () => 
     const legacy = vi.fn(() => { throw new Error('UNEXPECTED_LEGACY_SOURCE'); });
     const effects = vi.fn(() => { throw new Error('UNEXPECTED_DISPLAY_EFFECT'); });
     const runCommand = vi.fn(async (work: () => Promise<unknown>) => work());
-    seam.runtime.mockResolvedValue({ publicFeedDisplay: { read, search }, houseRuntime: { runCommand },
+    const display = { read, search, prepare: async () => display };
+    seam.runtime.mockResolvedValue({ publicFeedDisplay: display, houseRuntime: { runCommand },
       worldFeedClient: { fetchSnapshot: legacy }, worldFeedCache: { search: legacy },
       guideClient: { fetch: legacy }, summaryClient: { fetch: legacy },
       // `host` is no longer an effect. Since 4103ec80 (#582 — a gateway restart
