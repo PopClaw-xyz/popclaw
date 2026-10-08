@@ -29,6 +29,8 @@ import { ensureStorageParticipantsSchema } from '../../../src/host/storage-maint
 import { ensureStorageRestoreSchema } from '../../../src/host/storage-backup.js';
 import { ensureHouseLifecycleSchema } from '../../../src/runtime/house-lifecycle/participation-store.js';
 import { ensureInstallationIdSchema } from '../../../src/runtime/house-lifecycle/installation.js';
+import { ensureExecutionStoreIdentitySchema, ensureExecutionStoreCatalogSchema, addPrivateMessageFeatureColumn } from '../../../src/host/execution-catalog-schema.js';
+import { ensureHouseOriginBindingsSchema, ensureHouseRecoveryCursorEvidenceSchema } from '../../../src/runtime/house-lifecycle/house-runtime-schema.js';
 
 const migrationsDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../../migrations');
 const migrations = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
@@ -115,6 +117,77 @@ function refused(paths: PopclawPaths, code: string) {
   expect(snapshot(paths)).toEqual(before);
 }
 describe('storage admission before the first durable write', () => {
+  it.each([false, true])('allows the actual catalog schema with optional private-message column=%s without writing admission state', feature => {
+    const paths = root(), actorId = key(paths), db = new LocalHostDb(paths.socialDb());
+    runMigrations(db, migrationsDir);
+    const catalog = new ExecutionStoreCatalog({db, paths, actorId}); catalog.close();
+    if (feature) addPrivateMessageFeatureColumn(db);
+    ensureHouseOriginBindingsSchema(db); ensureHouseRecoveryCursorEvidenceSchema(db);
+    seal(db);
+    writeFileSync(paths.dataProfileFile(), JSON.stringify({generation: 1, actorId, globalMigrations: migrations,
+      executionLayout: 1, identityFormat: 'master-raw-seed/v1'}));
+    const before = snapshot(paths);
+    expect(inspectStorageCompatibility({paths, migrationsDir}).status).toBe('current');
+    expect(snapshot(paths)).toEqual(before);
+    const probe = new LocalHostDb(paths.socialDb(), {readOnly: true});
+    expect(probe.queryAll('SELECT * FROM house_origin_bindings')).toEqual([]);
+    expect(probe.queryAll('SELECT * FROM house_recovery_cursor_evidence_v1')).toEqual([]);
+    expect(probe.queryAll<{name: string}>('PRAGMA table_info(execution_store_catalog_v1)').some(row => row.name === 'private_message_feature')).toBe(feature);
+    probe.close();
+    let callbacks = 0;
+    const host = new LocalHostAdapter({dataRoot: paths.rootDir(), logger,
+      beforeDbInitialize: () => { callbacks++; return () => {}; }});
+    host.db.close(); expect(callbacks).toBe(1);
+  });
+  it('allows migrated current data when all four optional runtime tables are absent', () => {
+    const paths = root(), actorId = key(paths), db = new LocalHostDb(paths.socialDb());
+    runMigrations(db, migrationsDir); seal(db);
+    writeFileSync(paths.dataProfileFile(), JSON.stringify({generation: 1, actorId, globalMigrations: migrations,
+      executionLayout: 1, identityFormat: 'master-raw-seed/v1'}));
+    const before = snapshot(paths);
+    expect(inspectStorageCompatibility({paths, migrationsDir}).status).toBe('current');
+    expect(snapshot(paths)).toEqual(before);
+  });
+  it.each([
+    ['execution_store_identity_v1', ensureExecutionStoreIdentitySchema, 'PRIMARY KEY', ''],
+    ['execution_store_identity_v1', ensureExecutionStoreIdentitySchema, 'CHECK(singleton=1)', 'CHECK(singleton>=1)'],
+    ['execution_store_catalog_v1', ensureExecutionStoreCatalogSchema, 'store_id TEXT NOT NULL UNIQUE', 'store_id TEXT NOT NULL'],
+    ['execution_store_catalog_v1', ensureExecutionStoreCatalogSchema, "DEFAULT '[]'", "DEFAULT '[ ]'"],
+    ['house_origin_bindings', ensureHouseOriginBindingsSchema, 'origin TEXT NOT NULL UNIQUE', 'origin TEXT NOT NULL'],
+    ['house_origin_bindings', ensureHouseOriginBindingsSchema, 'slug TEXT PRIMARY KEY', 'slug TEXT'],
+    ['house_recovery_cursor_evidence_v1', ensureHouseRecoveryCursorEvidenceSchema, 'PRIMARY KEY(decision_id,store_lane)', 'PRIMARY KEY(store_lane,decision_id)'],
+    ['house_recovery_cursor_evidence_v1', ensureHouseRecoveryCursorEvidenceSchema, 'evidence_json TEXT NOT NULL', 'evidence_json TEXT'],
+  ] as const)('refuses damaged runtime authority %s', (table, ensure, original, changed) => {
+    const {paths} = fixture(), db = new LocalHostDb(paths.socialDb()); ensure(db);
+    const ddl = db.queryOne<{sql: string}>('SELECT sql FROM sqlite_master WHERE name=?', [table])!.sql;
+    expect(ddl).toContain(original);
+    const rows = db.queryAll<Record<string, string | number | null>>(`SELECT * FROM ${table}`);
+    db.execute(`DROP TABLE ${table}`); db.execute(ddl.replace(original, changed));
+    for (const row of rows) {
+      const names = Object.keys(row);
+      db.execute(`INSERT INTO ${table} (${names.join(',')}) VALUES (${names.map(() => '?').join(',')})`, Object.values(row));
+    }
+    seal(db); refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
+  });
+  it.each([
+    ['execution_store_identity_v1', ensureExecutionStoreIdentitySchema, ', layout_version INTEGER NOT NULL'],
+    ['execution_store_catalog_v1', ensureExecutionStoreCatalogSchema, ", required_tables TEXT NOT NULL DEFAULT '[]'"],
+    ['house_origin_bindings', ensureHouseOriginBindingsSchema, ', origin TEXT NOT NULL UNIQUE'],
+    ['house_recovery_cursor_evidence_v1', ensureHouseRecoveryCursorEvidenceSchema, 'evidence_json TEXT NOT NULL, '],
+  ].flatMap(([table, ensure, missing]) => [false, true].map(unknown => ({table: table as string,
+    ensure: ensure as (db: LocalHostDb) => void, missing: missing as string, unknown}))))('refuses missing/unknown columns: $table (unknown=$unknown)', ({table, ensure, missing, unknown}) => {
+      const {paths} = fixture(), db = new LocalHostDb(paths.socialDb()); ensure(db);
+      if (unknown) db.execute(`ALTER TABLE ${table} ADD COLUMN future_runtime_column TEXT`);
+      else {
+        const ddl = db.queryOne<{sql: string}>('SELECT sql FROM sqlite_master WHERE name=?', [table])!.sql;
+        expect(ddl).toContain(missing);
+        db.execute(`DROP TABLE ${table}`); db.execute(ddl.replace(missing, ''));
+      }
+      seal(db);
+      const admission = inspectStorageCompatibility({paths, migrationsDir});
+      expect(admission.status).toBe('refused');
+      refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
+  });
   it('refuses a future applied migration before registration or RW initialization', () => {
     const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
     db.execute("INSERT INTO _migrations VALUES('999-future.sql',1)"); seal(db);
@@ -437,7 +510,7 @@ describe('storage admission before the first durable write', () => {
   it('refuses unknown catalog schema independently of the supported marker', () => {
     const {paths} = fixture(), db = new LocalHostDb(paths.socialDb());
     db.execute('ALTER TABLE execution_store_catalog_v1 ADD COLUMN future_binding TEXT'); seal(db);
-    refused(paths, 'STORAGE_SCHEMA_UNKNOWN');
+    refused(paths, 'STORAGE_GLOBAL_SCHEMA_MISMATCH');
   });
   it('records missing post-publication source provenance without treating the complete selected ledger as missing', () => {
     const {paths} = fixture(), source = join(paths.rootDir(), 'retired-original.db'), db = new LocalHostDb(paths.socialDb());

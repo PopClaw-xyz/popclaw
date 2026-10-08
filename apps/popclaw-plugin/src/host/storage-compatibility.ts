@@ -44,12 +44,6 @@ export interface PreservedStorageReference {
 }
 export interface StorageInspectionOptions { paths: PopclawPaths; migrationsDir: string }
 
-// Pending the separately owned catalog/binding schema-only exports. This
-// intermediate candidate is not final admission coverage for these four tables.
-const PENDING_GLOBAL_SCHEMA_AUTHORITIES = new Set([
-  'execution_store_identity_v1', 'execution_store_catalog_v1',
-  'house_origin_bindings', 'house_recovery_cursor_evidence_v1',
-]);
 function fail(code: string): never { throw new Error(code); }
 function tables(db: HostDb): Set<string> {
   return new Set(db.queryAll<{name: string}>("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").map(r => r.name));
@@ -126,7 +120,7 @@ function inspectGlobal(db: HostDb, actor: string, known: string[], migrationsDir
   if (!present.has('_migrations')) fail('STORAGE_MIGRATION_RECORD_MISSING');
   checkColumns(db, '_migrations', ['filename', 'applied_at']);
   const verified = verifyAppliedGlobalSchema(db, migrationsDir, applied);
-  const allowed = new Set([...PENDING_GLOBAL_SCHEMA_AUTHORITIES, ...verified]);
+  const allowed = verified;
   if ([...present].some(name => !allowed.has(name)) || db.queryOne("SELECT name FROM sqlite_master WHERE type IN ('trigger','view')")) fail('STORAGE_SCHEMA_UNKNOWN');
   if (present.has('execution_store_identity_v1')) {
     checkColumns(db, 'execution_store_identity_v1', ['singleton', 'actor_id', 'layout_version']);
