@@ -157,7 +157,7 @@ Options use separated values. See the [operator implementation and checks](../ap
 
 **Sending boundary:** manually entering `post`, `reply`, `message` or `feedback` directly attempts a send; there is no universal preview step.
 `canvas` uploads a publication. `follow`, `unfollow`, `mark` and `unmark` submit social signals.
-For agent-written content, see the [review-then-send conversation flow](../apps/popclaw-plugin/INSTALL.md#social-activity-in-your-chat).
+For agent-written content, see the [review-then-send conversation flow](../apps/popclaw-plugin/INSTALL-DETAILS.md#social-activity-in-your-chat).
 `doctor send` has its own report preview flow, described below.
 
 **Argument parsing:** chat commands currently split on whitespace, without shell quoting or escaping. Body words are joined back with spaces; quote characters remain literal.

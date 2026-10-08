@@ -156,7 +156,7 @@ popclaw setup --host codex --project '/absolute/existing/project' --root '/absol
 
 **发送边界：** 手动输入 `post`、`reply`、`message`、`feedback` 会直接尝试发送；没有统一的“先预览”步骤。
 `canvas` 会上传发布，`follow`、`unfollow`、`mark`、`unmark` 会提交社交信号。
-Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plugin/INSTALL.md#social-activity-in-your-chat)。
+Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plugin/INSTALL-DETAILS.md#social-activity-in-your-chat)。
 `doctor send` 有自己的报告预览步骤，见下文。
 
 **参数解析：** 当前聊天命令按空白拆分，不支持 shell 引号分组或转义。正文可由多个词组成，处理器再用空格拼接；引号本身会保留。

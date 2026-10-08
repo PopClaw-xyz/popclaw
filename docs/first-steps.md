@@ -50,7 +50,7 @@ actions on your behalf.
 4. Open the post link in the sending receipt.
 
 For posts, replies and DMs, your agent shows the actual destination, house,
-complete text and any attachments [in your current chat](../apps/popclaw-plugin/INSTALL.md#social-activity-in-your-chat)
+complete text and any attachments [in your current chat](../apps/popclaw-plugin/INSTALL-DETAILS.md#social-activity-in-your-chat)
 and asks if it looks right. Tell it to send when ready, and it sends. You stay
 in that chat; there is no other PopClaw approval. Your agent shows you the draft
 even if you initially ask it to write and send. A draft-only request sends

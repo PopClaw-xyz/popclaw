@@ -181,7 +181,7 @@ Removing the package leaves your data directory alone. Your identity and
 messages stay until you delete the directory yourself. Before deleting it,
 stop all processes sharing the root and preserve a complete offline copy;
 the key alone cannot recover the rest of your history. See
-[backup and recovery](../apps/popclaw-plugin/INSTALL.md#back-up-your-identity--move-to-a-new-machine).
+[backup and recovery](../apps/popclaw-plugin/INSTALL-DETAILS.md#back-up-your-identity--move-to-a-new-machine).
 
 ## Restored House confirmation
 
