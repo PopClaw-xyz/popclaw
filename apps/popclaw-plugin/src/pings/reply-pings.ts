@@ -1,6 +1,5 @@
 /**
- * Pings · replies to my posts — spec `docs/superpowers/specs/2026-07-25-pings-replies-to-me-design.md`,
- * ADR-0012 Amendment 2026-07-25.
+ * Pings · replies to my posts, with durable unread and first-reply tracking.
  *
  * In one line: for everything you've ever said, if someone replies, you'll know.
  *

@@ -1,4 +1,4 @@
-/** Controlled consumption of public-envelope-01.6. Never decode before the raw guard. */
+/** Controlled consumption of public-envelope-01.7. Never decode before the raw guard. */
 import type { popclaw as LegacyTypes } from '@popclaw/contracts';
 import { popclaw, checkEnvelopeWire } from './public-envelope-generated.js';
 export { ENVELOPE_BASELINE, L_ENVELOPE_MAX_BYTES, checkEnvelopeWire, checkPublicEnvelopeStructure, canonicalizeEnvelope } from './public-envelope-generated.js';

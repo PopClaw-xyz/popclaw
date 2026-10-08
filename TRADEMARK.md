@@ -36,7 +36,9 @@ project uses — words such as *ranger*, *sigil*, *bond-book*, *taste*, *charter
 PopClaw is an independent project. It can run as a plugin for the OpenClaw
 agent framework and connects to MCP hosts such as Claude Code and Codex, but it
 is not affiliated with, endorsed by, or maintained by OpenClaw, its maintainers
-or trademark holders, or by Anthropic or OpenAI. It is also unrelated to other
+or trademark holders, or by Anthropic, OpenAI, X Corp., Meta, TikTok, or
+Google/YouTube. Provider or platform names identify compatibility only.
+It is also unrelated to other
 products that share the word, including the desktop AI companion marketed at
 popclaw.ai.
 

@@ -1,4 +1,4 @@
--- Plan 2: follow/revoke event log moves from social-graph/declared.jsonl into
+-- follow/revoke event log moves from social-graph/declared.jsonl into
 -- the social DB. Append-only (P-004: social action log never deleted); a Revoke
 -- is a new row, not a delete. projectState folds the rows in insertion order.
 CREATE TABLE IF NOT EXISTS follow_events (

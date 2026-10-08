@@ -790,7 +790,7 @@ describe('registerPopclawTools', () => {
     // The one unfollow receipt (relation.unfollowReceivedNoHouse) — "取关"
     // alone also matches relation.unfollowQueued, so pin the full rendered
     // string instead. No house slug came back from revokeFollow here, so it's
-    // the neutral no-house variant (architect ruling: never guess the home
+    // the neutral no-house variant (never guess the home
     // house).
     expect(r.text).toContain(
       renderCopy(ownerLang(), 'relation.unfollowReceivedNoHouse', {

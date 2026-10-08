@@ -223,7 +223,7 @@ export function bondBookLine(): string {
  * The payoff for a successful follow: the one follow receipt, then the
  * bond-book line.
  *
- * G1-copy / architect ruling: `house` is the one `runFollowCommand`'s own
+ * `house` is the one `runFollowCommand`'s own
  * receipt named — never a guess. In production `relation-scope.ts` always
  * resolves a slug, so `house` undefined here is defensive, not a real path;
  * omitted (or undefined) renders the no-house variant rather than naming a

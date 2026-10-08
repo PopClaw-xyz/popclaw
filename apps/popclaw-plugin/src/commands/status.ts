@@ -1,7 +1,6 @@
 /**
  * `popclaw status` — the owner's identity check-up report: who I am + my current
  * standing in the world + what I'm still missing.
- * (spec docs/superpowers/specs/2026-07-25-status-friendliness-redesign.md, slice P)
  *
  * Plain text, no borders, no padEnd alignment (phones will break lines): emoji
  * section headers + short lines. Two readers: the slash command shows this

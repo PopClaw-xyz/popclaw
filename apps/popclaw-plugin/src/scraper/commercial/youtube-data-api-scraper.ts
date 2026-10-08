@@ -1,6 +1,6 @@
 import { rethrowActionCancellation } from '../../runtime/house-lifecycle/action-context.js';
 /**
- * YoutubeDataApiScraper — Plan 10.10 direct-REST PlatformScraper via
+ * YoutubeDataApiScraper — direct-REST PlatformScraper via
  * the official YouTube Data API v3.
  *
  * Free tier: 10,000 quota units/day. Each playlistItems.list costs

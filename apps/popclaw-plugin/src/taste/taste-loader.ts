@@ -1,9 +1,8 @@
 /**
  * Read taste/manifest.json + the enabled markdown source files.
  *
- * Plan 11.1: only `core/public.md` + `core/private.md` are typically present.
- * The loader is generic so that Phase 3+ can drop `learned/` and Phase 5+
- * can drop `imported/<id>.md` files into the same tree without code change.
+ * Loads `core/public.md`, `core/private.md` and any enabled learned or
+ * imported sources declared in the manifest.
  */
 
 import { existsSync, readFileSync } from 'node:fs';

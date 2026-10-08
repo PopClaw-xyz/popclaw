@@ -1,6 +1,5 @@
 /**
- * Dreaming — the two-tool shape (spec `docs/superpowers/specs/2026-07-26-social-log-and-dream-architecture.md`
- * §1/§2 + Appendix A, step 3). Replaces the old `DreamerPass` + `DreamerService`.
+ * Dreaming — prepare material and record the host model’s result. Replaces the old `DreamerPass` + `DreamerService`.
  *
  * ## Why split into two tools
  *

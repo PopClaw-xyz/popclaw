@@ -28,7 +28,7 @@ export interface NotificationDeliveryBatch {
  *
  * Per ADR-0012 + spec §10.5: MVP downgraded to inbox-on-next-interaction.
  * All levels enqueue; `drain()` is called on owner's next interaction
- * (typically O-3b's OnboardingOrchestrator + future Plan 12 message tools).
+ * (typically O-3b's OnboardingOrchestrator + message tools).
  *
  * Concrete impl in sqlite-notifier.ts is backed by the `notification_queue`
  * table (ADR-0013).

@@ -44,7 +44,7 @@ export const RangerProfile = z.object({
   namecard_declared_at: z.number().int().optional(),
 });
 
-// Plan 10: watch-loop pacing for ranger_mode plugins.
+// watch-loop pacing for ranger_mode plugins.
 export const WatchConfig = z.object({
   tick_interval_ms: z.number().int().positive().default(10_000),
   heartbeat_interval_ms: z.number().int().positive().default(60_000),

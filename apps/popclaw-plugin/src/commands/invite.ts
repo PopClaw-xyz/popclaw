@@ -1,9 +1,7 @@
 /**
  * CLI command `popclaw invite <platform> <handle> [--nickname=X]`.
  *
- * Plan 5 keeps this as a plain async function dispatched from main.ts argv
- * parsing. Plan 6 will wrap the same body in `ctx.registerCommand(...)` for
- * OpenClaw integration.
+ * The async command body is shared by CLI and host command wiring.
  */
 
 import type { InviteInitiator } from '../invite/invite-initiator.js';

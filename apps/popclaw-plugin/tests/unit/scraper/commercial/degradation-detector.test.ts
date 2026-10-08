@@ -2,7 +2,7 @@
  * DegradationDetector — wraps a PlatformScraper, tracks consecutive empty
  * results, throws ProviderDegradedError to trigger HybridScraper failover.
  *
- * Motivated by Plan 10.13.1 follow-up: TwitterAPI.io's search endpoints
+ * Provider failure case: TwitterAPI.io's search endpoints
  * went silently degraded (HTTP 200 + empty tweets array) on 2026-04-27.
  * Without the detector, we'd just see a quiet feed; with it, we trip after
  * N empties and Apify takes over within seconds.

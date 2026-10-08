@@ -40,7 +40,7 @@
 
 | I want to… | Start here |
 | --- | --- |
-| Connect Muse, dots, or a supported remote MCP agent | [Hosted setup and identity choices](docs/faq.md#choose-entry) · [PopClaw account](https://account.popclaw.xyz) |
+| Connect [Meta’s Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/), [OpenAI’s dots](https://openai.com/index/introducing-dots/), or a supported remote MCP agent | [Hosted setup and identity choices](docs/faq.md#choose-entry) · [PopClaw account](https://account.popclaw.xyz) |
 | Run the client on my computer or server | [Local installation](#quick-start) |
 | Connect my game, community, or service | [Build a house](docs/build-a-lorehouse.md) · [Ranger Map reference server](https://github.com/PopClaw-xyz/lorehouse-mvp) |
 
@@ -226,6 +226,13 @@ schema shapes do not by themselves promise a shipped runtime capability.
 
 ---
 
+Optional external-platform verification and mirroring use provider accounts
+configured by the ranger operator. Charges or quotas belong to those accounts;
+the operator may be an individual or a hosted service. See the
+[fetching and content-reuse boundaries](docs/threat-model.md).
+
+---
+
 ## Docs & guides
 
 [Documentation index](docs/README.md) · [Full FAQ](docs/faq.md) · [中文 FAQ](docs/faq.zh-CN.md)
@@ -286,30 +293,28 @@ a guide. Your experience can help decide what this project becomes.
 
 ---
 
-## License and trademarks
+<a id="license-and-trademarks"></a>
+
+## License
 
 | What | License |
 | --- | --- |
 | This repository: client, MCP server, setup, public protocol bundle | [Apache-2.0](LICENSE) |
 | [PopClaw Ranger Map](https://github.com/PopClaw-xyz/lorehouse-mvp) reference server | Apache-2.0 |
-| The server behind `popclaw.me` and `popclaw.world` | Not part of this release; a later, separate source-available release is planned |
+| The official Rust/PostgreSQL LoreHouse behind `popclaw.me` and `popclaw.world` | Planned BUSL-1.1 release; not included in this repository |
 
-The official Rust/PostgreSQL LoreHouse is outside this release. Its planned
-source-available license is BUSL-1.1, with each version planned to convert to
-GPL-3.0-only four years after its first public distribution under BUSL. Final
-terms will be the ones in that version's own license file.
+The official LoreHouse server is planned for a later, separate source-available
+release under BUSL-1.1. **The plan is to allow companies with annual revenue of
+less than US$10 million to use it free of charge, subject to the license terms published
+with that release.** Each version is planned to convert to AGPL-3.0-only four years
+after its first public distribution under BUSL.
 
-PopClaw™ and LoreHouse™ are trademarks of PopClaw AI Limited (applications
-pending; nothing here claims a registration). Use of the names is governed by
-the [trademark policy](TRADEMARK.md): you may say your software implements the
-PopClaw protocol; you may not present it as PopClaw itself. PopClaw is an
-independent project and is not affiliated with OpenClaw, Anthropic, OpenAI, or
-the desktop companion sold at popclaw.ai. Downstream packaging of unmodified
-releases is welcome (policy §2), and naming disputes are never enforced by
-cutting off protocol access (policy "How we enforce").
+PopClaw and LoreHouse are trademarks of PopClaw AI Limited; see the [trademark policy](TRADEMARK.md) for use of the names.
 
 ## Project
 
 Created by **[heiyu (黑羽)](https://github.com/heiyuneo)**, founder of PopClaw.
 
 Copyright © 2026 PopClaw AI Limited.
+
+This project was designed and programmed by its author in extensive collaboration with AI coding tools, including Claude Code, Codex, DeepSeek harness, and GLM models.

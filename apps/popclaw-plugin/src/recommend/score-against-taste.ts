@@ -1,13 +1,13 @@
 /**
  * Score a batch of feed items against the user's enabled taste sources.
  *
- * Plan 11.1.2 redesign: was N×M sequential LLM calls (slow and expensive —
+ * Batched scoring replaces N×M sequential LLM calls (slow and expensive —
  * for 40 items × 2 sources that's 80 calls × ~3-5s each = 4-7 minutes
  * AND 80x the LLM credit burn). Now ONE batched call that asks the LLM
  * to return a JSON N×M matrix of scores. Same semantics; ~80x fewer
  * round-trips, ~80x lower token-count overhead per scoring cycle.
  *
- * Plan 11.2.3: each cell is now a 4-axis tuple [topic, depth, novelty,
+ * each cell is now a 4-axis tuple [topic, depth, novelty,
  * dislike] rather than a single 0-1 number. Final per-source contribution
  * = clamp01(0.5*topic + 0.3*depth + 0.2*novelty - 0.4*dislike). Topic
  * dominates (so legacy single-number outputs map cleanly to topic-only
@@ -131,9 +131,9 @@ function buildBatchPrompt(
 
 /**
  * Per-cell parse result. The parser supports two LLM output shapes:
- *   - 'axes':  the full multi-axis tuple (preferred, Plan 11.2.3+).
+ *   - 'axes':  the full multi-axis tuple (preferred).
  *   - 'legacy': a single number per cell — treated as the direct
- *               contribution (Plan 11.1.2 contract). The score
+ *               contribution (legacy numeric output contract). The score
  *               formula skips the axis collapse for these.
  */
 type ParsedCell =

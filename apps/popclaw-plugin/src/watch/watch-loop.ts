@@ -31,7 +31,7 @@ export interface MirrorPostToPush {
 }
 
 /**
- * Plan 10.14 — Optional cost guard. When `isTripped()` returns true, the
+ * Optional cost guard. When `isTripped()` returns true, the
  * watch loop short-circuits this entry's poll to a miss (no scraper call,
  * no cost) so the tier state machine drives it down to COLD/SLEEP. Pass
  * `null` to disable.
@@ -90,7 +90,7 @@ export class WatchLoop {
       return this.deps.registry.all().includes(entry);
     };
     if (!check()) return;
-    // Plan 10.14: budget tripped → count as miss without scraping. Tier
+    // budget tripped → count as miss without scraping. Tier
     // state machine drives the entry down to COLD/SLEEP; recovers when
     // older cost events age out and the guard untrips.
     if (this.deps.budgetGuard?.isTripped()) {
@@ -109,7 +109,7 @@ export class WatchLoop {
     const since = new Date((entry.state.lastSeenCreatedAt || 0) * 1000);
     let posts: ScrapedPost[] = [];
     try {
-      // Plan 10.5: pass the verified handle, NOT the base58 popclaw_id —
+      // pass the verified handle, NOT the base58 popclaw_id —
       // the scraper calls platform APIs that expect a native username.
       posts = await scraper.scrapeTimeline(
         entry.handle,

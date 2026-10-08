@@ -15,7 +15,7 @@
  * result is always observed, no matter the query shape — see scrapeTimeline
  * for the exact predicate (#413, #415).
  *
- * Motivated by Plan 10.13.1 follow-up: TwitterAPI.io's search/timeline
+ * Provider failure case: TwitterAPI.io's search/timeline
  * endpoints went silently empty for every handle on 2026-04-27 while
  * `/user/info` continued to work (so the API key wasn't the issue). With
  * this wrapper, the watch loop falls back to Apify within seconds instead

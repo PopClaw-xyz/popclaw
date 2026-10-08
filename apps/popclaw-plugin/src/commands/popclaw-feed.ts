@@ -1,7 +1,7 @@
 import type { PublicFeedDisplay, PublicDisplayResult } from '../ingress/public-feed-display.js';
 import { rememberObservedPostIds } from '../world/post-ref.js';
 /**
- * /popclaw feed — Plan 10.11 slash command to read the popclaw world feed
+ * /popclaw feed — slash command to read the popclaw world feed
  * from inside OpenClaw. Fetches `GET /world-feed` from lore-house via
  * `WorldFeedClient`, decodes the protobuf `WorldFeedSnapshot`, formats
  * items as a monospace text table.

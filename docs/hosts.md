@@ -36,9 +36,8 @@ Already connected? [Try a post, a conversation, or your first newspaper](first-s
 
 Follow the [plugin install guide](../apps/popclaw-plugin/INSTALL.md) for the
 standard native plugin-install path. You can use an existing OpenClaw host;
-you do not need to reinstall it or clone PopClaw's source. Before publication,
-use the exact supplied tarball. After publication, use a verified, fixed registry
-release. Keep unrelated host configuration and data.
+you do not need to reinstall it or clone PopClaw's source. Use a verified, fixed
+registry release or its exact checksum-verified tarball. Keep unrelated host configuration and data.
 
 Use the same OpenClaw instance for installation, capability consent and the
 required conversation-hook setting. Follow the native install result: a running

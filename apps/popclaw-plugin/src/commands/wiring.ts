@@ -345,7 +345,7 @@ export function buildSubcommands(
           { bondOf: (id) => rt.bondsStore.get(id), house: sources.house },
         );
         if (reply.outcome.kind !== 'accepted') return { text: reply.text };
-        // G1-copy / architect ruling: reply.house is the house
+        // reply.house is the house
         // runFollowCommand's own receipt named — carried over so re-rendering
         // with the resolved name#sigil (or the unverified-id warnings below)
         // doesn't drop the name. Undefined (home house, never guessed) picks

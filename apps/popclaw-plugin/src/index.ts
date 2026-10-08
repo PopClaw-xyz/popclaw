@@ -638,10 +638,9 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       },
     });
 
-    // Newspaper (L3) scheduled 8am auto-delivery is deferred to Plan 2: it wakes the
-    // agent to render (popclaw can't call an LLM on subscription hosts — spec
-    // 2026-06-18). The interactive paths (slash command + NL via the
-    // popclaw_newspaper / popclaw_publish_newspaper tools) work now.
+    // Newspaper rendering is driven by the host agent. Interactive entry points
+    // are the slash command and the popclaw_newspaper /
+    // popclaw_publish_newspaper tools; this block creates no schedule.
 
     class OpenClawRuntimeLLMClient implements LLMClient {
       constructor(private readonly api: OpenClawPluginApi) {}
@@ -705,7 +704,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
       return getLLMClient().complete(prompt);
     }
 
-    // Plan 11.1.2: scoring is now batched. score-against-taste builds the
+    // scoring is now batched. score-against-taste builds the
     // matrix prompt itself; we just hand it `llmComplete`. Same fn for
     // render. Total ≈ 2 LLM calls per /popclaw-recommend invocation,
     // regardless of pool size — was N×M before.

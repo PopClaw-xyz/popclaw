@@ -1883,7 +1883,7 @@ export const EN: Lexicon = {
     'world.lanternDownShort': 'Lore-house unreachable',
     // Not yet accepted, so no house is named here — naming one before it has
     // actually landed there would claim something the transport hasn't
-    // confirmed (architect ruling, G1-copy).
+    // confirmed.
     'relation.followQueued':
       'Signed and saved, but the follow of {who} has not reached the lore-house yet — it will be re-sent. Nothing is lost; it is not confirmed either.',
     'relation.unfollowQueued':
@@ -1894,7 +1894,7 @@ export const EN: Lexicon = {
     // which house actually accepted it — the owner otherwise has no way to
     // tell this happened in world and not in me. Used only when the house is
     // actually known; see relation.followReceivedNoHouse for the "accepted
-    // but which house is unknown" case (architect ruling: never guess the
+    // but which house is unknown" case (never guess the
     // primary/home house).
     'relation.followReceived':
       'Following {who} — {house} has the follow declaration. Their public posts now get priority in your recommendations and daily paper. They can see that you followed them.',

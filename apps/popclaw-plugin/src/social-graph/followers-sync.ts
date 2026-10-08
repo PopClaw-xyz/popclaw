@@ -1,6 +1,5 @@
 /**
- * Followed-you notifications — known-follower set + diff-based backfill (spec
- * `docs/superpowers/specs/2026-07-27-follower-notification-design.md` slices ②③).
+ * Followed-you notifications — known-follower set and diff-based backfill.
  *
  * Today the plugin has zero awareness of "someone followed me." The original
  * design planned to filter `FollowDeclared` in the world-stream callback, but

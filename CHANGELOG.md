@@ -5,7 +5,7 @@ means a client or house built against the stated bundle keeps working.
 
 ## 0.1.0 — Developer Preview
 
-The [GitHub Release](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.0)
+The [releases page](https://github.com/PopClaw-xyz/popclaw/releases)
 will record the final archive names and SHA-256 hashes when published. Verify
 a release tarball against that record; this source file does not contain a
 hash of an archive that will be built from it.

@@ -1,5 +1,5 @@
 /**
- * Plan 12 — sign Reply / DirectMessage envelopes.
+ * sign Reply / DirectMessage envelopes.
  *
  * Mirrors `social-graph/sign-event.ts` but for the messaging events. Same
  * Invariant #1 discipline: any proto3-default field MUST be omitted from

@@ -54,4 +54,4 @@ release you are installing; examples do not certify every host or platform.
 - Plans and updates: [Roadmap](../ROADMAP.md) and [@popclaw_xyz](https://x.com/popclaw_xyz).
 
 [Glossary](glossary.md) · [Brand and culture](brand/README.md) ·
-[Governance](governance.md) · [License and trademarks](../README.md#license-and-trademarks)
+[Governance](governance.md) · [License](../README.md#license)

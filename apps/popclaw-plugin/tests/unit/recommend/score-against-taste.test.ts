@@ -151,7 +151,7 @@ describe('scoreAgainstTaste (batched)', () => {
         { path: 'core/public.md', weight: 1.0, content: '...' },
       ], llm);
       // Legacy cells skip the axis blend — contribution equals the number directly.
-      // (This preserves the Plan 11.1.2 contract for any model output that doesn't
+      // (This preserves legacy numeric-output contract for any model output that doesn't
       // follow the new multi-axis instruction.)
       expect(out[0]!.score).toBeCloseTo(0.6, 6);
       // Lineage axes is omitted for legacy cells (only set on the new axis path).

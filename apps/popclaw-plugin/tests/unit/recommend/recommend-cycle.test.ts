@@ -12,7 +12,7 @@ const cacheItem = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-// Plan 11.1.2: scoring is batched. The mock `llmScore` returns a JSON N×M
+// scoring is batched. The mock `llmScore` returns a JSON N×M
 // matrix string (one row per item, one column per source).
 
 describe('runRecommendCycle', () => {

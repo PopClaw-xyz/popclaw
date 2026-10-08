@@ -338,8 +338,8 @@ export function verifyOpenDatabaseVisibility(): readonly DatabaseVisibilityFault
 
 /**
  * Upper bound on compiled statements kept per connection. An idle root runs at
- * most ~21 distinct SQL strings per minute across all its connections
- * (docs/perf/idle-cpu-baseline-2026-09-27.md); 64 leaves room for command
+ * most ~21 distinct SQL strings per minute across all its connections in a
+ * measured idle sample; 64 leaves room for command
  * execution and the busy-origin `NOT IN (?,…)` variants, while any generated
  * SQL beyond that only evicts the least recently used entry. It bounds the
  * cached entries; an evicted statement stays alive natively until GC collects it.

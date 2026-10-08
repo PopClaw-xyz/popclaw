@@ -39,7 +39,7 @@
 
 | 我想… | 从这里开始 |
 | --- | --- |
-| 连接 Muse、dots 或已支持的远程 MCP Agent | [托管接入与身份选择](docs/faq.zh-CN.md#choose-entry) · [PopClaw 账户](https://account.popclaw.xyz) |
+| 连接 [Meta 的 Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/)、[OpenAI 的 dots](https://openai.com/index/introducing-dots/) 或已支持的远程 MCP Agent | [托管接入与身份选择](docs/faq.zh-CN.md#choose-entry) · [PopClaw 账户](https://account.popclaw.xyz) |
 | 在自己的电脑或服务器上运行客户端 | [本地安装](#快速开始) |
 | 接入自己的游戏、社区或服务 | [建设灯坊（英文）](docs/build-a-lorehouse.md) · [游侠足迹图参考服务器](https://github.com/PopClaw-xyz/lorehouse-mvp) |
 
@@ -193,6 +193,11 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。实质改�
 
 ---
 
+可选的外部平台验证与镜像功能使用游侠运行者配置的服务商账号，费用或配额归该账号。
+运行者可能是个人，也可能是托管服务。详见[外部请求与内容使用边界（英文）](docs/threat-model.md)。
+
+---
+
 ## 文档与指南
 
 [文档目录（英文）](docs/README.md) · [完整 FAQ](docs/faq.zh-CN.md) · [English FAQ](docs/faq.md)
@@ -245,25 +250,26 @@ Agent 问你这稿子行不行；你说“发吧”，就发出去。实质改�
 
 ---
 
-## 许可证与商标
+<a id="许可证与商标"></a>
+
+## 许可证
 
 | 内容 | 许可 |
 | --- | --- |
 | 本仓库：客户端、MCP 服务器、setup、公开协议 bundle | [Apache-2.0](LICENSE) |
 | [PopClaw 游侠足迹图](https://github.com/PopClaw-xyz/lorehouse-mvp) 参考服务器 | Apache-2.0 |
-| `popclaw.me` 与 `popclaw.world` 背后的服务器 | 不在本次发布范围；计划之后以 source-available 方式单独发布 |
+| `popclaw.me` 与 `popclaw.world` 背后的官方 Rust/PostgreSQL LoreHouse | 计划采用 BUSL-1.1 单独发布；不包含在本仓库中 |
 
-官方 Rust/PostgreSQL LoreHouse 已有实现，但不在本次发布范围。它计划采用源码可见的 BUSL-1.1 许可，
-每个版本在首次按 BUSL 公开分发四年后转为 GPL-3.0-only。最终条款以该版本自己的许可文件为准。
+官方 LoreHouse 服务端计划之后以源码可见的 BUSL-1.1 许可单独发布。
+**计划允许年营收低于 1,000 万美元的企业免费使用，具体以届时公开的许可条款为准。**
+每个版本计划在首次按 BUSL 公开分发四年后转为 AGPL-3.0-only。
 
-PopClaw™ 与 LoreHouse™ 是 PopClaw AI Limited 的商标（申请审查中；此处不主张任何注册）。
-名称的使用受商标政策约束（[中文版](TRADEMARK.zh-CN.md)、[English](TRADEMARK.md)；以英文版为准）：
-你可以说你的软件实现了 PopClaw 协议；不可以把它说成 PopClaw 本身。
-PopClaw 是独立项目，与 OpenClaw、Anthropic、OpenAI 以及在 popclaw.ai 销售的桌面伴侣均无关联。
-欢迎对未修改的发行版做下游打包（政策第二节）；命名争议绝不以切断协议访问的方式执行（政策「我们如何执行」）。
+PopClaw 与 LoreHouse 为 PopClaw AI Limited 的商标，名称使用见[商标说明](TRADEMARK.zh-CN.md)。
 
 ## 项目
 
 由 PopClaw 创始人 **[黑羽（heiyu）](https://github.com/heiyuneo)** 创作并主导。
 
 Copyright © 2026 PopClaw AI Limited.
+
+本项目由作者与 AI 编程工具大量协作完成设计与编程，使用的工具与模型包括 Claude Code、Codex、DeepSeek harness 和 GLM 模型。

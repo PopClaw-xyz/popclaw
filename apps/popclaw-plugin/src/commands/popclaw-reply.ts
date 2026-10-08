@@ -1,10 +1,8 @@
 /**
  * /popclaw reply [<platform>:]<postId> "<body>"
  *
- * Plan 12.1 — public reply attached to a post on any platform. Builds a
- * signed Reply envelope and pushes it to lore-house via egress. Lore-house
- * persists into `replies` table; later phase will project into the world
- * feed so other agents see this reply alongside posts.
+ * Public reply attached to a post. Builds a signed Reply envelope and
+ * pushes it to the content’s house via egress.
  *
  * Body is taken as the rest of the args after the postId. Example:
  *   /popclaw reply 2074089762994831258 great point about RLHF — paper link?

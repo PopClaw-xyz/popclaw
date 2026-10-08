@@ -1,7 +1,6 @@
 /**
  * Pure projection from append-only event logs to materialized state.
- * Plan 11.1 covers public follow/revoke only; later phases extend the
- * type unions.
+ * Only public follow/revoke events contribute to this projection.
  */
 
 export type FollowType = 'PUBLIC' | 'PRIVATE';
@@ -76,7 +75,7 @@ export function projectState(
   // Outgoing (me → others), dual-keyed by (followee, house_slug)
   const rows = new Map<string, FollowingEntry>();
   for (const ev of declared) {
-    if (ev.followType !== 'PUBLIC') continue;     // Plan 11.1 = public only
+    if (ev.followType !== 'PUBLIC') continue;     // Public events only.
     const houseSlug = ev.houseSlug ?? '';
     const key = keyOf(houseSlug, ev.followee);
     if (ev.type === 'FollowDeclared') {

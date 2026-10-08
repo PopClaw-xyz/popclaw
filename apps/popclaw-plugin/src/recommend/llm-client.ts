@@ -1,14 +1,9 @@
 /**
- * Plan 11.2 — popclaw owns its LLM connectivity.
+ * popclaw owns its LLM connectivity.
  *
- * Plan 11.1 routed /popclaw-recommend through OpenClaw's plugin agent
- * runtime (`prepareSimpleCompletionModelForAgent`). Live verification
- * showed that runtime's provider registry does not recognize `ollama`,
- * so the user's `ollama/glm-5.1:cloud` setup throws on every call. We
- * can't change OpenClaw core, so popclaw gets its own thin client that
- * POSTs directly to the provider's HTTP API.
- *
- * See `docs/popclaw-direct-llm.md` for the full design.
+ * Direct provider clients support configured endpoints independently of the
+ * host provider registry; the optional host completion adapter remains a
+ * separate integration boundary.
  *
  * Surface kept narrow on purpose: a single `complete(prompt)` method.
  * The factory in `llm-factory.ts` adapts it to the `LLMCompleteFn`

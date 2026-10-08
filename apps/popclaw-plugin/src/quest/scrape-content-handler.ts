@@ -7,7 +7,7 @@ import { assertActionActive, questAction, rethrowActionCancellation, runAction, 
  * post via `egress.push`, then a single terminal QuestResultPayload
  * summarizing the run.
  *
- * Without a scraper (Plan 5 stub), skip mirror Post emission entirely
+ * Without a scraper (stub), skip mirror Post emission entirely
  * and just push a single APPROVE QuestResult. This preserves the
  * dispatcher-plumbing tests from S-B1/S-B2/S-B4.
  *
@@ -59,7 +59,7 @@ export class ScrapeContentHandler {
     const maxItems = Number(payload['maxItems'] ?? 20);
 
     if (!this.deps.scraperRegistry) {
-      // Plan 5 stub mode: emit only a terminal APPROVE QuestResult, no feeds.
+      // stub mode: emit only a terminal APPROVE QuestResult, no feeds.
       this.deps.loggerInfo?.(`scrape-content stub: task=${taskId} (no feed emission)`);
       assertActionActive(this.deps.gate);
       await this.pushQuestResult(taskId, platform, OUTCOME_APPROVE, new Uint8Array(32), null);

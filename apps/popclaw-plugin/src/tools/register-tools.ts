@@ -11,7 +11,6 @@
  * `*-tools.ts` modules next to it, and the call order below IS the
  * registration order the agent sees (pinned by a test — do not reorder).
  *
- * See: docs/superpowers/specs/2026-05-17-popclaw-command-surface-design.md
  */
 
 import { type RegisterToolsDeps, type ToolsCtx } from './tools-context.js';

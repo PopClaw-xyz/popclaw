@@ -19,7 +19,7 @@ describe('buildScraperRegistryFor', () => {
     });
 
     it('backendOverride=twitterapi_io → x: DegradationDetector(TwitterApiIoScraper)', async () => {
-      // Plan 10.13.x: TwitterAPI.io is always wrapped with a DegradationDetector
+      // TwitterAPI.io is always wrapped with a DegradationDetector
       // so silent provider outages can trip even without an autoselected fallback;
       // an operator using --backend twitterapi_io still sees the failover warn line.
       const r = await buildScraperRegistryFor({ backendOverride: 'twitterapi_io', apifyToken: undefined, twitterApiIoKey: 'k', youtubeApiKey: undefined });

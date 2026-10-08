@@ -174,13 +174,12 @@ A version number can be published once, so rehearse on something disposable.
 
 ## If the workflow fails on the day
 
-Publishing by hand is a valid fallback and costs that version its provenance.
-Take the cost explicitly: in the same change, remove the two sentences that
-promise it — `CONTRIBUTING.md` (§"How releases are cut", the bullet beginning
-"The package is built from a clean checkout") and `docs/hosts.md` (§"Before you
-start", the sentence beginning "The real `popclaw` package is published"). Put
-them back when the next version ships through the workflow. The docs and the
-artefact say the same thing, or one of them is wrong.
+If an exceptional manual publication is considered, first record which registry
+integrity and provenance checks would be lost and obtain the release owner's
+decision. Audit the current README, host guide, contribution guide and release
+notes for claims about the actual publication path; do not rely on a quoted
+sentence from an older revision. Record the exact artifact bytes and observed
+registry result. A manual upload must not be described as workflow-attested.
 
 ## What cannot be undone
 

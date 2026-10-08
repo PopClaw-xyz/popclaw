@@ -2,10 +2,9 @@ import { rethrowActionCancellation } from '../runtime/house-lifecycle/action-con
 /**
  * /popclaw message <to_popclaw_id> "<body>"
  *
- * Plan 12.1 — private 1:1 message to another popclaw user. Builds a signed
- * DirectMessage envelope and pushes via egress. Plan 12.0 / 12.1 MVP stores
- * plaintext (lore-house operator is trusted not to read or persist long-
- * term); Plan 12.x adds X25519 ECDH encryption to recipient's pubkey.
+ * Private 1:1 message to another popclaw user. Seals the body to the
+ * recipient’s key, builds a signed DirectMessage envelope and pushes via
+ * egress. See messaging/sign-message.ts for the encryption boundary.
  *
  * The recipient can be a full popclaw_id, or a human-facing form
  * (name#sigil / bare sigil / name) — the latter is translated into a full

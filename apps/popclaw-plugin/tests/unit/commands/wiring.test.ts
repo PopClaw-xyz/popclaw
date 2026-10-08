@@ -236,7 +236,7 @@ describe('/popclaw follow · unverified id branches', () => {
     const r = await follow(RAW_ID);
 
     // No house slug came back, so it's the neutral no-house variant
-    // (architect ruling: never guess the home house).
+    // (never guess the home house).
     expect(r.text).toBe(
       `${renderCopy('en', 'follow.cli.unknownId', { sigil: deriveSigil(RAW_ID), id: RAW_ID })}\n` +
         `✓ ${renderCopy('en', 'relation.followReceivedNoHouse', { who: RAW_ID })}`,
@@ -252,7 +252,7 @@ describe('/popclaw follow · unverified id branches', () => {
     const r = await follow(RAW_ID);
 
     // No house slug came back, so it's the neutral no-house variant
-    // (architect ruling: never guess the home house).
+    // (never guess the home house).
     expect(r.text).toBe(
       `✓ ${renderCopy('en', 'relation.followReceivedNoHouse', { who: RAW_ID })} ` +
         `${renderCopy('en', 'follow.cli.uncheckedNote')}`,

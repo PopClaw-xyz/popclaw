@@ -1,7 +1,7 @@
 /**
  * Persistent per-item score cache.
  *
- * Plan 11.2.1 cost optimization: between two /popclaw-recommend cycles, the
+ * Cost optimization: between two /popclaw-recommend cycles, the
  * 40-item pool is mostly the same — only a few new posts arrived. Re-scoring
  * unchanged items via the LLM each time is wasted spend. This cache stores
  * `(itemId, tasteHash) → number[]` so a cycle can skip the LLM for any
@@ -43,8 +43,8 @@ interface TasteSourceLike {
  * full-rescore cycle, then steady-state cheap again). Saves the operator
  * from having to manually `rm score-cache.json` on every algorithm tweak.
  *
- * - v1: Plan 11.1.2 — single 0-1 per cell, contribution = weight × cell.
- * - v2: Plan 11.2.3 — multi-axis [topic, depth, novelty, dislike] per cell,
+ * - v1: single 0-1 per cell, contribution = weight × cell.
+ * - v2: multi-axis [topic, depth, novelty, dislike] per cell,
  *       contribution = weight × axesToContribution(axes).
  */
 const SCORING_SCHEMA_VERSION = 'v2';

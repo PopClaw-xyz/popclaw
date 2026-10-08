@@ -1,5 +1,5 @@
 /**
- * apifyTwitter — Plan 10.7 factory for X/Twitter via Apify's
+ * apifyTwitter — factory for X/Twitter via Apify's
  * `kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest`
  * actor ($0.25/1k results).
  *

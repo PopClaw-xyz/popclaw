@@ -1,23 +1,16 @@
 import { decodeEnvelope } from '../protocol/public-envelope.js';
 /**
- * Plan 2 — DM inbox backed by the precious social DB (my-social-assets.db).
+ * DM inbox backed by the precious social DB (my-social-assets.db).
  *
  * Each incoming DM (received via InboxStreamClient) is one row in the `inbox`
  * table. `/popclaw inbox` reads the most recent rows.
  *
- * Dedup — the real fix:
- *   - SSE backfill replays queued DMs each connection, so the same DM arriving
- *     twice is normal. We dedupe on `(from_popclaw_id, ts, body_hash)` via a
- *     UNIQUE index (INSERT OR IGNORE). This is CROSS-PROCESS safe — the old
- *     in-memory `seen` Set never crossed processes, so when >1 gateway /
- *     subscription was live the same DM got recorded N times (host-b saw 3x/9x).
- *   - Plan 12.x will replace the dedup key with event_id once the stream emits
- *     full EventEnvelope frames.
- *   - Spec B slice 4 (multi-house): the dedup key is **house-agnostic**, so the
- *     same DM being relayed once each by two houses still lands one row and is
- *     only processed once (exactly-once is an asset verified both ways on real
- *     machines). `house_slug` is only a tag riding along — it must never go into
- *     `inbox_dedup`, or a single DM would be recorded twice.
+ * Deduplication is cross-process and house-agnostic: an available event_id
+ * is the primary key; legacy rows use (sender, timestamp, plaintext body hash).
+ * Relaying the same event through two houses does not create two inbox rows.
+ * house_slug records provenance and must not enter the deduplication key.
+ * Notification delivery has its own durable state; inbox deduplication alone
+ * is not a claim of exactly-once delivery to every external host.
  */
 
 import { createHash } from 'node:crypto';

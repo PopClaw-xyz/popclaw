@@ -9,7 +9,6 @@
  * store. This is the SURFACE over BondsStore — see bonds/bonds-store.ts.
  *
  * Principle: action commands perform actions (follow/unfollow); asset commands inspect assets (bond).
- * (spec docs/superpowers/specs/2026-07-25-status-friendliness-redesign.md, slice B)
  */
 
 import type { BondsStore, Bond } from '../bonds/bonds-store.js';

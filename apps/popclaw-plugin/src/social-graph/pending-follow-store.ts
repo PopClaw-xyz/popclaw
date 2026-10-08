@@ -1,10 +1,8 @@
 /**
  * pending_follows (migration 023) — follow intents pulled from the canvas,
  * capped, surfaced to the owner in batches, and driven to a terminal status.
- * Spec §6.3-§6.5 of
- * docs/superpowers/specs/2026-08-31-newspaper-follow-doorbell-design.md.
  *
- * Owner ruling 2026-09-13 supersedes the spec's author-set check (§6.3 step 1): a ➕
+ * A ➕
  * is credited to the READER who clicked it, named by the reader pass their
  * browser holds, so the intents a plugin pulls are ITS OWNER's clicks —
  * wherever they were made. An author who never appeared in this machine's own

@@ -3,7 +3,7 @@
  * for the ranger watch path. The ranger scrapes external platforms and wraps
  * each scraped post as a Post carrying an Origin (provenance).
  *
- * Respects Plan 5 Invariant #1 (elide proto3-default scalars / enum-zero /
+ * Preserves canonical encoding (elide proto3-default scalars / enum-zero /
  * empty-repeated so prost and pbjs agree on canonical bytes).
  *
  * block_type=0 (TEXT) and MediaAttachment.kind=0 (IMAGE) are proto3

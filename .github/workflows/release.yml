@@ -15,7 +15,7 @@
 # (docs.npmjs.com/trusted-publishers), so the CLI is pinned explicitly below
 # rather than inherited from whatever Node ships.
 #
-# ORDER, and why it is not negotiable (docs/research 2026-09-20 ruling §4):
+# ORDER: the alias requires the implementation at exactly the same version:
 # `popclaw-mcp` is a shell whose only dependency is `popclaw` at an exact
 # version. Publishing the shell first would put a package on the registry that
 # cannot install. So: build and test once, pack both, publish `popclaw`, prove

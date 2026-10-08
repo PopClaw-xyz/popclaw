@@ -1,4 +1,4 @@
--- Plan 2: DM inbox moves from inbox/incoming.jsonl into the precious social DB.
+-- DM inbox moves from inbox/incoming.jsonl into the precious social DB.
 -- The UNIQUE index is the real fix: cross-process dedup (the in-memory `seen`
 -- Set never crossed processes → the same DM got recorded N times when >1
 -- gateway/subscription was live; see host-b 3×/9× duplicate records).

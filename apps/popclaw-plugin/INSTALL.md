@@ -8,9 +8,8 @@ PopClaw 0.1.0 is the first public release. This guide covers a new user's curren
 release and first use; it does not promise compatibility with unpublished
 development versions.
 
-**Package selection:** before publication, use the exact maintainer-supplied
-`.tgz` and verify its SHA-256 against the handoff. After publication, use a fixed
-registry version confirmed to be the working release. An npm name-reservation
+**Package selection:** use a fixed registry version confirmed in the release
+record, or its exact `.tgz` with a matching SHA-256 from that record. An npm name-reservation
 placeholder is not this plugin. Neither packaging nor an installer exit proves
 that the plugin has loaded or completed first use.
 
@@ -116,7 +115,7 @@ openclaw plugins install popclaw@<verified-release-version>
 ```
 
 The example is a version-selection shape, not a claim that registry installation
-has been verified. Before publication, use the supplied tarball above.
+has been verified. If it is unavailable, use the verified tarball above.
 
 ### Enable the required conversation hook
 

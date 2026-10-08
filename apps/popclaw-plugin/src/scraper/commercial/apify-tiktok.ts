@@ -1,9 +1,9 @@
 import { rethrowActionCancellation } from '../../runtime/house-lifecycle/action-context.js';
 /**
- * apifyTiktok — Plan 10.10 TikTok scraper via Apify's
+ * apifyTiktok — TikTok scraper via Apify's
  * `scraptik/tiktok-api` actor (PAY_PER_EVENT, $0.001/call).
  *
- * Unlike Plan 10.7's clockworks/tiktok-scraper (single call, expensive),
+ * Unlike the older clockworks/tiktok-scraper (single call, expensive),
  * ScrapTik is a raw API wrapper that needs two calls per poll:
  *   1. Resolve username → sec_uid via usernameToId_username.
  *   2. Fetch posts via userPosts_secUserId.

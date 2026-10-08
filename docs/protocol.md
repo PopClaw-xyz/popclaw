@@ -181,4 +181,10 @@ resource rejection, not a cryptographic verdict.
 | I want to implement a server | [`IMPLEMENTERS.md`](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md), then [`SPEC.md`](../protocol/packages/contracts/protocol/public-envelope-01/SPEC.md), [`SIGNING.md`](../protocol/packages/contracts/protocol/public-envelope-01/SIGNING.md), [`PUBLIC-STREAM.md`](../protocol/packages/contracts/protocol/public-envelope-01/PUBLIC-STREAM.md), [`TRUST.md`](../protocol/packages/contracts/protocol/public-envelope-01/TRUST.md) |
 | I want to check my bytes | [Test vectors](../protocol/packages/contracts/fixtures/test-vectors.json) and [the check commands](../protocol/BUILD.md#checks) |
 | I want to see a whole server | [PopClaw Ranger Map](https://github.com/PopClaw-xyz/lorehouse-mvp) |
-| I want the design history | The architecture decision records are in the project's internal repository; the ones that matter for the wire format are summarized in `SPEC.md` |
+| I want the design history | The pinned bundle’s `SPEC.md` explains the wire-format decisions; its `CHANGES.md` records bundle revisions |
+
+Historical source identifiers inside `SOURCE-PROVENANCE.json` are provenance
+labels, not guaranteed public Git endpoints. The file records which earlier
+source could not be re-verified. Validate this distribution with its manifest
+and the consumer’s pinned digest; do not replace an unavailable historical
+identifier with a current commit or edit the sealed bundle to make a link work.

@@ -1,5 +1,5 @@
 /**
- * Plan 10.14 — BudgetGuard unit tests.
+ * BudgetGuard unit tests.
  *
  * Soft cap on cost-observer events. Emits warn at `warnPct`, error +
  * `tripped=true` at 100 %; untrips when older events age out of the

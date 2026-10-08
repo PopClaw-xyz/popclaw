@@ -477,7 +477,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
           if (reply.outcome.kind !== 'accepted') {
             return { type: 'text' as const, text: reply.text };
           }
-          // G1-copy / architect ruling: reply.house is the house
+          // reply.house is the house
           // runFollowCommand's own receipt named — carried over so
           // re-rendering with the resolved name#sigil doesn't drop the name.
           // Undefined (home house, never guessed) renders the no-house variant.
@@ -550,7 +550,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
           }
           const c = resolution.candidate;
           const who = c ? `${c.nickname}#${c.sigil}` : resolution.popclawId;
-          // G1-copy / architect ruling: same carry-over as popclaw_follow above.
+          // same carry-over as popclaw_follow above.
           const house = reply.house;
           return {
             type: 'text' as const,

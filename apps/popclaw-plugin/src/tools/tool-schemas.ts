@@ -2,7 +2,6 @@
  * Typebox schemas for popclaw tool registrations. One TSchema per tool
  * input. Centralized here so register-tools.ts is a thin wiring layer.
  *
- * See: docs/superpowers/specs/2026-05-17-popclaw-command-surface-design.md
  */
 import { Type, type TSchema } from 'typebox';
 

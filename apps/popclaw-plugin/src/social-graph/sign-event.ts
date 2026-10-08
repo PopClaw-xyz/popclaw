@@ -2,8 +2,7 @@
  * Wrap signEnvelope to produce signed FollowDeclared / FollowRevoked envelopes.
  * Encoded as protobuf via the existing pbjs runtime; bytes ready for /v1/push.
  *
- * Invariant #1 (proto3 defaults must be elided on the wire — see Plan 5/7
- * memory): for PUBLIC follows the FollowType enum is 0 and SubscriptionVisibility
+ * Proto3 defaults must be elided on the wire: for PUBLIC follows the FollowType enum is 0 and SubscriptionVisibility
  * is 0, both default values. pbjs would serialize them as explicit zero bytes
  * if present in the JS object, but prost (Rust) elides defaults — the resulting
  * CIDs would mismatch and lore-house would reject with `cid_mismatch`. So we
@@ -13,8 +12,7 @@
  *   - follow_type:                   0 (PUBLIC)        → omit when PUBLIC
  *   - taste_subscribed:              false             → omit when false
  *   - taste_subscription_visibility: 0 (SV_PUBLIC)     → always omit (no path
- *     in Plan 11.1 sets this non-default; Phase 4 will revisit when private
- *     taste subscription lands)
+ *     sets this non-default)
  */
 
 import { signEnvelope, type SignEnvelopeResult } from '../identity/sign-envelope.js';
@@ -91,7 +89,7 @@ export async function signFollowDeclared(
   if (ft !== 0) followDeclared.followType = ft;
   if (args.tasteSubscribed) followDeclared.tasteSubscribed = true;
   // taste_subscription_visibility defaults to 0 (SV_PUBLIC); always omit
-  // until Phase 4 introduces taste-subscription wiring.
+  // because this signer does not implement taste subscriptions.
   const order = orderToProto(args.order);
   if (order) followDeclared.order = order;
 

@@ -3,7 +3,7 @@
  * → minScore filter → topK → render. All external dependencies are
  * injected so this is fully unit-testable.
  *
- * Plan 11.1.2: scoring is now batched (one LLM call for the whole pool
+ * scoring is now batched (one LLM call for the whole pool
  * matrix), so `llmScore` and `llmRender` share the same signature
  * (prompt → text). Callers can pass the same function for both, or wire
  * different models if they want a cheaper one for scoring.
@@ -46,7 +46,7 @@ export interface RecommendCycleDeps {
    * Optional persistent score cache. When supplied, items already scored
    * under the current taste sources are skipped — only newly-arrived items
    * hit the LLM. Steady-state cost reduction is large (typically 80-95%
-   * fewer scoring calls). Omit to retain Plan 11.1 behavior (full rescore
+   * fewer scoring calls). Omit to request a full rescore (full rescore
    * every cycle).
    */
   scoreCache?: ScoreCache;
@@ -119,7 +119,7 @@ export async function runRecommendCycle(deps: RecommendCycleDeps): Promise<Recom
 
   const sources = await tasteLoader.enabledSources();
 
-  // Plan 11.2.1: split into "already scored under this taste" vs "needs LLM".
+  // split into "already scored under this taste" vs "needs LLM".
   let scored: ScoredItem[];
   if (scoreCache) {
     const tasteHash = hashTasteSources(sources);

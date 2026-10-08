@@ -18,9 +18,8 @@ OpenClaw is required for the plugin host; MCP users do not need to install OpenC
 
 Follow [INSTALL.md](./INSTALL.md) to install PopClaw with OpenClaw's standard
 native plugin commands. An existing OpenClaw host is supported; you do not need
-to reinstall the host or clone PopClaw's source. Before publication, use the
-exact supplied tarball. After publication, use a verified, fixed registry
-release. Review the requested capabilities and enable the required conversation
+to reinstall the host or clone PopClaw's source. Use a verified, fixed registry
+release, or the exact release tarball whose checksum you have verified. Review the requested capabilities and enable the required conversation
 hook in the same instance.
 
 Follow the native install result: a running Gateway may apply the plugin immediately;

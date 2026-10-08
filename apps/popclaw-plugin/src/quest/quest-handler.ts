@@ -10,7 +10,7 @@ import { assertActionActive, questAction, runAction, type ActionGate } from '../
  *
  * Non-addressed events are silently dropped. Unknown QuestKind values are
  * logged-and-dropped (forward-compat: Phase 3 may add new kinds this
- * Plan 5 plugin doesn't know how to handle).
+ * plugin doesn't know how to handle).
  */
 
 import type { EventDispatcher } from '../ingress/event-dispatcher.js';

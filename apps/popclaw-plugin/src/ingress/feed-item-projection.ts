@@ -24,7 +24,7 @@ export interface CachedFeedItem {
   originalUrl: string;
   textPreview: string;
   /**
-   * Plan 12.2 — when this cached item is a popclaw-native Reply, these
+   * when this cached item is a popclaw-native Reply, these
    * fields identify the post being replied to. Empty strings for normal
    * posts. Recommend cycle / digest renderer can use them to thread
    * "@<author> replied to @<original-author>'s post".
@@ -372,7 +372,7 @@ export function normalizeFeedItem(raw: Partial<popclaw.event.IWorldFeedItem> | n
       (typeof raw.originalUrl === 'string' && raw.originalUrl) ||
       (typeof raw.origin?.url === 'string' ? raw.origin.url : ''),
     textPreview: typeof raw.textPreview === 'string' ? raw.textPreview : '',
-    // Plan 12.2: only set the reply_to_* fields when this is actually a
+    // only set the reply_to_* fields when this is actually a
     // reply (replyToPostId non-empty). Keeps cached posts undisturbed.
     ...(replyToPostId
       ? {

@@ -1,5 +1,5 @@
 /**
- * Plan 10.14 — BudgetGuard.
+ * BudgetGuard.
  *
  * Soft cap on commercial-scrape spend. Records each cost-observer event
  * into a rolling 24 h window (configurable). When consumption crosses
@@ -14,7 +14,6 @@
  * (no recording, no warnings, never trips). Existing deployments observe
  * zero behaviour change unless they opt in via `POPCLAW_DAILY_BUDGET_USD`.
  *
- * See `docs/superpowers/specs/2026-04-27-plan-10.14-budget-alarm-design.md`.
  */
 
 import type { CostEvent } from '../scraper/commercial/apify-actor-scraper.js';

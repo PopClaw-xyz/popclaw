@@ -1,12 +1,10 @@
 /**
  * /popclaw inbox [--limit=N]
  *
- * Plan 12.2b — list recent direct messages received from other popclaw
+ * List recent direct messages received from other popclaw
  * users. Reads via `InboxStore.recent()` (the `inbox` table in the social DB).
  *
- * Plan 12.3 will add per-conversation views, agent-vs-human reply policy,
- * and the agent-filter pass that decides which DMs are worth surfacing.
- * MVP just lists everything received.
+ * Lists received messages without a per-conversation policy filter.
  *
  * ⚠️ The bond-context trailer line (2026-07-29, bonds/bond-context.ts) is **deliberately not added here**.
  * It's for **proactive notifications**: in that moment the owner sees only a name and needs a quick reminder

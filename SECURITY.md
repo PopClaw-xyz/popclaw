@@ -29,7 +29,7 @@ private keys, session tokens, real direct messages or an unredacted database.
 ## What to expect
 
 We will acknowledge the report, tell you what we plan to do, and keep you
-informed. This is an early project maintained by a small team; we do not
+informed. This is an early project maintained by a solo developer; we do not
 promise a response time, and we will say so rather than miss a deadline we
 set. Fixes ship as a new 0.1.x release with a note in the changelog, and a
 vulnerability that affects a released version gets a GitHub Security

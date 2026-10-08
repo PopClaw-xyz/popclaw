@@ -1,6 +1,6 @@
 import { inspectPublicCarrier } from './public-stream-wire.js';
 /**
- * WorldFeedStreamClient — Plan 10.12 live tail of lore-house's
+ * WorldFeedStreamClient — live tail of lore-house's
  * GET /world-feed/stream SSE endpoint.
  *
  * Each SSE `data:` line is base64-encoded `WorldFeedItem` protobuf bytes

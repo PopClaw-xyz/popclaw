@@ -1,7 +1,7 @@
 /**
  * /popclaw react up|down [<platform>:]<postId>
  *
- * Plan 11.4 — replaces the harness's simulated reactions with a real user
+ * Replaces the harness's simulated reactions with a real user
  * signal. Appends a `PickRecord` to the same `picks.jsonl` the learn loop
  * already reads. Latest-ts-wins dedup in `loadRecentPicks` means a manual
  * up overrides any earlier simulated down (or vice versa) without needing

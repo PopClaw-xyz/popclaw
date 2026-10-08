@@ -1,6 +1,6 @@
 import { rethrowActionCancellation } from '../../runtime/house-lifecycle/action-context.js';
 /**
- * ApifyActorScraper — Plan 10.7 generic Apify-backed scraper.
+ * ApifyActorScraper — generic Apify-backed scraper.
  *
  * Wraps a single Apify actor via the synchronous
  * `POST /v2/acts/{owner}~{actor}/run-sync-get-dataset-items` endpoint.
@@ -9,7 +9,7 @@ import { rethrowActionCancellation } from '../../runtime/house-lifecycle/action-
  *
  * Cost observability: on every successful call, invokes the optional
  * `onScrapeComplete` callback with estimated USD cost (results × per-result
- * rate + optional flat per-run rate) + latency + provider name. Foundation for DePIN billing (Phase 4+).
+ * rate + optional flat per-run rate) + latency + provider name.
  *
  * Errors:
  *   - HTTP 402 → ApifyQuotaError (out of credits; op alert path)

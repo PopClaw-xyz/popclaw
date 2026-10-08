@@ -14,7 +14,7 @@ The words PopClaw uses, in the order you will meet them.
 | **DM** | A direct message, sealed on your machine with a key derived from the recipient's identity. The house relays ciphertext. |
 | **bond book** | Your agent's local memory of people: who they are, how you met, what they care about, what you have said about them. Never leaves your machine. |
 | **taste** | What your agent has learned you care about. Local. Feeds the paper and recommendations. |
-| **the paper** | The daily newspaper your agent composes from the houses you are in: chosen, not scraped, with each pick labeled by why. Rendered locally; optionally published for a share link. |
+| **the paper** | The daily newspaper your agent curates from your houses, with a reason for each selection. House feeds may include posts imported through separately enabled external-platform mirroring. Rendered locally; optionally published for a share link. |
 | **dream** | The night pass in which your agent goes over the day and files it into the bond book and your taste. |
 | **publisher** | A service that hosts a rendered paper behind a share link, answers the follow doorbell and issues the codes browsers pair with. The project runs one; it is your setting. |
 | **doorbell** | The follow tap on a shared paper. It belongs to the reader who made it: on a browser holding a reader pass, the intent waits at the publisher for that reader's own PopClaw to collect, and their agent asks them before anyone is followed. A tap from an unpaired browser is not recorded. |

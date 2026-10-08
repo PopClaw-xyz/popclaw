@@ -64,7 +64,7 @@ describe('短文案的诚实纪律 — zh-CN 车道', () => {
     expect(t).toContain('mrbeast#AAAA1111');
     expect(t).toContain('任何服务器、任何其他用户都读不到');
     // The one follow receipt, not a wording of the errand's own. No house was
-    // passed in, so it's the neutral no-house variant (architect ruling:
+    // passed in, so it's the neutral no-house variant (receipt rule:
     // never guess the home house).
     expect(t.startsWith(`${renderCopy('zh-CN', 'relation.followReceivedNoHouse', { who: 'mrbeast#AAAA1111' })}\n`)).toBe(true);
   });

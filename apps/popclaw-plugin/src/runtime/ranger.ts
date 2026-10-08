@@ -36,17 +36,17 @@ export interface BuildScraperDeps {
   readonly fetch?: typeof globalThis.fetch;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly backendOverride: string | undefined;
-  readonly apifyToken: string | undefined;              // Plan 10.7
-  readonly twitterApiIoKey: string | undefined;         // Plan 10.7.1
-  readonly youtubeApiKey: string | undefined;           // Plan 10.10
-  readonly onScrapeComplete?: CostObserverCallback;     // Plan 10.7
+  readonly apifyToken: string | undefined;
+  readonly twitterApiIoKey: string | undefined;
+  readonly youtubeApiKey: string | undefined;
+  readonly onScrapeComplete?: CostObserverCallback;
   /** Optional filter: only include these platform keys in the result. */
   readonly enabledPlatforms?: readonly string[];
   /** Optional pino-style logger so degradation events emit structured warns. */
   readonly degradationLogger?: DegradationLogger;
 }
 
-// Plan 10.13.x: TwitterAPI.io's search endpoints went silently empty for
+// TwitterAPI.io's search endpoints went silently empty for
 // every handle on 2026-04-27 while /user/info still worked. Wrap the
 // provider so consecutive empties trip a circuit and HybridScraper falls
 // back to Apify within seconds.
@@ -73,7 +73,7 @@ function wrapWithDegradationDetector(
 async function buildScraperForX(deps: BuildScraperDeps): Promise<PlatformScraper | undefined> {
   const { backendOverride, apifyToken, twitterApiIoKey, onScrapeComplete } = deps;
 
-  // Plan 10.13.x: TwitterAPI.io is wrapped with a DegradationDetector so a
+  // TwitterAPI.io is wrapped with a DegradationDetector so a
   // silent provider outage trips into Apify failover within ~5 polls.
   const makeTwitterApiIo = () =>
     wrapWithDegradationDetector(
@@ -152,11 +152,11 @@ export async function buildScraperRegistryFor(deps: BuildScraperDeps): Promise<P
 /**
  * Build a `PlatformScraperRegistry` from `process.env`. Optional
  * `onScrapeComplete` callback receives a `CostEvent` per scrape — wire
- * this to your daemon's structured logger to get per-call cost lines
- * (Plan 10.13). Without a callback, scrape costs are discarded.
+ * this to your daemon's structured logger to get per-call cost lines.
+ * Without a callback, scrape costs are discarded.
  *
  * Optional `degradationLogger` receives degradation/recovery events from
- * the TwitterAPI.io DegradationDetector wrapper (Plan 10.13.x). Pass a
+ * the TwitterAPI.io DegradationDetector wrapper. Pass a
  * pino-style logger to surface failover transitions.
  */
 export async function buildScraperRegistry(
@@ -244,21 +244,20 @@ export class Ranger {
 
   private async startActive(): Promise<void> {
     assertActionActive(this.actionGate);
-    // Scope B: EventDispatcher routes inbound events by payload oneof; QuestHandler
+    // EventDispatcher routes inbound events by payload oneof; QuestHandler
     // intercepts quest_dispatch and handles self-addressed VERIFY_INVITE /
-    // SCRAPE_CONTENT quests via stub handlers (Plan 7 replaces the stubs with
-    // real scraping).
+    // SCRAPE_CONTENT quests through their registered handlers.
     const dispatcher = new EventDispatcher();
     // Build a platform-keyed scraper registry from env. Capabilities derived
     // from its keys are advertised in ranger_registration — a ranger only
     // advertises platforms it can actually scrape.
     //
-    // Plan 10.13: thread a cost-observer callback that emits one structured
+    // thread a cost-observer callback that emits one structured
     // log line per scrape so operators can `just popclaw-cost-summary` to
     // tally daily/monthly burn.
-    // Plan 10.13.x: pino-shaped logger to DegradationDetector — surfaces
+    // pino-shaped logger to DegradationDetector — surfaces
     //   provider failover transitions (TwitterAPI.io → Apify on outage).
-    // Plan 10.14: each cost event also feeds BudgetGuard for the soft
+    // each cost event also feeds BudgetGuard for the soft
     //   daily-budget alarm + auto-throttle.
     const budgetGuard = BudgetGuard.fromEnv(this.deps.host.logger);
     const registry = await buildScraperRegistry(

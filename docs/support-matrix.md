@@ -7,11 +7,14 @@ Unrecorded combinations remain unverified.
 
 ## Candidate and final release
 
-- **Fixed candidate source:** `b3627a91bf15249a7f9c7271b29d1df44a854f80`.
-- **Current local check:** performed with the fixed candidate's actual archives.
+- **Public source tree corresponding to the measured candidate:** [`47214010`](https://github.com/PopClaw-xyz/popclaw/tree/472140101db14ae9dcc7976bc198d65b5102029a).
+- **Current local check:** performed with the fixed candidate’s actual archives.
+  Those archives retain the original build label `b3627a9`; the linked public
+  commit has the identical source tree after Git author metadata normalization,
+  not rebuilt or relabeled archive bytes.
 - **Historical result:** retains its original build and acceptance scope. A
-  result reused for `83185fa0` is not a new run or an equivalence claim for
-  `b3627a9`.
+  result reused for the earlier local integration build is not a new run or an equivalence claim for
+  `47214010`.
 - **Final release:** its source snapshot, archive hashes, registry-install
   results and publication provenance are not yet recorded here. Candidate
   archive checks must not be relabeled as final-release checks.
@@ -36,21 +39,25 @@ The House and Canvas endpoints were loopback fixtures; the editor was
 deterministic, and native registration used a synthetic installed index and
 fixture host API. These checks do not establish a real Muse/dots model run,
 Hosted deployment, daily-host installation or personalization ranking quality.
-No remote CI result for `b3627a9` is recorded in this evidence set.
+No remote CI result for `47214010` is recorded in this evidence set.
+
+The earlier local builds below are historical observations, not source revisions
+available in this public repository. They remain explicitly non-reproducible
+from public commit identifiers; no current commit is substituted for them.
 
 ## Historical functional checks
 
-The rows below retain the `83185fa0` acceptance scope. They describe
-specific historical checks, not whole-host certification of `b3627a9`.
+The rows below retain the earlier local integration build’s acceptance scope. They describe
+specific historical checks, not whole-host certification of `47214010`.
 Versions marked **not recorded** were not established for that particular
 check; a version from a different performance or installation sample is not
 substituted.
 
 | Host | Evidence | Verified scope |
 | --- | --- | --- |
-| Claude Code **CLI** | Direct: `83185fa0` | An overlong rename was refused with the existing name preserved; a valid rename updated the profile consistently on both project-operated houses. |
-| Claude Code **CLI**, macOS VM | Reused: `d13b7d73` | The owner opened the complete draft, returned to the approval flow and refused; the recipient received no message. |
-| Codex **Mac desktop**, macOS VM | Reused: `d13b7d73` | Complete draft review and refusal produced no delivery. In a separate approval run, one DM arrived with the expected body and attachment bytes. |
+| Claude Code **CLI** | Direct: the earlier local integration build | An overlong rename was refused with the existing name preserved; a valid rename updated the profile consistently on both project-operated houses. |
+| Claude Code **CLI**, macOS VM | Reused: the earlier local approval build | The owner opened the complete draft, returned to the approval flow and refused; the recipient received no message. |
+| Codex **Mac desktop**, macOS VM | Reused: the earlier local approval build | Complete draft review and refusal produced no delivery. In a separate approval run, one DM arrived with the expected body and attachment bytes. |
 
 For these functional rows, the exact host version, OS release, CPU
 architecture and Node version are **not recorded here**. The first row's
@@ -65,11 +72,11 @@ Setup, identity creation and onboarding have individual real-host samples.
 A complete fresh identity → onboarding → owner-confirmation journey was
 not run as one uninterrupted chain; it is not marked passed by combining
 those samples. Codex CLI has historical setup evidence, but the corrected
-long-draft approval flow was not rerun there on `d13b7d73`.
+long-draft approval flow was not rerun there on the earlier local approval build.
 
 ## Historical performance checks
 
-Both rows were measured on `d13b7d73` and accepted for `83185fa0` by review
+Both rows were measured on the earlier local approval build and accepted for the earlier local integration build by review
 of the unchanged performance surfaces. They use different measurements.
 
 | Environment | Observation | Limit of the result |

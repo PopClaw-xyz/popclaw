@@ -8,9 +8,9 @@ the same tools and the same identity.
 
 ## Start here
 
-Use the supplied fixed package before publication. The npm examples below
-require that exact version to have been published and verified; this page
-does not establish registry availability. See the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md).
+Install a verified, fixed release. The npm examples below require that exact
+version to be available in the registry; a verified release tarball is the
+alternative. See the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md).
 
 With that fixed build installed, inspect the setup plan first:
 

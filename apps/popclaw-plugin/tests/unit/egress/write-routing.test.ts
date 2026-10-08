@@ -1,5 +1,4 @@
 /**
- * 规格 B 切片③的路由表逐行判据（docs/superpowers/specs/2026-07-26-multi-house-client-design.md）。
  *
  *   原创 Post / 红包 / invite / 注册          → 主坊
  *   Reply / Quote / Mark（含 revoke）        → 被回/被标内容的来源坊

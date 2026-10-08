@@ -2,9 +2,8 @@
  * PlatformScraper — used by VerifyInviteHandler and ScrapeContentHandler
  * to read public data from a social platform (currently just X).
  *
- * Plan 9: removed `fetchProfileBio` in favour of `fetchVerificationTargets`
- * which returns the handle's first post + self-reply chain. Matches the
- * corrected sigil placement rule (memory `sigil-placement-rule.md`).
+ * `fetchVerificationTargets` returns the handle’s first post and self-reply
+ * chain, where account verification looks for the sigil.
  */
 
 export interface VerifiedPost {
@@ -27,7 +26,7 @@ export interface SelfReply {
 export interface VerificationTargets {
   /**
    * Earliest post within a bounded recent scan window (implementation-
-   * defined size; Plan 9 defaults to the most recent ~100 tweets). NOT
+   * defined size; a typical window is the most recent ~100 tweets). NOT
    * guaranteed to be the account's literal first-ever tweet — paginating
    * to the account's genesis is rate-limit hostile on the API v2 fallback
    * and infeasible on Playwright without infinite scroll. `null` when the

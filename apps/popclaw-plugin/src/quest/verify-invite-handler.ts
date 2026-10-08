@@ -18,7 +18,7 @@ import { assertActionActive, questAction, rethrowActionCancellation, runAction, 
  *      `fetchVerificationTargets(handle)`; APPROVE iff the bound token
  *      `<handle>#<sigil>` (case-insensitive) appears in the handle's first
  *      post text OR in any self-reply authored by the same handle under one
- *      of their own posts (memory `sigil-placement-rule.md`; Plan 9 Task 5).
+ *      of their own posts.
  *      Binding the handle (not a bare sigil) defeats the quote-tweet/repost
  *      replay: a repost carries the original author's handle, never the
  *      claimed one. REJECT if fetched OK but the token is absent, ABSTAIN if
@@ -30,7 +30,7 @@ import { assertActionActive, questAction, rethrowActionCancellation, runAction, 
  *   - evidence_sample = first 16 KB of rawBytes
  * For the mock / fallback paths, evidence_hash stays 32 zero bytes (still
  * non-default so pbjs + prost encode identically) and evidence_sample is
- * omitted (proto3-default conditional spread — see Plan 5 Invariant #1).
+ * omitted (proto3-default conditional spread — see Invariant #1).
  */
 
 import { createHash } from 'node:crypto';
@@ -280,7 +280,7 @@ export class VerifyInviteHandler {
       }
     }
 
-    // Conditional-spread for proto3-default safety (Plan 5 Invariant #1).
+    // Conditional-spread for proto3-default safety (Invariant #1).
     const questResult: Record<string, unknown> = {
       taskId,
       outcome: OUTCOME_TO_PROTO[outcome],

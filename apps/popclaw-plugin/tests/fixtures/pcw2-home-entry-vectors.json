@@ -1,6 +1,6 @@
 {
   "note": "pcw2 home-entry contract test vectors.",
-  "warning": "TEST KEY ONLY — a fixed seed checked into a private repo. It is not an identity. Never use it anywhere else.",
+  "warning": "TEST KEY ONLY — a fixed seed committed for these vectors. It is not an identity and confers no access. Never use it anywhere else.",
   "domain": "POPCLAW_BROWSER_ENTRY_V2",
   "signing_rule": "0x00 || UTF8(\"POPCLAW_BROWSER_ENTRY_V2\") || 0x00 || payloadBytes",
   "test_key": {

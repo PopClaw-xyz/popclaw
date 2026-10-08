@@ -1,5 +1,4 @@
 /**
- * 待回（Pings）· 回我帖 — spec docs/superpowers/specs/2026-07-25-pings-replies-to-me-design.md
  * 刀① 地板（查得到） + 刀② 感知（入队 / 首回 / 未读）。
  */
 import { describe, it, expect, beforeAll } from 'vitest';

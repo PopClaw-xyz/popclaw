@@ -1,7 +1,6 @@
 /**
  * Identity resolution — turn a human-readable follow reference into a
- * decision: follow this popclaw_id, or show candidates to pick from. See
- * ADR-0028 + docs/superpowers/specs/2026-06-17-identity-resolution-design.md.
+ * decision: follow this popclaw_id, or show candidates to pick from.
  *
  * Pure logic: the lore-house `/v1/resolve` call is injected as `resolve`, so
  * this is unit-testable without a network. Surfaces (slash command + the

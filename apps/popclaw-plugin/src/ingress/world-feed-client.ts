@@ -3,12 +3,12 @@ import { RemoteHouseReadError, houseReadFailure } from '../runtime/house-lifecyc
 import { verifyInboundEnvelope } from './verify-envelope.js';
 import { inspectPublicCarrier } from './public-stream-wire.js';
 /**
- * WorldFeedClient — Plan 10.11 read client for lore-house's
+ * WorldFeedClient — read client for lore-house's
  * GET /world-feed protobuf endpoint.
  *
  * Mirrors ServerPushEgress's shape (just GET instead of POST). Decodes
  * `WorldFeedSnapshot` via the generated TS bindings — wire format stays
- * protobuf end-to-end per Plan 10.11 design.
+ * protobuf end-to-end using protobuf.
  */
 
 import { popclaw } from '@popclaw/contracts';

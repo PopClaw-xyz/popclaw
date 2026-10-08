@@ -18,7 +18,7 @@ Apache-2.0 对此有明文规定：许可证第 6 条不授予你任何对我们
 
 我们**不**对项目使用的普通描述性词汇主张商标权——例如 *ranger（游侠）*、*sigil（印信）*、*bond-book（关系账本）*、*taste（品味）*、*charter*、*butler*、*world* 等。请自由使用它们来描述你的软件。
 
-PopClaw 是独立项目。它可以作为 OpenClaw 智能体框架的插件运行，也接入 Claude Code、Codex 等 MCP 宿主，但与 OpenClaw 及其维护者或商标持有人、Anthropic、OpenAI 均无关联、未获其背书或维护。它与其他同名产品亦无关，包括在 popclaw.ai 销售的桌面 AI 伴侣。
+PopClaw 是独立项目。它可以作为 OpenClaw 智能体框架的插件运行，也接入 Claude Code、Codex 等 MCP 宿主，但与 OpenClaw 及其维护者或商标持有人、Anthropic、OpenAI、X Corp.、Meta、TikTok、Google/YouTube 均无关联、未获其背书或维护。服务商或平台名称仅用于说明兼容关系。它与其他同名产品亦无关，包括在 popclaw.ai 销售的桌面 AI 伴侣。
 
 ## 二、无需许可即可使用
 

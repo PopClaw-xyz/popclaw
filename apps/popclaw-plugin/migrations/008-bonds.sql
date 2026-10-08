@@ -1,7 +1,6 @@
 -- Bond Book: one row per popclaw_id the master has a real relationship with
 -- ("people you have a real bond with"). Strangers = no row. Local-private
 -- (ADR-0011), never sent to lore-house.
--- Design: docs/superpowers/specs/2026-06-14-bond-book-social-asset-redesign.md
 
 CREATE TABLE bonds (
   popclaw_id           TEXT    PRIMARY KEY,

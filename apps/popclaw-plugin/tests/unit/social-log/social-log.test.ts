@@ -1,6 +1,5 @@
 /**
  * 社交日志（做梦机制第 1 步）· 写入器 + 读取器。
- * spec `docs/superpowers/specs/2026-07-26-social-log-and-dream-architecture.md` §4,
  * ADR-0023 Revision 2026-07-26.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

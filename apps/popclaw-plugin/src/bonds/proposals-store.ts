@@ -1,7 +1,7 @@
 /**
  * bond_proposals (migration 009) — tier up/down-grade proposals the dreamer
  * generates and the master confirms (1 agree / 2 disagree / 3 need more thought). Local-private
- * (ADR-0011/0022). Design: docs/superpowers/plans/2026-06-15-bond-book-report-review.md §E1.
+ * state stays on the owner’s device.
  */
 import type { HostDb } from '../host/host-db.js';
 import type { BondTier } from './bond-tier.js';

@@ -1,13 +1,13 @@
 /**
  * High-level Social-Graph API for the popclaw plugin. Composes:
  *   - FollowEventStore: the append-only follow/revoke log in the social DB
- *     `follow_events` table (Plan 2; was social-graph/declared.jsonl). P-004.
+ *     `follow_events` table.
  *   - state-projection for the materialized following state
  *   - the ordered relation producer, which owns every relation WRITE: it
  *     resolves the house, proves the binding, reserves the seq, signs,
  *     journals and pushes. This module signs nothing itself.
  *
- * Plan 11.1: PUBLIC follow / revoke only. Private path lands in Phase 2.
+ * PUBLIC follow / revoke only.
  */
 
 import { RelationRefusedError, type RelationOutcome, type RelationProducer } from './relation-producer.js';

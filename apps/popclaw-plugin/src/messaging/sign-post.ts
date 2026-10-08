@@ -7,7 +7,7 @@
  *   3. Quote post: envelope.prev_event_id = target; blocks = [TEXT body, LINK_CARD
  *      with content = https://popclaw.me/post/<target>].
  *
- * Invariant #1 (Plan 5 + this plan):
+ * Canonical encoding invariant:
  *   - prev_event_id "" MUST be omitted (not set on object) — pbjs would emit
  *     a zero tag and prost-decoded CID would mismatch.
  *   - ContentBlock.block_type=0 (TEXT) MUST be omitted; only set blockType

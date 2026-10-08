@@ -1,5 +1,5 @@
 /**
- * apifyInstagram — Plan 10.10 factory for Instagram via Apify's
+ * apifyInstagram — factory for Instagram via Apify's
  * `sones/instagram-posts-scraper-lowcost` actor ($0.20/1k results,
  * down from $1.50/1k with the old `apify/instagram-scraper`) — plus ~$0.007
  * of platform usage per run, which is what the bill is really made of.
@@ -8,8 +8,7 @@
  * `code` is the shortcode (e.g. "DXg_ZGfHKmT"). `caption` is an object,
  * NOT a plain string — extract `.text` with a null-guard.
  *
- * Sigil flow is not implemented for IG (tracked in plan-10.7-followups.md
- * item #2). fetchVerificationTargets returns empty without making an HTTP
+ * Sigil flow is not implemented for IG. fetchVerificationTargets returns empty without making an HTTP
  * call — the invite-verification path doesn't reach this scraper.
  */
 

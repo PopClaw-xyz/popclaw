@@ -1,5 +1,5 @@
 /**
- * Plan 11.3 — pick recorder.
+ * pick recorder.
  *
  * Append-only JSONL of items the user (or, in dev/harness mode, simulated
  * reactions) reacted to. Wired to `/popclaw feedback`, onboarding, and

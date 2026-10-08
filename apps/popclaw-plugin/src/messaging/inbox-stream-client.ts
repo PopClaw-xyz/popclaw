@@ -1,5 +1,5 @@
 /**
- * Plan 12.2b — InboxStreamClient.
+ * InboxStreamClient.
  *
  * Live tail of lore-house's GET /inbox/:popclaw_id/stream. Per-recipient
  * SSE channel that emits DirectMessage protobuf frames base64-encoded as

@@ -322,10 +322,10 @@ export function gatewayRuntimePorts(input: {
         });
       },
       reportScrapers: async () => {
-        // Plan 10.13: route scrape costs into OpenClaw's structured logger.
-        // Plan 10.13.x: surface DegradationDetector failover events via a
+        // route scrape costs into OpenClaw's structured logger.
+        // surface DegradationDetector failover events via a
         // pino-shape logger adapter (OpenClaw's logger is single-string-arg).
-        // Plan 10.14: feed each cost event into BudgetGuard.record() for the
+        // feed each cost event into BudgetGuard.record() for the
         // soft daily-budget alarm + auto-throttle.
         const pinoStyleLogger = {
           warn: (obj: Record<string, unknown>, msg: string) =>
@@ -347,7 +347,7 @@ export function gatewayRuntimePorts(input: {
           },
           pinoStyleLogger,
         );
-        // Plan 10.11 hotfix: tell the operator at startup which platforms the
+        // Tell the operator at startup which platforms the
         // ranger can scrape (drives advertised capabilities + the watch loop).
         // Env vars must be exported BEFORE `openclaw tui` for the plugin's
         // register() to see them — exporting after-the-fact requires a TUI

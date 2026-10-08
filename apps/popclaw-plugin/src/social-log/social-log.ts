@@ -1,7 +1,5 @@
 /**
- * Social log — raw material warehouse for the dream mechanism (spec
- * `docs/superpowers/specs/2026-07-26-social-log-and-dream-architecture.md`
- * §4, ADR-0023 Revision 2026-07-26).
+ * Social log — durable raw material for the dream mechanism.
  *
  * One sentence: **every social action the owner genuinely took gets written
  * to disk verbatim, on the spot, and never deleted.**

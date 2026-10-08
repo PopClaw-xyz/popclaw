@@ -1,5 +1,5 @@
 /**
- * Plan 10 Task 14: Ranger ranger_mode wiring.
+ * Ranger ranger_mode wiring.
  *
  * When `ranger_mode === true`, `Ranger.start()` must push a
  * `RangerRegistration` envelope (capabilities=["x"], availabilityScore

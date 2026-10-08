@@ -1597,7 +1597,7 @@ export const ZH_CN: Lexicon = {
     'world.lanternDownShort': '灯坊暂时联系不上',
     // Not yet accepted, so no house is named here — naming one before it has
     // actually landed there would claim something the transport hasn't
-    // confirmed (architect ruling, G1-copy).
+    // confirmed.
     'relation.followQueued':
       '已签名存好，但关注 {who} 还没送到灯坊，会自动重发。东西没丢，但也还没确认。',
     'relation.unfollowQueued':
@@ -1608,7 +1608,7 @@ export const ZH_CN: Lexicon = {
     // world and not in me. 对方 (not 他/她): the other party's gender is
     // unknown. Used only when the house is actually known; see
     // relation.followReceivedNoHouse for the "accepted but which house is
-    // unknown" case (architect ruling: never guess the primary/home house).
+    // unknown" case (never guess the primary/home house).
     'relation.followReceived':
       '已关注 {who}，{house} 已收到关注声明。之后对方公开发的帖在你的推荐和日报里会优先。对方会知道这次关注。',
     'relation.followReceivedNoHouse':

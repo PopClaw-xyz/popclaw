@@ -2,7 +2,6 @@
 -- signal feeding "close interaction → tier upgrade" proposals, plus the
 -- bond_proposals table the master confirms via 1 (agree) / 2 (disagree) /
 -- 3 (let me think). Local-private (ADR-0011/0022).
--- Design: docs/superpowers/plans/2026-06-15-bond-book-report-review.md
 
 -- Rolling window of the master's recent OUTGOING interaction timestamps per bond
 -- (capped JSON array of unix seconds). Drives the relative-value interaction-density signal.

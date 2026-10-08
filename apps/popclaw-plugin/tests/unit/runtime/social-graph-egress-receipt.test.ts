@@ -88,7 +88,7 @@ it.each(cases)('$action command does not report public success or record a succe
   // Names the CURRENT success wording: a negative assertion against a phrase
   // the code no longer produces passes for free and guards nothing.
   expect(reply.text).not.toMatch(/has the (follow|unfollow) declaration/);
-  // Queued must not name a house either (architect ruling, G1-copy): naming
+  // Queued must not name a house either: naming
   // one before it actually landed there would claim something the transport
   // hasn't confirmed.
   expect(reply.text).not.toContain(HOUSE);

@@ -1,6 +1,6 @@
 import { rethrowActionCancellation } from '../../runtime/house-lifecycle/action-context.js';
 /**
- * TwitterApiIoScraper — Plan 10.7.1 direct-REST provider for X/Twitter
+ * TwitterApiIoScraper — direct-REST provider for X/Twitter
  * via TwitterAPI.io ($0.15/1k tweets, $0.00015 per empty call).
  *
  * Endpoint: GET https://api.twitterapi.io/twitter/tweet/advanced_search

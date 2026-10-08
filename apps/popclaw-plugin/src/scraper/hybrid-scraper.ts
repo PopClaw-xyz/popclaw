@@ -1,6 +1,6 @@
 import { assertActionActive, rethrowActionCancellation } from '../runtime/house-lifecycle/action-context.js';
 /**
- * HybridScraper — Plan 9 orchestrator: primary scraper with automatic
+ * HybridScraper — orchestrator: primary scraper with automatic
  * fallback on throw or empty-targets. `fallback` is optional so rangers
  * with only one configured commercial backend (e.g. Apify alone) can run
  * primary-only.
@@ -16,8 +16,7 @@ import { assertActionActive, rethrowActionCancellation } from '../runtime/house-
  * suspicious" signal (a quiet handle really does have zero posts in
  * window), so we'd rather return `[]` than pay the fallback cost.
  *
- * TokenBucket is shared across primary + fallback (per Plan 9 spec
- * §Keeps): every delegated call consumes one token. Default bucket is
+ * TokenBucket is shared across primary + fallback: every delegated call consumes one token. Default bucket is
  * capacity 10, refill 1/s.
  */
 import type {

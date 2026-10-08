@@ -1,8 +1,8 @@
 /**
  * /popclaw follow <popclaw_id | platform:handle>
  *
- * Plan 11.1: now signs a FollowDeclared event via SocialGraph, appends to
- * declared.jsonl, and pushes to lore-house. Falls back to a clear error
+ * Signs a FollowDeclared event via SocialGraph, records the durable
+ * relation operation, and pushes to lore-house. Falls back to a clear error
  * message if the SocialGraph hasn't started.
  */
 
@@ -98,8 +98,8 @@ export interface FollowCommandDeps {
 
 /** Resolve `target` (popclaw_id or "platform:handle") to a popclaw_id. */
 async function resolveTarget(target: string, _deps: FollowCommandDeps): Promise<string> {
-  // Plan 11.1: only popclaw_id is accepted directly. Phase 2 adds resolution
-  // from "platform:handle" via lore-house's verified_profiles lookup.
+  // Only popclaw_id is accepted directly here. Higher-level entry points
+  // resolve human-readable targets before invoking this command.
   if (target.includes(':')) {
     throw new Error(`platform:handle resolution not yet supported (Plan 11.1); pass a base58 popclaw_id directly`);
   }
@@ -184,7 +184,7 @@ export async function runFollowCommand(
       // so they wait. FOLLOW-UP: nothing re-runs them when a later re-send
       // succeeds, so a queued follow stays absent from bonds until the owner
       // acts again. That gap moves with the resend path, not here.
-      // G1-copy / architect ruling: not accepted yet, so no house is named —
+      // not accepted yet, so no house is named —
       // naming one before it has actually landed there would claim something
       // the transport hasn't confirmed.
       return {
@@ -243,7 +243,7 @@ export async function runFollowCommand(
     // to say "now publicly following", which claimed the one thing this
     // branch cannot know; that wording is gone.
     //
-    // G1-copy / architect ruling: name the house ONLY when it is actually
+    // name the house ONLY when it is actually
     // known — never guess. In production `relation-scope.ts` always resolves
     // a slug (falling back to the home house's own), so `houseSlug` undefined
     // here is defensive, not a real path; `relation.followReceivedNoHouse` is

@@ -2,8 +2,7 @@
  * OpenClaw host adapter. Reuses `LocalHostAdapter` by rooting all file IO
  * under `<openclaw-state>/popclaw/`. Business modules see the same
  * namespaced FS layout whether running in OpenClaw or in the dev CLI,
- * so Plan 5's scope (identity/keystore/scraper/egress/ingress/ranger/etc.)
- * needs zero changes to work under OpenClaw.
+ * so business modules do not need host-specific filesystem paths.
  */
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import type { HostAdapter } from './host-adapter.js';

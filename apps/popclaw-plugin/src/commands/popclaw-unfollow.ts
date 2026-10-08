@@ -86,7 +86,7 @@ export async function runPopclawUnfollowCommand(
     }
     if (outcome.transport !== 'accepted') {
       // Durable and waiting; the projections below would claim otherwise.
-      // G1-copy / architect ruling: not accepted yet, so no house is named —
+      // not accepted yet, so no house is named —
       // naming one before it has actually landed there would claim something
       // the transport hasn't confirmed.
       return {
@@ -110,7 +110,7 @@ export async function runPopclawUnfollowCommand(
       ...(houseSlug ? { house_slug: houseSlug } : {}),
       actor: { id: target },
     });
-    // G1-copy / architect ruling: name the house ONLY when it is actually
+    // name the house ONLY when it is actually
     // known — never guess. In production `relation-scope.ts` always resolves
     // a slug (falling back to the home house's own), so `houseSlug` undefined
     // here is defensive, not a real path; `relation.unfollowReceivedNoHouse`

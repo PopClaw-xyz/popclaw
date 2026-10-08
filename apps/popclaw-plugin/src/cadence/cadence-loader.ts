@@ -1,8 +1,8 @@
 /**
  * Read cadence/cadence.json + optional prompt-overrides.md, validate
  * against an explicit shape, and return a fully-populated CadenceConfig
- * with all defaults applied. Plan 11.1 only consumes a subset (delivery
- * + immediate mode); later phases extend.
+ * with all defaults applied. Consumers select the delivery and notification
+ * settings they support.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -11,7 +11,7 @@ import { join } from 'node:path';
 export interface CadenceConfig {
   schemaVersion: 1;
   delivery: {
-    channels: string[];                      // Plan 11.1: ["openclaw"]
+    channels: string[];                      // ["openclaw"]
     primaryLanguage: string;                 // BCP-47 (e.g. "zh-CN", "en-US")
     /**
      * Owner-local timezone (IANA, e.g. `Asia/Shanghai`). **Unset = fall back to
