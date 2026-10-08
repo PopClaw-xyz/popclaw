@@ -12,6 +12,8 @@ import { noteContextTokenBudget, _resetBudgetForTest } from '../../../src/newspa
 import { publicMaterialSource } from '../../../src/newspaper/public-material-source.js';
 import { NewspaperOutcomeStore, NewspaperStageStore, runDedicatedNewspaper, type NewspaperDispatchRecord } from '../../../src/newspaper/dedicated-session.js';
 import { LocalHostDb } from '../../../src/host/local-host-db.js';
+import { runMigrations } from '../../../src/host/migrations.js';
+import { establishTrust } from '../../../src/world/house-binding-pin.js';
 import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
 import { ExecutionStoreCatalog } from '../../../src/host/execution-store.js';
 import { initializePublicStreamJournal } from '../../../src/host/execution-store-migration.js';
@@ -52,6 +54,8 @@ async function displayFixture() {
   displayCleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const paths = new PopclawPaths(root), db = new LocalHostDb(paths.socialDb());
   displayCleanup.push(() => db.close());
+  runMigrations(db, join(import.meta.dirname, '../../../migrations'));
+  establishTrust(db, {origin:displayOrigin, houseKey:bs58.encode(displayPair.publicKey), incarnation:'display_house_1'}, 'configured');
   ensureHouseLifecycleSchema(db);
   db.execute("INSERT INTO house_participation(house_origin,installation_id,desired,phase,op_seq,ack_key_hex) VALUES(?,'fixture','enabled','disconnected',1,?)", [displayOrigin, displayPin]);
   const catalog = new ExecutionStoreCatalog({ db, paths, actorId: bs58.encode(displayPair.publicKey) });

@@ -1,3 +1,5 @@
+import { ensureHouseOriginBindingsSchema, ensureHouseRecoveryCursorEvidenceSchema } from './house-runtime-schema.js';
+export { ensureHouseOriginBindingsSchema, ensureHouseRecoveryCursorEvidenceSchema } from './house-runtime-schema.js';
 import { houseBindingBlocked } from '../../world/house-recovery-fence.js';
 import { HouseRecovery, type HouseRecoveryPort } from '../../world/house-recovery.js';
 import { projectWorldAgentContext, type WorldAgentContextQuery, type WorldAgentContextResult } from '../../world/world-agent-context.js';
@@ -45,7 +47,7 @@ import { readHouseCapabilityView } from '../../world/world-capabilities.js';
 import { normalizeAckKeyHex } from './control-client.js';
 import { captureLegacyTrust } from './legacy-trust.js';
 import type { HouseReadFailureCode } from './read-failure.js';
-import { publicProducerPolicy } from './public-read-resources.js';
+import { publicProducerPolicy, publicHouseBindingMatches } from './public-read-resources.js';
 import type { ExecutionStoreCatalog } from '../../host/execution-store.js';
 import { PublicReadResources, inactivePublicReadStatus, type PublicReadStatus } from './public-read-resources.js';
 
@@ -247,7 +249,7 @@ export class HouseRuntime {
     this.configuredHousePinning = opts.publicV1Mode === true
       ? Object.freeze({ mode: 'public-v1' as const, proofPin: this.manager.configuredPublicPin })
       : Object.freeze({ mode: 'static' as const, firstPin: this.manager.configuredFirstPin });
-    opts.db.execute('CREATE TABLE IF NOT EXISTS house_origin_bindings (slug TEXT PRIMARY KEY, origin TEXT NOT NULL UNIQUE)');
+    ensureHouseOriginBindingsSchema(opts.db);
     // Validate all cache addresses before opening a single store or stream.
     const origins = [...new Set([...opts.origins.map(normalizeHouseOrigin), ...opts.db.queryAll<{house_origin: string}>(
       'SELECT house_origin FROM house_participation ORDER BY house_origin').map(row => row.house_origin)])];
@@ -296,7 +298,7 @@ export class HouseRuntime {
             }
             const fence = opts.db.queryOne<{decision_id:string}>('SELECT decision_id FROM house_recovery_fences_v1 WHERE origin=?',[origin]);
             if (fence?.decision_id !== id) throw new Error('HOUSE_RECOVERY_DECISION_STALE');
-            opts.db.execute('CREATE TABLE IF NOT EXISTS house_recovery_cursor_evidence_v1 (decision_id TEXT NOT NULL, store_lane TEXT NOT NULL, evidence_json TEXT NOT NULL, PRIMARY KEY(decision_id,store_lane))');
+            ensureHouseRecoveryCursorEvidenceSchema(opts.db);
             opts.db.execute('INSERT OR IGNORE INTO house_recovery_cursor_evidence_v1 VALUES(?,?,?)',[fence!.decision_id,db === store.db ? 'cache':'execution',JSON.stringify(rows)]);
             db.transaction(tx => { for (const table of Object.keys(rows)) tx.execute(`UPDATE ${table} SET seq=0`); });
           }
@@ -500,6 +502,8 @@ export class HouseRuntime {
   /** Public trust comes from the relation binding on public-only Houses;
    * session ACK state remains untouched and is never invented for reception. */
   private publicPinFor(origin: string): string {
+    const house = readHouseCapabilityView(this.opts.db, origin)?.publicStreamCapability?.house;
+    if (house && !publicHouseBindingMatches(this.opts.db, origin, house)) return '';
     const binding = this.opts.db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='house_binding_pin'")
       ? pinnedBinding(this.opts.db,origin) : undefined;
     if (binding?.blockedReason) return '';

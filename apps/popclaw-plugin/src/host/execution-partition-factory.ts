@@ -19,7 +19,7 @@ import { dirname, resolve } from 'node:path';
 import type { HostDb } from './host-db.js';
 import { LocalHostDb } from './local-host-db.js';
 import type { PopclawPaths } from './popclaw-paths.js';
-import { ACTION_RECEIPT_FEATURE_TABLES, NATIVE_ACTION_FEATURE_TABLES, PUBLIC_JOURNAL_TABLES, EXECUTION_LAYOUT_VERSION } from './execution-store-schema.js';
+import { ACTION_RECEIPT_FEATURE_TABLES, NATIVE_ACTION_FEATURE_TABLES, PUBLIC_JOURNAL_TABLES, DURABLE_TABLES, EXECUTION_LAYOUT_VERSION } from './execution-store-schema.js';
 import { MaintenanceSession, readStorageControl, storagePathAllowed } from './storage-maintenance.js';
 import { prepareActionReceiptJournal, snapshotActionReceiptOriginalContent, snapshotActionJournalTableOriginalContent, ACTION_RECEIPT_SCHEMA_FINGERPRINT } from '../world/action-receipt-journal.js';
 import { prepareNativeActionJournal, snapshotNativeActionOriginalContent, NATIVE_ACTION_SCHEMA_FINGERPRINT } from '../world/native-action-journal.js';
@@ -146,7 +146,10 @@ export function assertFreshPublicPartition(db: HostDb, expected: { actorId: stri
     || row.layout_version !== EXECUTION_LAYOUT_VERSION || row.public_initialization !== 'fresh-public-v1')
     throw new Error('PUBLIC_JOURNAL_INITIALIZATION_REQUIRED');
   verifyPublicStreamJournalSchema(db);
-  const historical = [...PUBLIC_JOURNAL_TABLES, 'world_stream', 'world_scoped_events', 'world_scoped_bindings', 'world_scoped_cursors'];
+  // Keep the complete legacy stream family from the component authority. A
+  // cursor/descriptor/log/gap is history even when no event row survived.
+  const historical = [...PUBLIC_JOURNAL_TABLES, ...DURABLE_TABLES.filter(name =>
+    name === 'world_stream' || name === 'world_stream_cursor' || name.startsWith('world_scoped_'))];
   for (const table of historical) {
     if (db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [table])
       && db.queryOne(`SELECT 1 FROM "${table}" LIMIT 1`)) throw new Error('PUBLIC_JOURNAL_INITIALIZATION_REQUIRED');

@@ -1,4 +1,6 @@
 /** Anonymous raw reception, owned by the existing resident and never a business gate. */
+import { pinnedBinding } from '../../world/house-binding-pin.js';
+import type { VerifiedHouseBinding } from '../../world/house-binding.js';
 import { initializePublicStreamJournal } from '../../host/execution-store-migration.js';
 import bs58 from 'bs58';
 import type { HostDb } from '../../host/host-db.js';
@@ -45,6 +47,18 @@ export function publicProducerPolicy(view: HouseCapabilityView) {
     officialActorIds: Object.freeze([...new Set(ids as string[])].sort()) });
 }
 
+/** Public authority names the complete current HouseBinding, not only its key.
+ * Missing or blocked persisted trust cannot supply a current incarnation. */
+export function publicHouseBindingMatches(db: HostDb, origin: string,
+  house: Pick<VerifiedHouseBinding, 'origin' | 'houseKey' | 'incarnation'>): boolean {
+  if (house.origin !== origin) return false;
+  if (!db.queryOne("SELECT name FROM sqlite_master WHERE type='table' AND name='house_binding_pin'")) return false;
+  const binding = pinnedBinding(db, origin);
+  return !!binding && !binding.blockedReason && binding.origin === house.origin
+    && normalizeAckKeyHex(binding.houseKey) === normalizeAckKeyHex(house.houseKey)
+    && binding.incarnation === house.incarnation;
+}
+
 export interface PublicReadResourceOptions {
   readonly db: HostDb;
   readonly catalog: ExecutionStoreCatalog;
@@ -80,6 +94,7 @@ export class PublicReadResources implements PublicResourceFactory {
       if (!view || view.publicStream.validation !== 'valid' || !capability) throw new Error('PUBLIC_CAPABILITY_UNAVAILABLE');
       const pin = normalizeAckKeyHex(opts.pinFor(origin));
       if (!pin || pin !== normalizeAckKeyHex(capability.house.houseKey)) throw new Error('PUBLIC_PIN_MISMATCH');
+      if (!publicHouseBindingMatches(opts.db, origin, capability.house)) throw new Error('PUBLIC_BINDING_MISMATCH');
       const producerPolicy = publicProducerPolicy(view);
       const selection = Object.freeze({ fullPublic: true, scopes: Object.freeze([...capability.publicStream.initial_public_scopes].sort()) });
       const catalogRow = opts.db.queryOne<ExecutionCatalogRow>('SELECT * FROM execution_store_catalog_v1 WHERE origin=?', [origin]);
@@ -92,6 +107,7 @@ export class PublicReadResources implements PublicResourceFactory {
       // alone cannot fence cross-process logout or a takeover between polls.
       const active = () => {
         if (!opts.selected() || !opts.authority.isEpochCurrent(epoch) || !opts.consumersAllowed()) return false;
+        if (!publicHouseBindingMatches(opts.db, origin, capability.house)) return false;
         const current = readParticipation(opts.db, origin);
         if (current?.desired !== 'enabled' || current.op_seq !== row.op_seq || normalizeAckKeyHex(opts.pinFor(origin)) !== pin) return false;
         const latest = readHouseCapabilityView(opts.db, origin);

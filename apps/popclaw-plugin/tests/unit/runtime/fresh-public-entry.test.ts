@@ -153,14 +153,15 @@ it('MCP rejects an invalid receive mode before creating mutable host storage',as
   expect(existsSync(new PopclawPaths(root).socialDb())).toBe(false);
 });
 
-it.each(['Native','MCP'] as const)('%s refuses a changed trusted binding on restart and preserves history',async kind=>{
+it.each([['Native','key'],['MCP','key'],['Native','incarnation'],['MCP','incarnation']] as const)('%s refuses a changed trusted binding %s on restart and preserves history',async(kind,change)=>{
   const f=await fixture(kind);
   expect(await f.rt.houseRuntime.activateInitialMe()).toMatchObject({admission:'configured'});
   await vi.waitFor(()=>expect(f.controllers).toHaveLength(1));
   const identity=f.rt.boot.popclawId;
   await f.rt.shutdown();
   const writer=new LocalHostDb(f.paths.socialDb());
-  writer.execute("UPDATE house_binding_pin SET house_key=?,revision=revision+1 WHERE origin=?",[bs58.encode(nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(99)).publicKey),ME]);
+  if(change==='key') writer.execute("UPDATE house_binding_pin SET house_key=?,revision=revision+1 WHERE origin=?",[bs58.encode(nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(99)).publicKey),ME]);
+  else writer.execute("UPDATE house_binding_pin SET incarnation='synthetic-new-house',revision=revision+1 WHERE origin=?",[ME]);
   writer.close();
   f.setRuntime(await f.build());
   await vi.waitFor(()=>expect(f.rt.houseRuntime.publicReadStatus(ME).detail).toContain('PUBLIC_PIN_MISMATCH'));
@@ -241,4 +242,37 @@ it.each(['Native','MCP'] as const)('%s normal shutdown joins an actual held rela
     receptions.at(-1)!.stop();await receptions.at(-1)!.whenIdle();
     expect(calls).toHaveLength(1);
   } finally {release();await task;}
+});
+
+
+it.each(['Native','MCP'] as const)('%s stops old public authority after a running HouseBinding incarnation change',async kind=>{
+  const f=await fixture(kind);await f.rt.houseRuntime.activateInitialMe();
+  await vi.waitFor(()=>expect(f.controllers).toHaveLength(1));
+  const store=await f.rt.houseRuntime.storeForCommand(ME),db=executionDbFor(store);
+  const material=f.rt.houseRuntime.capturePublicMaterial(store);
+  const identity=f.rt.boot.popclawId;
+  const before=db.queryAll('SELECT * FROM world_public_bindings_v1');
+  const writer=new LocalHostDb(f.paths.socialDb());
+  try {writer.execute("UPDATE house_binding_pin SET incarnation='synthetic-new-house',revision=revision+1 WHERE origin=?",[ME]);}
+  finally {writer.close();}
+  // The existing MATERIAL gate already rejects this change; keep that evidence.
+  expect(()=>material.assertCurrent()).toThrow();
+  expect(f.rt.houseRuntime.publicReadStatus(ME).transport).toBe('inactive');
+  // A buffered frame on the old HTTP response must not create journal evidence.
+  f.send('public_boundary',popclaw.world.PublicStreamBoundary.encode(popclaw.world.PublicStreamBoundary.fromObject({logIncarnation:'fresh_log_1',fullPublic:true,highWaterSeq:'0'})).finish());
+  await vi.waitFor(()=>expect(f.requests.find(r=>new URL(r.url).pathname==='/v1/world-stream')!.init?.signal?.aborted).toBe(true),{timeout:4000});
+  expect(f.controllers).toHaveLength(1);expect(f.rt.boot.popclawId).toBe(identity);
+  expect(db.queryAll('SELECT * FROM world_public_bindings_v1')).toEqual(before);
+  expect(db.queryAll('SELECT * FROM world_public_frames_v1')).toEqual([]);
+});
+
+it.each(['Native','MCP'] as const)('%s refuses an already captured display after HouseBinding incarnation changes',async kind=>{
+  const f=await fixture(kind);await f.rt.houseRuntime.activateInitialMe();
+  await vi.waitFor(()=>expect(f.controllers).toHaveLength(1));
+  const store=await f.rt.houseRuntime.storeForCommand(ME),display=f.rt.houseRuntime.capturePublicDisplay(store);
+  display.assertCurrent();
+  const writer=new LocalHostDb(f.paths.socialDb());
+  try {writer.execute("UPDATE house_binding_pin SET incarnation='synthetic-new-house',revision=revision+1 WHERE origin=?",[ME]);}
+  finally {writer.close();}
+  expect(()=>display.assertCurrent()).toThrow();
 });

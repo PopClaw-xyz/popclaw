@@ -1,3 +1,5 @@
+import { ensureExecutionStoreIdentitySchema, ensureExecutionStoreCatalogSchema, addPrivateMessageFeatureColumn } from './execution-catalog-schema.js';
+export { ensureExecutionStoreIdentitySchema, ensureExecutionStoreCatalogSchema, addPrivateMessageFeatureColumn } from './execution-catalog-schema.js';
 import { randomBytes } from 'node:crypto';
 import { existsSync, lstatSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -26,11 +28,6 @@ const PROTECTED_FEATURE_TABLES = new Set<string>([...ACTION_RECEIPT_FEATURE_TABL
 export function privateMessageFeatureCertification(state: 'reserved' | 'certified'): string {
   return JSON.stringify({profile: PRIVATE_MESSAGE_FEATURE_PROFILE, schemaFingerprint: PRIVATE_MESSAGE_SCHEMA_FINGERPRINT, state});
 }
-/** The marker column is historically absent; adding it carries no certification. */
-function addPrivateMessageFeatureColumn(tx: HostDb): void {
-  if (!tx.queryAll<{name: string}>('PRAGMA table_info(execution_store_catalog_v1)').some(column => column.name === 'private_message_feature'))
-    tx.execute('ALTER TABLE execution_store_catalog_v1 ADD COLUMN private_message_feature TEXT');
-}
 function assertPrivateCertification(probe: HostDb, row: ExecutionCatalogRow): void {
   if (row.private_message_feature == null) return;
   if (row.private_message_feature !== privateMessageFeatureCertification('certified')) throw new Error('PRIVATE_MESSAGE_RECOVERY_REQUIRED');
@@ -47,15 +44,12 @@ export class ExecutionStoreCatalog {
   constructor(readonly options: { db: HostDb; paths: PopclawPaths; actorId: string }) {
     if (!options.actorId) throw new Error('EXECUTION_ACTOR_REQUIRED');
     options.db.transaction(db => {
-      db.execute(`CREATE TABLE IF NOT EXISTS execution_store_identity_v1 (
-        singleton INTEGER PRIMARY KEY CHECK(singleton=1), actor_id TEXT NOT NULL, layout_version INTEGER NOT NULL)`);
+      ensureExecutionStoreIdentitySchema(db);
       db.execute('INSERT OR IGNORE INTO execution_store_identity_v1 VALUES(1,?,?)', [options.actorId, EXECUTION_LAYOUT_VERSION]);
       const identity = db.queryOne<{actor_id: string; layout_version: number}>('SELECT * FROM execution_store_identity_v1 WHERE singleton=1')!;
       if (identity.actor_id !== options.actorId) throw new Error('EXECUTION_ACTOR_MISMATCH');
       if (identity.layout_version !== EXECUTION_LAYOUT_VERSION) throw new Error('EXECUTION_LAYOUT_UNSUPPORTED');
-      db.execute(`CREATE TABLE IF NOT EXISTS execution_store_catalog_v1 (
-        origin TEXT PRIMARY KEY, actor_id TEXT NOT NULL, store_id TEXT NOT NULL UNIQUE,
-        layout_version INTEGER NOT NULL, source_path TEXT, source_fingerprint TEXT, required_tables TEXT NOT NULL DEFAULT '[]')`);
+      ensureExecutionStoreCatalogSchema(db);
     });
   }
   /** A brand-new partition is built and verified before it is published; the
