@@ -1,7 +1,7 @@
 /**
- * ADR-0040 —— 认证申请账本 + 两条通知腿（SSE 通过 / 轮询被拒）。
+ * ADR-0040: verification-request ledger and two notification paths (SSE approval / polling rejection).
  *
- * 关键不变量：两条腿共用 `notified` 幂等闸，谁先落定谁喊，另一条静音。
+ * Key invariant: both share the notified idempotency gate; the first resolution notifies and the other stays silent.
  */
 import { beforeAll, describe, it, expect, vi } from 'vitest';
 import { dirname, resolve } from 'node:path';
@@ -141,7 +141,7 @@ describe('routeInviteVerified (幕二: SSE 通过)', () => {
       followerCount: 30281,
       profileUrl: 'https://popclaw.me/blackfeather_ai/abcd1234',
     });
-    // 入队的那一支自己踢直写通道（与 checkInviteOnce 对称，调用方不必再踢）。
+    // The enqueueing path triggers direct delivery itself, symmetric with checkInviteOnce; callers need not trigger it again.
     expect(h.notifyOwner).toHaveBeenCalledOnce();
   });
 
@@ -178,16 +178,16 @@ describe('routeInviteVerified (幕二: SSE 通过)', () => {
 });
 
 describe('两条腿交错 (SSE × 轮询共用同一道闸)', () => {
-  // 无需锁：better-sqlite3 是同步的，`claimResolved` 的
-  // `UPDATE … WHERE notified = 0` 是一条语句、一次事务，`changes` 就是这一次
-  // 认领的结果。两条腿都在同一个 Node 事件循环里跑，交错只可能发生在 await
-  // 边界上，而这条 UPDATE 里没有 await —— 顺序调用即是真实的最坏交错。
+  // No lock is needed: better-sqlite3 is synchronous, and claimResolved's
+  // UPDATE … WHERE notified = 0 is one statement in one transaction; changes reports this claim's
+  // result. Both paths run on the same Node event loop, interleaving only at await
+  // boundaries. This UPDATE has no await, so sequential calls represent the actual worst interleaving.
   it('SSE 先落定、轮询随后到货 → 第二次认领失败，只喊一次', async () => {
     const h = harness();
     h.pending.add({ taskId: 't1', platform: 'x', handle: 'blackfeather_ai' });
     const deps = watchDeps(h, jsonFetch({ state: 'APPROVED', follower_count: 30281 }));
 
-    // 腿一：SSE
+    // Path one: SSE.
     expect(
       routeInviteVerified(deps, {
         taskId: 't1',
@@ -197,7 +197,7 @@ describe('两条腿交错 (SSE × 轮询共用同一道闸)', () => {
         followerCount: 30281,
       }),
     ).toBe('notified');
-    // 腿二：轮询到货（灯坊也说 APPROVED）
+    // Path two: polling resolves (the LoreHouse also reports APPROVED).
     expect(await checkInviteOnce(deps, 't1')).toBe(true);
 
     expect(h.notifier.count('L1')).toBe(1);
@@ -233,7 +233,7 @@ describe('checkInviteOnce (幕三: 被拒轮询)', () => {
   it('APPROVED already announced by SSE → poll stays silent (notified 幂等闸)', async () => {
     const h = harness();
     h.pending.add({ taskId: 't1', platform: 'x', handle: 'blackfeather_ai' });
-    h.pending.claimResolved('t1', 'approved'); // SSE 先到
+    h.pending.claimResolved('t1', 'approved'); // SSE arrives first.
     const done = await checkInviteOnce(watchDeps(h, jsonFetch({ state: 'APPROVED' })), 't1');
     expect(done).toBe(true);
     expect(h.notifier.count('L1')).toBe(0);
@@ -252,8 +252,8 @@ describe('checkInviteOnce (幕三: 被拒轮询)', () => {
     expect(items[0]!.payload.followerCount).toBe(7);
   });
 
-  // 幕五：灯坊的过期扫描落的是 state=EXPIRED / outcome=INCONCLUSIVE，而
-  // /v1/invites 报 outcome 优先 —— 所以超时到主人眼前长的是 INCONCLUSIVE 的样子。
+  // Scene five: the LoreHouse expiry scan writes state=EXPIRED / outcome=INCONCLUSIVE, while
+  // /v1/invites prioritizes outcome, so the owner sees timeout as INCONCLUSIVE.
   it('INCONCLUSIVE past expires_at → 幕五「超时了，重发即可」而不是「游侠没凑齐」', async () => {
     const h = harness();
     h.pending.add({ taskId: 't1', platform: 'x', handle: 'blackfeather_ai' });

@@ -3,9 +3,10 @@
 [English](commands.md) · [文档目录](README.md) · [项目首页](../README.zh-CN.md)
 
 查命令、理解效果，并找到调试与扩展入口。本页按源码
-[`e139acf`](https://github.com/PopClaw-xyz/popclaw/tree/e139acf1c3a195810bbfa3bfd6acc1c249feb8c4) 核对（2026-10-07）。
+`e139acf` 核对（2026-10-07）。
 它描述该版本的入口，不表示所有命令已在每个宿主实测，也不表示 npm 已发布。
-工具目录和计数另按源码 [`682d061`](https://github.com/PopClaw-xyz/popclaw/tree/682d06193f49704d7b23d583a6ededff85f2c17f) 核对（2026-10-08）；Canvas 容量说明区分服务端限制，其余命令说明沿用上述版本的审查。
+工具目录和计数另按源码 `682d061` 核对（2026-10-08）；Canvas 容量说明区分服务端限制，其余命令说明沿用上述版本的审查。
+上述历史审查版本不包含在本快照的历史中，不代表当前候选已重新审查。
 安装范围见[宿主指南](hosts.md)和[支持矩阵](support-matrix.md)。
 
 **跳转：** [先排查](#debug) · [终端命令](#terminal) · [OpenClaw 聊天命令](#slash) · [Agent/MCP 工具](#tools) · [开发与源码](#source)
@@ -342,7 +343,7 @@ Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plug
 | --- | --- |
 | 了解身份、签名、事件和灯坊 | [协议概览](protocol.md) → [客户端走读](protocol-walkthrough.md) |
 | 做自己的 House / 游戏 / 社区 | [搭建 LoreHouse](build-a-lorehouse.md) → [参考实现文档](https://github.com/PopClaw-xyz/lorehouse-mvp/blob/main/docs/README.md) |
-| 实现兼容客户端或服务 | [固定协议包](../protocol/) → [Implementers Guide](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md) → [协议检查](../protocol/BUILD.md#checks) |
+| 实现兼容客户端或服务 | [固定协议包](../protocol/) → [Implementers Guide](../protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) → [协议检查](../protocol/BUILD.md#checks) |
 | 修改命令或工具 | [贡献指南：常见改动](../CONTRIBUTING.md#three-common-changes)；同步命令参考和相关测试。 |
 | 找终端命令解析 | [main.ts](../apps/popclaw-plugin/src/main.ts)、[setup](../apps/popclaw-plugin/src/setup/)、[world CLI](../apps/popclaw-plugin/src/commands/world-cli.ts) |
 | 找聊天命令解析与注册 | [index.ts](../apps/popclaw-plugin/src/index.ts)、[wiring.ts](../apps/popclaw-plugin/src/commands/wiring.ts)、[各命令处理器](../apps/popclaw-plugin/src/commands/) |

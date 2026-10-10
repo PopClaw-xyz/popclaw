@@ -94,19 +94,20 @@ describe('seed stamp — the three branches', () => {
 });
 
 /**
- * 印章机制上线（v5）之前装的机器盘上没有 `.seed`，模板却是我们自己种的 —— 认不出来
- * 就会被当成「主人写的」永久冻住（真机：host-c 2026-07-30 那一版）。指纹表就是为了
- * 认出自家发过的种子。两份 fixture 是从 git 历史里逐字取出来的真种子，别手改。
+ * Machines installed before the seed stamp (v5) have no `.seed`, although we planted the template.
+ * Without recognition it would be frozen permanently as "owner-written" (real host-c, 2026-07-30). The
+ * fingerprint table recognizes our historical seeds. Both fixtures are exact real seeds from Git
+ * history; do not edit them manually.
  */
 describe('历史种子指纹：认得出自家发的，就敢重种', () => {
   const fixture = (name: string): string =>
     readFileSync(join(__dirname, '../../fixtures/newspaper-seeds', name), 'utf-8');
 
   it('zh：无印章 + 内容是 86eb70ef 那一版种子 → 自动重种 + 补印章', () => {
-    writeFileSync(content(), fixture('zh-content-86eb70ef.md'), 'utf-8'); // host-c 的处境
+    writeFileSync(content(), fixture('zh-content-86eb70ef.md'), 'utf-8'); // The host-c situation.
     setOwnerLang('zh-CN');
     const got = readNewspaperContentRules(dir);
-    expect(got).toContain('版面由 popclaw 排'); // v10 才有的开场白
+    expect(got).toContain('版面由 popclaw 排'); // Opening copy introduced in v10.
     expect(readFileSync(content(), 'utf-8')).toBe(got);
     expect(seed()['content.md']).toMatchObject({ lang: 'zh-CN', templateVersion: VERSION });
     expect(newspaperRulesOutdated(dir)).toEqual([]);
@@ -123,7 +124,7 @@ describe('历史种子指纹：认得出自家发的，就敢重种', () => {
     writeFileSync(content(), '# 我自己的规矩\n\n只写这一行。', 'utf-8');
     setOwnerLang('zh-CN');
     expect(readNewspaperContentRules(dir)).toBe('# 我自己的规矩\n\n只写这一行。');
-    expect(existsSync(join(dir, '.seed'))).toBe(false); // 没重种，也就没印章
+    expect(existsSync(join(dir, '.seed'))).toBe(false); // No reseeding, hence no stamp.
   });
 
   it('印章对不上 + 内容是旧种子（被旧包盖回去） → 不报「待处理」，下次读自动修好', () => {
@@ -131,13 +132,16 @@ describe('历史种子指纹：认得出自家发的，就敢重种', () => {
     readNewspaperContentRules(dir);
     writeFileSync(content(), fixture('zh-content-86eb70ef.md'), 'utf-8');
     setOwnerLang(undefined);
-    setOwnerLang('en-US'); // 印章的语言也过期了 —— 旧逻辑到这里就会报「主人编辑过」
+    setOwnerLang('en-US'); // The stamp language is also stale; the old logic would report "owner edited" here.
     expect(newspaperRulesOutdated(dir)).toEqual([]);
     expect(readNewspaperContentRules(dir)).toBe(DEFAULT_CONTENT_EN);
   });
 });
 
-/** v0.2：content.md 只管文字的分寸，版面归代码 —— 所以法典里不许再出现类名和 HTML。 */
+/**
+ * v0.2: content.md governs writing, while code owns layout; the rules must no longer contain class
+ * names or HTML.
+ */
 describe('v0.2 的 content codex 只谈写作', () => {
   it('zh：忠实/以人为主角/三档密度/新人小传/teaser 都在，类名与 HTML 一个不留', () => {
     setOwnerLang('zh-CN');
@@ -168,7 +172,9 @@ describe('v0.2 的 content codex 只谈写作', () => {
   });
 });
 
-/** v0.2 的版式旋钮：种下去、读得回、改了必然生效。 */
+/**
+ * v0.2 layout controls: seed them, read them back, and ensure edits take effect.
+ */
 describe('style.json —— 主人手里那把旋钮', () => {
   it('第一次读就把 style.json 与它的说明书一起种下，值是发布默认值', () => {
     setOwnerLang('zh-CN');
@@ -186,7 +192,7 @@ describe('style.json —— 主人手里那把旋钮', () => {
     writeFileSync(join(dir, 'style.json'), JSON.stringify({ fontScale: 1.3, leadMax: 1, roster: false }), 'utf-8');
     const { style, notes } = readNewspaperStyle(dir);
     expect([style.fontScale, style.leadMax, style.roster]).toEqual([1.3, 1, false]);
-    expect(style.accent).toBe(DEFAULT_STYLE.accent); // 没写的键照旧
+    expect(style.accent).toBe(DEFAULT_STYLE.accent); // Omitted keys stay unchanged.
     expect(notes).toEqual([]);
   });
 
@@ -199,7 +205,7 @@ describe('style.json —— 主人手里那把旋钮', () => {
       'utf-8',
     );
     const { style, notes } = readNewspaperStyle(dir);
-    expect(style.leadMax).toBe(2); // 好的那个照样生效
+    expect(style.leadMax).toBe(2); // The valid setting still takes effect.
     expect([style.fontScale, style.accent, style.bodyFont]).toEqual([
       DEFAULT_STYLE.fontScale,
       DEFAULT_STYLE.accent,
@@ -208,7 +214,7 @@ describe('style.json —— 主人手里那把旋钮', () => {
     expect(notes.join('\n')).toContain('fontScale');
     expect(notes.join('\n')).toContain('accent');
     expect(notes.join('\n')).toContain('bodyFont');
-    expect(notes.join('\n')).toContain('wat'); // 拼错的键也说一声,省得以为旋钮坏了
+    expect(notes.join('\n')).toContain('wat'); // Report misspelled keys too, so the owner does not assume the control is broken.
   });
 
   it('JSON 整个坏掉 → 用发布默认值出报纸,但一定说出来', () => {
@@ -221,7 +227,10 @@ describe('style.json —— 主人手里那把旋钮', () => {
   });
 });
 
-/** layout.md 在 v0.2 退休：我们种的那份不吭声，主人改过的那份必须告诉他。 */
+/**
+ * layout.md retires in v0.2: stay silent for our seeded version, but notify the owner about their
+ * edited version.
+ */
 describe('layout.md 退休', () => {
   const layout = (): string => join(dir, 'layout.md');
   const fixture = (name: string): string =>
@@ -239,7 +248,7 @@ describe('layout.md 退休', () => {
   it('主人自己改过 → 必须报出来:那些改动从今天起不再生效', () => {
     writeFileSync(layout(), '# 我自己调的版式\n\n卡片再宽一点。', 'utf-8');
     expect(retiredLayoutRules(dir)).toBe(true);
-    // 但它仍旧躺在盘上,一个字节不动(P-006:主人的东西不销毁)
+    // It remains on disk with every byte intact (P-006: do not destroy owner property).
     expect(readFileSync(layout(), 'utf-8')).toContain('我自己调的版式');
   });
 

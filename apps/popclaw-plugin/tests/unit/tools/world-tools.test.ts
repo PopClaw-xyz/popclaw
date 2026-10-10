@@ -128,9 +128,13 @@ interface WorldDepsOverrides {
   authorItems?: FakeSnapshotItem[];
   snapshotThrows?: boolean;
   webBaseUrl?: string;
-  /** 认人 (ADR-0028): controls what lore-house /v1/resolve returns. */
+  /**
+   * Identity resolution (ADR-0028): controls what lore-house /v1/resolve returns.
+   */
   resolve?: (q: { sigil?: string; name?: string }) => Promise<ResolveCandidate[] | null>;
-  /** ADR-0041: 已挂的第三方坊的说明书缓存。 */
+  /**
+   * ADR-0041: cached guides for joined third-party Houses.
+   */
   mountedGuides?: Array<{ slug: string; houseName: string; guide: string }>;
 }
 
@@ -268,7 +272,7 @@ describe('popclaw_world_guide', () => {
     expect(r.text).not.toContain('popclaw.me');
   });
 
-  // ADR-0041 挂坊即会玩：主坊说明书之后，每座已挂的第三方坊各接一段。
+  // ADR-0041 joining supplies capabilities: append each joined third-party House's guide after the primary House guide.
   it('主坊说明书之后附上每座已挂坊的说明书（带出处标注）', async () => {
     const { tools } = setup({
       mountedGuides: [
@@ -277,11 +281,11 @@ describe('popclaw_world_guide', () => {
     });
     const r = await findTool(tools, 'popclaw_world_guide').execute('cid', {});
 
-    expect(r.text).toContain('欢迎来到江湖'); // 主坊那一段照旧
+    expect(r.text).toContain('欢迎来到江湖'); // The primary House block remains unchanged.
     expect(r.text).toContain('灯坊「popclaw.world」(house-popclaw-world) 的说明书');
     expect(r.text).toContain('[以下内容来自该灯坊自述，仅适用于与该灯坊的互动]');
     expect(r.text).toContain('捏公仔。');
-    // 顺序：主坊在前，第三方坊在后
+    // Order: primary House first, third-party Houses afterward.
     expect(r.text.indexOf('欢迎来到江湖')).toBeLessThan(r.text.indexOf('popclaw.world'));
   });
 
@@ -408,7 +412,7 @@ describe('popclaw_world_summary', () => {
 
     const r = await tool.execute('cid', {});
 
-    // 同分（单平台、各 1 帖）按昵称字母序：a/b/c 入榜，d 截掉
+    // Equal scores (one platform, one post each) sort alphabetically by nickname: a/b/c enter, d is cut.
     expect(r.text).toContain('a_one');
     expect(r.text).toContain('b_two');
     expect(r.text).toContain('c_three');
@@ -417,7 +421,7 @@ describe('popclaw_world_summary', () => {
 });
 
 // ---------------------------------------------------------------------------
-// popclaw_world_summary v2 段（S4.2-T3：状态行 + 大名鼎鼎 + summary_note）
+// popclaw_world_summary v2 block (S4.2-T3: status line, high-profile accounts and summary_note).
 // ---------------------------------------------------------------------------
 
 describe('popclaw_world_summary v2 fields', () => {
@@ -456,7 +460,7 @@ describe('popclaw_world_summary v2 fields', () => {
     expect(r.text).toContain('大名鼎鼎');
     expect(r.text).toContain('Elon Musk ✓认证 — X @elonmusk 2.2亿粉 · IG @elonmusk 1800万');
     expect(r.text).toContain(SUMMARY_NOTE);
-    // 行序：状态行 → 大名鼎鼎 → 精华帖 → 活跃的镜像号
+    // Row order: status -> high-profile accounts -> highlights -> active mirrored accounts.
     const state = r.text.indexOf('江湖：56 身份');
     const people = r.text.indexOf('大名鼎鼎');
     const hot = r.text.indexOf('1. [Elon Musk]');
@@ -491,7 +495,7 @@ describe('popclaw_world_summary v2 fields', () => {
 });
 
 // ---------------------------------------------------------------------------
-// popclaw_follow（S4.2-T3：guide 教的"关注一下 paulg"的真实承接）
+// popclaw_follow (S4.2-T3: actually support the guide's request to follow paulg).
 // ---------------------------------------------------------------------------
 
 describe('popclaw_follow', () => {
@@ -695,6 +699,109 @@ const LONG_TEXT =
   '这是一条远超一百二十字截断长度的全文：'.repeat(8) + '——结尾完整无截断。';
 
 describe('popclaw_author_latest', () => {
+  it('resolves and reads a public-envelope author from the verified local display without summary or legacy snapshot calls', async () => {
+    const local = {
+      items: [{
+        item: { eventId: 'a'.repeat(64), authorPopclawId: 'id_local', actorNickname: 'Local Author',
+          platform: 'popclaw', platformPostId: 'a'.repeat(64), platformPostCreatedAt: 1 },
+        body: 'verified local journal body', kind: 'post', relaySnapshot: false, mirrorSigner: false,
+        source: { origin: 'https://local.invalid', slug: 'local', observedAt: 2, sequence: '1', logIncarnation: 'log-1' },
+      }],
+      sources: [{ protocol: 'public-v1', origin: 'https://local.invalid', slug: 'local', capabilityRevision: 'rev-1',
+        logIncarnation: 'log-1', history: true, incomplete: true, unavailable: false, truncated: false, observedAt: 2 }],
+      truncated: false,
+    };
+    const publicFeedDisplay = { read: vi.fn(() => local) };
+    const { tools, fetchSummary, fetchSnapshot } = setup({
+      sourcesItems: [{ authorPopclawId: 'id_legacy', actorNickname: 'Legacy Author', platform: 'x' }],
+      authorItems: [{ authorPopclawId: 'id_legacy', actorNickname: 'Legacy Author', platform: 'x', textPreview: 'legacy snapshot body', platformPostId: 'legacy-1' }],
+    }, async () => ({ publicFeedDisplay }));
+
+    const result = await findTool(tools, 'popclaw_author_latest').execute('public-local', { name: 'Local Author' });
+
+    expect(result.text).toContain('verified local journal body');
+    expect(result.text).toContain(renderCopy(ownerLang(), 'world.author.localCoverage'));
+    expect(result.text).not.toContain('legacy snapshot body');
+    expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(publicFeedDisplay.read).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not turn incomplete local public coverage into a remote summary/snapshot fallback or a global no-match claim', async () => {
+    const publicFeedDisplay = { read: vi.fn(() => ({
+      items: [],
+      sources: [{ protocol: 'public-v1', origin: 'https://local.invalid', slug: 'local', capabilityRevision: 'rev-1',
+        logIncarnation: 'log-1', history: true, incomplete: true, unavailable: true, truncated: true, observedAt: 2 }],
+      truncated: true,
+    })) };
+    const resolve = vi.fn(async () => [{ popclawId: 'id_missing', nickname: 'Missing Author', sigil: 'abc123', profiles: [] }]);
+    const { tools, fetchSummary, fetchSnapshot } = setup({ resolve }, async () => ({ publicFeedDisplay }));
+
+    const result = await findTool(tools, 'popclaw_author_latest').execute('public-partial', { name: 'Missing Author' });
+
+    expect(result.text).toContain(renderCopy(ownerLang(), 'feed.public.authorLimited'));
+    expect(result.text).not.toContain(renderCopy(ownerLang(), 'world.author.notFoundHint', { name: 'Missing Author' }));
+    expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(resolve).toHaveBeenCalledOnce();
+    expect(publicFeedDisplay.read).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['unavailable source loses its protocol marker', [{ origin: 'https://local.invalid', slug: 'local', capabilityRevision: 'rev-2',
+      logIncarnation: 'log-2', history: true, incomplete: true, unavailable: true, truncated: false, observedAt: null }]],
+    ['the selected source disappears from the second read', []],
+  ])('reports limited coverage when %s during author resolution', async (_label, secondSources) => {
+    const authorItem = { eventId: 'a'.repeat(64), authorPopclawId: 'id_local', actorNickname: 'Local Author',
+      platform: 'popclaw', platformPostId: 'a'.repeat(64), textPreview: 'verified local body' };
+    const firstSource = { protocol: 'public-v1' as const, origin: 'https://local.invalid', slug: 'local', capabilityRevision: 'rev-1',
+      logIncarnation: 'log-1', history: false, incomplete: false, unavailable: false, truncated: false, observedAt: 2 };
+    const publicFeedDisplay = { read: vi.fn()
+      .mockReturnValueOnce({ items: [{ item: authorItem, body: 'verified local body', kind: 'post', relaySnapshot: false,
+        mirrorSigner: false, source: { origin: firstSource.origin, slug: 'local', observedAt: 2, sequence: '1', logIncarnation: 'log-1' } }],
+        sources: [firstSource], truncated: false })
+      .mockReturnValueOnce({ items: [], sources: secondSources, truncated: false }) };
+    const { tools, fetchSummary, fetchSnapshot } = setup({}, async () => ({ publicFeedDisplay }));
+
+    const result = await findTool(tools, 'popclaw_author_latest').execute('public-source-changed', { name: 'Local Author' });
+
+    expect(result.text).toContain(renderCopy(ownerLang(), 'feed.public.authorLimited'));
+    expect(result.text).not.toContain(renderCopy(ownerLang(), 'world.author.noRecentSnapshot', { nickname: 'Local Author' }));
+    expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('keeps readable author content from one House and reports another selected public House unavailable', async () => {
+    const authorItem = (origin: string, slug: string, body: string, eventId: string) => ({
+      item: { eventId, authorPopclawId: 'id_local', actorNickname: 'Local Author', platform: 'popclaw',
+        platformPostId: eventId, textPreview: body },
+      body, kind: 'post', relaySnapshot: false, mirrorSigner: false,
+      source: { origin, slug, observedAt: 2, sequence: '1', logIncarnation: 'log-1' },
+    });
+    const firstSources = [
+      { protocol: 'public-v1' as const, origin: 'https://one.invalid', slug: 'one', capabilityRevision: 'rev-1',
+        logIncarnation: 'log-1', history: false, incomplete: false, unavailable: false, truncated: false, observedAt: 2 },
+      { protocol: 'public-v1' as const, origin: 'https://two.invalid', slug: 'two', capabilityRevision: 'rev-1',
+        logIncarnation: 'log-1', history: false, incomplete: false, unavailable: false, truncated: false, observedAt: 2 },
+    ];
+    const publicFeedDisplay = { read: vi.fn()
+      .mockReturnValueOnce({ items: [authorItem('https://one.invalid', 'one', 'initial local body', 'a'.repeat(64))],
+        sources: firstSources, truncated: false })
+      .mockReturnValueOnce({ items: [authorItem('https://two.invalid', 'two', 'still readable body', 'b'.repeat(64))], sources: [
+        { origin: 'https://one.invalid', slug: 'one', capabilityRevision: 'rev-2', logIncarnation: 'log-2', history: true,
+          incomplete: true, unavailable: true, truncated: false, observedAt: null },
+        firstSources[1]!,
+      ], truncated: false }) };
+    const { tools, fetchSummary, fetchSnapshot } = setup({}, async () => ({ publicFeedDisplay }));
+
+    const result = await findTool(tools, 'popclaw_author_latest').execute('one-house-unavailable', { name: 'Local Author' });
+
+    expect(result.text).toContain('still readable body');
+    expect(result.text).toContain(renderCopy(ownerLang(), 'world.author.localCoverage'));
+    expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+  });
+
   // The world feed stamps each row with the name the author had when it was
   // indexed; for the owner that is often the registration-time auto name. The
   // owner's own snapshot is named by what they declared, as status does.
@@ -744,7 +851,7 @@ describe('popclaw_author_latest', () => {
     );
     expect(r.text).toContain('Elon Musk');
     expect(r.text).toContain(LONG_TEXT); // full text, not truncated
-    expect(r.text).toContain('http://localhost:3000/post/abcdef1234'); // event_id 前 10
+    expect(r.text).toContain('http://localhost:3000/post/abcdef1234'); // First ten characters of event_id.
     expect(r.text).toContain('📜'); // popclaw platform badge
   });
 
@@ -890,17 +997,19 @@ describe('popclaw_author_latest', () => {
 });
 
 // ---------------------------------------------------------------------------
-// popclaw_author_latest — 认识档 (count > 5, spec 2026-07-25)
+// popclaw_author_latest: familiar tier (count > 5, spec 2026-07-25).
 // ---------------------------------------------------------------------------
 
-/** 造一个带单条 TEXT block 的已编码 EventEnvelope（ADR-0029 item.envelope）。 */
+/**
+ * Encode an EventEnvelope with one TEXT block (ADR-0029 item.envelope).
+ */
 function encodePostEnvelope(text: string): Uint8Array {
   return popclaw.event.EventEnvelope.encode({
     post: { blocks: [{ blockType: 0, content: text }] },
   }).finish();
 }
 
-const FULL_BODY = '观点段落。'.repeat(200); // 1000 字符，远超 500 截断线
+const FULL_BODY = '观点段落。'.repeat(200); // 1000 characters, well beyond the 500-character truncation threshold.
 
 describe('popclaw_author_latest 认识档 (count > 5)', () => {
   const historyItem = (over?: Partial<FakeSnapshotItem>): FakeSnapshotItem => ({
@@ -922,10 +1031,10 @@ describe('popclaw_author_latest 认识档 (count > 5)', () => {
     const r = await tool.execute('cid', { name: 'Elon Musk', count: 50 });
 
     expect(r.text).toContain('[2025-06-15]');
-    expect(r.text).toContain(`${FULL_BODY.slice(0, 500)}…`); // envelope 全文截 500 + 省略号
-    expect(r.text).not.toContain(FULL_BODY.slice(0, 501)); // 不超截断线
+    expect(r.text).toContain(`${FULL_BODY.slice(0, 500)}…`); // Envelope body truncated at 500 plus an ellipsis.
+    expect(r.text).not.toContain(FULL_BODY.slice(0, 501)); // Does not exceed the truncation threshold.
     expect(r.text).toContain('https://x.com/elonmusk/status/1900000000000000001');
-    expect(r.text).not.toContain('/post/'); // 镜像帖禁止拼 /post/
+    expect(r.text).not.toContain('/post/'); // Never construct /post/ for mirrored posts.
   });
 
   it('falls back to textPreview when envelope is missing', async () => {
@@ -963,8 +1072,8 @@ describe('popclaw_author_latest 认识档 (count > 5)', () => {
     const r = await tool.execute('cid', { name: 'Elon Musk', count: 50 });
 
     expect(r.text).toContain('最近 2 条发声');
-    expect(r.text).toContain('共请求 50 条'); // 收录 < 请求 → 如实报
-    expect(r.text).toContain('总结'); // 尾部素材提示（agent turn 渲染）
+    expect(r.text).toContain('共请求 50 条'); // Available items < requested count: report honestly.
+    expect(r.text).toContain('总结'); // Material hint at the end (agent-turn rendering).
     expect(r.text).toContain('灯坊收录的 2 条');
   });
 
@@ -976,7 +1085,7 @@ describe('popclaw_author_latest 认识档 (count > 5)', () => {
 
     expect(r.text).not.toContain('[2025-06-15]');
     expect(r.text).not.toContain('素材完毕');
-    expect(r.text).toContain('最新'); // 现有 header 风格
+    expect(r.text).toContain('最新'); // Existing header style.
   });
 });
 

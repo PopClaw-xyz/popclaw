@@ -1,8 +1,10 @@
 /**
- * 刀① 地板（查得到） + 刀② 感知（入队 / 首回 / 未读）。
+ * Slice ① lookup foundation + slice ② awareness (enqueue / first reply / unread).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { dirname, resolve } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { popclaw } from '@popclaw/contracts';
 import { deriveSigil } from '../../../src/invite/sigil';
@@ -11,6 +13,8 @@ import type { WorldFeedCache } from '../../../src/ingress/world-feed-cache';
 import { LocalHostDb } from '../../../src/host/local-host-db';
 import { runMigrations } from '../../../src/host/migrations';
 import { SqliteNotifier } from '../../../src/notifier/sqlite-notifier';
+import { notifierForOrigin } from '../../../src/runtime/house-lifecycle/notification-scope';
+import { readSocialLog, SocialLogWriter } from '../../../src/social-log/social-log';
 import { setOwnerLang } from '../../../src/lexicon/owner-language';
 import {
   ReplyPingsStore,
@@ -48,7 +52,7 @@ function rec(cache: WorldFeedCache, over: Partial<popclaw.event.IWorldFeedItem>)
 }
 
 // ---------------------------------------------------------------------------
-// 刀① — WorldFeedCache.repliesToOwner
+// Slice ①: WorldFeedCache.repliesToOwner.
 // ---------------------------------------------------------------------------
 
 describe('WorldFeedCache.repliesToOwner', () => {
@@ -113,7 +117,7 @@ describe('WorldFeedCache.repliesToOwner', () => {
   it('never filters on reply_to_author_popclaw_id (empty on live tail — spec §12)', async () => {
     const { cache } = await makeCache();
     rec(cache, { platformPostId: 'mine', authorPopclawId: OWNER, textPreview: '我的帖' });
-    // live tail: reply_to_author_popclaw_id 永远是空字符串
+    // Live tail: reply_to_author_popclaw_id is always an empty string.
     rec(cache, {
       platformPostId: 'r1',
       authorPopclawId: 'other',
@@ -143,14 +147,14 @@ describe('WorldFeedCache.repliesToOwner', () => {
 
   it('joins on the FULL primary key — a forged platform cannot hit my mirror row', async () => {
     const { cache } = await makeCache();
-    // 主人在 X 上的镜像帖，id "111"
+    // Owner's mirrored X post, ID "111".
     rec(cache, {
       platform: 'x',
       platformPostId: '111',
       authorPopclawId: OWNER,
       textPreview: '我的 X 镜像帖',
     });
-    // 别人在 tiktok 上一条同 id 的帖 + 一条回它的回复；回复者可以随便写 platform
+    // Someone else's TikTok post with the same ID and a reply to it; the replier can supply any platform.
     rec(cache, { platform: 'tiktok', platformPostId: '111', authorPopclawId: 'other' });
     rec(cache, {
       platform: 'popclaw',
@@ -160,7 +164,7 @@ describe('WorldFeedCache.repliesToOwner', () => {
       replyToPostId: '111',
     });
     expect(cache.repliesToOwner(OWNER, 50)).toEqual([]);
-    // …而如实指向主人那条 X 镜像帖的回复照常命中
+    // A reply correctly targeting the owner's X mirror still matches.
     rec(cache, {
       platform: 'popclaw',
       platformPostId: 'real',
@@ -173,10 +177,10 @@ describe('WorldFeedCache.repliesToOwner', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 刀② — 入队路由 / 首回 / 幂等
+// Slice ②: enqueue routing / first reply / idempotency.
 // ---------------------------------------------------------------------------
 
-/** helpers/world-feed-cache 的默认发帖时间；把"现在"钉在同一刻 = 回复是新鲜的。 */
+/** Default post time from helpers/world-feed-cache; pin now to the same instant so replies are fresh. */
 const NOW = 1_700_000_000;
 
 describe('routeReplyPing', () => {
@@ -206,13 +210,109 @@ describe('routeReplyPing', () => {
     expect(notifier.count()).toBe(1);
   });
 
+  it.each([
+    ['first', false, false],
+    ['first', false, true],
+    ['first-stale', true, false],
+    ['first-stale', true, true],
+    ['more', false, false],
+    ['more', false, true],
+  ] as const)('rolls back failed %s routing (stale=%s, queue written=%s) and restores it once on replay', async (outcome, stale, writeQueue) => {
+    const { cache, deps, db, pings, notifier } = await setup(() => NOW + (stale ? 3600 : 60));
+    const origin = 'https://reply-house.invalid';
+    const logDir = mkdtempSync(resolve(tmpdir(), 'popclaw-reply-pings-'));
+    const socialLog = new SocialLogWriter({ dir: logDir, now: () => NOW * 1000 });
+    const readLog = () => readSocialLog(logDir, NOW, NOW + 1);
+    try {
+      if (outcome === 'more') {
+        routeReplyPing(deps, rec(cache, { eventId: 'earlier', platformPostId: 'earlier', authorPopclawId: 'a', replyToPostId: 'mine' }));
+      }
+      const beforeUnread = pings.listUnread(10);
+      const beforeQueue = notifier.count();
+      const beforeFirst = db.queryAll('SELECT * FROM reply_first_ping');
+      const reply = rec(cache, { eventId: 'failed-reply', platformPostId: 'failed-reply', authorPopclawId: 'b', replyToPostId: 'mine', textPreview: 'Reply body' });
+      const failed = {
+        ...deps,
+        socialLog,
+        notifier: notifierForOrigin({ enqueue: (args) => {
+          if (writeQueue) notifier.enqueue(args);
+          throw new Error('QUEUE-FAILURE');
+        } }, origin),
+      };
+      expect(() => routeReplyPing(failed, reply)).toThrow('QUEUE-FAILURE');
+      expect(pings.listUnread(10)).toEqual(beforeUnread);
+      expect(db.queryAll('SELECT * FROM reply_first_ping')).toEqual(beforeFirst);
+      expect(notifier.count()).toBe(beforeQueue);
+      expect(readLog()).toEqual([]);
+
+      const recovered = { ...deps, socialLog, notifier: notifierForOrigin(notifier, origin) };
+      expect(routeReplyPing(recovered, reply)).toBe(outcome);
+      expect(routeReplyPing(recovered, reply)).toBe('duplicate');
+      expect(pings.unreadCount()).toBe(beforeUnread.length + 1);
+      expect(notifier.count()).toBe(beforeQueue + 1);
+      expect(db.queryAll('SELECT * FROM reply_first_ping')).toHaveLength(1);
+      const queued = notifier.drain().filter((notice) => notice.payload.replyEventId === 'failed-reply');
+      expect(queued).toHaveLength(1);
+      expect(queued[0]).toMatchObject({ level: outcome === 'first' ? 'L1' : 'L2', kind: 'reply', payload: { houseOrigin: origin } });
+      expect(readLog()).toHaveLength(1);
+      expect(readLog()[0]).toMatchObject({ kind: 'reply_received', event_id: 'failed-reply', text: 'Reply body' });
+    } finally {
+      db.close();
+      rmSync(logDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rolls back both reply gates after a real SQLite queue insert failure, then replays normally', async () => {
+    const { cache, deps, db, pings, notifier } = await setup();
+    const reply = rec(cache, { eventId: 'sql-failure', platformPostId: 'sql-failure', authorPopclawId: 'a', replyToPostId: 'mine' });
+    db.execute("CREATE TEMP TRIGGER reject_reply_queue BEFORE INSERT ON notification_queue BEGIN SELECT RAISE(ABORT, 'QUEUE-SQL-FAILURE'); END");
+    expect(() => routeReplyPing(deps, reply)).toThrow('QUEUE-SQL-FAILURE');
+    expect(pings.unreadCount()).toBe(0);
+    expect(db.queryAll('SELECT * FROM reply_first_ping')).toEqual([]);
+    expect(notifier.count()).toBe(0);
+    db.execute('DROP TRIGGER reject_reply_queue');
+    expect(routeReplyPing(deps, reply)).toBe('first');
+    expect(routeReplyPing(deps, reply)).toBe('duplicate');
+    expect(notifier.count('L1')).toBe(1);
+    expect(pings.unreadCount()).toBe(1);
+    db.close();
+  });
+
+  it('does not append JSONL when SQLite rejects the transaction at commit', async () => {
+    const { cache, deps, db, pings, notifier } = await setup();
+    const logDir = mkdtempSync(resolve(tmpdir(), 'popclaw-reply-pings-commit-'));
+    const socialLog = new SocialLogWriter({ dir: logDir, now: () => NOW * 1000 });
+    const readLog = () => readSocialLog(logDir, NOW, NOW + 1);
+    try {
+      // The queue insert succeeds; its deferred foreign key fails only at COMMIT.
+      db.execute('CREATE TABLE commit_parent (id INTEGER PRIMARY KEY)');
+      db.execute('CREATE TABLE commit_child (parent_id INTEGER REFERENCES commit_parent(id) DEFERRABLE INITIALLY DEFERRED)');
+      db.execute('CREATE TEMP TRIGGER reject_reply_commit AFTER INSERT ON notification_queue BEGIN INSERT INTO commit_child (parent_id) VALUES (404); END');
+      const reply = rec(cache, { eventId: 'commit-failure', platformPostId: 'commit-failure', authorPopclawId: 'a', replyToPostId: 'mine' });
+      const routed = { ...deps, socialLog };
+      expect(() => routeReplyPing(routed, reply)).toThrow(/FOREIGN KEY constraint failed/);
+      expect(readLog()).toEqual([]);
+      expect(pings.unreadCount()).toBe(0);
+      expect(db.queryAll('SELECT * FROM reply_first_ping')).toEqual([]);
+      expect(notifier.count()).toBe(0);
+      db.execute('DROP TRIGGER reject_reply_commit');
+      expect(routeReplyPing(routed, reply)).toBe('first');
+      expect(routeReplyPing(routed, reply)).toBe('duplicate');
+      expect(notifier.count('L1')).toBe(1);
+      expect(readLog()).toHaveLength(1);
+    } finally {
+      db.close();
+      rmSync(logDir, { recursive: true, force: true });
+    }
+  });
+
   it('首回 is judged once per 发言 — a redelivered first reply never re-fires L1', async () => {
     const { cache, deps, notifier } = await setup();
     const a = rec(cache, { platformPostId: 'r1', authorPopclawId: 'a', replyToPostId: 'mine' });
     const b = rec(cache, { platformPostId: 'r2', authorPopclawId: 'b', replyToPostId: 'mine' });
     routeReplyPing(deps, a);
     routeReplyPing(deps, b);
-    routeReplyPing(deps, a); // SSE 重连回补
+    routeReplyPing(deps, a); // SSE reconnect backfill.
     routeReplyPing(deps, b);
     expect(notifier.count('L1')).toBe(1);
     expect(notifier.count('L2')).toBe(1);
@@ -238,7 +338,7 @@ describe('routeReplyPing', () => {
     expect(notifier.count()).toBe(0);
   });
 
-  // 交情上下文尾行（2026-07-29）：与 fromName 同款，入队时烘进 payload。
+  // Bond-context trailing line (2026-07-29): like fromName, bake it into the payload when enqueuing.
   it('bondContext 有话说 → 烘进 payload.bondLine；没话说不带这个 key', async () => {
     const { cache, deps, notifier } = await setup();
     const withCtx = {
@@ -254,7 +354,7 @@ describe('routeReplyPing', () => {
   });
 
   it('a stale reply (SSE backfill) still queues, but never at L1', async () => {
-    // 首装/重装：limit 5000 的窗口回补，历史上每条回复都是"首回"。
+    // First install/reinstall: backfill a 5000-item window, where every historical reply looks like a first reply.
     const { cache, deps, notifier } = await setup(() => NOW + 3600);
     const a = rec(cache, { platformPostId: 'r1', authorPopclawId: 'a', replyToPostId: 'mine' });
     expect(routeReplyPing(deps, a)).toBe('first-stale');
@@ -284,7 +384,7 @@ describe('routeReplyPing', () => {
     });
     expect(routeReplyPing(deps, laoZhang)).toBe('first');
     expect(notifier.count('L1')).toBe(1);
-    expect(pings.unreadCount()).toBe(1); // 自嘲那条不进待回
+    expect(pings.unreadCount()).toBe(1); // The self-reply does not enter pending replies.
   });
 
   it('unread survives until popclaw_show_pings takes the batch (agent 不取则未读不清)', async () => {
@@ -292,7 +392,7 @@ describe('routeReplyPing', () => {
     const a = rec(cache, { platformPostId: 'r1', authorPopclawId: 'a', replyToPostId: 'mine' });
     routeReplyPing(deps, a);
     expect(pings.unreadCount()).toBe(1);
-    // agent 看到尾巴却没取 → 未读保留
+    // Agent saw the trailing notice but did not fetch: keep unread.
     expect(pings.unreadCount()).toBe(1);
     expect(pings.markRead(pings.listUnread(10))).toBe(1);
     expect(pings.unreadCount()).toBe(0);
@@ -308,11 +408,11 @@ describe('routeReplyPing', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 素材 + 分档渲染（照抄 popclaw_author_latest 一具两档）
+// Materials + tiered rendering (same two-level response shape as popclaw_author_latest).
 // ---------------------------------------------------------------------------
 
 describe('collectPings / renderPings', () => {
-  /** cache + 账本 + 已路由的 N 条回复，全部未读。 */
+  /** Cache + ledger + N routed replies, all unread. */
   async function seeded(n: number, over: (i: number) => Partial<popclaw.event.IWorldFeedItem> = () => ({})) {
     const { cache } = await makeCache();
     const s = makeStores();
@@ -343,15 +443,15 @@ describe('collectPings / renderPings', () => {
       ownerPopclawId: OWNER,
       bondOf: (id) => (id === 'friendPid' ? { tier: 'close' as const, remarkName: '' } : null),
     });
-    // bond tier 降序 → 时间降序（最新优先）
+    // Bond tier descending, then time descending (newest first).
     expect(got.map((p) => p.replierPopclawId)).toEqual(['friendPid', 'nobody']);
     expect(got[0]!.tier).toBe('close');
     expect(got[1]!.tier).toBe('stranger');
   });
 
-  // renderPings 直接渲染 replierName，所以
-  // 无别名、无 handle 的回帖者此前会把裸 id 前缀烤进名字。同一条纪律：上屏
-  // 一律「名号#印信」，连不出名字就只报「#印信」。
+  // renderPings renders replierName directly, so
+  // repliers without aliases or handles previously had raw ID prefixes baked into names. Same display rule:
+  // always name#sigil, or just #sigil when no name can be resolved.
   it('no alias and no handle → the name falls back to #sigil, never a bare id prefix', async () => {
     const { cache, pings } = await seeded(1, () => ({ authorPopclawId: 'ghostPid', handle: '' }));
     const got = collectPings({ cache, pings, ownerPopclawId: OWNER, bondOf: () => null });
@@ -375,10 +475,10 @@ describe('collectPings / renderPings', () => {
     expect(items).toHaveLength(130);
     const { shown } = renderPings(items);
     expect(shown).toHaveLength(20);
-    // 最新的那条必须在被呈现的 20 条里（同档内时间降序）
+    // The newest reply must be among the 20 shown (time descending within a tier).
     expect(shown[0]!.eventId).toBe(items[0]!.eventId);
     expect(pings.markRead(shown.map((p) => p.eventId))).toBe(20);
-    expect(pings.unreadCount()).toBe(110); // 剩下的下次继续提示，不是永远消失
+    expect(pings.unreadCount()).toBe(110); // Prompt for the rest next time; do not lose them forever.
   });
 
   it('≤5 renders full text; >5 switches to the compact timeline', () => {

@@ -1,5 +1,5 @@
 /**
- * 装机/升级回音（issue #270）—— 决策纯函数全档位覆盖。见 src/runtime/install-notice.ts 头注释。
+ * Install/upgrade notice (issue #270): all decision-function tiers. See the header of src/runtime/install-notice.ts.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 

@@ -1,3 +1,4 @@
+import type { ReadRequestScope } from '../read-request-scope.js';
 /**
  * The ports of the shared runtime assembly (`assembleRuntime`): the ONLY way
  * a composition root tells the assembly what differs about its host.
@@ -105,6 +106,8 @@ export interface WorldLane<S extends object> {
 }
 
 export interface WorldPort<S extends object> {
+  /** Explicit current host run; absence preserves ordinary unscoped reads. */
+  readonly currentReadScope?: () => ReadRequestScope | undefined;
   /**
    * Build the host's owner lane. `worlds` is the runtime about to be
    * constructed; only read lazily (a dialog's duplicate lookup), never here.

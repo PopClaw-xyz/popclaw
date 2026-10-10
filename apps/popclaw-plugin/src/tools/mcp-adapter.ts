@@ -1,7 +1,8 @@
+import { isLocalInviteCall } from '../invite/local-invite-call.js';
 import { decorateToolNotice, offerToolNotice, type ToolNoticeContext } from '../notifier/tool-notice.js';
 import type { ContentBlock, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 /**
- * OpenClaw tool registrations → MCP. Pure translation, no I/O, no node:*, so
+ * OpenClaw tool registrations → MCP. No I/O, no node:* imports or host boot, so
  * it is unit-testable without booting the server (importing `src/mcp.ts`
  * installs a process-wide stdout guard — never do that from a test).
  *
@@ -27,19 +28,20 @@ export interface CollectedTool {
  * signal in one place, so all three are observable from a unit test instead of
  * living only inside `src/mcp.ts` (which no test may import).
  *
- * The id is sanitised because a JSON-RPC request id is free-form text: the
- * owner-confirmation adapter only accepts `[A-Za-z0-9_.:-]`, so a host whose
- * ids carry a space, `/` or `#` would have EVERY world action refused as
- * OWNER_CONFIRMATION_INVOCATION_INVALID. The clock fallback costs nothing —
- * the id only has to be stable within the one call it names.
+ * The invocation ref is independent of the JSON-RPC wire id, which a client
+ * can repeat or omit. The root allocates it once and passes it unchanged to
+ * both approval and execution. Standalone dispatch allocates only when that
+ * trusted ref was not supplied. UUID characters fit the world dialog's guard.
  */
+export function allocateMcpCallRef(): string { return `mcp_${globalThis.crypto.randomUUID()}`; }
+
 export function dispatchMcpCall(
   tool: Pick<CollectedTool, 'execute'>,
   args: unknown,
   extra: { readonly requestId?: string | number; readonly signal?: AbortSignal },
+  callRef: string = allocateMcpCallRef(),
 ): Promise<unknown> {
-  const id = String(extra.requestId ?? '');
-  return tool.execute(`mcp_${/^[A-Za-z0-9_.:-]{1,120}$/.test(id) ? id : Date.now()}`, args ?? {}, extra.signal);
+  return tool.execute(callRef, args ?? {}, extra.signal);
 }
 
 export interface ToolCollector {
@@ -174,6 +176,7 @@ export function withNativeToolNotice(api: ToolCollector['api'] | {registerTool: 
     if (!t || typeof t.execute !== 'function' || typeof t.name !== 'string') return tool;
     const execute = t.execute;
     return {...t, execute: async (id: string, params: unknown, signal?: AbortSignal, ...rest: unknown[]) => {
+      if (isLocalInviteCall(typeof t.name === 'string' ? t.name : '', params)) return (execute as (...args: unknown[]) => Promise<unknown>)(id, params, signal, ...rest);
       const result = await (execute as (...args: unknown[]) => Promise<unknown>)(id, params, signal, ...rest);
       return decorateToolNotice(t.name!, toMcpToolResult(result), async () => offerToolNotice(await context(signal)));
     }};

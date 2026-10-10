@@ -1,11 +1,9 @@
 /**
- * 规格 B 切片④：一坊一条私信流 + 来信记来源坊 + exactly-once 跨坊仍成立。
- *
- * 判据来自规格的验收清单：
- *   - 双坊各来一条不同 DM → 都收到，各带对的坊标签；
- *   - 同一封 DM 两坊重复到达 → 只处理一次（consume 只跑一遍）；
- *   - 某坊不可达（onerror）只报它自己的 slug，不拖垮其余；
- *   - 单坊配置行为逐位不变。
+ * Spec B, slice 4: one DM stream per House, retain the source House, and preserve exactly-once
+ * delivery across Houses. Acceptance criteria: distinct DMs from two Houses both arrive with the
+ * correct House labels; the same DM arriving through two Houses is consumed only once; an unreachable
+ * House (onerror) reports only its own slug without breaking others; single-House configuration stays
+ * byte-for-byte equivalent.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { dirname, resolve } from 'node:path';
@@ -32,7 +30,9 @@ const WORLD = 'http://world.test';
 
 type FakeES = AnyEventSource & { listeners: Record<string, (e: { data: string }) => void> };
 
-/** 每座坊一个可手动喂帧的假 EventSource。 */
+/**
+ * One fake EventSource per House, with frames injected manually.
+ */
 function fakeSources() {
   const byUrl = new Map<string, FakeES>();
   const Ctor = class {
@@ -80,7 +80,7 @@ async function wire(urls: string[]) {
         houseSlug,
         ...(envelopeBytes.length > 0 ? { envelopeBytes } : {}),
       });
-      if (!wasNew) return; // 与 index.ts / main.ts 同一道闸
+      if (!wasNew) return; // The same gate as index.ts / main.ts.
       consumed.push(`${dm.body}@${houseSlug}`);
     },
     onError,
@@ -91,10 +91,10 @@ async function wire(urls: string[]) {
   // buildInboxToken().then(open) path, so the fake EventSource isn't
   // constructed synchronously anymore — wait for all of them before feeding.
   await vi.waitFor(() => expect(byUrl.size).toBe(urls.length));
-  // 正常私信帧走具名 `envelope` 事件（加固 1）。
+  // Normal DM frames use the named `envelope` event (hardening 1).
   const feed = (baseUrl: string, data: string) =>
     byUrl.get(`${baseUrl}/inbox/me/stream`)!.listeners.envelope!({ data });
-  // 旧灯坊的裸帧走默认（无名）事件 —— 报警口。
+  // Legacy House bare frames use the default unnamed event: the alarm path.
   const feedDefault = (baseUrl: string, data: string) =>
     byUrl.get(`${baseUrl}/inbox/me/stream`)!.onmessage!({ data });
   const fail = (baseUrl: string, err: unknown) =>
@@ -123,19 +123,19 @@ describe('规格 B 切片④ · inbox 按坊各订一条', () => {
     expect(env.directMessage?.body).toBe('signed hi');
   });
 
-  // 加固 1：新灯坊+旧插件反向 —— 旧灯坊发裸 DM 走默认（无名）事件时，绝不静默解码
-  // 或跳过，而是响亮报错（版本不一致），且**不落库**（等升级重连后 backfill 补投）。
+  // Hardening 1: when a legacy House sends a bare DM via the default unnamed event, do not silently decode
+  // or skip it. Report a version mismatch and do not persist it; backfill can deliver after upgrade/reconnect.
   it('无名默认事件 → 响亮报警而非静默解码/跳过', async () => {
     const w = await wire([HOME]);
-    // 用一个能 decode 的裸 DM 字节喂默认事件 —— 证明即便"看起来能解"也不解，走报警。
+    // Feed decodable bare DM bytes to the default event: even apparently decodable content must trigger the alarm.
     const bareDm = Buffer.from(
       popclaw.event.DirectMessage.encode({ fromPopclawId: 'alice', toPopclawId: 'me', body: 'x', ts: 1 }).finish(),
     ).toString('base64');
     w.feedDefault(HOME, bareDm);
-    expect(w.consumed).toEqual([]); // 没被当私信消费
-    expect(w.store.recent(10)).toHaveLength(0); // 没落库
+    expect(w.consumed).toEqual([]); // Not consumed as a DM.
+    expect(w.store.recent(10)).toHaveLength(0); // Not persisted.
     expect(w.onError).toHaveBeenCalledTimes(1);
-    // 多坊 onError 签名是 (houseSlug, err) —— 报警 Error 是第二个参数。
+    // Multi-House onError takes (houseSlug, err); the alarm Error is the second argument.
     const [slug, err] = w.onError.mock.calls[0]!;
     expect(slug).toBe('home-test');
     const msg = String((err as Error).message);
@@ -164,10 +164,10 @@ describe('规格 B 切片④ · inbox 按坊各订一条', () => {
   it('同一封 DM 两坊各中继一次 → 只处理一次（exactly-once 不因多坊破掉）', async () => {
     const w = await wire([HOME, WORLD]);
     w.feed(HOME, dmFrame());
-    w.feed(WORLD, dmFrame()); // 同一封（同 from + ts + body）
+    w.feed(WORLD, dmFrame()); // The same letter (same from + ts + body).
     expect(w.consumed).toEqual(['hello@home-test']);
     expect(w.store.recent(10)).toHaveLength(1);
-    expect(w.store.houseOf(fixtureActor)).toBe('home-test'); // 哪座坊先到记哪座
+    expect(w.store.houseOf(fixtureActor)).toBe('home-test'); // Record whichever House arrives first.
   });
 
   it('SSE 重连回补（同坊重复到达）依旧只处理一次', async () => {

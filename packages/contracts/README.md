@@ -6,9 +6,9 @@ The authoritative protocol source in this repository is the pinned,
 cryptographically verified bundle at the repository root:
 
 - **Location:** [`protocol/`](../../protocol)
-- **Version:** `0.1.0-public-envelope-01.7` (baseline `public-envelope-01`)
+- **Version:** `0.1.0-public-envelope-02.0` (baseline `public-envelope-02`)
 - **Integrity:** 273 source files, bundle SHA-256
-  `f7993f282db354476efe2ef5bf9eb6fb07282934df2b5fc884465bb2cbd3fcec`
+  `c530e69b51dcf8358b0e239b67d936dc9443ba7cad1f59b34b34520ad5e11337`
   (see `CONTRACT-MANIFEST.json` inside the bundle; every client protocol
   build re-verifies it via `scripts/verify-bundle.py`)
 
@@ -18,7 +18,7 @@ cryptographically verified bundle at the repository root:
   (events, identity, profile, invite, quest, world interaction, public
   stream, house sessions) plus the compiled `descriptor.pb`
 - `packages/contracts/protocol/` — the protocol specification set:
-  `public-envelope-01/SPEC.md`, signing, canonicalization, receipts,
+  `public-envelope-02/SPEC.md`, signing, canonicalization, receipts,
   runtime, trust and limits documents, and the pinned JSON schemas
   (`retained/` for private messages, profiles and participation)
 - `packages/contracts/ts/` — the TypeScript codec and algorithms packages
@@ -44,5 +44,5 @@ python3 scripts/verify-bundle.py   # integrity check against the manifest
 See `BUILD.md` inside the bundle for the full standalone toolchain.
 
 Implementer-facing documents: start with
-`packages/contracts/protocol/public-envelope-01/SPEC.md` and
+`packages/contracts/protocol/public-envelope-02/SPEC.md` and
 `IMPLEMENTERS.md` in the same directory.

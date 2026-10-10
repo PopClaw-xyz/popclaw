@@ -82,9 +82,9 @@ describe('RuntimeOwnerNotifier', () => {
     expect(warn.mock.calls.flat().join(' ')).toMatch(/boom/);
   });
 
-  // 真机 2026-07-28→29：带图的通知每次都回 partial_failed（三张图 telegram 全
-  // 报 outbound send ok，主人手机上也确实收到了），却被当成失败整批重排 —— 于是
-  // 下一封新私信把所有旧私信再念一遍。partial = 已经出线，绝不重排。
+  // Real host, 2026-07-28 to 29: every image notice returned partial_failed although all three Telegram
+  // images logged outbound send ok and reached the owner's phone. Treating this as failure requeued the whole batch,
+  // so each new DM repeated all old ones. Partial means it crossed the outbound boundary: never requeue.
   it('treats partial_failed as delivered — it already went out', async () => {
     const { send } = fakeSend({ status: 'partial_failed', error: new Error('half') });
     const warn = vi.fn();
@@ -94,8 +94,8 @@ describe('RuntimeOwnerNotifier', () => {
     expect(warn.mock.calls.flat().join(' ')).toContain('partial_failed');
   });
 
-  // 这行日志是抓「宿主为什么报 partial_failed」的唯一陷阱：宿主的 error 不保证是
-  // Error，裸 String() 会打成 [object Object]，陷阱就哑火了。
+  // This log is the only diagnostic for the host's partial_failed: its error is not necessarily an Error,
+  // and bare String() turns objects into [object Object], silencing the diagnostic.
   it('日志里的宿主错误不许打成 [object Object]', async () => {
     const { send } = fakeSend({ status: 'partial_failed', error: { stage: 'media', code: 402 } });
     const warn = vi.fn();
@@ -130,7 +130,7 @@ describe('RuntimeOwnerNotifier', () => {
     expect(warn).toHaveBeenCalledOnce();
   });
 
-  // #231：图真的推到主人的 IM 上（本地路径交给 channel adapter 上传）。
+  // #231: the image actually reaches the owner's IM; the channel adapter uploads the local path.
   it('passes mediaUrls straight into payloads', async () => {
     const { send, calls } = fakeSend({ status: 'sent' });
     const notifier = new RuntimeOwnerNotifier(
@@ -157,7 +157,7 @@ describe('RuntimeOwnerNotifier', () => {
 });
 
 // ---------------------------------------------------------------------------
-// notifyOwnerNow — 首回不再靠唤醒：直写频道（唯一验证过的通道），成败交出来
+// notifyOwnerNow: first reply no longer depends on waking an agent; write directly to the channel (the only verified route) and return its outcome.
 // ---------------------------------------------------------------------------
 
 describe('notifyOwnerNow', () => {
@@ -248,8 +248,8 @@ describe('notifyOwnerNow', () => {
     });
   }
 
-  // #231：多条合并成一条消息时，图取并集；投递失败退回队列后 mediaPath 仍在
-  // （payload_json 天然带着它走）。
+  // #231: when combining items into one message, union their images. After failed delivery and requeue, mediaPath remains
+  // because payload_json carries it naturally.
   it('unions the mediaPaths of the drained batch and survives a requeue', async () => {
     const { notifier, deps } = bed();
     const got: string[][] = [];
@@ -265,12 +265,12 @@ describe('notifyOwnerNow', () => {
       });
     }
 
-    // 第一次：频道拒收 → 三条原样退回队列。
+    // First attempt: channel rejection returns all three unchanged to the queue.
     await expect(notifyOwnerNow(deps)).resolves.toBe('queued');
     expect(got[0]).toEqual(['/m/a.png', '/m/b.png']);
     expect(notifier.count('L1')).toBe(3);
 
-    // 第二次：退回的条目里 mediaPath 一个没丢。
+    // Second attempt: the requeued items retain every mediaPath.
     ok = true;
     await expect(notifyOwnerNow(deps)).resolves.toBe('channel');
     expect(got[1]).toEqual(['/m/a.png', '/m/b.png']);
@@ -285,7 +285,7 @@ describe('notifyOwnerNow', () => {
     expect(sent).toHaveLength(1);
     expect(sent[0]).toContain('老张');
     expect(sent[0]).toContain('我那条讲武功的帖');
-    expect(notifier.count('L1')).toBe(0); // 这次打扰发生过了
+    expect(notifier.count('L1')).toBe(0); // This interruption already happened.
     expect(logs.join(' ')).toContain('level=channel');
     expect(logs.join(' ')).not.toContain('heartbeat');
   });
@@ -322,7 +322,7 @@ describe('notifyOwnerNow', () => {
 
     await expect(notifyOwnerNow(deps)).resolves.toBe('queued');
 
-    expect(notifier.count('L1')).toBe(1); // 留给主人下次开口（通道 B）
+    expect(notifier.count('L1')).toBe(1); // Leave it for the owner's next turn (channel B).
     expect(logs.join(' ')).toContain('level=queued');
     expect(logs.join(' ')).toContain('delivery-failed');
   });
@@ -355,7 +355,7 @@ describe('notifyOwnerNow', () => {
 
     await notifyOwnerNow(deps);
 
-    expect(pings.unreadCount()).toBe(1); // 主人还没真看到内容
+    expect(pings.unreadCount()).toBe(1); // The owner has not actually seen the content yet.
   });
 
   it('draining on notify means a later DM does not re-say the same reply', async () => {
@@ -363,19 +363,19 @@ describe('notifyOwnerNow', () => {
     enqueueFirstPing(notifier, pings);
 
     await notifyOwnerNow(deps);
-    // …然后一条私信到货，走同一条投递路径
+    // Then a DM arrives through the same delivery path.
     notifier.enqueue({ level: 'L1', kind: 'dm', payload: { fromPopclawId: 'f', body: '在吗' } });
     await notifyOwnerNow(deps);
 
     expect(sent).toHaveLength(2);
     expect(sent[1]).toContain('在吗');
     expect(sent[1]).not.toContain('老张');
-    expect(sent[1]).not.toContain('想看全部回复'); // 私信不带待回邀请
+    expect(sent[1]).not.toContain('想看全部回复'); // The DM carries no reply invitation.
   });
 
-  // 真机 2026-07-31：通知直写频道（no agent turn），agent 看不见那条私信；正文
-  // 又被截到 140 字。主人问「这私信说的什么」→「老臣不明所指」。下钻邀请是把那条
-  // 断链接回来的一半（另一半在 popclaw_show_inbox 的工具描述里）。
+  // Real host, 2026-07-31: a notice written directly to the channel has no agent turn, so the agent cannot see the DM,
+  // and the body is cut to 140 characters. Asking what the DM says yielded a failure to identify it. The drill-down invitation
+  // reconnects half the missing link; the other half is the popclaw_show_inbox description.
   it('正文被截断的私信带一条下钻邀请', async () => {
     const { notifier, deps, sent } = bed();
     notifier.enqueue({
@@ -411,7 +411,7 @@ describe('notifyOwnerNow', () => {
     expect(sent).toEqual([]);
   });
 
-  // 私信路径不回归：DM 是唯一验证过的通道，改签名不能动它的行为。
+  // Preserve the DM path: it is the only verified channel, and a signature change must not change its behavior.
   it('DM path: renders the DM line and consumes the queue', async () => {
     const { notifier, deps, sent } = bed();
     notifier.enqueue({
@@ -428,8 +428,8 @@ describe('notifyOwnerNow', () => {
     expect(notifier.count('L1')).toBe(0);
   });
 
-  // 真机故障（2026-07-28）：解密落盘的图在工作区外 → 宿主 FsSafeError → 整批判
-  // 失败 → 无限重排。图必须先拷进宿主允许发送的目录再上线。
+  // Real-host failure, 2026-07-28: a decrypted image outside the workspace caused FsSafeError, marking the batch
+  // failed and endlessly requeuing it. Copy images into a host-approved outbound directory before sending.
   it('图先过 staging，mediaUrls 用的是 staging 路径', async () => {
     const { notifier, deps } = bed();
     const got: string[][] = [];
@@ -445,13 +445,13 @@ describe('notifyOwnerNow', () => {
     expect(got[0]).toEqual(['/state/media/popclaw-dm/1-abc.png']);
   });
 
-  // 信里的图是远端 url，staging（拷本地文件）对它无从下手 —— 走 staging 就会被
-  // 判空丢掉，主人又看不到明信片了。
+  // The letter's image is a remote URL, which local-file staging cannot copy. Staging it would discard it as unavailable,
+  // leaving the owner unable to see the postcard again.
   it('信里的远端图链接不过 staging，原样交给 channel', async () => {
     const { notifier, deps } = bed();
     const got: string[][] = [];
     deps.owner = { deliverNow: async (_t: string, urls?: string[]) => { got.push(urls ?? []); return true; } };
-    deps.stageMedia = () => null; // 本地图会被丢；远端图不该经过这里
+    deps.stageMedia = () => null; // Local images are dropped; remote images must not pass through this path.
     notifier.enqueue({
       level: 'L1',
       kind: 'dm',
@@ -479,12 +479,12 @@ describe('notifyOwnerNow', () => {
 
     expect(got[0]!.urls).toEqual([]);
     expect(got[0]!.text).toContain('看这个');
-    expect(got[0]!.text).toContain('📎 附件暂不可用'); // 有图这件事还是要告诉主人
-    expect(notifier.count('L1')).toBe(0); // 图丢了不算投递失败
+    expect(got[0]!.text).toContain('📎 附件暂不可用'); // Still tell the owner that an image exists.
+    expect(notifier.count('L1')).toBe(0); // Losing the image does not count as delivery failure.
   });
 
   // ---------------------------------------------------------------------
-  // 无限重排防线：失败 3 次就不再重排（否则每条新通知都拖着旧尸体重发）
+  // Guard against infinite requeue: stop after three failures, or every new notice resends old failed items.
   // ---------------------------------------------------------------------
 
   it('前两次失败照样重排（attempts 计数带着走）', async () => {
@@ -507,7 +507,7 @@ describe('notifyOwnerNow', () => {
     await notifyOwnerNow(deps);
     await notifyOwnerNow(deps);
 
-    expect(notifier.count('L1')).toBe(0); // 尸体清了，新通知不再被它拖累
+    expect(notifier.count('L1')).toBe(0); // The failed item is cleared and no longer blocks new notices.
     const dropped = logs.filter((l) => l.includes('DROPPED'));
     expect(dropped).toHaveLength(1);
     expect(dropped[0]).toContain('kind=dm');
@@ -578,9 +578,9 @@ describe('renderL1', () => {
     expect(line.length).toBeLessThan(290);
   });
 
-  // 2026-07-31 真机事故：424 字的官方回信被静默切到 140，主人和 agent 都以为半封
-  // 信就是整封，agent 于是把信里已经写清的事又寄回去问。截断本身没错（IM 里长正文
-  // 是噪音），错在不说。
+  // Real-host incident, 2026-07-31: a 424-character official reply was silently cut to 140. Both owner and agent assumed
+  // the preview was complete, and the agent sent back questions already answered in the letter. Truncation is appropriate
+  // for long IM bodies; failing to disclose it is the problem.
   it('dm: 正文超长 → 明说被切了、并指回信箱', () => {
     const line = renderL1({
       id: 1,
@@ -595,7 +595,7 @@ describe('renderL1', () => {
 
   it('dm: 正文不超长 → 一个字节都不变（老通知长什么样还长什么样）', () => {
     const from = 'Demo1234xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
-    const atCap = 'x'.repeat(256); // 正好卡在上限：边界不算截断
+    const atCap = 'x'.repeat(256); // Exactly at the limit: the boundary does not count as truncation.
     for (const body of ['在吗', atCap]) {
       const line = renderL1({
         id: 1,
@@ -609,7 +609,7 @@ describe('renderL1', () => {
     }
   });
 
-  // reply 走的是同一个正文预览 —— 同病同治，别只修 dm 那条路。
+  // reply uses the same body preview; fix both paths, not just dm.
   it('reply: 正文超长同样明说；被回的原话切了给省略号', () => {
     const from = 'Demo1234xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
     const line = renderL1({
@@ -623,8 +623,8 @@ describe('renderL1', () => {
     expect(line).toContain(`「${'z'.repeat(40)}…」`);
   });
 
-  // 主人亲自点名的体验问题：`📨 @Demo1234 给你发了私信` —— 44 位 base58 的前 8
-  // 位，主人根本不知道那是谁。
+  // Owner-reported display problem: `📨 @Demo1234 给你发了私信` showed the first eight characters of a 44-character
+  // base58 ID, which did not identify the sender to the owner.
   it('dm: 有名号 → 名号#印信；一个字的裸 id 前缀都不出现', () => {
     const from = 'Demo1234xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
     const line = renderL1({
@@ -652,10 +652,13 @@ describe('renderL1', () => {
   });
 
   // ---------------------------------------------------------------------
-  // 坊寄来的家书（明信片/回程信）—— 真机 2026-07-31（host-c）
+  // House letters (postcards / return letters): real host-c, 2026-07-31.
   // ---------------------------------------------------------------------
 
-  /** 真机原样：机器标头首行 + 正文 + 单独一行的明信片图链接。 */
+  /**
+   * Exact real-host shape: machine header on the first line, then body, then a postcard image URL on
+   * its own line.
+   */
   const POSTCARD =
     '[homeletter/v1] kind=postcard place=乱星海·紫潮崖 view=https://popclaw.world/h/9b2y5d3f\n' +
     '📮「乱星海·紫潮崖」寄来一张明信片\n' +
@@ -697,7 +700,7 @@ describe('renderL1', () => {
     ).toEqual([]);
   });
 
-  // ADR-0040 幕二/幕三 — without these branches both kinds rendered as
+  // ADR-0040 acts 2/3: without these branches both kinds rendered as
   // 「给你发了私信」, which is how the real-machine test found this hole.
   it('ranger_verify_done: 通过 + 确数关注者 + 名帖链接 + 下一步', () => {
     const line = renderL1({
@@ -712,8 +715,8 @@ describe('renderL1', () => {
       },
       enqueuedAt: 100,
     });
-    expect(line).toContain('认证通过');
-    expect(line).toContain('x:blackfeather_ai');
+    expect(line).toContain('账号认证成功');
+    expect(line).toContain('@blackfeather_ai');
     expect(line).toContain('30281');
     expect(line).toContain('https://popclaw.me/blackfeather_ai/abcd1234');
     expect(line).not.toContain('私信');
@@ -727,7 +730,7 @@ describe('renderL1', () => {
       payload: { platform: 'x', handle: 'blackfeather_ai', followerCount: 0, profileUrl: '' },
       enqueuedAt: 100,
     });
-    expect(line).toContain('认证通过');
+    expect(line).toContain('账号认证成功');
     expect(line).not.toContain('关注者');
     expect(line).not.toContain('分享给朋友');
   });
@@ -748,7 +751,7 @@ describe('renderL1', () => {
   });
 
   // -------------------------------------------------------------------------
-  // #231 私信带图 — 图真的推到主人的 IM，而不是只给一句"在这个路径"。
+  // #231 DM images: actually deliver the image to the owner's IM instead of merely giving a local path.
   // -------------------------------------------------------------------------
 
   it('renderL1 dm 带图时标一声 📎 附图', () => {
@@ -760,10 +763,10 @@ describe('renderL1', () => {
       enqueuedAt: 100,
     });
     expect(line).toContain('📎 附件：1.png');
-    expect(line).not.toContain('/x/1.png'); // 路径不进文字，图走 mediaUrls
+    expect(line).not.toContain('/x/1.png'); // Keep paths out of text; send images through mediaUrls.
   });
 
-  // 纯图无字：尾巴不能空着挂一句「给你发了私信：」。
+  // Image-only message: the tail must not leave an empty "sent you a DM:" prefix.
   it('renderL1 dm 纯图无正文 → 「给你发了一张图 📎」，且文字非空（宿主不收空 text）', () => {
     const from = 'Demo1234xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
     const line = renderL1({
@@ -774,7 +777,7 @@ describe('renderL1', () => {
       enqueuedAt: 100,
     });
     expect(line).toBe(`📨 收到信件\n来自：苍梧小居士#${deriveSigil(from)}\n\n📎 附件：1.png`);
-    expect(line).not.toContain('/x/1.png'); // 路径不进文字，图走 mediaUrls
+    expect(line).not.toContain('/x/1.png'); // Keep paths out of text; send images through mediaUrls.
     expect(line.trim().length).toBeGreaterThan(0);
   });
 
@@ -795,8 +798,9 @@ describe('renderL1', () => {
 });
 
 /**
- * 交情上下文尾行（2026-07-29）。主人原话：收到私信只看到名字还是懵的 ——
- * AI 帮我收信的价值就在于顺手告诉我这人是谁、之前跟我有哪些互动。
+ * Bond-context tail (2026-07-29). Owner feedback: a sender name alone does not explain who a DM is
+ * from; an agent receiving mail should also explain who the person is and their previous interactions
+ * with the owner.
  */
 describe('renderL1 · 交情上下文尾行', () => {
   const FROM = 'Demo1234xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
@@ -868,7 +872,7 @@ describe('renderL1 · 交情上下文尾行', () => {
     expect(line).toContain('\n　 ↳ 好友 · 3 天前他给你来过信');
   });
 
-  // 合并出线时每条各自带行 —— 尾行跟着它那条走，不会串到别人头上。
+  // Each batched item carries its own line and tail, preventing attribution to another person.
   it('多条合并成一条消息时，每条各自带自己的尾行', async () => {
     const { notifier, deps, sent } = bedForBondTail();
     notifier.enqueue({
@@ -888,7 +892,7 @@ describe('renderL1 · 交情上下文尾行', () => {
     expect(lines[7]).toContain('乙');
   });
 
-  // requeue 是 `{...item.payload, attempts}` —— bondLine 在 payload 里，天然不丢。
+  // requeue uses `{...item.payload, attempts}`; bondLine lives in payload and is naturally retained.
   it('投递失败重排后，尾行数据仍在（payload 富化的意义）', async () => {
     const { notifier, deps, sent } = bedForBondTail();
     let ok = false;
@@ -977,8 +981,8 @@ describe('renderL1 · en lane (S6 lexicon parity)', () => {
       },
       'en',
     );
-    expect(line).toContain('Verified.');
-    expect(line).toContain('x:blackfeather_ai');
+    expect(line).toContain('account is verified on PopClaw.');
+    expect(line).toContain('@blackfeather_ai');
     expect(line).toContain('30281');
     expect(line).toContain('https://popclaw.me/blackfeather_ai/abcd1234');
   });
@@ -988,7 +992,7 @@ describe('renderL1 · en lane (S6 lexicon parity)', () => {
       { id: 1, level: 'L1', kind: 'ranger_verify_done', payload: { platform: 'x', handle: 'blackfeather_ai', followerCount: 0, profileUrl: '' }, enqueuedAt: 100 },
       'en',
     );
-    expect(line).toContain('Verified.');
+    expect(line).toContain('account is verified on PopClaw.');
     expect(line).not.toContain('followers');
     expect(line).not.toContain('Share it');
   });

@@ -1,14 +1,11 @@
 /**
- * 稿子挂到别人名下 —— 2026-09-10/11 真机的形态,以及唯一治得了它的那道闸。
- *
- * 素材页的编号是对的,写手用的每个编号也都合法,可它照样把 Quanta 的摘要填进了
- * MKBHD 的 [100],把 MKBHD 的填进了 verge 的 [120],还有一次把同一作者相邻的
- * [1][2] 对调。数字校验从原理上就看不见这种事:编号本身没错。
- *
- * 所以每条稿子要带一个 `q` —— 从**它自己**那条素材正文里原样抄下的一段话。
- * publish 拿它去核那一条的正文:核不上的,只退这一条,同批其余照收;整批都核
- * 不上的,一个字也不存、账本也不消耗,并把那几条的素材原样重贴一遍——回执里
- * 点名一个它已经看不见的编号,等于逼它凭印象写,而凭印象写正是串位的来处。
+ * Real-host misattribution, 2026-09-10/11, and the gate that can detect it. Material numbering and the
+ * writer's numbers were valid, yet Quanta's summary landed at MKBHD [100], MKBHD's at verge [120], and
+ * adjacent items [1][2] by one author were swapped. Numeric validation cannot see this because the
+ * numbers are valid. Each edit therefore carries `q`, a verbatim passage from its own material body.
+ * Publish checks it against that item: refuse only mismatches and accept the rest of the batch. If all
+ * anchors fail, save nothing, consume no ledger, and reprint those items' material verbatim. Naming an
+ * invisible number in the receipt forces rewriting from memory, the original cause of displacement.
  */
 import { createLocalNewspaperIssueArchive } from '../../../src/host/local-newspaper-artifacts.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -33,7 +30,9 @@ function deps(upload = vi.fn(async () => ({ url: 'https://canvas/x/1?t=tok' })))
   };
 }
 
-/** 三条素材,三个作者,三段互不相干的正文 —— 串位才有得串。 */
+/**
+ * Three materials, three authors and unrelated bodies, allowing a detectable swap.
+ */
 const three = (): ReturnType<typeof issue> =>
   issue({
     pulse: [
@@ -52,13 +51,16 @@ const head = { masthead: 'Cloudboat Gazette', teaser: 'today in three lines' };
 const refusedCopy = (count: number, numbers: string): string =>
   renderCopy('en', 'newspaper.publish.anchorRefused', { count: String(count), numbers });
 
-/** 回执要点名「为什么」——四种毛病长得一模一样的话,写作端只能瞎猜一个改。 */
+/**
+ * The receipt must name the reason: indistinguishable failure messages force the writer to guess what
+ * to fix.
+ */
 const why = (reason: string): string => renderCopy('en', `newspaper.publish.anchorReason.${reason}`);
 const refused1 = (n: number, reason: string): string => refusedCopy(1, `[${n}] (${why(reason)})`);
 
 /**
- * 同一个人相邻两条,开头那串 @ 是一模一样的 —— 正是 2026-09-10/11 真机上被对调的
- * 那种形态。抄公共开头当锚,两条都核得上,对调照样过闸。
+ * Adjacent items by one author start with the same @ prefix, matching the real-host swaps of
+ * 2026-09-10/11. Anchoring on that shared prefix matches both bodies and lets a swap pass.
  */
 const twins = (): ReturnType<typeof issue> =>
   issue({
@@ -96,19 +98,19 @@ describe('每条稿子必须引到自己那条素材', () => {
         ...head,
         items: {
           '1': { q: Q1, h: 'the camera', s: 'it sees in the dark.' },
-          // 真机的形态:合法编号 + 别人的正文摘要 + 别人正文里的话。
+          // Real-host shape: a valid number, another item's summary and another item's body quotation.
           '2': { q: Q1, h: 'the camera again', s: 'the phone camera, written under Quanta.' },
           '3': { q: Q3, h: 'the console', s: 'a brighter screen.' },
         },
       },
     });
     expect(r.text).toContain(refused1(2, 'notInBody'));
-    // 被退的那条要连素材一起重贴:作者行 + 正文,它才不必凭印象重写。
+    // Reprint the refused item's author line and body, so rewriting does not depend on memory.
     expect(r.text).toContain('QuantaMagazine#2222bbbb');
     expect(r.text).toContain('Mathematicians have finally settled the sphere packing question');
     const saved = getEdit('a2')!;
-    expect(Object.keys(saved.items!).sort()).toEqual(['1', '3']); // 串位那条一个字也没存
-    expect(upload).not.toHaveBeenCalled(); // 还欠第 2 条,这一期当然不发
+    expect(Object.keys(saved.items!).sort()).toEqual(['1', '3']); // No copy from the displaced item was saved.
+    expect(upload).not.toHaveBeenCalled(); // Item 2 remains unwritten, so this issue must not publish.
   });
 
   it('压根没给 q → 一样退(锚是必填,不是可选的礼貌)', async () => {
@@ -165,9 +167,9 @@ describe('每条稿子必须引到自己那条素材', () => {
     expect(upload).not.toHaveBeenCalled();
     expect(r.landed).toBeUndefined();
     expect(r.text).toContain(refusedCopy(2, `[1] (${why('notInBody')}) [2] (${why('notInBody')})`));
-    expect(getEdit('a7')).toBeUndefined(); // 什么都没存
-    expect(getIssue('a7')).toBeDefined(); // 账本还在,原样再交一次就行
-    // 重贴的是那两条,不是全期。
+    expect(getEdit('a7')).toBeUndefined(); // Nothing was saved.
+    expect(getIssue('a7')).toBeDefined(); // The ledger remains; the same edit can be resubmitted.
+    // Reprint those two items, not the whole issue.
     expect(r.text).toContain('MKBHD#1111aaaa');
     expect(r.text).toContain('QuantaMagazine#2222bbbb');
     expect(r.text).not.toContain('verge#3333cccc');
@@ -193,8 +195,8 @@ describe('每条稿子必须引到自己那条素材', () => {
     expect(saved.pulls).toEqual({});
     expect(saved.xrefs).toEqual({});
     expect(saved.topics).toEqual({});
-    // leads 不剔:版面本来就会忽略没稿的头版位,而填空式合并只认第一份非空的
-    // leads —— 当场剔掉等于把它永久赶下头版,下一批补好了也回不来。
+    // Do not remove leads: layout already ignores front-page slots without copy, and fill-only merge keeps the first nonempty
+    // leads. Removing them now permanently removes their front-page placement, even if a later batch supplies the copy.
     expect(saved.leads).toEqual([1, 2]);
   });
 
@@ -222,8 +224,8 @@ describe('每条稿子必须引到自己那条素材', () => {
     });
     expect(r.landed).toBe(true);
     expect(sent[0]).toContain('dimension seventeen is settled.');
-    expect(sent[0]).not.toContain('somebody else\'s summary.'); // 退掉的那版从没存在过
-    expect(getIssue('a9')).toBeUndefined(); // 写完销账
+    expect(sent[0]).not.toContain('somebody else\'s summary.'); // The refused version never existed.
+    expect(getIssue('a9')).toBeUndefined(); // Finish the copy and settle the ledger.
   });
 
   it('锚抄的是两条共有的那段(同一个人相邻两条的 @ 开头)→ 两条都退,对调不许蒙混过去', async () => {
@@ -231,7 +233,7 @@ describe('每条稿子必须引到自己那条素材', () => {
     const upload = vi.fn();
     const r = await publishNewspaper(deps(upload as never), {
       publishToken: 'b1',
-      // 稿子其实是对调的 —— 但两条的 q 都核得上,只靠「核得上」这一关它会照收。
+      // The edits are swapped, but both q anchors match; a match-only gate would accept them.
       edit: {
         ...head,
         items: {
@@ -241,7 +243,7 @@ describe('每条稿子必须引到自己那条素材', () => {
       },
     });
     expect(upload).not.toHaveBeenCalled();
-    // 同一段话两条都对得上 —— 点名的理由必须是「与别的条目共有」,不是「不在正文里」。
+    // The same passage matches both items; the reason must be shared with another item, not absent from the body.
     expect(r.text).toContain(refusedCopy(2, `[1] (${why('ambiguous')}) [2] (${why('ambiguous')})`));
     expect(getEdit('b1')).toBeUndefined();
   });
@@ -272,8 +274,8 @@ describe('每条稿子必须引到自己那条素材', () => {
   });
 
   /**
-   * 被退的那条仍然留在 leads 里:填空式合并只认第一份非空的 leads,当场剔掉就等于
-   * 永久把它赶下头版 —— 而版面本来就会忽略没稿的头版位。
+   * The refused item stays in leads: fill-only merging keeps the first nonempty leads, so removing it
+   * would permanently lose its front-page slot. Layout already ignores front-page slots without copy.
    */
   it('被退的那条不许被赶出 leads —— 下一批补上稿子,它照样上头版', async () => {
     putIssue('b4', three());
@@ -307,8 +309,9 @@ describe('每条稿子必须引到自己那条素材', () => {
   });
 
   /**
-   * 已经存下的稿子是改不动的(填空式合并),所以重发时那条的 q 好坏都不影响版面 ——
-   * 再为它报一句「没收下」,就是在教写作端去修一个它其实修不了的东西。
+   * Saved copy is immutable under fill-only merging, so resubmitting that item's good or bad q does
+   * not change layout. Reporting it as unaccepted would ask the writer to fix something they cannot
+   * change.
    */
   it('已经写过的那条重发时带了个错 q → 不报退稿,报纸照发', async () => {
     putIssue('b5', three());
@@ -331,8 +334,9 @@ describe('每条稿子必须引到自己那条素材', () => {
   });
 
   /**
-   * 重贴的素材要和素材页一个语言:那一页是按 issue.language 印的,回执却按主人的
-   * 语言说话。标签换了语言,写作端手上的两份就对不上字了。
+   * Reprinted material must use the material page's language (issue.language), even when the receipt
+   * uses the owner's language. Translated labels would keep the writer's two copies from matching
+   * verbatim.
    */
   it('重贴素材用素材页的语言,不跟着回执走', async () => {
     putIssue('b6', issue({ language: 'en', pulse: [item({ text: 'first' }), item({ eventId: 'e2', author: 'b', sigil: '6666ffff', text: 'second' })] }));
@@ -340,7 +344,7 @@ describe('每条稿子必须引到自己那条素材', () => {
       publishToken: 'b6',
       edit: { ...head, items: { '1': { q: 'first', h: 'h', s: 's.' } } },
     });
-    expect(r.text).toContain('body: second'); // 素材页是英文的
+    expect(r.text).toContain('body: second'); // The material page is English.
     expect(r.text).not.toContain('正文: second');
   });
 
@@ -355,9 +359,10 @@ describe('每条稿子必须引到自己那条素材', () => {
 });
 
 /**
- * `pulls` 是版面直接打引号印在人名底下的那句话 —— 素材页的原话是「a sentence
- * **already present in that item's own text**」。它比摘要更该逐字:摘要看得出是转述,
- * 引号里的一句看起来就是那个人亲口说的。可它从来没被核过。
+ * `pulls` are quotations printed directly beneath a person's name. The material page requires a
+ * sentence already present in that item's own text. They need stricter verbatim fidelity than
+ * summaries: summaries are visibly paraphrased, while quotation marks imply the person's own words.
+ * They had never been checked.
  */
 describe('引语也要是本条的原话', () => {
   beforeEach(() => {
@@ -381,8 +386,8 @@ describe('引语也要是本条的原话', () => {
     });
     expect(r.text).toContain(notVerbatim('[1]'));
     const saved = getEdit('p1')!;
-    expect(saved.pulls).toEqual({}); // 编的那句没存下
-    expect(saved.items!['1']).toBeDefined(); // 条目照存 —— 引语的毛病不连坐正文
+    expect(saved.pulls).toEqual({}); // The fabricated quotation was not saved.
+    expect(saved.items!['1']).toBeDefined(); // The item is still saved; a quotation error does not invalidate the body.
   });
 
   it('真是原话的引语照存 —— 大小写、标点不同不算两句话', async () => {

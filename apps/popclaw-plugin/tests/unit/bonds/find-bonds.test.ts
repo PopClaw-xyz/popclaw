@@ -54,8 +54,8 @@ describe('findBonds', () => {
     for (const id of ['A', 'B', 'C', 'D', 'E']) expect(prompt).toContain(id.slice(0, 10));
   });
 
-  // 认人（ADR-0028 修订）：列人输出补机器字段——LLM 手上得有完整 popclaw_id，
-  // 后续对这个人动作（私信/关注）才不用再猜。
+  // Identity resolution (ADR-0028 revision): list output includes machine fields so the LLM has the full popclaw_id.
+  // Subsequent actions on this person (DM/follow) must not require guessing the ID again.
   it('prompt carries each person FULL popclaw_id', async () => {
     const s = fresh();
     const longId = 'ALICE' + 'x'.repeat(30);

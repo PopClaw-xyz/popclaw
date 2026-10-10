@@ -13,7 +13,7 @@ describe('openWorldFeedStore', () => {
     const paths = new PopclawPaths(root);
     const { cache, dbPath, slug, baseUrl } = await openWorldFeedStore('https://popclaw.me', paths);
     expect(dbPath).toBe(join(root, 'data', 'lorehouses', 'popclaw-me.db'));
-    // 切片②：来源坊标签的源头就是这里派生的 slug。
+    // Slice 2: the source-house label comes from the slug derived here.
     expect(slug).toBe('popclaw-me');
     expect(baseUrl).toBe('https://popclaw.me');
     expect(existsSync(dbPath)).toBe(true);
@@ -32,7 +32,10 @@ describe('openWorldFeedStore', () => {
   });
 });
 
-/** 一份除了某座坊的 db 路径会炸、其余照常的 PopclawPaths（模拟"这座坊打不开"）。 */
+/**
+ * PopclawPaths that throws only for one house's database path, simulating a house that cannot be
+ * opened.
+ */
 function pathsFailingOn(root: string, badSlug: string): PopclawPaths {
   const paths = new PopclawPaths(root);
   const real = paths.lorehouseDb.bind(paths);
@@ -64,7 +67,7 @@ describe('openHouseStores — 主坊是硬依赖，副坊可降级', () => {
     expect(stores.map((s) => s.slug)).toEqual(['house-popclaw-me']);
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError.mock.calls[0]![0]).toBe(WORLD);
-    // 钉住不变量：catalog.home() 恒等于配置里的第一座坊（切片③写侧路由的依据）。
+    // Pin the invariant: catalog.home() always equals the first configured house (basis for slice 3 write routing).
     const cat = new WorldFeedCatalog(
       stores.map((s) => ({ ...s, snapshot: { fetchSnapshot: async () => [] } })),
     );

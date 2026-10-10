@@ -44,11 +44,12 @@ streams:
 
 const MRBEAST = 'MrBeastIntegrationPopclawId11111';
 const ALIX = 'AlixEarleIntegrationPopclawId222';
-const E1 = '1111aaaa1111aaaa';
-const E2 = '2222bbbb2222bbbb';
-const E3 = '3333cccc3333cccc';
+// The real MarkService signs only complete 64-hex event IDs.
+const E1 = '1111aaaa1111aaaa'.padEnd(64, '0');
+const E2 = '2222bbbb2222bbbb'.padEnd(64, '0');
+const E3 = '3333cccc3333cccc'.padEnd(64, '0');
 
-/** 两座已挂的坊——名字全部来自数据（ADR-0041：插件里零坊名）。 */
+/** Two connected houses: all names come from data (ADR-0041: no house names in the plugin). */
 const HOUSES = [
   { slug: 'popclaw-me', name: 'popclaw.me', guide: '# popclaw.me\n\n这里怎么玩：直接说话。' },
   { slug: 'popclaw-world', name: 'popclaw.world' },
@@ -124,14 +125,14 @@ describe('Onboarding 六幕（integration）', () => {
           pushed.push(bytes);
           return { status: 201, eventId: 'e'.repeat(64) };
         },
-        // 逐坊落章（护照那一幕的数据源）：两座坊都收下。
+        // Enroll with each house (the passport scene's data source): both houses accept.
         async broadcastEach(bytes): Promise<readonly HouseBroadcastOutcome[]> {
           pushed.push(bytes);
           return HOUSES.map((h) => ({ slug: h.slug, result: { status: 201, eventId: 'e'.repeat(64) } }));
         },
       },
       llm: {
-        // 取名（{"names":…}）与重排（{"order":…}）共用一个 client，按输出契约分流。
+        // Naming ({"names":…}) and reranking ({"order":…}) share a client; route by output contract.
         complete: async (prompt: string) => {
           llmPrompts.push(prompt);
           return prompt.includes('"order"')
@@ -152,7 +153,7 @@ describe('Onboarding 六幕（integration）', () => {
         ],
       },
       tasteLoader: {
-        // 真读 tasteRoot：口味写进去之后梯度门就开（与 TasteLoader 同根）。
+        // Read the real tasteRoot: writing taste opens the gradient gate (same root as TasteLoader).
         enabledSources: async () => {
           try {
             const content = await readFile(join(tasteRoot, 'core/private.md'), 'utf-8');
@@ -192,13 +193,13 @@ describe('Onboarding 六幕（integration）', () => {
   }
 
   it('happy path：六幕走通，名片真上链路、口味真落盘、标记真进库、毕业交出攻略素材', async () => {
-    // ① arrival —— 一句定位 + 候选，还没有名号。
+    // ① arrival: one positioning sentence plus candidates; no name yet.
     const arrival = await orch.handleStartCommand();
     expect(row()?.stage).toBe('arrival');
     expect(arrival.text).toContain('1. 凤栖梧');
-    expect(arrival.text).not.toContain('灯坊'); // 体验先于概念
+    expect(arrival.text).not.toContain('灯坊'); // Experience before concepts.
 
-    // ② passport —— 报编号选名 → 签名片 → 逐坊落章 → 护照页。
+    // ② passport: choose a name by number → sign the profile → enroll per house → passport page.
     const passport = await orch.handleAdvance('next', '1');
     expect(row()?.stage).toBe('passport');
     const cfg = (await host.config.loadJson('plugin')) as {
@@ -206,22 +207,22 @@ describe('Onboarding 六幕（integration）', () => {
     };
     expect(cfg.ranger_profile?.nickname).toBe('凤栖梧');
     expect(cfg.ranger_profile?.name_source).toBe('auto');
-    // 真 ProfilePayload 上线（S1 协议腿通电）
+    // Send a real ProfilePayload (the S1 protocol path is active).
     expect(pushed).toHaveLength(1);
     const sp = popclaw.identity.SignedPayload.decode(pushed[0]!);
     const env = popclaw.event.EventEnvelope.decode(sp.payload);
     expect(env.profile?.nickname).toBe('凤栖梧');
     expect(Number(env.profile?.declaredAt)).toBe(1700000000);
     expect(env.actor?.popclawId).toBe(POPCLAW_ID);
-    // 逐坊落章 + 护照页（72h），且印信小课在页上不在聊天框
+    // Per-house enrollment + passport page (72h); the sigil lesson belongs on the page, not in chat.
     expect(passport.text).toContain('popclaw.me ✓ 已盖章');
     expect(passport.text).toContain('popclaw.world ✓ 已盖章');
-    // 印信小课「在页上不在聊天框」的后半句由上面 passport.text 的两条覆盖。
-    // 前半句（页面内容）曾断言 uploads[0].html，但这个构建**刻意不含 Canvas**，
-    // 上传器根本没有被注入——`uploads` 全文件零处 push，断言恒对一个空数组取 [0]。
-    // 它不再描述任何行为，删掉；要恢复这层覆盖，得先有一个能上传的构建。
+    // The two passport.text assertions above cover the lesson's absence from chat.
+    // Page content was previously checked via uploads[0].html, but this build deliberately excludes Canvas.
+    // No uploader is injected: nothing in this file pushes to uploads, so [0] always reads an empty array.
+    // That assertion described no behavior and was removed; restoring coverage requires an upload-capable build.
 
-    // ③ lantern —— 坊卡 + 编号精华 + 江湖一瞥页；此刻口味还空 → 热度序，零重排调用。
+    // ③ lantern: house cards + numbered highlights + world preview; empty taste means popularity order and no reranking.
     const lantern = await orch.handleAdvance('next');
     expect(row()?.stage).toBe('lantern');
     expect(lantern.text).toContain('一座灯坊是一盏灯，不是整个江湖');
@@ -230,7 +231,7 @@ describe('Onboarding 六幕（integration）', () => {
     expect(llmPrompts.filter((p) => p.includes('"order"'))).toHaveLength(0);
     expect(contextIndex.byOrdinal(1)?.eventId).toBe(E1);
 
-    // 编号展开 + 标一下 + 无感：三种反馈真落盘。
+    // Expand by number, save, and mark meh: all three feedback types persist.
     const expanded = await orch.handleAdvance('next', '2');
     expect(expanded.text).toContain('Morning routine ✨ every step explained');
     expect(expanded.text).toContain(`http://localhost:3000/post/${E2.slice(0, 10)}`);
@@ -238,7 +239,7 @@ describe('Onboarding 六幕（integration）', () => {
     expect((await orch.handleAdvance('next', '无感 3')).text).toContain('记下了');
     expect(marksStore.has(E1)).toBe(true);
 
-    // ④ attune —— 一问 → 写主权层 → 对同一批条目重排（LLM order=[2,1,3]）。
+    // ④ attune: ask once → write the sovereign layer → rerank the same items (LLM order=[2,1,3]).
     const ask = await orch.handleAdvance('next');
     expect(row()?.stage).toBe('attune');
     expect(ask.text).toContain('你最近关心什么');
@@ -249,22 +250,22 @@ describe('Onboarding 六幕（integration）', () => {
     expect(md).toContain('常看 AI 论文，周末扫街摄影');
     expect(llmPrompts.filter((p) => p.includes('"order"'))).toHaveLength(1);
     expect(llmPrompts.at(-1)).toContain('常看 AI 论文，周末扫街摄影');
-    // 新第 1 条 = 原第 2 条（alixearle），且标注写在卡上
+    // New item 1 is former item 2 (alixearle), with the annotation on the card.
     expect(rerank.text).toContain('（原第 2 条）[alixearle]');
     expect(rerank.text).toContain('热度和');
-    // ⑤ errand 紧跟着开口
+    // ⑤ errand prompts immediately afterward.
     expect(row()?.stage).toBe('errand');
     expect(rerank.text).toContain('上面那几个人里有想跟着的吗');
 
-    // ⑤ errand —— 报编号 → 认人链拿到 id → 关注 → 交情本 + 条件式认证一句。
+    // ⑤ errand: choose a number → resolve the person ID → follow → bond book + conditional verification sentence.
     const followed = await orch.handleAdvance('next', '1');
-    expect(followRefs).toEqual([ALIX]); // 重排后第 1 条是 alixearle 的帖
+    expect(followRefs).toEqual([ALIX]); // After reranking, item 1 is alixearle's post.
     expect(followed.text).toContain('已关注 mrbeast#5PQ8RTVW。');
     expect(followed.text).toContain('任何服务器、任何其他用户都读不到');
     expect(followed.text).toContain('X 的背书');
     expect(row()?.stage).toBe('cadence');
 
-    // ⑥ cadence —— 答 1 → 记 daily → 毕业词 + 攻略素材 → completed。
+    // ⑥ cadence: answer 1 → record daily → graduation copy + guide materials → completed.
     const graduation = await orch.handleAdvance('next', '1');
     expect(row()?.stage).toBe('completed');
     expect(row()?.completed_at).toBe(1700000000);
@@ -273,11 +274,11 @@ describe('Onboarding 六幕（integration）', () => {
     expect(graduation.text).toContain('ttl_hours 设 72');
     expect(graduation.text).toContain('popclaw-newspaper');
     expect(graduation.text).toContain('把该任务的结果投递关掉');
-    // 只列真做过的 + 坊玩法来自数据
+    // List only completed actions; house activities come from data.
     expect(graduation.text).toContain('定了名号「凤栖梧」');
     expect(graduation.text).toContain('关注了 mrbeast#5PQ8RTVW');
     expect(graduation.text).toContain('popclaw.me 怎么玩');
-    // 名片只签一次（标记那次是另一条 payload）
+    // Sign the profile only once (the mark action uses a different payload).
     const profiles = pushed.filter((b) => {
       const decoded = popclaw.event.EventEnvelope.decode(
         popclaw.identity.SignedPayload.decode(b).payload,
@@ -286,7 +287,7 @@ describe('Onboarding 六幕（integration）', () => {
     });
     expect(profiles).toHaveLength(1);
 
-    // learned/picks.jsonl：expanded + saved + meh 逐行真落盘。
+    // learned/picks.jsonl: expanded, saved, and meh each persist as a separate line.
     const picksRaw = await readFile(join(tasteRoot, 'learned', 'picks.jsonl'), 'utf-8');
     const signals = picksRaw.trim().split('\n').map((l) => (JSON.parse(l) as { signal: string }).signal);
     expect(signals).toContain('expanded');
@@ -296,10 +297,10 @@ describe('Onboarding 六幕（integration）', () => {
 
   it('全跳路径：一路 skip 也能走到底，缺口逐条记进毕业素材', async () => {
     await orch.handleStartCommand();          // arrival
-    await orch.handleAdvance('skip');         // 用第一候选 → passport
+    await orch.handleAdvance('skip');         // Choose the first candidate → passport.
     expect((await host.config.loadJson('plugin') as { ranger_profile: { nickname: string } }).ranger_profile.nickname).toBe('凤栖梧');
     await orch.handleAdvance('skip');         // passport → lantern
-    await orch.handleAdvance('skip');         // lantern skip → errand（连带跳 attune）
+    await orch.handleAdvance('skip');         // Skip lantern → errand (also skips attune).
     expect(row()?.stage).toBe('errand');
     await orch.handleAdvance('skip');         // errand → cadence
     const graduation = await orch.handleAdvance('skip'); // cadence → completed
@@ -308,9 +309,9 @@ describe('Onboarding 六幕（integration）', () => {
     expect(graduation.text).toContain('口味档案还是空的');
     expect(graduation.text).toContain('还一个人都没关注');
     expect(graduation.text).toContain('别自作主张排定时任务');
-    // 口味那一问跳过了 → 主权层一个字都没写
+    // The taste question was skipped, so nothing was written to the sovereign layer.
     await expect(stat(join(tasteRoot, 'core/private.md'))).rejects.toThrow();
-    // 但名片照样签出去了（占位名判死刑）
+    // The profile was still signed (placeholder names are forbidden).
     expect(pushed).toHaveLength(1);
   });
 
@@ -321,7 +322,7 @@ describe('Onboarding 六幕（integration）', () => {
     delivered = [];
     const res = await orch.handleAdvance('skip');
     expect(row()?.stage).toBe('errand');
-    // 直接是差事那一问，中间没有第二张"你关心什么"的卡
+    // Go directly to the errand question, without another card asking what the owner cares about.
     expect(res.text).toContain('上面那几个人里有想跟着的吗');
     expect(res.text).not.toContain('你最近关心什么');
     expect(delivered).toHaveLength(1);
@@ -333,7 +334,7 @@ describe('Onboarding 六幕（integration）', () => {
     expect(row()?.stage).toBe('completed');
     expect(row()?.completed_at).toBe(1700000000);
     expect(res.text).toContain('先到这儿');
-    // 引导不排队通知（脊柱本身不入队）
+    // Onboarding queues no notifications (the spine itself does not enqueue).
     expect(host.db.queryAll('SELECT * FROM notification_queue WHERE delivered_at IS NULL')).toEqual([]);
   });
 

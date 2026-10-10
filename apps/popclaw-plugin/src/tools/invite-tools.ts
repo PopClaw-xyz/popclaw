@@ -1,22 +1,7 @@
-/**
- * Account verification on the tool path (#585).
- *
- * `/popclaw invite` was slash-only, and MCP hosts (Claude Code / Codex /
- * Hermes) have no slash commands — an MCP citizen could not get verified at
- * all, even though the MCP composition root already builds the initiator, the
- * pending ledger and the watch deps. This module is the missing door, and it
- * is deliberately the ONLY place `popclaw_invite` is registered: both
- * composition roots share this one registration pass (the MCP bridge collects
- * its tool list from it), so wiring it here reaches both hosts at once.
- *
- * Shape: preview → confirm, the same discipline as `popclaw_draft_* →
- * popclaw_send_draft`. Submitting an invite puts rangers to work on someone
- * else's machine, so it must never fire on a single call the agent made up.
- * The first call canonicalises and preflights the arguments, parks the
- * submission behind a token and sends nothing; the second call — carrying that
- * token and nothing else — is the one that signs and pushes.
- */
-
+/** Local invitation copy and account verification share the existing submit path.
+ * A Native posting acknowledgement uses the current owner invocation and this
+ * conversation's latest prepared account. Other hosts and sensitive changes
+ * retain preview/confirmation. Preparation has no signer or network port. */
 import { PopclawInviteSchema } from './tool-schemas.js';
 import { makeDraftToken, putDraft, takeDraft, type DraftKind } from './draft-store.js';
 import type { ToolsCtx } from './tools-context.js';
@@ -26,138 +11,132 @@ import { canonicalPlatform } from '../scraper/platform-scraper.js';
 import { extractPostId } from '../quest/verify-invite-handler.js';
 import { submitInvite } from '../invite/submit-invite.js';
 import { watchInvite } from '../invite/pending-invites.js';
+import { prepareInviteShare, isSupportedInvitePlatform, unsupportedInvitePlatform } from '../invite/prepare-invite-share.js';
+import { socialDraftBinding, sameSocialDraftBinding, socialSendAssertion, socialToolFactory, withSocialSendInvocation, type SocialDraftBinding } from '../host/social-send-context.js';
 
-/**
- * The one draft kind this tool may mint and execute. It shares the write
- * chain's draft table (one TTL discipline, one process-level store that
- * survives a plugin reload); `takeDraft` enforces the kind for both doors, so
- * a `message-3` handed here cannot fire that DM through the verification door,
- * and an `invite-7` handed to popclaw_send_draft cannot submit this one.
- */
 const INVITE_KINDS = ['invite'] as const satisfies readonly DraftKind[];
+const CONFIRM_DISCIPLINE = 'Nothing has been submitted. Read the preview back to the owner in their own language; only after they explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.';
+const KEYS = new Set(['platform', 'handle', 'prepare_only', 'posted', 'proof_url', 'nickname', 'replace', 'sync', 'confirm_token']);
+const str = (v: unknown): string => typeof v === 'string' ? v.trim() : '';
+type Prepared = { platform: string; handle: string; popclawId: string; consumed: boolean };
 
-/** The agent-facing half of the receipt — same role as write-tools' CONFIRM_DISCIPLINE. */
-const CONFIRM_DISCIPLINE =
-  'Nothing has been submitted. Read the preview back to the owner in their own language; only after they ' +
-  'explicitly say go, call popclaw_invite again with confirm_token alone. That second call is the one that submits.';
-
-/** `popclaw_invite` — registered on every host, whatever else this process wired. */
 export function registerInviteTools(ctx: ToolsCtx): void {
-  const { api, runtime } = ctx;
-
-  api.registerTool({
-    name: 'popclaw_invite',
-    description:
-      'Call when the owner wants to prove a social account is theirs — "verify my X account", "link my Instagram". ' +
-      'They give you the platform and their handle, plus proof_url if they already published the proof post. ' +
-      'Always TWO calls: the first returns a preview of exactly what would be submitted, plus a confirm_token, and ' +
-      'sends nothing; read it back to the owner, and only once they say go, call this again with confirm_token alone. ' +
-      'That second call puts rangers to work, so never make it on your own initiative. A token is single-use and ' +
-      'expires in 30 minutes.',
-    parameters: PopclawInviteSchema,
-    execute: async (_callId: string, params: unknown) => {
-      const p = (params ?? {}) as {
-        platform?: unknown;
-        handle?: unknown;
-        proof_url?: unknown;
-        nickname?: unknown;
-        replace?: unknown;
-        sync?: unknown;
-        confirm_token?: unknown;
+  const { api, runtime, deps } = ctx;
+  const host = deps.socialSendHost;
+  const native = host === undefined || host === 'native';
+  // Registration-scoped, keyed by the SDK's complete conversation binding.
+  // Failed preparation never overwrites an earlier target; restart requires prepare again.
+  const prepared = new Map<string, Prepared>();
+  const confirmations = new Map<string, {binding: SocialDraftBinding; assertCurrent?: () => void}>();
+  api.registerTool(socialToolFactory(host, toolContext => {
+    const binding = socialDraftBinding(host, toolContext);
+    const bindingKey = binding ? JSON.stringify(binding) : null;
+    const ownerAssertion = (signal?: AbortSignal): (() => void) => {
+      const current = socialSendAssertion(host, toolContext, signal);
+      if (!current || (native && (toolContext as {senderIsOwner?: unknown})?.senderIsOwner !== true)) throw new Error('INVITE_OWNER_INVOCATION_REQUIRED');
+      return () => {
+        current();
+        if (native && (toolContext as {senderIsOwner?: unknown}).senderIsOwner !== true) throw new Error('INVITE_OWNER_INVOCATION_REQUIRED');
+        if (!sameSocialDraftBinding(binding, socialDraftBinding(host, toolContext))) throw new Error('INVITE_CONVERSATION_CHANGED');
       };
-      const lang = ownerLang();
-      const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
-
-      // --- second call: the owner said go ---
-      const confirmToken = str(p.confirm_token);
-      if (confirmToken) {
-        const submit = takeDraft(confirmToken, INVITE_KINDS);
-        if (!submit) {
-          return {
-            type: 'text' as const,
-            text: renderCopy(lang, 'invite.tool.expiredToken', { token: confirmToken }),
-          };
+    };
+    return {
+      name: 'popclaw_invite',
+      description: 'Prepare editable invitation copy for the owner’s X account, locally. After the owner says posted/done, call posted:true: Native verifies this chat’s most recent successful preparation, using the current owner invocation. Never submit before that acknowledgement. Other hosts, sync, replacement and nickname changes return a preview; confirm only after owner approval, with confirm_token alone. A token is single-use and expires in 30 minutes.',
+      parameters: PopclawInviteSchema,
+      execute: async (_callId: string, params: unknown, signal?: AbortSignal) => {
+        const p = { ...((params && typeof params === 'object' && !Array.isArray(params)) ? params : {}) } as Record<string, unknown>;
+        const lang = ownerLang();
+        const fail = (code: string, text = renderCopy(lang, 'invite.prepare.mixed')) => ({type: 'text' as const, isError: true, code, text});
+        if (Object.keys(p).some(key => !KEYS.has(key))) return fail('INVITE_ARGUMENTS_INVALID');
+        if (['posted', 'prepare_only', 'sync', 'replace'].some(key => p[key] !== undefined && typeof p[key] !== 'boolean')) return fail('INVITE_ARGUMENTS_INVALID');
+        const token = str(p.confirm_token);
+        if (p.confirm_token !== undefined) {
+          if (!token || Object.keys(p).length !== 1) return fail('INVITE_CONFIRM_TOKEN_ALONE');
+          try {
+            const assert = native ? ownerAssertion(signal) : undefined;
+            assert?.();
+            const confirmation = confirmations.get(token);
+            if (native && !sameSocialDraftBinding(confirmation?.binding, binding)) return fail('INVITE_CONFIRM_CONVERSATION_CHANGED');
+            const submit = takeDraft(token, INVITE_KINDS);
+            confirmations.delete(token);
+            if (!submit) return {type:'text' as const, text:renderCopy(lang, 'invite.tool.expiredToken', {token})};
+            if (confirmation && assert) confirmation.assertCurrent = assert;
+            const result = await submit();
+            return {type:'text' as const, text:result.text};
+          } catch (error) { return fail('INVITE_SUBMIT_FAILED', `${failureText('popclaw_invite', error)}\n${renderCopy(lang, 'invite.tool.submitFailed')}`); }
         }
-        try {
-          return { type: 'text' as const, text: (await submit()).text };
-        } catch (err) {
-          // The token was spent the moment it was taken (single-use by design),
-          // so say so — otherwise the agent retries with a dead token forever.
-          return {
-            type: 'text' as const,
-            text: `${failureText('popclaw_invite', err)}\n${renderCopy(lang, 'invite.tool.submitFailed')}`,
-          };
+        const posted = p.posted === true;
+        if (!posted) {
+          if (['proof_url', 'nickname', 'replace', 'sync'].some(key => p[key] !== undefined)) return fail('INVITE_PREPARE_ONLY');
+          const platform = str(p.platform), handle = str(p.handle);
+          if (!platform || !handle) return fail('INVITE_SHARE_ACCOUNT_REQUIRED', renderCopy(lang, 'invite.tool.usage'));
+          if (!isSupportedInvitePlatform(platform)) return {type:'text' as const, isError:true, text:JSON.stringify(unsupportedInvitePlatform(platform))};
+          try {
+            const identity = await deps.getInviteShareIdentity?.();
+            if (!identity) return fail('INVITE_SHARE_IDENTITY_UNAVAILABLE', renderCopy(lang, 'invite.prepare.unavailable'));
+            const share = prepareInviteShare(identity, platform, handle);
+            // Bind only a successful, still-current owner invocation. MCP may prepare copy,
+            // but its posted path continues to require the existing explicit confirmation.
+            if (native) { const assert = ownerAssertion(signal); assert(); }
+            if (bindingKey) prepared.set(bindingKey, {platform:share.platform, handle:share.handle, popclawId:identity.popclawId, consumed:false});
+            return {type:'text' as const, text:JSON.stringify({...share, owner_action_required:true})};
+          } catch (error) { return fail('INVITE_PREPARE_FAILED', failureText('popclaw_invite', error)); }
         }
-      }
-
-      // --- first call: canonicalise, preflight, park ---
-      const rawPlatform = str(p.platform);
-      const rawHandle = str(p.handle);
-      if (!rawPlatform || !rawHandle) {
-        return { type: 'text' as const, text: renderCopy(lang, 'invite.tool.usage') };
-      }
-      // Canonicalize before signing: "X"/"Twitter" must not become distinct
-      // platforms server-side (already-verified checks are keyed by platform).
-      const platform = canonicalPlatform(rawPlatform);
-      const handle = rawHandle.replace(/^@/, '');
-      // "Provided but empty" is a bad proof URL, not an absent one: coercing
-      // `proof_url: ""` (or whitespace, or a non-string) to undefined would submit
-      // by-search verification while the owner believes their post was attached,
-      // and the rejection only surfaces ~5min later. The slash lane already
-      // refuses `--proof ""` at preflight; this lane must agree.
-      const proofGiven = p.proof_url !== undefined && p.proof_url !== null;
-      const proofUrl = str(p.proof_url) || undefined;
-      // ADR-0034 preflight: a bad proof URL would otherwise be signed, stored,
-      // and only surface ~5min later as an unexplained REJECT behind the 24h gate.
-      if (proofGiven && (proofUrl === undefined || !extractPostId(proofUrl))) {
-        return {
-          type: 'text' as const,
-          text: renderCopy(lang, 'invite.badProofUrl', { got: proofUrl ?? String(p.proof_url) }),
+        if (p.prepare_only === true) return fail('INVITE_PREPARE_ONLY');
+        const target = bindingKey ? prepared.get(bindingKey) : undefined;
+        const rawPlatform = str(p.platform) || target?.platform || '';
+        const rawHandle = str(p.handle) || target?.handle || '';
+        if (!rawPlatform || !rawHandle) return fail('INVITE_PREPARE_REQUIRED', renderCopy(lang, 'invite.tool.usage'));
+        const platform = canonicalPlatform(rawPlatform);
+        const handle = rawHandle.replace(/^@/, '');
+        if (!isSupportedInvitePlatform(platform)) return {type:'text' as const, isError:true, text:JSON.stringify(unsupportedInvitePlatform(platform))};
+        if (!/^[A-Za-z0-9_]{1,15}$/.test(handle)) return fail('INVITE_SHARE_ACCOUNT_REQUIRED');
+        const proofGiven = p.proof_url !== undefined && p.proof_url !== null;
+        const proofUrl = str(p.proof_url) || undefined;
+        if (proofGiven && (proofUrl === undefined || !extractPostId(proofUrl))) return fail('INVITE_BAD_PROOF_URL', renderCopy(lang, 'invite.badProofUrl', {got:proofUrl ?? String(p.proof_url)}));
+        const nickname = str(p.nickname) || undefined;
+        const replace = p.replace === true, mirrorOptin = p.sync === true;
+        const submit = async (assert?: () => void, expectedPopclawId?: string) => {
+          const rt = await (assert ? withSocialSendInvocation(assert, runtime) : runtime());
+          assert?.();
+          if (expectedPopclawId && rt.boot.popclawId !== expectedPopclawId) throw new Error('INVITE_IDENTITY_CHANGED');
+          return submitInvite({initiate:opts => assert ? withSocialSendInvocation(assert, () => rt.initiator.initiate(opts)) : rt.initiator.initiate(opts), recordPending:entry => rt.pendingInvites.add(entry),
+            watch:taskId => watchInvite(rt.inviteWatch, taskId), onWatchError:message => api.logger?.info(message), webBaseUrl:rt.boot.webBaseUrl},
+          {platform, handle, nickname:nickname ?? rt.boot.nickname, replace, proofUrl, mirrorOptin});
         };
-      }
-      const nickname = str(p.nickname) || undefined;
-      const replace = p.replace === true;
-      // Mirroring is opt-in and the flag IS the whole
-      // opt-in — absent means no. It has to be carried on every invite path, or
-      // a consent gate silently stops being one on the path that dropped it.
-      const mirrorOptin = p.sync === true;
-
-      const token = makeDraftToken('invite');
-      putDraft(token, async () => {
-        const rt = await runtime();
-        return submitInvite({
-          initiate: (opts) => rt.initiator.initiate(opts),
-          recordPending: (entry) => rt.pendingInvites.add(entry),
-          watch: (taskId) => watchInvite(rt.inviteWatch, taskId),
-          onWatchError: (message) => api.logger?.info(message),
-          webBaseUrl: rt.boot.webBaseUrl,
-        }, {
-          platform,
-          handle,
-          nickname: nickname ?? rt.boot.nickname,
-          // ADR-0026: swap an already-verified account on this platform.
-          replace,
-          // ADR-0034: post URL → rangers verify by-id instead of by search.
-          proofUrl,
-          mirrorOptin,
+        const ordinary = !['sync', 'replace', 'nickname'].some(key => p[key] !== undefined);
+        if (native && ordinary) {
+          try {
+            const invocation = ownerAssertion(signal);
+            const assert = () => { invocation(); if (bindingKey && prepared.get(bindingKey) !== target) throw new Error('INVITE_PREPARED_TARGET_CHANGED'); };
+            assert();
+            if (!target || target.consumed || target.platform !== platform || target.handle.toLowerCase() !== handle.toLowerCase()) return fail('INVITE_PREPARED_TARGET_CHANGED');
+            const identity = await deps.getInviteShareIdentity?.(); assert();
+            if (!identity || identity.popclawId !== target.popclawId || prepared.get(bindingKey!) !== target || target.consumed) return fail('INVITE_PREPARED_TARGET_CHANGED');
+            // Reserve before any asynchronous command/bootstrap/signing work.
+            // An uncertain failure does not authorize an automatic paid retry.
+            target.consumed = true;
+            // Only runtime construction, signing and egress retain this turn's
+            // invocation. submitInvite resumes in the original House scope to
+            // record the accepted receipt and start its existing result watcher.
+            const work = async () => { assert(); return submit(assert, target.popclawId); };
+            const result = await (deps.runCommand ? deps.runCommand(work) : work()) as {text:string};
+            return {type:'text' as const, text:result.text};
+          } catch (error) { return fail('INVITE_SUBMIT_FAILED', failureText('popclaw_invite', error)); }
+        }
+        const confirmToken = makeDraftToken('invite');
+        const confirmation = native && binding ? {binding, assertCurrent: undefined as (() => void) | undefined} : undefined;
+        putDraft(confirmToken, () => {
+          if (native && !confirmation?.assertCurrent) throw new Error('INVITE_OWNER_INVOCATION_REQUIRED');
+          return submit(confirmation?.assertCurrent);
         });
-      });
-
-      const preview = renderCopy(lang, 'invite.tool.preview', {
-        platform,
-        handle,
-        // Submitted either way (absent → the owner's own name, resolved from boot
-        // inside the draft): the owner cannot consent to a field the preview hid.
-        // Named here rather than resolved, because previewing must not build the
-        // runtime — the first call is preflight only, it touches nothing.
-        nickname: nickname ?? renderCopy(lang, 'invite.tool.nicknameDefault'),
-        proof: proofUrl ?? renderCopy(lang, 'invite.tool.proofNone'),
-        sync: renderCopy(lang, mirrorOptin ? 'invite.tool.syncOn' : 'invite.tool.syncOff'),
-      });
-      return {
-        type: 'text' as const,
-        text: `${replace ? `${preview}\n${renderCopy(lang, 'invite.tool.replaceLine')}` : preview}\n\nconfirm_token: ${token}\n${CONFIRM_DISCIPLINE}`,
-      };
-    },
-  });
+        if (confirmation) confirmations.set(confirmToken, confirmation);
+        const preview = renderCopy(lang, 'invite.tool.preview', {platform, handle,
+          nickname:nickname ?? renderCopy(lang, 'invite.tool.nicknameDefault'), proof:proofUrl ?? renderCopy(lang, 'invite.tool.proofNone'),
+          sync:renderCopy(lang, mirrorOptin ? 'invite.tool.syncOn' : 'invite.tool.syncOff')});
+        return {type:'text' as const, text:`${replace ? `${preview}\n${renderCopy(lang, 'invite.tool.replaceLine')}` : preview}\n\nconfirm_token: ${confirmToken}\n${CONFIRM_DISCIPLINE}`, owner_action_required:true};
+      },
+    };
+  }, deps.getHostedSocialInvocation, deps.getLocalSocialScope), {name:'popclaw_invite'});
 }

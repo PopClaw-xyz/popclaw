@@ -38,18 +38,18 @@ describe('buildNewspaperPrompt', () => {
   });
 
   /**
-   * 2026-09-10/11 真机:编号全合法,摘要却挂到了别人名下(Quanta 的进了 MKBHD 的
-   * [100])。数字校验看不见这种事,能看见的只有「稿子必须引到自己那条素材」。
-   * 所以 edit 模板里每条多一个 `q`,规则里说清它会被核。
+   * Real runs, 2026-09-10/11: valid numbers still attached summaries to the wrong authors
+   * (Quanta content went under MKBHD's [100]). Numeric checks cannot detect this; requiring
+   * each draft to quote its own material can. Add q per edit item and state that it is checked.
    */
   it('每条稿子的形状带上 `q`,并说清它会被核 —— 这是唯一治得了串位的那一刀', () => {
     const p = brief();
     expect(p).toContain('"q"');
     expect(p).toContain('**`q` is the anchor.**');
     expect(p).toContain("publish checks `q` against that very item's body");
-    expect(p).toContain("each with its own `q`"); // 续批同样要带
-    // 从哪抄、抄多少、什么不算数 —— 三样都说死,否则写作端会去抄标签、抄两字、
-    // 抄两条共有的那段开头。
+    expect(p).toContain("each with its own `q`"); // Continuation batches also need it.
+    // Specify where to copy from, how much, and what does not count; otherwise the writer may copy labels, two characters,
+    // or an opening shared by two items.
     expect(p).toContain('copy it from the text after `正文:` (never the label)');
     expect(p).toContain('at least about four English words or five Chinese characters');
     expect(p).toContain('a passage that other items also contain does not count');
@@ -57,18 +57,19 @@ describe('buildNewspaperPrompt', () => {
   });
 
   /**
-   * 这是整个 v0.2 的地基：模型碰不到 URL，就没有什么可编造的，F2 那套检查才敢整套删掉。
-   * 2026-09-06 r7:洗令牌的信道依旧,但指令不再停在「可以不带令牌」——素材页把该期
-   * basis(= 账本令牌)印进 edit 模板并下令原样带回;basis 是 edit 里的普通字段,不是
-   * *_token 工具参数,脱参宿主洗不掉。令牌降回括号里的可选说明。
+   * The v0.2 foundation: the model cannot access URLs, so it cannot invent them; this allowed removing F2 checks.
+   * 2026-09-06 r7: token-stripping channels remain, but instructions now go beyond allowing absent tokens.
+   * The material page prints the issue basis (= ledger token) inside the edit template and requires it unchanged.
+   * basis is an ordinary edit field, not a *_token tool parameter, so parameter-stripping hosts cannot remove it.
+   * The token is reduced to an optional parenthetical note.
    */
   it('不再命令照抄令牌:指令要的是 basis(edit 里的普通字段,洗不掉),令牌只以可选说明出现', () => {
     const p = brief();
     expect(p).not.toContain('with publish_token="');
     expect(p).toContain('**Copy the `basis` value below into every edit you hand in, verbatim**');
-    expect(p).toContain('"basis": "tok_x"'); // 该期 basis 印在 edit 模板首行 —— 编号属于哪页,它说了算
+    expect(p).toContain('"basis": "tok_x"'); // Print the issue basis on the edit template's first line; it determines which page owns the numbers.
     expect(p).toContain('the basis needs no token at all');
-    expect(p).toContain('tok_x'); // 令牌仍然印 —— 传得了的宿主用它精确绑定
+    expect(p).toContain('tok_x'); // Still print the token for hosts that can pass it, enabling exact binding.
   });
 
   it('首手交稿量指导:先交一批再续,不再许诺「约30条安全」(deepseek-v4-flash 32条死在半路)', () => {
@@ -103,7 +104,7 @@ describe('buildNewspaperPrompt', () => {
     expect(p).toContain(`${mat('pulse.author', { i: '2', who: 'b#zz' })} · ${mat('tier.brief')}`);
   });
 
-  /** 坊事件由版面照坊自报的字段排 —— 让模型重写它，等于请它破忠实那条铁律。 */
+  /** Layout renders house events from house-declared fields; asking the model to rewrite them invites a fidelity violation. */
   it('坊事件不进简报,序号仍是它在 issue 里的位置', () => {
     const p = brief(
       issue({
@@ -114,14 +115,14 @@ describe('buildNewspaperPrompt', () => {
       }),
     );
     expect(p).toContain(mat('pulse.head', { count: '1' }));
-    expect(p).toContain(mat('pulse.author', { i: '2', who: 'b#zz' })); // 第 2 条仍叫 [2]
+    expect(p).toContain(mat('pulse.author', { i: '2', who: 'b#zz' })); // Item 2 remains [2].
     expect(p).not.toContain('山塘街');
   });
 
   it('名录只报「属于人」的那几格,头像与主页留给版面', () => {
     const p = brief(issue({ pulse: [item({ followerCount: 82_000, verified: true, isFollowing: true })] }));
     expect(p).toContain(mat('cast.head', { label: mat('cast.label'), count: '1' }));
-    expect(p).toContain('8.2 万粉'); // 数字按主人的语言本地化
+    expect(p).toContain('8.2 万粉'); // Localize numbers to the owner's language.
     expect(p).toContain('verified✓');
     expect(p).toContain('follow state: following');
     expect(p).not.toContain('unavatar');
@@ -170,7 +171,7 @@ describe('buildNewspaperPrompt', () => {
     expect(p).toContain(mat('pulse.author', { i: '1', who: mat('pulse.unattributed', { platform: 'rss' }) }));
   });
 
-  /** 宿主截断保头不保中 —— 这条防惊慌的话必须在被切掉的位置之前。 */
+  /** Host truncation preserves the beginning, not the middle; this reassurance must precede the cut point. */
   it('防截断那段话排在最前面(宿主要切也切不到它)', () => {
     const p = brief();
     expect(p.indexOf('[IF THIS MATERIAL IS CUT SHORT]')).toBeLessThan(p.indexOf(mat('pulse.head', { count: '1' })));

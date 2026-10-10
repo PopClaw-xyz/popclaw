@@ -1,6 +1,7 @@
 /**
- * 装机凭据 —— gateway 重启杀断片回来的 agent 回合，机器上得留一条"刚才装过/
- * 升级过 popclaw"的痕迹。见 src/runtime/last-build.ts 头注释。
+ * Installation receipt: gateway restart interrupts the agent turn, so the machine must retain
+ * evidence of a recent PopClaw install/upgrade. See the header comment in
+ * src/runtime/last-build.ts.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';

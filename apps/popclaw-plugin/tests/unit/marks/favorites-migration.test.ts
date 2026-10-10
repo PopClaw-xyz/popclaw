@@ -1,5 +1,5 @@
 /**
- * favorites.jsonl → marks 迁移（favorites-migration.ts）单测。
+ * Unit tests for favorites.jsonl to marks migration (favorites-migration.ts).
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, writeFile } from 'node:fs/promises';
@@ -44,13 +44,13 @@ describe('migrateFavoritesJsonl', () => {
     const count = migrateFavoritesJsonl(join(dir, 'favorites.jsonl'), store);
 
     expect(count).toBe(2);
-    // 原文件已消失，改名为 .migrated
+    // Original file is gone, renamed to .migrated.
     expect(existsSync(file)).toBe(false);
     expect(existsSync(file + '.migrated')).toBe(true);
-    // marks 表含两条
+    // The marks table contains two rows.
     expect(store.has(E1)).toBe(true);
     expect(store.has(E2)).toBe(true);
-    // 字段映射正确
+    // Correct field mapping.
     const rows = store.listActive(10);
     const r1 = rows.find((r) => r.eventId === E1)!;
     expect(r1).toBeDefined();
@@ -61,7 +61,7 @@ describe('migrateFavoritesJsonl', () => {
 
   it('再跑（.migrated 存在，原文件不在）→ 返回 0（幂等）', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'popclaw-fav-migrate-'));
-    // 只放 .migrated，无原文件
+    // Only .migrated exists, without the original file.
     await writeFile(
       join(dir, 'favorites.jsonl.migrated'),
       JSON.stringify({ ts: 1, event_id: E1, summary_line: 'old' }) + '\n',
@@ -78,7 +78,7 @@ describe('migrateFavoritesJsonl', () => {
       JSON.stringify({ ts: 999, event_id: E1, summary_line: 'old summary' }) + '\n',
     );
     const store = freshStore();
-    // 预先插入同 event_id
+    // Preinsert the same event_id.
     store.upsert({
       eventId: E1, platform: 'x', platformPostId: E1,
       authorPopclawId: 'pid', handle: 'handle', summaryLine: 'existing',
@@ -87,13 +87,13 @@ describe('migrateFavoritesJsonl', () => {
 
     const count = migrateFavoritesJsonl(join(dir, 'favorites.jsonl'), store);
 
-    expect(count).toBe(0); // 不覆盖
-    // 原行未被覆盖
+    expect(count).toBe(0); // Do not overwrite.
+    // Existing row was not overwritten.
     const rows = store.listActive(10);
     const r = rows.find((r) => r.eventId === E1)!;
     expect(r.summaryLine).toBe('existing');
     expect(r.platform).toBe('x');
-    // 文件还是被重命名
+    // The file is still renamed.
     expect(existsSync(file)).toBe(false);
     expect(existsSync(file + '.migrated')).toBe(true);
   });

@@ -7,6 +7,7 @@ import bs58 from 'bs58';
 import { popclaw } from '@popclaw/contracts';
 import { cidFromCanonical } from '@popclaw/algorithms';
 import { canonicalizeEnvelope } from '../../../src/protocol/public-envelope.js';
+import { deriveSigil } from '../../../src/invite/sigil.js';
 import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
 import { createOpenClawHostAdapter } from '../../../src/host/openclaw-host-adapter.js';
 import { gatewayRuntimePorts } from '../../../src/host/openclaw-runtime-ports.js';
@@ -30,6 +31,8 @@ import { publicMaterialSource, retainPublicMaterialBasis } from '../../../src/ne
 import { collectNewspaperMaterials } from '../../../src/newspaper/collect-materials.js';
 import { registerWorldTools } from '../../../src/tools/world-tools.js';
 import { _observedPostIdsForTest, resolvePostRefWithSource } from '../../../src/world/post-ref.js';
+import { renderCopy } from '../../../src/lexicon/index.js';
+import { ownerLang } from '../../../src/lexicon/owner-language.js';
 import { publishStorageJson } from '../../../src/host/storage-maintenance.js';
 import { confirmHouseTrust } from '../../../src/world/house-trust.js';
 
@@ -65,7 +68,7 @@ afterEach(async()=>{ for(const close of cleanup.splice(0).reverse()) await close
 const ME='https://house.popclaw.me', WORLD='https://house.popclaw.world';
 const logger={info() {},warn() {},error() {}};
 type Runtime=Awaited<ReturnType<typeof buildMcpRuntime>>|Awaited<ReturnType<typeof assembleRuntime>>;
-async function fixture(kind:'Native'|'MCP', missingCapability=false, rootMode:'new'|'current'='current') {
+async function fixture(kind:'Native'|'MCP', missingCapability=false, rootMode:'new'|'current'='current', publicBaseline='public-envelope-02') {
   const root=mkdtempSync(join(tmpdir(),'fresh-public-entry-')), paths=new PopclawPaths(root);
   cleanup.push(()=>rmSync(root,{recursive:true,force:true}));
   if(rootMode==='current') {
@@ -87,20 +90,28 @@ async function fixture(kind:'Native'|'MCP', missingCapability=false, rootMode:'n
   vi.stubEnv('POPCLAW_DATA_ROOT',root); vi.stubEnv('POPCLAW_WORLD_STREAM',undefined);
   vi.stubEnv('LOG_LEVEL','silent');
   const actorPair=nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(66)), actor=bs58.encode(actorPair.publicKey);
+  const signed02 = publicBaseline === 'public-envelope-02';
+  const guideText = signed02 ? '---\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary\n---\n# Synthetic House guide' : '# Synthetic House guide';
+  const guideBytes = new TextEncoder().encode(guideText);
   const manifest=mintHouse({origin:ME,seed:77,manifest:{relations:{ordered:1},
     read_auth:{schemes:['popclaw-identity-read-v2']},guide_url:'/guide.md',
+    ...(signed02 ? {official_ids:[actor],event_kinds:[{kind:'fixture.notice',schema_version:1,transport:'house',signer:'official',description:'Notice',body_schema:{type:'object'}}]} : {}),
     ...(!missingCapability?{world_interaction:{version:1,public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',
-      log_incarnation:'fresh_log_1',envelope_baseline:'public-envelope-01',initial_public_scopes:[]}}}: {})}});
+      log_incarnation:'fresh_log_1',envelope_baseline:publicBaseline,initial_public_scopes:[]},
+      ...(signed02 ? {guide:{path:'/v1/guide.md',sha256:cidFromCanonical(guideBytes),revision:'1'},
+        private_messages:{version:1,kinds:['fixture.notice'],participation:false}} : {})}}: {})}});
   let servedManifest=manifest;
   let snapshotTransform:(items:popclaw.event.IWorldFeedItem[],url:URL)=>Promise<popclaw.event.IWorldFeedItem[]>=async items=>items;
-  let worldManifest=mintHouse({origin:WORLD,seed:78,manifest:{relations:{ordered:1},read_auth:{schemes:['popclaw-identity-read-v2']},world_interaction:{version:1,public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',log_incarnation:'world_log_1',envelope_baseline:'public-envelope-01',initial_public_scopes:[]}}}});
+  let worldManifest=mintHouse({origin:WORLD,seed:78,manifest:{relations:{ordered:1},read_auth:{schemes:['popclaw-identity-read-v2']},world_interaction:{version:1,public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',log_incarnation:'world_log_1',envelope_baseline:'public-envelope-02',initial_public_scopes:[]}}}});
   const requests:Array<{url:string;init?:RequestInit}>=[], controllers:ReadableStreamDefaultController<Uint8Array>[]=[];
   const fakeFetch=vi.fn<typeof fetch>(async(input,init)=>{
     const url=new URL(input instanceof Request?input.url:String(input)); requests.push({url:url.href,init});
     if(url.origin===WORLD && url.pathname==='/v1/manifest') return worldManifest.fetch(url.href);
     if(url.origin!==ME && !(url.origin===WORLD&&url.pathname==='/world-feed')) throw new Error('UNEXPECTED_NETWORK:'+url.origin);
     if(url.pathname==='/v1/manifest') return servedManifest.fetch(url.href);
-    if(url.pathname==='/guide.md') return new Response('# Synthetic House guide');
+    if(url.pathname==='/guide.md' || url.pathname==='/v1/guide.md') return new Response(guideText);
+    if(url.pathname==='/v1/world-summary') return Response.json({window_hours:24,generated_at_ms:0,total_posts:1,
+      distinct_authors:1,authors:{},hot_posts:[]});
     if(url.pathname==='/world-feed') {
       const items = [undefined, {platform:'x',postId:'signed-external',url:'https://x.invalid/signed-external',createdAt:1780000001}].map((origin, i) => {
         const env = popclaw.event.EventEnvelope.fromObject({actor:{popclawId:actor,nickname:'Signed author'},timestamp:1780000000+i,
@@ -183,6 +194,176 @@ it.each(['Native','MCP'] as const)('%s normal unset first install reads ordinary
   const db=executionDbFor(await f.rt.houseRuntime.storeForCommand(ME));
   expect(db.queryAll('SELECT * FROM world_public_frames_v1')).toEqual([]);
   expect(db.queryAll('SELECT * FROM world_public_bindings_v1')).toEqual([]);
+});
+
+it('the public-envelope-02 client keeps private-message and summary reads and opens its public log', async()=>{
+  const f=await fixture('MCP',false,'new','public-envelope-02');
+  await f.rt.houseRuntime.activateInitialMe();
+  const capability=worldCapabilities.readHouseCapabilityView(f.rt.host.db,ME)!;
+  expect(capability.publicStream.validation).toBe('valid');
+  expect(capability.publicStreamCapability?.publicStream).toMatchObject({envelope_baseline:'public-envelope-02',log_incarnation:'fresh_log_1'});
+  expect(capability.privateMessages).toMatchObject({validation:'valid',kinds:{'fixture.notice':{validation:'valid'}}});
+
+  const feed=await f.rt.houseFeedReader!.prepare();
+  expect(feed.read()).toMatchObject({items:[],sources:[{unavailable:false}]});
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/v1/world-stream')).toBe(true);
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/world-feed')).toBe(false);
+
+  const newspaper=await publicMaterialSource(f.rt)!.prepareCollect();
+  expect(newspaper.items).toEqual([]);
+  expect(newspaper.coverage).toMatchObject([{unavailable:false}]);
+
+  const tools=new Map<string,{execute(id:string,params:unknown):Promise<{text:string}>}>();
+  const api={registerTool:(tool:{name:string;execute(id:string,params:unknown):Promise<{text:string}>})=>tools.set(tool.name,tool)};
+  registerWorldTools({api,runtime:async()=>f.rt,deps:{api,
+    runCommand:<T>(work:()=>Promise<T>)=>f.rt.houseRuntime.runCommand(work),
+    getWorldDeps:async()=>({guideClient:f.rt.guideClient,summaryClient:f.rt.summaryClient,snapshotClient:f.rt.worldFeedClient,
+      resolveClient:{resolve:async()=>[]},webBaseUrl:f.rt.boot.webBaseUrl})}} as unknown as ToolsCtx);
+  const summary=await tools.get('popclaw_world_summary')!.execute('old-client-summary',{});
+  expect(summary.text.length).toBeGreaterThan(0);
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/v1/world-summary')).toBe(true);
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/v1/world-stream')).toBe(true);
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/world-feed')).toBe(false);
+});
+
+it('author_latest reads a signed public-envelope-02 journal locally without summary or ordinary-snapshot requests',async()=>{
+  const f=await fixture('MCP',false,'new','public-envelope-02');
+  await f.rt.houseRuntime.activateInitialMe();
+  await vi.waitFor(()=>expect(f.controllers).toHaveLength(1));
+  const store=await f.rt.houseRuntime.storeForCommand(ME),db=executionDbFor(store);
+  const env=popclaw.event.EventEnvelope.fromObject({actor:{popclawId:f.actor,nickname:'Verified Local Author'},timestamp:1780000000,
+    post:{blocks:[{blockType:0,content:'Verified public-envelope-02 journal body'}]}});
+  const canonical=canonicalizeEnvelope(env);env.eventId=cidFromCanonical(canonical);env.signature=nacl.sign.detached(canonical,f.actorPair.secretKey);
+  f.send('public_boundary',popclaw.world.PublicStreamBoundary.encode({logIncarnation:'fresh_log_1',fullPublic:true,highWaterSeq:1}).finish());
+  f.send('public_frame',popclaw.event.WorldStreamFrame.encode({seq:1,envelope:popclaw.event.EventEnvelope.encode(env).finish(),kind:'post',scopes:[]}).finish());
+  f.send('public_checkpoint',popclaw.world.PublicStreamCheckpoint.encode({phase:'replay',publicThroughSeq:1}).finish());
+  await vi.waitFor(()=>expect(db.queryOne('SELECT event_id FROM world_public_events_v1')).toEqual({event_id:env.eventId}));
+  expect(f.rt.publicFeedDisplay!.read({limit:100})).toMatchObject({items:[{body:'Verified public-envelope-02 journal body',item:{authorPopclawId:f.actor,actorNickname:'Verified Local Author'},source:{origin:ME}}],sources:[{protocol:'public-v1',origin:ME,unavailable:false}]});
+
+  const tools=new Map<string,{execute(id:string,params:unknown):Promise<{text:string}>}>();
+  const api={registerTool:(tool:{name:string;execute(id:string,params:unknown):Promise<{text:string}>})=>tools.set(tool.name,tool)};
+  const fetchSummary=vi.fn(async()=>null),fetchSnapshot=vi.fn(async()=>[]);
+  registerWorldTools({api,runtime:async()=>f.rt,deps:{api,runtime:async()=>f.rt,getWorldDeps:async()=>({guideClient:f.rt.guideClient,
+    summaryClient:{fetchSummary},snapshotClient:{fetchSnapshot},resolveClient:{resolve:async()=>[]},webBaseUrl:f.rt.boot.webBaseUrl})}} as unknown as ToolsCtx);
+  const result=await tools.get('popclaw_author_latest')!.execute('signed-local-history',{name:'Verified Local Author'});
+
+  expect(result.text).toContain('Verified public-envelope-02 journal body');
+  expect(fetchSummary).not.toHaveBeenCalled();
+  expect(fetchSnapshot).not.toHaveBeenCalled();
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/world-feed')).toBe(false);
+});
+
+it.each(['full-id', 'name#sigil', 'bare-sigil'] as const)(
+  'author_latest resolves %s for an incomplete signed local journal without summary or snapshot fallback',
+  async form=>{
+    const f=await fixture('MCP',false,'new','public-envelope-02');
+    await f.rt.houseRuntime.activateInitialMe();
+    await vi.waitFor(()=>expect(f.controllers).toHaveLength(1));
+    const store=await f.rt.houseRuntime.storeForCommand(ME),db=executionDbFor(store),sigil=deriveSigil(f.actor);
+    const env=popclaw.event.EventEnvelope.fromObject({actor:{popclawId:f.actor,nickname:'Verified Local Author'},timestamp:1780000000,
+      post:{blocks:[{blockType:0,content:'Verified public identity body'}]}});
+    const canonical=canonicalizeEnvelope(env);env.eventId=cidFromCanonical(canonical);env.signature=nacl.sign.detached(canonical,f.actorPair.secretKey);
+    f.send('public_boundary',popclaw.world.PublicStreamBoundary.encode({logIncarnation:'fresh_log_1',fullPublic:true,highWaterSeq:1}).finish());
+    f.send('public_frame',popclaw.event.WorldStreamFrame.encode({seq:1,envelope:popclaw.event.EventEnvelope.encode(env).finish(),kind:'post',scopes:[]}).finish());
+    await vi.waitFor(()=>expect(db.queryOne('SELECT event_id FROM world_public_events_v1')).toEqual({event_id:env.eventId}));
+    expect(f.rt.publicFeedDisplay!.read({limit:100}).sources).toMatchObject([{protocol:'public-v1',incomplete:true}]);
+
+    const tools=new Map<string,{execute(id:string,params:unknown):Promise<{text:string}>}>();
+    const api={registerTool:(tool:{name:string;execute(id:string,params:unknown):Promise<{text:string}>})=>tools.set(tool.name,tool)};
+    const fetchSummary=vi.fn(async()=>null),fetchSnapshot=vi.fn(async()=>[]);
+    const resolve=vi.fn(async()=>[{popclawId:f.actor,nickname:'Verified Local Author',sigil,profiles:[]}]);
+    registerWorldTools({api,runtime:async()=>f.rt,deps:{api,runtime:async()=>f.rt,getWorldDeps:async()=>({guideClient:f.rt.guideClient,
+      summaryClient:{fetchSummary},snapshotClient:{fetchSnapshot},resolveClient:{resolve},webBaseUrl:f.rt.boot.webBaseUrl})}} as unknown as ToolsCtx);
+    const name=form==='full-id'?f.actor:form==='name#sigil'?`Verified Local Author#${sigil}`:`#${sigil}`;
+
+    const result=await tools.get('popclaw_author_latest')!.execute(`signed-local-${form}`,{name});
+
+    expect(result.text).toContain('Verified public identity body');
+    expect(fetchSummary).not.toHaveBeenCalled();
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(f.requests.some(r=>new URL(r.url).pathname==='/world-feed')).toBe(false);
+  },
+);
+
+it('author_latest fails closed when its selected public journal becomes unreadable during identity resolution',async()=>{
+  const f=await fixture('MCP',false,'new','public-envelope-02');
+  await f.rt.houseRuntime.activateInitialMe();
+  await vi.waitFor(()=>expect(f.controllers).toHaveLength(1));
+  const store=await f.rt.houseRuntime.storeForCommand(ME),db=executionDbFor(store),sigil=deriveSigil(f.actor);
+  const env=popclaw.event.EventEnvelope.fromObject({actor:{popclawId:f.actor,nickname:'Verified Local Author'},timestamp:1780000000,
+    post:{blocks:[{blockType:0,content:'must not claim an unreadable journal is empty'}]}});
+  const canonical=canonicalizeEnvelope(env);env.eventId=cidFromCanonical(canonical);env.signature=nacl.sign.detached(canonical,f.actorPair.secretKey);
+  f.send('public_boundary',popclaw.world.PublicStreamBoundary.encode({logIncarnation:'fresh_log_1',fullPublic:true,highWaterSeq:1}).finish());
+  f.send('public_frame',popclaw.event.WorldStreamFrame.encode({seq:1,envelope:popclaw.event.EventEnvelope.encode(env).finish(),kind:'post',scopes:[]}).finish());
+  f.send('public_checkpoint',popclaw.world.PublicStreamCheckpoint.encode({phase:'replay',publicThroughSeq:1}).finish());
+  await vi.waitFor(()=>expect(db.queryOne('SELECT event_id FROM world_public_events_v1')).toEqual({event_id:env.eventId}));
+  expect(f.rt.publicFeedDisplay!.read({limit:100}).sources).toMatchObject([{origin:ME,protocol:'public-v1',unavailable:false,incomplete:false}]);
+
+  const tools=new Map<string,{execute(id:string,params:unknown):Promise<{text:string}>}>();
+  const api={registerTool:(tool:{name:string;execute(id:string,params:unknown):Promise<{text:string}>})=>tools.set(tool.name,tool)};
+  const fetchSummary=vi.fn(async()=>null),fetchSnapshot=vi.fn(async()=>[]);
+  let invalidatedSource:{origin:string;protocol?:string;unavailable:boolean}|undefined;
+  const resolve=vi.fn(async()=>{
+    db.execute('DROP TABLE world_public_log_profiles_v1');
+    invalidatedSource=f.rt.publicFeedDisplay!.read({limit:100}).sources.find(source=>source.origin===ME);
+    return [{popclawId:f.actor,nickname:'Verified Local Author',sigil,profiles:[]}];
+  });
+  registerWorldTools({api,runtime:async()=>f.rt,deps:{api,runtime:async()=>f.rt,getWorldDeps:async()=>({guideClient:f.rt.guideClient,
+    summaryClient:{fetchSummary},snapshotClient:{fetchSnapshot},resolveClient:{resolve},webBaseUrl:f.rt.boot.webBaseUrl})}} as unknown as ToolsCtx);
+
+  const result=await tools.get('popclaw_author_latest')!.execute('journal-invalidated-during-resolution',{name:'Remote Resolved Author'});
+
+  expect(resolve).toHaveBeenCalledOnce();
+  expect(invalidatedSource).toMatchObject({origin:ME,unavailable:true});
+  expect(invalidatedSource).not.toHaveProperty('protocol');
+  expect(result.text).toContain(renderCopy(ownerLang(),'feed.public.authorLimited'));
+  expect(result.text).not.toContain(renderCopy(ownerLang(),'world.author.noRecentSnapshot',{nickname:'Verified Local Author'}));
+  expect(fetchSummary).not.toHaveBeenCalled();
+  expect(fetchSnapshot).not.toHaveBeenCalled();
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/world-feed')).toBe(false);
+});
+
+it('author_latest filters the local public journal by author before applying count beyond the global 100-item window',async()=>{
+  const f=await fixture('MCP',false,'new','public-envelope-02');
+  await f.rt.houseRuntime.activateInitialMe();
+  await vi.waitFor(()=>expect(f.controllers).toHaveLength(1));
+  const store=await f.rt.houseRuntime.storeForCommand(ME),db=executionDbFor(store);
+  const olderPair=nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(67)),olderActor=bs58.encode(olderPair.publicKey);
+  f.send('public_boundary',popclaw.world.PublicStreamBoundary.encode({logIncarnation:'fresh_log_1',fullPublic:true,highWaterSeq:101}).finish());
+  for(let seq=1;seq<=101;seq++){
+    const isOlderAuthor=seq===1,pair=isOlderAuthor?olderPair:f.actorPair,actor=isOlderAuthor?olderActor:f.actor;
+    const env=popclaw.event.EventEnvelope.fromObject({actor:{popclawId:actor,nickname:isOlderAuthor?'Older Author':'Recent Author'},timestamp:1780000000+seq,
+      post:{blocks:[{blockType:0,content:isOlderAuthor?'older author body':`recent body ${seq}`}]}});
+    const canonical=canonicalizeEnvelope(env);env.eventId=cidFromCanonical(canonical);env.signature=nacl.sign.detached(canonical,pair.secretKey);
+    f.send('public_frame',popclaw.event.WorldStreamFrame.encode({seq,envelope:popclaw.event.EventEnvelope.encode(env).finish(),kind:'post',scopes:[]}).finish());
+  }
+  f.send('public_checkpoint',popclaw.world.PublicStreamCheckpoint.encode({phase:'replay',publicThroughSeq:101}).finish());
+  await vi.waitFor(()=>expect(db.queryOne('SELECT COUNT(*) AS count FROM world_public_events_v1')).toEqual({count:101}));
+  expect(f.rt.publicFeedDisplay!.read({limit:100}).items.some(hit=>hit.item.authorPopclawId===olderActor)).toBe(false);
+
+  const tools=new Map<string,{execute(id:string,params:unknown):Promise<{text:string}>}>();
+  const api={registerTool:(tool:{name:string;execute(id:string,params:unknown):Promise<{text:string}>})=>tools.set(tool.name,tool)};
+  const fetchSummary=vi.fn(async()=>null),fetchSnapshot=vi.fn(async()=>[]);
+  const resolve=vi.fn(async(q:{name?:string})=>q.name==='Older Author'?[{popclawId:olderActor,nickname:'Older Author',sigil:deriveSigil(olderActor),profiles:[]}]:[]);
+  registerWorldTools({api,runtime:async()=>f.rt,deps:{api,runtime:async()=>f.rt,getWorldDeps:async()=>({guideClient:f.rt.guideClient,
+    summaryClient:{fetchSummary},snapshotClient:{fetchSnapshot},resolveClient:{resolve},webBaseUrl:f.rt.boot.webBaseUrl})}} as unknown as ToolsCtx);
+
+  const result=await tools.get('popclaw_author_latest')!.execute('author-outside-global-window',{name:'Older Author',count:1});
+
+  expect(result.text).toContain('older author body');
+  expect(result.text).not.toContain('recent body');
+  expect(fetchSummary).not.toHaveBeenCalled();
+  expect(fetchSnapshot).not.toHaveBeenCalled();
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/world-feed')).toBe(false);
+});
+
+it('a signed public-envelope-01 House stays outside the current public receiver even with the 02 client',async()=>{
+  const f=await fixture('MCP',false,'new','public-envelope-01');
+  await f.rt.houseRuntime.activateInitialMe();
+  const capability=worldCapabilities.readHouseCapabilityView(f.rt.host.db,ME)!;
+  expect(capability.publicStream.validation).toBe('invalid');
+  expect(capability.publicStreamCapability).toBeUndefined();
+  expect(f.requests.some(r=>new URL(r.url).pathname==='/v1/world-stream')).toBe(false);
 });
 
 it('ordinary author history and body reference share the signed reader and exact House source',async()=>{
@@ -317,6 +498,15 @@ it('a positively declared public-v1 journal refusal never requests an ordinary s
   const before=f.requests.filter(r=>new URL(r.url).pathname==='/world-feed').length;
   executionDbFor(store).execute('DROP TABLE world_public_frames_v1');
   const prepared=await f.rt.houseFeedReader!.prepare();expect(prepared.read()).toMatchObject({items:[],sources:[{unavailable:true}]});
+  expect(f.requests.filter(r=>new URL(r.url).pathname==='/world-feed')).toHaveLength(before);
+  const tools=new Map<string,{execute(id:string,params:unknown):Promise<{text:string}>}>();
+  const api={registerTool:(tool:{name:string;execute(id:string,params:unknown):Promise<{text:string}>})=>tools.set(tool.name,tool)};
+  const fetchSummary=vi.fn(async()=>null),fetchSnapshot=vi.fn(async()=>[]);
+  registerWorldTools({api,runtime:async()=>f.rt,deps:{api,runtime:async()=>f.rt,getWorldDeps:async()=>({guideClient:f.rt.guideClient,
+    summaryClient:{fetchSummary},snapshotClient:{fetchSnapshot},resolveClient:{resolve:async()=>[]},webBaseUrl:f.rt.boot.webBaseUrl})}} as unknown as ToolsCtx);
+  const authorResult=await tools.get('popclaw_author_latest')!.execute('unavailable-public-history',{name:'Signed author'});
+  expect(authorResult.text).toMatch(/incomplete|不完整/);
+  expect(fetchSummary).not.toHaveBeenCalled();expect(fetchSnapshot).not.toHaveBeenCalled();
   expect(f.requests.filter(r=>new URL(r.url).pathname==='/world-feed')).toHaveLength(before);
 });
 

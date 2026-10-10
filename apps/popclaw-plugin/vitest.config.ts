@@ -12,9 +12,9 @@ const ALIASES: Record<string, string> = {
   '@popclaw/contracts/world-interaction/schema-profile.schema.json': `${PROTOCOL}/protocol/retained/schema-profile.schema.json`,
   '@popclaw/contracts/world-interaction/participation.schema.json': `${PROTOCOL}/protocol/retained/participation.schema.json`,
   '@popclaw/contracts/world-interaction/manifest.schema.json': 'src/protocol/retained/manifest.schema.json',
-  '@popclaw/contracts/world-interaction/first-release-candidate/board.schema.json': `${PROTOCOL}/protocol/public-envelope-01/board.schema.json`,
-  '@popclaw/contracts/world-interaction/first-release-candidate/action-kind.schema.json': `${PROTOCOL}/protocol/public-envelope-01/action-kind.schema.json`,
-  '@popclaw/contracts/world-interaction/first-release-candidate/interpreted-event-kind.schema.json': `${PROTOCOL}/protocol/public-envelope-01/interpreted-event-kind.schema.json`,
+  '@popclaw/contracts/world-interaction/first-release-candidate/board.schema.json': `${PROTOCOL}/protocol/public-envelope-02/board.schema.json`,
+  '@popclaw/contracts/world-interaction/first-release-candidate/action-kind.schema.json': `${PROTOCOL}/protocol/public-envelope-02/action-kind.schema.json`,
+  '@popclaw/contracts/world-interaction/first-release-candidate/interpreted-event-kind.schema.json': `${PROTOCOL}/protocol/public-envelope-02/interpreted-event-kind.schema.json`,
   '@popclaw/contracts': `${PROTOCOL}/ts/contracts/src/index.ts`,
   '@popclaw/algorithms': `${PROTOCOL}/ts/algorithms/src/index.ts`,
 };

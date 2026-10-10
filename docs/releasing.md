@@ -13,11 +13,29 @@ A release is **two packages**, published in one workflow run, in one order:
 `popclaw-mcp` cannot install until `popclaw` is on the registry at exactly its
 version. So `popclaw` goes first, is verified on the registry, and only then
 does the shell go out. The two recipes carry opposite guards on purpose:
-`pack-plugin` aborts below 11 prebuilt native bindings, `pack-mcp-shell` aborts
+`pack-plugin` checks every declared native binding inside the tarball by name,
+binary platform/architecture header and Node ABI initializer, plus the packer's
+unsuffixed fallback. `pack-mcp-shell` aborts
 if the shell tarball contains any `dist/`, `native-deps`, `migrations` or
 `wallet-migrations` — or if its version and its `popclaw` dependency are not the
-exact same string as the plugin's version. Neither floor may be loosened to let
+exact same string as the plugin's version. Neither guard may be loosened to let
 one recipe serve both packages.
+
+Full packing requires Darwin. The release job uses GitHub-hosted `macos-15`
+(arm64): clang builds `darwin-arm64` and `darwin-x64`; official better-sqlite3
+release assets supply `linux-arm64`, `linux-x64` and `win32-x64`. Each target
+ships Node 24 (ABI 137) and Node 26 (ABI 147): ten named bindings and one
+fallback. This matrix is fixed, independent of the verification machine.
+`POPCLAW_NATIVE_DEPS_MINIMAL=1` is for development bundles only and cannot
+produce a releasable tarball. Do not lower a binding count to accept a missing
+platform.
+
+[npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) supports
+GitHub-hosted runners, including the [hosted macOS runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
+It does not support self-hosted runners. The workflow filename, repository,
+environment and `id-token: write` remain the trusted-publisher identity; moving
+the job from Ubuntu to hosted macOS does not change those fields. Checksums use
+`shasum -a 256`, available on macOS, with the same retained checksum format.
 
 ## Order on the day
 

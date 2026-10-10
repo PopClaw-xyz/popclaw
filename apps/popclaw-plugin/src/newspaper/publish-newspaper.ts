@@ -39,6 +39,9 @@ import type { NewspaperIssueArchive, SavedNewspaperIssue } from './newspaper-art
 import { renderCopy, type Lang } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { beginReading } from './reading-page.js';
+import { writingPacket } from './writing-packet.js';
+import { writingDirectory, writingPacketNote } from './build-newspaper-prompt.js';
+import { langOf } from '../lexicon/owner-language.js';
 import { admitHandIn, reprintOf } from './admit-hand-in.js';
 
 // Kept importable from here: tests and callers reach checkEdit through this module.
@@ -262,6 +265,9 @@ export async function publishNewspaper(
   if (unfinished) {
     assertCurrent();
     settle();
+    const packet = writingPacket(issue, page.unwrittenNumbers, deps.sessionKey).map(({ n }) => n);
+    const directory = packet.length < page.unwrittenNumbers.length
+      ? `\n\n${writingDirectory(issue, page.unwrittenNumbers, issue.language ? langOf(issue.language) : lang)}` : '';
     return {
       // Not landed, but the copy in this hand-in was kept — the difference the dispatch
       // ledger needs to tell "it never published anything" from "it published some and
@@ -270,7 +276,7 @@ export async function publishNewspaper(
       text: beginReading(publishToken, `${renderCopy(lang, 'newspaper.publish.moreToWrite', {
         count: String(page.unwritten),
         numbers: `[${page.unwrittenNumbers.join('] [')}]`,
-      })}${noteBlock}\n\n${reprintOf(issue, page.unwrittenNumbers, lang)}`, deps),
+      })}${noteBlock}${directory}\n\n${writingPacketNote(packet)}\n\n${reprintOf(issue, packet, lang)}`, deps),
     };
   }
 

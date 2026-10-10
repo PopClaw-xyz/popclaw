@@ -98,7 +98,7 @@ it('refuses an old reading-stage cursor after a new saved receipt replaces that 
 it('writes a selected issue over 120 items in batches, paginates the receipt and preserves HTML over 2MiB locally', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'newspaper-batches-'));
   const pulse = Array.from({ length: 125 }, (_, i) => item({ eventId: `event${i}`, itemNumber: i + 1,
-    text: `The unique source passage number ${i} ends here.` }));
+    text: `The unique source passage number ${i} ends here.` + (i === 1 ? ' Long complete source.'.repeat(2000) : '') }));
   putIssue('tok_batches', issue({ pulse }), dir);
   noteContextTokenBudget('writer', 32000);
   const upload = vi.fn(async () => { throw new Error('HTTP 413 actual configured publisher'); });

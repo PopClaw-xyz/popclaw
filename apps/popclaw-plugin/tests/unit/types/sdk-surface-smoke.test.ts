@@ -7,10 +7,9 @@ import type {
 import type { sendDurableMessageBatch } from 'openclaw/plugin-sdk/channel-outbound';
 
 /**
- * 真 SDK 面的编译期哨兵（前身是手写 shim 的自检，2026-08-11 换成真类型）。
- *
- * 只钉**我们真的踩在上面**的那几格：宿主升级把哪一格挪走了，这里当场红，
- * 而不是等真机上某条链路静默死掉三周（#374 的教训）。
+ * Compile-time sentinel for the real SDK surface (replaced handwritten shim self-checks with real
+ * types on 2026-08-11). Pin only the surfaces actually used so host changes fail here instead of
+ * silently breaking a live path for three weeks, as in #374.
  */
 describe('openclaw SDK surface — 编译期哨兵', () => {
   it('OpenClawPluginApi 上我们用的那几格还在', () => {
@@ -19,7 +18,7 @@ describe('openclaw SDK surface — 编译期哨兵', () => {
     expectTypeOf<OpenClawPluginApi>().toHaveProperty('registerCommand');
     expectTypeOf<OpenClawPluginApi>().toHaveProperty('registerTool');
     expectTypeOf<OpenClawPluginApi>().toHaveProperty('registrationMode');
-    // ADR-0035：`full` 之外的加载都不许开 socket/DB。
+    // ADR-0035: load modes other than full must not open sockets or databases.
     expectTypeOf<OpenClawPluginApi['registrationMode']>().extract<'full'>().not.toBeNever();
   });
 
@@ -37,7 +36,7 @@ describe('openclaw SDK surface — 编译期哨兵', () => {
   });
 
   it('sendDurableMessageBatch 仍收 skipQueue（@internal，exactly-once 全靠它）', () => {
-    // 没了 = 通知会被写前队列重放成第二条。
+    // Without this, the write-ahead queue replays the notification as a second message.
     expectTypeOf<Parameters<typeof sendDurableMessageBatch>[0]>().toHaveProperty('skipQueue');
   });
 

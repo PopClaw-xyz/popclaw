@@ -111,7 +111,7 @@ function assertOfflineAndDrained(box: ReturnType<typeof sandbox>, minClosedDbs =
 describe('ordinary CLI business commands share the lifecycle reader', () => {
   it.each([
     ['follow', 'test-followee'],
-    ['invite', 'x', 'cli-test-handle', '--poll-timeout-sec=0'],
+    ['invite', 'x', 'cli_test_handle', '--poll-timeout-sec=0'],
   ])('CLI %s refuses an unjoined house without direct networking', async (...args) => {
     const box = sandbox();
     const result = await runCli(box, args);
@@ -137,9 +137,9 @@ describe('ordinary CLI business commands share the lifecycle reader', () => {
   // success — and follow can no longer carry it: a relation write is refused
   // before anything is signed while the ordered producer is not installed, so
   // there would be no bytes to queue and the coverage would quietly vanish.
-  it('queues exact signed business bytes for the absent owner and exits without claiming success', async () => {
+  it.each(['X', 'Twitter'])('queues exact signed invite bytes for %s/@handle without claiming success', async platform => {
     const box = sandbox(true);
-    const result = await runCli(box, ['invite', 'x', 'cli-test-handle', '--poll-timeout-sec=0']);
+    const result = await runCli(box, ['invite', platform, '@cli_test_handle', '--poll-timeout-sec=0']);
     expect(result.code, result.stdout + result.stderr).toBe(1);
     expect(result.stdout).not.toMatch(/invite submitted/i);
     const db = new LocalHostDb(box.dbPath);
@@ -150,7 +150,7 @@ describe('ordinary CLI business commands share the lifecycle reader', () => {
       expect(rows[0]!.payload_bytes.length).toBeGreaterThan(0);
       const signed = popclaw.identity.SignedPayload.decode(rows[0]!.payload_bytes);
       expect(nacl.sign.detached.verify(signed.payload, signed.signature, signed.signerPubkey)).toBe(true);
-      expect(popclaw.event.EventEnvelope.decode(signed.payload).inviteRequest?.handle).toBe('cli-test-handle');
+      expect(popclaw.event.EventEnvelope.decode(signed.payload).inviteRequest).toMatchObject({ platform: 'x', handle: 'cli_test_handle' });
       expect(result.stdout + result.stderr).toContain(rows[0]!.request_id);
       expect(result.stdout + result.stderr).toContain('execution not confirmed');
     } finally { db.close(); }
@@ -159,7 +159,7 @@ describe('ordinary CLI business commands share the lifecycle reader', () => {
 
   it('SIGTERM drains a queued command and leaves its operation available for the resident', async () => {
     const box = sandbox(true);
-    const result = await runCli(box, ['invite', 'x', 'cli-test-handle', '--poll-timeout-sec=0'], true);
+    const result = await runCli(box, ['invite', 'x', 'cli_test_handle', '--poll-timeout-sec=0'], true);
     expect(result.code).not.toBeNull();
     expect(result.code).not.toBe(0);
     expect(result.stdout).not.toMatch(/invite submitted/i);

@@ -87,8 +87,8 @@ describe('pickNudge — 8 道触发闸', () => {
 });
 
 describe('pickNudge — 文案纪律', () => {
-  // S5：前缀与行长上限都跟着主人的语种走，所以断言走同一条渲染路径，
-  // 不再写死中文常量（一个汉字约抵两个拉丁字母，英文档上限是两倍）。
+  // S5: prefix and line-length limit follow the owner's language, so assertions use the same render path
+  // instead of hardcoded Chinese constants (one Han character roughly equals two Latin letters; the English limit is double).
   const prefix = (): string => renderCopy(ownerLang(), 'onboarding.nudge.prefix');
   const cap = (): number => (ownerLang() === 'zh-CN' ? 60 : 120);
 
@@ -121,7 +121,7 @@ describe('pickNudge — 文案纪律', () => {
       const body = pick!.line;
       expect(body).not.toContain('别人');
       expect(body).not.toContain('社区');
-      expect(body).not.toMatch(/\d+\s*人/); // "N人"（"几个人"不含数字，放行）
+      expect(body).not.toMatch(/\d+\s*人/); // Numeric person count: "N人"; "几个人" has no number and is allowed.
       expect(body).not.toMatch(/还剩\d+步/);
       expect(body).not.toContain('完成度');
       expect(body).not.toContain('你确定不');
@@ -231,7 +231,7 @@ describe('账本读写（config onboarding.nudge）', () => {
 
   it('只在真输出时写：不调用 recordNudgeSent 就不落盘', async () => {
     const host = new InMemoryHostAdapter();
-    // pickNudge 本身是纯函数，不接触 host —— 这里只是确认没有隐藏的副作用。
+    // pickNudge is pure and does not touch host; this verifies there are no hidden side effects.
     pickNudge([GAP_NO_FOLLOWS], EMPTY_LEDGER, NOW, CTX_OK);
     expect(await readNudgeLedger(host)).toEqual(EMPTY_LEDGER);
   });
@@ -239,7 +239,7 @@ describe('账本读写（config onboarding.nudge）', () => {
   it('终身 6 行：sixth send 之后 pickNudge 就不再挑了', async () => {
     const host = new InMemoryHostAdapter();
     for (let i = 0; i < 6; i++) {
-      await recordNudgeSent(host, `gap${i}`, NOW - (6 - i) * 100 * 3600); // 保证距上条 ≥72h
+      await recordNudgeSent(host, `gap${i}`, NOW - (6 - i) * 100 * 3600); // Ensure at least 72h since the previous entry.
     }
     const ledger = await readNudgeLedger(host);
     expect(ledger.lifetime).toBe(6);

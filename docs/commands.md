@@ -3,9 +3,11 @@
 [中文](commands.zh-CN.md) · [Documentation index](README.md) · [Project README](../README.md)
 
 Find a command, understand its effects, and locate the debugging or extension entry point.
-Checked against source [`e139acf`](https://github.com/PopClaw-xyz/popclaw/tree/e139acf1c3a195810bbfa3bfd6acc1c249feb8c4) on 2026-10-07.
+Checked against source `e139acf` on 2026-10-07.
 This describes that source version; it does not certify every command on every host or announce an npm release.
-Tool names/counts were additionally checked against [`682d061`](https://github.com/PopClaw-xyz/popclaw/tree/682d06193f49704d7b23d583a6ededff85f2c17f) on 2026-10-08; Canvas capacity notes identify service limits. Other command descriptions retain the review scope above.
+Tool names/counts were additionally checked against `682d061` on 2026-10-08; Canvas capacity notes identify service limits. Other command descriptions retain the review scope above.
+These historical review revisions are not included in this snapshot’s history;
+they are not evidence of a fresh review of the current candidate.
 See [host setup](hosts.md) and the [support matrix](support-matrix.md) for installation scope.
 
 **Jump to:** [Debug first](#debug) · [Terminal CLI](#terminal) · [OpenClaw chat commands](#slash) · [Agent/MCP tools](#tools) · [Develop and inspect source](#source)
@@ -343,7 +345,7 @@ Tool names link to their source definitions. Use the current host-returned schem
 | --- | --- |
 | Understand identity, signatures, events and Houses | [Protocol overview](protocol.md) → [Client walkthrough](protocol-walkthrough.md) |
 | Build your own House, game or community | [Build a LoreHouse](build-a-lorehouse.md) → [Reference implementation docs](https://github.com/PopClaw-xyz/lorehouse-mvp/blob/main/docs/README.md) |
-| Implement a compatible client or service | [Pinned protocol bundle](../protocol/) → [Implementers Guide](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md) → [Protocol checks](../protocol/BUILD.md#checks) |
+| Implement a compatible client or service | [Pinned protocol bundle](../protocol/) → [Implementers Guide](../protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) → [Protocol checks](../protocol/BUILD.md#checks) |
 | Change a command or tool | [Contributing: common changes](../CONTRIBUTING.md#three-common-changes); update this reference and relevant tests. |
 | Find terminal parsing | [main.ts](../apps/popclaw-plugin/src/main.ts), [setup](../apps/popclaw-plugin/src/setup/), [world CLI](../apps/popclaw-plugin/src/commands/world-cli.ts) |
 | Find chat parsing and registration | [index.ts](../apps/popclaw-plugin/src/index.ts), [wiring.ts](../apps/popclaw-plugin/src/commands/wiring.ts), [command handlers](../apps/popclaw-plugin/src/commands/) |

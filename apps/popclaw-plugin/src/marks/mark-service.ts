@@ -12,7 +12,7 @@ import { appendPick, type LearnedWriterOptions } from '../taste/learned-writer.j
 /** Minimum surface MarkService needs to mark an item. Onboarding/migrated items need not fabricate unused fields (e.g. platformPostCreatedAt). */
 export type MarkableItem = Pick<CachedFeedItem, 'eventId' | 'platform' | 'platformPostId' | 'authorPopclawId' | 'handle' | 'textPreview' | 'originalUrl' | 'houseSlug'>;
 import { signMark, signMarkRevoked } from '../messaging/sign-mark.js';
-import { pushRouted } from '../egress/event-egress.js';
+import { pushRejection, pushRouted } from '../egress/event-egress.js';
 import type { Signer } from '../identity/signer.js';
 import type { MarksStore } from './marks-store.js';
 
@@ -63,7 +63,11 @@ export class MarkService {
   private async push(houseSlug: string | undefined, sign: () => Promise<{ signedPayloadBytes: Uint8Array }>): Promise<MarkResult> {
     try {
       const signed = await sign();
-      await pushRouted(this.deps.egress, houseSlug, signed.signedPayloadBytes);
+      const receipt = await pushRouted(this.deps.egress, houseSlug, signed.signedPayloadBytes);
+      const rejection = pushRejection(receipt);
+      if (rejection) {
+        return { pushed: false, error: `HTTP ${rejection.status}${rejection.detail ? `: ${rejection.detail}` : ''}` };
+      }
       return { pushed: true };
     } catch (err) {
       return { pushed: false, error: String(err) };

@@ -10,6 +10,7 @@ import { _draftsForTest, makeDraftToken, putDraft, takeDraft } from '../../../sr
 import { ActionInactiveError, assertActionActive, assertHouseActionActive, withAction, withHouseActions } from '../../../src/runtime/house-lifecycle/action-context.js';
 import { sendDraftConfirmed } from '../../helpers/owner-approval-script.js';
 import { makeNameChain } from '../../../src/identity/person-name.js';
+import { toMcpToolResult } from '../../../src/tools/mcp-adapter.js';
 
 afterEach(() => _draftsForTest.clear());
 
@@ -24,7 +25,7 @@ function gate() {
   return { signal: controller.signal, isActive: () => !controller.signal.aborted, retire: () => controller.abort() };
 }
 
-async function setup(origin?: string) {
+async function setup(origin?: string, status?: number) {
   const recipient = await signer(2).popclawId();
   const post = { handle: 'Author A', textPreview: 'Original post', authorPopclawId: recipient, houseSlug: 'house-a', eventId: 'a'.repeat(64) };
   const source = { fromPopclawId: recipient, senderNickname: '', houseSlug: 'house-a', eventId: 'b'.repeat(64) };
@@ -37,15 +38,18 @@ async function setup(origin?: string) {
   const pushTo = vi.fn(async (house: string | undefined, bytes: Uint8Array) => {
     assertHouseActionActive(house ?? 'house-a');
     pushed.push({ house, bytes });
+    return status === undefined ? undefined : { status, detail: 'synthetic conflict' };
   });
   const lookup = vi.fn(() => post);
   const houseOf = vi.fn(() => messageHouse);
+  const socialLog = { record: vi.fn() };
   const runtime = async () => ({
     boot: { signer: signer(1), nickname: 'Owner', webBaseUrl: 'https://example.invalid' },
     egress: { home, capturePlan: () => ({ targets: ['house-home', 'house-a', 'house-b'].map(slug => ({ slug, origin: slug === 'house-a' && origin ? origin : slug })) }), pushTo, push: (bytes: Uint8Array) => pushTo(undefined, bytes) },
     worldFeedCache: { lookup, findByEventIdPrefix: () => ({ item: post, ambiguous: [] }) },
     inboxStore: { houseOf, get: () => source },
     nameOf,
+    socialLog,
     bondsStore: { list: () => [{ popclawId: recipient, nickname: 'Recipient', remarkName: '' }] },
   });
   type Tool = { name: string; execute(id: string, params: unknown): Promise<{ text: string }> };
@@ -69,10 +73,21 @@ async function setup(origin?: string) {
     expect(token).toBeTruthy();
     return sendDraftConfirmed((id, params) => tools.get('popclaw_send_draft')!.execute(id, params), token!);
   };
-  return { recipient, post, source, pushed, lookup, houseOf, call, confirm, home, setLatestName: (name: string) => { latestName = name; }, setRemark: (name: string) => { remarkName = name; }, setHouse: (house: string | undefined) => { messageHouse = house; } };
+  return { recipient, post, source, pushed, lookup, houseOf, call, confirm, home, socialLog, setLatestName: (name: string) => { latestName = name; }, setRemark: (name: string) => { remarkName = name; }, setHouse: (house: string | undefined) => { messageHouse = house; } };
 }
 
 describe('draft destination and action generation', () => {
+  it.each([409, 200])('confirmed reply draft propagates HTTP %i without a false reply_sent', async status => {
+    const fx = await setup(undefined, status);
+    const draft = await fx.call('popclaw_draft_reply', { platform: 'x', post_id: '123', body: 'Synthetic confirmed reply' });
+    expect(fx.pushed).toEqual([]);
+    const sent = await fx.confirm(draft);
+    expect(sent.text).toContain(status === 409 ? 'not delivered' : 'replied on PopClaw');
+    expect(toMcpToolResult(sent).isError).toBe(status === 409 ? true : undefined);
+    expect(fx.pushed.map(p => p.house)).toEqual(['house-a']);
+    expect(fx.socialLog.record).toHaveBeenCalledTimes(status === 409 ? 0 : 1);
+  });
+
   it('uses the inbox sender name in a DM reply preview without changing the pinned recipient or house', async () => {
     const fx = await setup();
     fx.source.senderNickname = 'Lee';

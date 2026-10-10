@@ -5,11 +5,11 @@ import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { renderL1 } from '../../../src/notifier/owner-notifier.js';
 import { deriveSigil } from '../../../src/invite/sigil.js';
 
-const NOW = 1_800_000_000; // 固定"现在"，所有相对时间都从这里算
+const NOW = 1_800_000_000; // Freeze "now"; all relative times derive from this instant.
 const DAY = 86_400;
 
-// bond-context.ts 现在走 tierLabel()/renderCopy()，默认 lang = ownerLang() ——
-// 迁移前的产线原文全是中文，钉死 zh-CN 让下面这批断言继续原样通过（零回归）。
+// bond-context.ts now uses tierLabel()/renderCopy(), with lang defaulting to ownerLang().
+// The pre-migration production copy was Chinese; pin zh-CN so these assertions remain unchanged (zero regression).
 beforeAll(() => setOwnerLang('zh-CN', 'config'));
 afterAll(() => setOwnerLang(undefined));
 
@@ -75,10 +75,10 @@ describe('bondContext — 交情上下文尾行', () => {
   });
 
   it('取两个方向里更近的那一次，方向决定措辞', () => {
-    // 他来信 5 天前、我出手 1 天前 → 报我出手
+    // Their letter was five days ago, my action one day ago: report my action.
     const mine = ctx({ tier: 'friend', lastInteractionTs: NOW - DAY }, NOW - 5 * DAY)('abc');
     expect(mine).toContain('昨天你主动找过他');
-    // 反过来
+    // Reverse the order.
     const his = ctx({ tier: 'friend', lastInteractionTs: NOW - 5 * DAY }, NOW - DAY)('abc');
     expect(his).toContain('昨天他给你来过信');
   });
@@ -86,7 +86,7 @@ describe('bondContext — 交情上下文尾行', () => {
   it('beforeTs 排除当前这一封（否则永远只会说"今天他给你来过信"）', () => {
     const c = makeBondContext({
       bond: () => ({ tier: 'friend', description: '', lastInteractionTs: null }),
-      // 只有当前这封信（ts = NOW）在库里，早于它的一封都没有
+      // Only the current letter (ts = NOW) exists; there is no earlier letter.
       lastIncomingTs: (_id, beforeTs) => (beforeTs > NOW ? NOW : null),
       now: () => NOW,
     });
@@ -136,10 +136,11 @@ describe('bondContext — 交情上下文尾行', () => {
 });
 
 /**
- * 验收核心：真机截图那条推送（L1 私信 + bond-context 尾行）在 en/zh 各渲染
- * 一次，拼法照 index.ts 的真实生产路径 —— `renderL1` 拼第一行 + `bondTail()`
- * 接上 `payload.bondLine`（`bondContext(from, ts)` 的返回值）。修复前，尾行
- * 永远是硬编码中文，跟已双语化的第一行混在一起；修复后两行必须同语言。
+ * Core acceptance: render the real-host notification (L1 DM plus bond-context tail) once in each of
+ * en/zh. Assemble it through the production index.ts path: `renderL1` supplies the first line and
+ * `bondTail()` appends `payload.bondLine` (the result of `bondContext(from, ts)`). Before the fix, the
+ * tail was always hardcoded Chinese alongside a bilingual first line. Both lines must now use the same
+ * language.
  */
 describe('bondContext — 截图那条推送的 en/zh 对照（验收核心）', () => {
   const FROM_ID = 'someTestPopclawId1234567890';
@@ -148,7 +149,7 @@ describe('bondContext — 截图那条推送的 en/zh 对照（验收核心）',
   function pushLine(lang: 'en' | 'zh-CN', fromName: string): string {
     const bondCtx = makeBondContext({
       bond: () => ({ tier: 'acquaintance', description: '', lastInteractionTs: null }),
-      lastIncomingTs: () => NOW - 3600, // 一小时前 → 今天/today
+      lastIncomingTs: () => NOW - 3600, // One hour ago maps to today (Chinese label: 今天).
       now: () => NOW,
     });
     const bondLine = bondCtx(FROM_ID, NOW, lang);

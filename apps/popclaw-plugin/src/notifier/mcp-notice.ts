@@ -1,3 +1,4 @@
+import { verifySuccessCopy } from './verify-success-copy.js';
 import type { SqliteNotifier } from './sqlite-notifier.js';
 /** MCP counts and peeks are per consumer. Explicit acknowledgement follows
  * handoff; native hosts retain their existing L1/L2 delivery paths. */
@@ -88,11 +89,7 @@ function describe(item: NotificationItem, nameOf: NameChain | undefined, lang: L
         targetPostId: String(p['targetPostId'] ?? ''),
       })}${tail}`;
     case 'ranger_verify_done':
-      return renderCopy(lang, 'notify.mcp.verifyDone.line', {
-        label,
-        platform: String(p['platform'] ?? ''),
-        handle: String(p['handle'] ?? ''),
-      });
+      return verifySuccessCopy(lang, String(p['platform'] ?? ''), String(p['handle'] ?? ''), p);
     case 'ranger_verify_fail':
       return renderCopy(lang, 'notify.mcp.verifyFail.line', {
         label,

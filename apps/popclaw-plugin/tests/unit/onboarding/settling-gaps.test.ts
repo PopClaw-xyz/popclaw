@@ -32,7 +32,7 @@ describe('listGaps', () => {
       loreHouseReachable: true,
       externalVerifiedCount: 0,
       pendingInvitesCount: 0,
-      dreamStale: true, // followingCount=0 → dream_stale 的前置条件不满足，不该出
+      dreamStale: true, // followingCount=0 makes dream_stale's precondition false, so it must not appear.
       nameSource: 'auto',
     });
     expect(gaps.map((g) => g.key)).toEqual([
@@ -73,8 +73,8 @@ describe('listGaps', () => {
     const houses = [
       { slug: 'main', name: '主坊', entry: { headline: '主坊也声明了', firstMove: '主坊第一件事' } },
       { slug: 'house-a', name: '灯坊甲', entry: { headline: '甲的看点', firstMove: '带我进甲' } },
-      { slug: 'house-b', name: '灯坊乙' }, // 零声明：没有第一件事这回事
-      { slug: 'house-c', name: '灯坊丙', entry: { firstMove: '带我进丙' } }, // 已开始
+      { slug: 'house-b', name: '灯坊乙' }, // No declaration means there is no first-action task.
+      { slug: 'house-c', name: '灯坊丙', entry: { firstMove: '带我进丙' } }, // Already started.
     ];
     const gaps = listGaps({
       ...BASE,
@@ -132,8 +132,8 @@ describe('bailed_at（spec §5 落盘修复）', () => {
   it('write → read 跨「进程」（新读取者）也读到', async () => {
     const host = new InMemoryHostAdapter();
     await writeBailedAt(host, 1700000000);
-    // 新 host 实例复用同一份底层 config，模拟"跨进程"读——这里直接复用同一
-    // InMemoryHostAdapter（其 config 本身就是持久化状态），验证 write 真落盘。
+    // A new host instance reuses the same underlying config, simulating a cross-process read. Reuse the same
+    // InMemoryHostAdapter (its config is persistent state) to verify the write really persisted.
     expect(await readBailedAt(host)).toBe(1700000000);
   });
 
@@ -160,9 +160,9 @@ describe('bailed_at（spec §5 落盘修复）', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 同源钉子：status 待办与顺一句必须从同一份 listGaps() 出发，不许各写一份。
-// 这里不跑完整的 runStatusCommand（另有 status.test.ts 覆盖渲染细节），只钉
-// "同一份 facts → 同一份 gaps → 两个消费者认的是同一批 key，顺序一致"。
+// Common-source guard: status tasks and nudges must both use listGaps(), never separate implementations.
+// Do not run the full runStatusCommand here (status.test.ts covers rendering); pin the contract that
+// the same facts and gaps produce the same keys in the same order for both consumers.
 // ---------------------------------------------------------------------------
 describe('status / 顺一句同源', () => {
   it('同一份 GapFacts 喂 listGaps 一次，status 的 5 个已知 key 与顺一句候选严格同序', () => {
@@ -178,12 +178,12 @@ describe('status / 顺一句同源', () => {
     };
     const gaps = listGaps(facts);
 
-    // status.ts 只认这 5 个 key（resume_onboarding / house:* 是顺一句专属）。
+    // status.ts recognizes only these five keys; resume_onboarding / house:* belong only to nudges.
     const STATUS_KEYS = new Set(['no_follows', 'no_taste', 'no_verify', 'dream_stale', 'auto_name']);
     const statusTodoKeys = gaps.filter((g) => STATUS_KEYS.has(g.key)).map((g) => g.key);
     expect(statusTodoKeys).toEqual(['no_follows', 'no_taste', 'no_verify', 'auto_name']);
 
-    // 顺一句候选池 = 全量 gaps（含 resume_onboarding），同一顺序、同一来源。
+    // The nudge candidate pool is all gaps, including resume_onboarding, in the same order from the same source.
     expect(gaps.map((g) => g.key)).toEqual([
       'resume_onboarding',
       'no_follows',

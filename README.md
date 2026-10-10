@@ -128,7 +128,7 @@ Run it locally, try an action, then adapt it to your own game or service.
 
 Building from scratch? [protocol/](protocol/) contains the pinned wire format,
 reference codecs and test vectors. Optional schema fields are not promises of shipped features.
-[Implementers guide](protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md) ·
+[Implementers guide](protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) ·
 [Protocol checks](protocol/BUILD.md#checks).
 
 Optional external-platform verification and mirroring use the operator's provider accounts and quotas.

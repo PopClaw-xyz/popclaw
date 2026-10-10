@@ -96,9 +96,9 @@ describe('resolvePerson — 解析顺序（本地优先）', () => {
 });
 
 describe('resolvePerson — 拉丁名号被折成"印信"的坑（crockford fold）', () => {
-  // 'blackfeather' 是合法 crockford 输入（o/i/l 折成 0/1/1），parseFollowTarget 判它
-  // 是印信 b1ackfeather。本地源必须同时按"折过的名号"比，否则交情本里的拉丁名号
-  // 一律漏，灯坊一挂就复现最初那次私信事故。
+  // 'blackfeather' is valid Crockford input (o/i/l fold to 0/1/1), so parseFollowTarget treats it
+  // as sigil b1ackfeather. Local sources must also compare folded names; otherwise Latin names in the bond book
+  // are all missed, reproducing the original DM incident whenever the LoreHouse is down.
   it('交情本里的拉丁名号 → 本地命中，零往返', async () => {
     const s = sources({ known: () => [{ popclawId: ID_A, nickname: 'blackfeather' }] });
     const r = await resolvePerson('blackfeather', s);
@@ -177,9 +177,9 @@ describe('localCandidates', () => {
 });
 
 describe('关注我的人也是认人的本地信源（真机 2026-07-30）', () => {
-  // host-c 昨晚 23:40 关注了主人，id 就躺在 `known_followers` 里（通知就是从那张表
-  // diff 出来的），可认人时压根不查它 —— 于是本该零往返认出来的人退到灯坊，而
-  // 灯坊那边他没名片（名号广播给了旧坊）→ 「认不出 #9b2y5d3f」。
+  // host-c followed the owner at 23:40 last night; its ID is in known_followers (the notification came from a diff
+  // of that table), but person resolution never queried it. A person resolvable locally fell back to the LoreHouse,
+  // where it had no profile (the name was broadcast to the old house), producing an unresolved #9b2y5d3f.
   it('只在 followers 里的人（不在交情本/关注簿）也能按印信认出来', () => {
     const out = localCandidates(
       { sigil: SIGIL_B },
@@ -208,14 +208,14 @@ describe('关注我的人也是认人的本地信源（真机 2026-07-30）', ()
 });
 
 describe('灯坊核不出的 id 必须带着 unverified 出来（防人机之间认错人）', () => {
-  // 真机 2026-07-30：agent 把 popclaw.world 官方的 id 当成 host-c 那边递进来的，草稿预览
-  // 回了个 `—#6q0w4z7r` —— 与「灯坊确认过的收件人」长得一模一样，agent 当成合法
-  // 结果，只能自己编解释。resolved 不该把核验状态吞掉。
+  // Real run, 2026-07-30: the agent treated the popclaw.world official ID as coming from host-c; the draft preview
+  // returned `—#6q0w4z7r`, indistinguishable from a LoreHouse-verified recipient. The agent accepted it
+  // and invented an explanation. A resolved result must preserve verification status.
   it('完整 id + 灯坊查无 → resolved 但标记 unverified=unknown', async () => {
     const r = await resolvePerson(ID_B, {
       known: () => [],
       seen: () => [],
-      house: async () => [], // 灯坊在线，明确答"查无此人"
+      house: async () => [], // The LoreHouse is online and explicitly reports no such person.
     });
     expect(r.kind).toBe('resolved');
     if (r.kind === 'resolved') {
@@ -328,8 +328,8 @@ describe('displayPerson — 主人可见的称呼里绝不出现裸 id 前缀', 
   });
 });
 
-// 真机 2026-07-29：私信认得出「苍梧小居士」全靠灯坊 /v1/resolve，认完就扔，
-// 交情本那一行的 nickname 一直空着 → 所有通知退回 #印信 兜底。
+// Real run, 2026-07-29: resolving the DM recipient depended entirely on LoreHouse /v1/resolve, then discarded the name.
+// The bond row's nickname stayed empty, so all notifications fell back to #sigil.
 describe('localFirst — 灯坊认出来的名号写回交情本', () => {
   it('第③级（灯坊）命中 → learn 收到 id + 名号', async () => {
     const learn = vi.fn();
@@ -372,7 +372,7 @@ describe('localFirst — 灯坊认出来的名号写回交情本', () => {
     const book = new Map<string, string>([[ID_A, '']]);
     const s = sources({
       house: vi.fn(async () => [cand(ID_A, '苍梧小居士', SIGIL_A)]),
-      // fillNickname 的行为契约：只填空、不建行。
+      // fillNickname contract: fill empty fields only; never create rows.
       learn: (id, nickname) => {
         if (book.get(id) === '') book.set(id, nickname);
       },

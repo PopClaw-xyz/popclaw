@@ -30,7 +30,7 @@ describe('六幕 stages', () => {
 
   it('lantern 可直接到 errand（skip 连带跳过 attune），但脊柱后继仍是 attune', () => {
     expect(legalNextStages['lantern']).toContain('errand');
-    // 顺序承重：spineNext 取第一个非 completed 的目标。
+    // Order matters: spineNext selects the first non-completed target.
     expect(legalNextStages['lantern']![0]).toBe('attune');
   });
 
@@ -56,10 +56,10 @@ describe('六幕 stages', () => {
 
     it('所有旧串名与未知值 → idle 重走', () => {
       const legacy = [
-        // 三幕串名
+        // Three-scene sequence names.
         'act1-opening', 'act1-naming', 'act1-presence', 'act2-world', 'act2-summary',
         'act3-actions', 'graduating',
-        // 更早的 11 段
+        // The earlier 11 stages.
         'bootstrapping', 'welcoming', 'discovering-taste', 'first-report', 'inviting',
         'cadence-aligning', 'bonus-platforms', 'nameplate', 'first-voice',
         'garbage-value', '',

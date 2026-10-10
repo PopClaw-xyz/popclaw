@@ -1,6 +1,6 @@
 /**
- * S4-T4 规格 5: learned writer — 速览反馈（展开/收藏/无感）追加进
- * <tasteRoot>/learned/picks.jsonl（与 TasteLoader 同根；ADR-0011 本地私域）。
+ * S4-T4 spec 5: learned writer appends glance feedback (expand/favorite/not interested) to
+ * <tasteRoot>/learned/picks.jsonl, sharing TasteLoader's root (ADR-0011 local private domain).
  */
 import { describe, it, expect } from 'vitest';
 import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
@@ -72,7 +72,7 @@ describe('appendPick', () => {
   });
 });
 
-// learned/dreamed.md —— 做梦写回的建议层（spec 附录 A.3/A.4，第 3 步）
+// learned/dreamed.md: the suggestion layer written by dreaming (spec appendix A.3/A.4, step 3).
 describe('learned taste (dreamed.md)', () => {
   it('round-trips tags/mute/正文，并按 P-002 形态分两半', async () => {
     const tasteRoot = await freshRoot();
@@ -123,22 +123,22 @@ describe('learned taste (dreamed.md)', () => {
   });
 });
 
-// 审查抓到的（ADR/A.4 主权层压过建议层）：主人把 learned 关掉是明确表态，
-// 每晚做梦自动把它重新打开，就是拿建议层压主权层。
+// Review finding (ADR/A.4: sovereign layer outranks suggestions): disabling learned is an explicit owner decision;
+// nightly dreaming must not automatically reenable it and override that decision.
 describe('learned taste — 尊重主人关掉它', () => {
   it('主人 enabled:false → 做梦写回不许偷偷打开', async () => {
     const tasteRoot = await freshRoot();
     await writeLearnedTaste({ tasteRoot }, { tags: ['a'], mute: [], summary: '' });
     const file = join(tasteRoot, 'manifest.json');
     const m = JSON.parse(await readFile(file, 'utf-8'));
-    m.sources['learned/dreamed.md'].enabled = false; // 主人手动关掉
+    m.sources['learned/dreamed.md'].enabled = false; // Owner disables it manually.
     await writeFile(file, JSON.stringify(m), 'utf-8');
 
     await writeLearnedTaste({ tasteRoot }, { tags: ['b'], mute: [], summary: '第二场梦' });
 
     const after = JSON.parse(await readFile(file, 'utf-8'));
     expect(after.sources['learned/dreamed.md'].enabled).toBe(false);
-    // 文件本身照写不误 —— 关掉的是"用不用"，不是"记不记"。
+    // Still write the file: the switch controls use, not recording.
     expect((await readLearnedTaste({ tasteRoot })).tags).toEqual(['b']);
   });
 

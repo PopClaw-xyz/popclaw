@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 /**
  * A release ships TWO packages from one workflow, and the order is the whole
@@ -57,7 +58,7 @@ describe('Justfile packs the two packages with two different guards', () => {
     expect(justfile).toMatch(/^pack-mcp-shell /m);
   });
 
-  it('keeps the native-binding floor on the plugin and off the shell', () => {
+  it('keeps the native matrix guard on the plugin and off the shell', () => {
     // A recipe is its header line plus every indented line that follows it.
     const recipe = (name: string): string => {
       const lines = justfile.split('\n');
@@ -71,12 +72,12 @@ describe('Justfile packs the two packages with two different guards', () => {
       expect(body.join('\n').trim(), `${name} has an empty body`).not.toBe('');
       return body.join('\n');
     };
-    // The floor is a promise about the IMPLEMENTATION package. Weakening it to
+    // The matrix is a promise about the IMPLEMENTATION package. Weakening it to
     // make one recipe serve both packages is the failure this pins shut.
-    expect(recipe('pack-plugin')).toContain('-lt 11');
+    expect(recipe('pack-plugin')).toContain('scripts/prepare-native-deps.mjs --verify-tarball "$dst"');
     // The shell must fail the opposite test: no runtime inside it at all.
     const shell = recipe('pack-mcp-shell');
-    expect(shell).not.toContain('-lt 11');
+    expect(shell).not.toContain('--verify-tarball');
     expect(shell).toContain('wallet-migrations');
   });
 });
@@ -84,6 +85,36 @@ describe('Justfile packs the two packages with two different guards', () => {
 describeRelease('release.yml ships both packages in one fixed order', () => {
   const yaml = readFileSync(RELEASE, 'utf8');
   const all = steps(yaml);
+
+  it('runs the full native matrix on a hosted Darwin packer with every advertised target', () => {
+    const runner = /^ {4}runs-on: (\S+)$/m.exec(yaml)?.[1];
+    const platform = runner?.startsWith('macos-') ? 'darwin' : 'linux';
+    const source = readFileSync(resolve(ROOT, 'apps/popclaw-plugin/scripts/prepare-native-deps.mjs'), 'utf8');
+    // Execute the actual matrix declaration without vendoring or compiling.
+    const start = source.indexOf('const NODE_ABI_TARGETS =');
+    const end = source.indexOf('\nfunction downloadHostPrebuilds()');
+    const rows = runInNewContext(`${source.slice(start, end)}; coverageMatrix();`, {
+      process: { platform },
+    }) as { platform: string; arch: string; major: number; file: string }[];
+    const expected = ['darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64', 'win32-x64']
+      .flatMap(target => [24, 26].map(major => `better_sqlite3-${target}-node${major}.node`));
+    expect([...new Set(rows.map(row => row.file))].sort()).toEqual(expected.sort());
+    const linuxVerifierRows = runInNewContext(`${source.slice(start, end)}; coverageMatrix();`, {
+      process: { platform: 'linux' },
+    }) as { file: string }[];
+    expect(linuxVerifierRows.map(row => row.file).sort()).toEqual(expected.sort());
+    expect(runner).toBe('macos-15');
+  });
+
+  it('uses macOS checksum tooling without changing the trusted-publisher identity', () => {
+    const pack = stepContaining(all, 'just pack-mcp-shell');
+    expect(pack.text).toContain('shasum -a 256 ./*.tgz > SHA256SUMS.txt');
+    expect(pack.text).not.toContain('sha256sum ');
+    expect(yaml).toContain('environment: npm-release');
+    expect(yaml).toContain('id-token: write');
+    expect(yaml).toContain('filename), and both `popclaw` and `popclaw-mcp` name `release.yml`');
+    expect(yaml).not.toContain('runs-on: self-hosted');
+  });
 
   it('packs with the project recipes rather than re-implementing packing', () => {
     expect(yaml).toContain('just pack-plugin');

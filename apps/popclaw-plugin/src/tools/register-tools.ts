@@ -129,7 +129,7 @@ export function registerPopclawTools(deps: RegisterToolsDeps): number {
   const total = countRegistrations(deps);
   const registrationApi = deps.nativeToolNotices && deps.getToolNoticeContext
     ? withNativeToolNotice(deps.api, deps.getToolNoticeContext) : deps.api;
-  const api = withTail(registrationApi, runtime, deps.runCommand, deps.getToolNoticeContext);
+  const api = withTail(registrationApi, runtime, deps.runCommand, deps.getToolNoticeContext, deps.currentGuideReadScope);
   const ctx: ToolsCtx = { api, runtime, deps: {...deps, api: registrationApi}, total };
 
   for (const step of REGISTER_STEPS) step(ctx);

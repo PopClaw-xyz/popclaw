@@ -2,9 +2,9 @@ import { ensureWorldCapabilitySchema } from '../host/runtime-storage-schema.js';
 import { recoveredCapabilityBinding } from './house-recovery-fence.js';
 import { houseKeyFromAckHex, verifyManifestProof, type VerifiedHouseBinding } from './house-binding.js';
 import { popclaw, isHouseSessionBoard } from '@popclaw/contracts';
-import boardSchema from '../../../../protocol/packages/contracts/protocol/public-envelope-01/board.schema.json';
-import actionSchema from '../../../../protocol/packages/contracts/protocol/public-envelope-01/action-kind.schema.json';
-import eventSchema from '../../../../protocol/packages/contracts/protocol/public-envelope-01/interpreted-event-kind.schema.json';
+import boardSchema from '../../../../protocol/packages/contracts/protocol/public-envelope-02/board.schema.json';
+import actionSchema from '../../../../protocol/packages/contracts/protocol/public-envelope-02/action-kind.schema.json';
+import eventSchema from '../../../../protocol/packages/contracts/protocol/public-envelope-02/interpreted-event-kind.schema.json';
 import profileSchema from '@popclaw/contracts/world-interaction/schema-profile.schema.json';
 import { cidFromCanonical } from '@popclaw/algorithms';
 import Ajv2020 from 'ajv/dist/2020.js';
@@ -53,7 +53,7 @@ export interface VerifiedHouseManifest {
 export interface VerifiedPublicStreamCapability {
   readonly house: VerifiedHouseManifest['house'];
   readonly capabilityRevision: string;
-  readonly publicStream: Readonly<{ envelope_baseline: 'public-envelope-01'; endpoint: '/v1/world-stream'; mode: 'public-v1'; log_incarnation: string; initial_public_scopes: readonly string[] }>;
+  readonly publicStream: Readonly<{ envelope_baseline: 'public-envelope-02'; endpoint: '/v1/world-stream'; mode: 'public-v1'; log_incarnation: string; initial_public_scopes: readonly string[] }>;
 }
 export interface HouseCapabilityView {
   readonly verified: VerifiedHouseManifest;

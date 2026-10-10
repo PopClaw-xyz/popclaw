@@ -77,3 +77,20 @@ it('an ignited retry after failure still drains its own runtime exactly once', a
   await stopping;
   expect(shutdown).toHaveBeenCalledOnce();
 });
+
+
+it('peek never constructs a runtime and returns only the current live build', async () => {
+  const value = {shutdown: vi.fn(async () => {})};
+  const build = vi.fn(async () => value); const lifecycle = createLazyRuntime(build);
+  expect(await lifecycle.peek()).toBeNull(); expect(build).not.toHaveBeenCalled();
+  await lifecycle.get(); expect(await lifecycle.peek()).toBe(value);
+  await lifecycle.stop(); expect(await lifecycle.peek()).toBeNull(); expect(build).toHaveBeenCalledOnce();
+});
+
+it('peek cannot return a pending build after stop or resurrect a failed build', async () => {
+  const init = deferred<{shutdown(): Promise<void>}>(); const lifecycle = createLazyRuntime(() => init.promise);
+  const opening = lifecycle.get(); await Promise.resolve(); const peek = lifecycle.peek(); const stopping = lifecycle.stop();
+  init.resolve({shutdown: vi.fn(async () => {})}); await opening; await stopping; expect(await peek).toBeNull();
+  const failed = createLazyRuntime(async () => {throw new Error('NO BUILD');});
+  await expect(failed.get()).rejects.toThrow('NO BUILD'); expect(await failed.peek()).toBeNull();
+});

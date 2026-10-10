@@ -15,6 +15,11 @@
 # (docs.npmjs.com/trusted-publishers), so the CLI is pinned explicitly below
 # rather than inherited from whatever Node ships.
 #
+# Full native packing requires Darwin: clang builds both Mac architectures;
+# Linux and Windows bindings come from official better-sqlite3 releases.
+# Use GitHub-hosted macos-15 (arm64), which supports npm trusted publishing.
+# Self-hosted runners are not supported by npm's OIDC trusted publisher.
+#
 # ORDER: the alias requires the implementation at exactly the same version:
 # `popclaw-mcp` is a shell whose only dependency is `popclaw` at an exact
 # version. Publishing the shell first would put a package on the registry that
@@ -79,7 +84,7 @@ env:
 jobs:
   publish:
     name: build, verify and publish
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     timeout-minutes: 45
     # An empty GitHub Environment today; it exists so the owner can attach a
     # required reviewer to it later, which turns an accidental `git push --tags`
@@ -287,9 +292,9 @@ jobs:
           # Reuse the project's own recipes rather than calling `pnpm pack`
           # directly. `just pack-plugin` is what produces every tarball anyone
           # has ever installed, and it carries a guard `pnpm pack` does not — it
-          # counts the prebuilt native bindings and aborts below 11, the failure
-          # that otherwise installs fine on the packer's machine and dies on
-          # everyone else's. `just pack-mcp-shell` carries the opposite guard:
+          # checks every declared platform, architecture and Node ABI inside
+          # the tarball. A binding count alone cannot prove that Mac bindings
+          # were packed. `just pack-mcp-shell` carries the opposite guard:
           # version lock step, an exact dependency, and a tarball that contains
           # no copy of the runtime.
           just pack-plugin
@@ -307,12 +312,12 @@ jobs:
             exit 1
           fi
 
-          # One manifest, two lines, the format `sha256sum --check` reads back.
+          # One manifest, two lines, the format `shasum --check` reads back.
           # This file is what a resume run verifies the retained bytes against.
           staged="${RUNNER_TEMP}/artefacts"
           mkdir -p "$staged"
           cp "$main_tgz" "$shell_tgz" "$staged/"
-          (cd "$staged" && sha256sum ./*.tgz > SHA256SUMS.txt)
+          (cd "$staged" && shasum -a 256 ./*.tgz > SHA256SUMS.txt)
           cat "$staged/SHA256SUMS.txt"
 
           # What a resume run checks this set against, BY VALUE. The artefact's
@@ -332,8 +337,8 @@ jobs:
               console.log(JSON.stringify(meta));
             ' "$staged/release-metadata.json"
 
-          main_sha=$(sha256sum "$main_tgz" | cut -d' ' -f1)
-          shell_sha=$(sha256sum "$shell_tgz" | cut -d' ' -f1)
+          main_sha=$(shasum -a 256 "$main_tgz" | cut -d' ' -f1)
+          shell_sha=$(shasum -a 256 "$shell_tgz" | cut -d' ' -f1)
           {
             echo "MAIN_TGZ=$main_tgz"
             echo "SHELL_TGZ=$shell_tgz"

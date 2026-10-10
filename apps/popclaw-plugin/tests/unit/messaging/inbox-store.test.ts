@@ -47,8 +47,8 @@ describe('InboxStore (DB-backed)', () => {
     expect(new InboxStore(db).recent(10)).toHaveLength(1);
   });
 
-  // 规格 B 切片④：坊维度。去重键刻意与坊无关 —— 同一封 DM 被两座坊各中继一次
-  // 只处理一次（exactly-once，真机双向验过的资产）。
+  // Spec B, slice 4: house dimension. The deduplication key is deliberately house-independent: a DM relayed by two houses
+  // is processed once (exactly-once behavior verified bidirectionally on real machines).
   it('同一封 DM 从两座坊各到一次 → 只落一行，记先到的那座坊', () => {
     const s = new InboxStore(db);
     expect(s.record(item({ houseSlug: 'popclaw-me' }))).toBe(true);
@@ -100,7 +100,7 @@ describe('InboxStore (DB-backed)', () => {
 
   it('旧行（空串 house_slug）与查无此人都回落主坊（undefined）', () => {
     const s = new InboxStore(db);
-    s.record(item()); // 不带 houseSlug = 存量单坊行
+    s.record(item()); // No houseSlug means an existing single-house row.
     expect(s.recent(1)[0]!.houseSlug).toBeUndefined();
     expect(s.houseOf('alice')).toBeUndefined();
     expect(s.houseOf('nobody')).toBeUndefined();
@@ -127,7 +127,7 @@ describe('InboxStore (DB-backed)', () => {
     expect(newest.inReplyToPostId).toBe('p9');
   });
 
-  // #231：随信那张图落盘后的路径。旧行 NULL → undefined。
+  // #231: path of the image saved with a message; old NULL values become undefined.
   it('media_path round-trips; 无图的行是 undefined（不是空串）', () => {
     const s = new InboxStore(db);
     s.record(item({ ts: 1, body: 'with pic', mediaPath: '/data/dm-media/1-abcdefgh.png' }));
@@ -137,8 +137,8 @@ describe('InboxStore (DB-backed)', () => {
     expect(older!.mediaPath).toBe('/data/dm-media/1-abcdefgh.png');
   });
 
-  // 铁律：去重键算在解密后的**文字**上，绝不掺图 —— 同一封信被 SSE 回放两次
-  // （图路径相同）仍然只落一行。
+  // Hard rule: deduplicate on decrypted TEXT, never the image; replaying the same message through SSE twice
+  // with the same image path still produces only one row.
   it('图不进去重键：同一封信重放仍只落一行', () => {
     const s = new InboxStore(db);
     expect(s.record(item({ ts: 1, body: 'hi', mediaPath: '/a.png' }))).toBe(true);
@@ -146,7 +146,7 @@ describe('InboxStore (DB-backed)', () => {
     expect(s.recent(10)).toHaveLength(1);
   });
 
-  // onboarding R1「已开始」判定：坊官方给主人来过信 = 那边真动过。
+  // Onboarding R1 started predicate: a DM from the house's official account proves activity there.
   describe('hasIncomingFrom', () => {
     it('坊官方来过信 → true；换个坊的官方 → false', () => {
       const s = new InboxStore(db);
@@ -157,7 +157,7 @@ describe('InboxStore (DB-backed)', () => {
 
     it('存量旧行（空 house_slug）也算 —— 发件人已经把坊锁死了', () => {
       const s = new InboxStore(db);
-      s.record(item({ fromPopclawId: 'me-official' })); // 单坊时代落的行
+      s.record(item({ fromPopclawId: 'me-official' })); // Row from the single-house era.
       expect(s.hasIncomingFrom('popclaw-me', ['me-official'])).toBe(true);
     });
 
@@ -174,8 +174,8 @@ describe('InboxStore (DB-backed)', () => {
     });
   });
 
-  // 交情上下文尾行的"他给你来过信"素材。beforeTs 是硬要求：收信循环先落库
-  // 再入队，不排除当前这一封就永远只会说「今天他给你来过信」。
+  // Material for the bond-context footer saying this person wrote before. beforeTs is required: the receive loop persists
+  // before enqueueing; without excluding this message it would always report that the person wrote today.
   describe('lastIncomingTs', () => {
     it('取严格早于 beforeTs 的最近一封', () => {
       const s = new InboxStore(db);

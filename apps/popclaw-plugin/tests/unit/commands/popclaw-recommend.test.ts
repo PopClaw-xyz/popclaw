@@ -47,7 +47,7 @@ describe('runPopclawRecommendCommand', () => {
         llmScore: vi.fn(), llmRender: vi.fn(),
       },
     );
-    // 台账 #010：报错行进词表后，钉成 zh-CN 的这个文件就该收到中文。
+    // Ledger #010: once errors use the lexicon, this zh-CN-pinned file must receive Chinese copy.
     expect(out.text).toContain('没跑成');
     expect(out.text).toContain('boom');
   });

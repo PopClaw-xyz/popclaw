@@ -122,8 +122,8 @@ If Python and SQLite are not what you want, implement the protocol directly.
 The pinned bundle is the only specification. Clone this repository or
 download the release tarball; the spec, the proto definitions, the vectors
 and the reference codecs are all under `protocol/`, with the documents under
-`protocol/packages/contracts/protocol/public-envelope-01/`. Read
-[`IMPLEMENTERS.md`](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md) first, then follow the
+`protocol/packages/contracts/protocol/public-envelope-02/`. Read
+[`IMPLEMENTERS.md`](../protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) first, then follow the
 [walkthrough](protocol-walkthrough.md). What a compliant house must do:
 
 1. **Verify on ingest.** At `POST /v1/push`, decode the outer `SignedPayload`,

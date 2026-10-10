@@ -1,6 +1,6 @@
 /**
- * 规格 B 切片②：跨坊合并视图。
- * 三条不变量：来源坊标签 / event_id 跨坊去重 / 单坊配置逐条不变。
+ * Spec B slice ②: merged view across houses.
+ * Three invariants: source-house labels, cross-house event_id deduplication, unchanged single-house entries.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -114,7 +114,7 @@ describe('WorldFeedCatalog — 跨坊合并视图', () => {
   it('repliesToOwner() 合并两坊的回音，回音带自己那座坊的 slug', async () => {
     const home = await house('popclaw-me');
     const world = await house('popclaw-world');
-    // 各坊自成一条 帖→回 的链：回音一定落在被回内容所在的坊。
+    // Each house has its own post → reply chain: replies belong to the house of their target content.
     rec(home, { platform: 'popclaw', platformPostId: 'mine-h', eventId: 'eh', authorPopclawId: 'ME' });
     rec(home, { platform: 'popclaw', platformPostId: 'r-h', eventId: 'erh', authorPopclawId: 'X', replyToPlatform: 'popclaw', replyToPostId: 'mine-h', platformPostCreatedAt: 10 });
     rec(world, { platform: 'popclaw', platformPostId: 'mine-w', eventId: 'ew', authorPopclawId: 'ME' });
@@ -160,7 +160,7 @@ describe('WorldFeedCatalog — 跨坊合并视图', () => {
     const direct = only.cache.recent(10);
     const viaCatalog = new WorldFeedCatalog([only]).recent(10);
     expect(viaCatalog.map((i) => i.platformPostId)).toEqual(direct.map((i) => i.platformPostId));
-    // 唯一多出来的东西就是来源坊标签。
+    // The only addition is the source-house label.
     expect(viaCatalog.every((i) => i.houseSlug === 'popclaw-me')).toBe(true);
     expect(viaCatalog.every((i) => i.alsoInHouses === undefined)).toBe(true);
     expect(new WorldFeedCatalog([only]).search('a', 10).map((i) => i.platformPostId))
@@ -230,7 +230,7 @@ describe('WorldFeedCatalog.fetchSnapshot — 各坊快照并发拉', () => {
     const home = await house('popclaw-me', [item({ platformPostId: 'h1', eventId: 'eh', platformPostCreatedAt: 100 })]);
     const world = await house('popclaw-world', [
       item({ platformPostId: 'w1', eventId: 'ew', platformPostCreatedAt: 300 }),
-      item({ platformPostId: 'h1', eventId: 'eh', platformPostCreatedAt: 100 }), // 中继重复
+      item({ platformPostId: 'h1', eventId: 'eh', platformPostCreatedAt: 100 }), // Duplicate relay.
     ]);
     const got = await new WorldFeedCatalog([home, world]).fetchSnapshot({ limit: 10 });
     expect(got.map((i) => i.platformPostId)).toEqual(['w1', 'h1']);

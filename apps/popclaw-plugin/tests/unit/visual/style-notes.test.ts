@@ -76,8 +76,8 @@ describe('style-notes', () => {
 });
 
 // ---------------------------------------------------------------------------
-// data/ → vault/ 搬家（P-004：主人亲手给的品味信号不能住在可丢弃层；
-// P-006：已有用户的老文件必须跟着搬，绝不孤儿化）。
+// Move data/ → vault/ (P-004: owner-provided taste signals cannot live in disposable storage;
+// P-006: migrate existing users' files too, never orphan them).
 // ---------------------------------------------------------------------------
 
 describe('migrateStyleNotesToVault', () => {

@@ -40,8 +40,8 @@ describe('renderNotifications', () => {
     payload: Record<string, unknown>,
   ): NotificationItem => ({ id: 1, level, kind, payload, enqueuedAt: 0 });
 
-  // 陌生人来信本来是静默的；有分量的陌生人不该被吃掉。
-  // 标签只报事实（认证 + 粉丝数），不替主人下"这人重要"的结论。
+  // Stranger DMs are normally silent, but notable strangers must not be suppressed.
+  // Labels report only facts (verification and follower count), not a judgment that this person is important.
   it('大 V 来信/关注：报出他是谁、有多少分量', () => {
     const out = renderNotifications([
       item('L1', 'dm', { fromPopclawId: 'abcdef0123456789', fromName: '某位大V', body: '你好', verifiedFollowerCount: 250_000 }),
@@ -58,9 +58,9 @@ describe('renderNotifications', () => {
     expect(out).not.toContain('认证 ·');
   });
 
-  // 做梦整理出来的东西终于有嘴了。
-  // 名字照全局规矩走「名号#印信」，档位报人话不报 wire 值。
-  // 文案要写全「当前及建议档位」与回应方式。
+  // Dream-generated organization can finally surface to the owner.
+  // Names follow the global nickname-plus-sigil rule; tiers use human labels, not wire values.
+  // Copy must include current and proposed tiers and how to respond.
   it('renders the dreamer\'s findings the way the owner would hear them', () => {
     const out = renderNotifications([
       item('L2', 'bond_proposal', {
@@ -84,8 +84,8 @@ describe('renderNotifications', () => {
     expect(renderNotifications([])).toBe('📭 没有待看的通知。');
   });
 
-  // 这些行最终由宿主 agent 转告主人 → 与 renderL1 同口径：`名号#印信`，
-  // 没名字只报 `#印信`。裸 id 前缀一个字都不留。
+  // The host agent relays these lines to the owner, so use renderL1's nickname-plus-sigil rule,
+  // or only the sigil when unnamed. Never show raw ID prefixes.
   it('renders each item with what it is and where to act', () => {
     const out = renderNotifications([
       item('L1', 'dm', { fromPopclawId: 'abcdef0123456789', fromName: '老张', body: '在吗' }),
@@ -100,7 +100,7 @@ describe('renderNotifications', () => {
     expect(out).not.toContain('ffee0011…');
   });
 
-  // 纯图私信：正文是空串，不能渲成一对空引号。
+  // Image-only DM: the empty body must not render as empty quotation marks.
   it('纯图私信渲成「一张图 📎」，不留空引号', () => {
     const out = renderNotifications([
       item('L1', 'dm', { fromPopclawId: 'abcdef0123456789', fromName: '老张', body: '', mediaPath: '/x/1.png' }),
@@ -109,8 +109,8 @@ describe('renderNotifications', () => {
     expect(out).not.toContain('「」');
   });
 
-  // 交情上下文尾行（2026-07-29）：MCP 宿主下主人是通过 agent 转述读到这些行的，
-  // 「这人是谁」的价值只多不少 —— 与 renderL1 同款尾行、同一份 payload 素材。
+  // Bond-context footer (2026-07-29): MCP owners read these lines through their agent, so identifying the sender
+  // is at least as valuable; use the same footer and payload material as renderL1.
   it('dm / reply / followed_you 各自带交情上下文尾行', () => {
     const out = renderNotifications([
       item('L1', 'dm', { fromPopclawId: 'abcdef0123456789', body: '在吗', bondLine: '　 ↳ 密友 · 昨天他给你来过信' }),
@@ -127,7 +127,7 @@ describe('renderNotifications', () => {
       item('L1', 'dm', { fromPopclawId: 'abcdef0123456789', body: '在吗' }),
     ]);
     expect(out).not.toContain('↳');
-    expect(out.split('\n')).toHaveLength(5); // 抬头 + 一条
+    expect(out.split('\n')).toHaveLength(5); // Heading plus one item.
   });
 });
 
@@ -148,9 +148,9 @@ describe('makeNotificationsTool — drains L1+L2, never L3', () => {
     expect(JSON.parse(res.text).owner_text).toBe('📭 没有待看的通知。');
   });
 
-  // 已决定/失效提议不作为新建议继续送达。
-  // 提议在入队后、送达前被 /popclaw review 或 decide 工具处理掉时，
-  // 这一条 L2 快照要被滤掉——事实仍在 review 卡里，提醒不必再发。
+  // Decided or expired proposals must not be delivered as new suggestions.
+  // If /popclaw review or the decide tool handles a proposal after enqueueing but before delivery,
+  // filter this L2 snapshot: the review card retains the facts and no further reminder is needed.
   it('settled bond proposals are drained but not delivered', async () => {
     const reenqueued: unknown[] = [];
     const fake: Notifier = {
@@ -179,8 +179,8 @@ describe('makeNotificationsTool — drains L1+L2, never L3', () => {
     expect(reenqueued).toHaveLength(0); // dropped ≠ lost-and-retried; decided is decided
   });
 
-  // 送达失败按既有 L2 机制处理——native 路径
-  // 在 render 抛错时把已 drain 的活项原样回队（index.ts），MCP 路径此前没有。
+  // Follow the existing L2 failure mechanism: the native path
+  // requeues drained live items unchanged if rendering throws (index.ts); MCP previously did not.
   it('render throw re-enqueues the drained items verbatim and reports failure', async () => {
     const reenqueued: Array<{ level: string; kind: string }> = [];
     const fake: Notifier = {
@@ -251,7 +251,7 @@ describe('renderNotifications · en lane (S6 lexicon parity)', () => {
     expect(out).toContain('(unknown) followed you');
   });
 
-  // en lane：当前及建议档位 + 回应方式。
+  // English lane: current/proposed tiers and response instructions.
   it('renders the dreamer\'s proposal with both tiers and how to answer', () => {
     const out = renderNotifications(
       [

@@ -277,10 +277,12 @@ export const PopclawPairBrowserSchema = Type.Object({
 // Account verification (#585) — the tool-side door onto `/popclaw invite`
 // ---------------------------------------------------------------------------
 
-/** popclaw_invite: preview on the first call, submit on the second. */
+/** Local prepare; admitted Native posted; explicit confirmation for sensitive changes. */
 export const PopclawInviteSchema = Type.Object({
+  prepare_only: Type.Optional(Type.Boolean({description: 'Prepare editable invitation copy locally; do not submit verification.'})),
+  posted: Type.Optional(Type.Boolean({description: 'Only after the owner acknowledges posting. Native verifies this chat’s latest prepared X account; other hosts return a confirmation preview.'})),
   platform: Type.Optional(
-    Type.String({ description: 'which platform the account is on: x | instagram | tiktok (omit when confirming)' }),
+    Type.String({ description: 'X account platform: x | twitter (omit when acknowledging the latest Native preparation or confirming)' }),
   ),
   handle: Type.Optional(
     Type.String({ description: "the owner's handle on that platform; a leading @ is fine (omit when confirming)" }),
@@ -610,7 +612,9 @@ export const PublishNewspaperSchema = Type.Object({
         '{ basis, masthead, edition, weather[], leads[], items{ "<item number>": {q, h, s} }, pulls{}, xrefs{}, deckNotes{}, newbies{}, teaser }. ' +
         "each item's q is a passage copied verbatim from THAT item's body on the material page (about four English words or five Chinese characters, or the whole body when it is shorter) and is checked against it — " +
         "an item whose q is not found in its own body, or whose q another item's body also contains, is refused. " +
-        'masthead, items and teaser are required; basis is the line the material page printed — copy it verbatim into every hand-in (without it or a real publish_token the hand-in is refused). No HTML, no URLs.',
+        'Submit ONE small batch as soon as its item copy is ready, rather than drafting the entire issue first. ' +
+        'masthead, items and teaser are required on the first hand-in; later hand-ins need only the same basis and the remaining items, because accepted structure is inherited. ' +
+        'basis is the line the material page printed — copy it verbatim into every hand-in (without it or a real publish_token the hand-in is refused). No HTML, no URLs.',
     },
   ),
 });

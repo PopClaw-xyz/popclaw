@@ -111,11 +111,11 @@ describe('SocialGraph', () => {
     void warns;
   });
 
-  // ADR-0037: 坊级宣告 / 人级亲疏。端到端走一遍 declare→revoke 的坊路由。
+  // ADR-0037: declarations per house, relationship tiers per person. Exercise declare-to-revoke house routing end to end.
   it('一坊取关不动另一坊：followsIn 分坊为真，following() 并集仍在', async () => {
     const db = makeDb();
     const signer = await makeSigner();
-    // houseOf 决定这条 follow 发去哪座坊（真实运行时来自世界流缓存）。
+    // houseOf chooses the follow's destination house; production derives it from the world-stream cache.
     let house = 'me';
     const sg = new SocialGraph({
       relationProducer: fakeRelationProducer({ db, houseOf: () => house }).producer,
@@ -125,7 +125,7 @@ describe('SocialGraph', () => {
     await sg.declareFollow('B');
     house = 'world';
     await sg.declareFollow('B');
-    await sg.revokeFollow('B');            // 回当初 declare 的那座坊 = world
+    await sg.revokeFollow('B');            // Return to the house of the original declaration: world.
 
     expect(sg.followsIn('B', 'me')).toBe(true);
     expect(sg.followsIn('B', 'world')).toBe(false);
@@ -136,8 +136,8 @@ describe('SocialGraph', () => {
   it('primaryHouse 注入 → 空 house_slug 的存量行归一成主坊，不在副坊拿加权（ADR-0037）', async () => {
     const db = makeDb();
     const signer = await makeSigner();
-    // 存量行：migration 014 之前写入的关注，house_slug 为空 —— 它当初确实经
-    // pushRouted(…, undefined, …) 落在了主坊。
+    // Legacy row: follows created before migration 014 have an empty house_slug; they originally reached
+    // the primary house through pushRouted(..., undefined, ...).
     db.execute(
       `INSERT INTO follow_events (type, followee, follow_type, taste_subscribed, timestamp, signature, house_slug)
        VALUES ('FollowDeclared', 'B', 'PUBLIC', 0, 100, 's', '')`,
@@ -149,8 +149,8 @@ describe('SocialGraph', () => {
     await sg.start();
 
     expect(sg.followsIn('B', 'me')).toBe(true);
-    expect(sg.followsIn('B', 'world')).toBe(false);   // 串坊噪音正是 ADR-0037 要消除的
-    expect(sg.following().map((f) => f.popclawId)).toEqual(['B']);   // 人级并集不受影响
+    expect(sg.followsIn('B', 'world')).toBe(false);   // Cross-house noise is exactly what ADR-0037 removes.
+    expect(sg.following().map((f) => f.popclawId)).toEqual(['B']);   // The person-level union is unaffected.
   });
 
   // The follow doorbell asks "do I already know this person", which is a

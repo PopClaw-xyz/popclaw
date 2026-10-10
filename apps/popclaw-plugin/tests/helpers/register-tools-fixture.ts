@@ -123,10 +123,10 @@ export function makeMockRuntime(overrides?: {
     egress,
     host: {},
     socialGraph: {},
-    // ADR-0042: 反馈工具从主坊说明书里读官方联系人。
+    // ADR-0042: the feedback tool reads the official contact from the primary House guide.
     guideClient: overrides?.guideClient ?? { fetchGuideText: async () => null },
     worldFeedClient: {},
-    // 切片④：草稿 DM 要问「他上封信从哪座坊来」；这里没来信记录 → 主坊。
+    // Slice 4: DM drafts ask which House the last letter came from; no inbox history here means the primary House.
     inboxStore: { houseOf: () => undefined },
     ...(overrides?.paths ? { paths: overrides.paths } : {}),
     worldFeedCache,
@@ -179,7 +179,9 @@ export function findTool(tools: ReturnType<typeof buildFakeApi>['tools'], name: 
   return t;
 }
 
-/** 收件人（真公钥，seed=7）+ 已登记名号的 bondsStore。 */
+/**
+ * Recipient with a real public key (seed=7), plus a bondsStore with a registered nickname.
+ */
 export function makeImageDmFixture() {
   const bondsStore = makeRealBondsStore();
   const kp = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7));

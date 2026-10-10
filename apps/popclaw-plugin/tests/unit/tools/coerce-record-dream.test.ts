@@ -1,6 +1,6 @@
 /**
- * 宿主把嵌套对象塞成 JSON 字符串交过来是常见现实（不同宿主的 tool-call 序列化不
- * 一致）。一整场梦的结论丢在这上面太贵 —— 归一在工具入口做掉。
+ * Hosts often pass nested objects as JSON strings because tool-call serialization differs.
+ * Losing an entire dream's conclusions to this is too costly; normalize at the tool entry point.
  */
 import { describe, it, expect } from 'vitest';
 import { coerceRecordDream } from '../../../src/tools/dream-taste-tools.js';

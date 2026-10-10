@@ -28,13 +28,13 @@ describe('passesRelativeValueGate', () => {
     expect(passesRelativeValueGate('dm', 'stranger9', graph)).toBe(false);
   });
 
-  // 没有这条豁免，新粉通知会被全数丢掉 —— 新粉按定义就在图谱之外。
+  // Without this exemption every new-follower notice would be dropped; new followers are outside the graph by definition.
   it('followed_you 显式豁免：完全陌生的新粉照样放行', () => {
     expect(passesRelativeValueGate('followed_you', 'stranger9', graph)).toBe(true);
   });
 
-  // 挂坊即认识（ADR-0041）：坊官方对新主人必然"陌生"，不放行 = 世界坊的
-  // 明信片/回程信全被静默丢弃。
+  // Joining a House establishes familiarity (ADR-0041): its official account is initially unknown to a new owner, so rejecting it
+  // would silently discard every world-House postcard and return letter.
   it('已挂坊的官方名号视同图谱内', () => {
     const isHouseOfficial = (id: string) => id === 'WORLD_OFFICIAL_1';
     expect(passesRelativeValueGate('dm', 'WORLD_OFFICIAL_1', graph, isHouseOfficial)).toBe(true);
@@ -105,8 +105,8 @@ describe('block beats the follow exemption', () => {
   });
 });
 
-// 已认证的大 V 来信此前被静默吃掉。豁免写进闸的
-// 第五级（拉黑 → 类豁免 → 图谱 → 挂坊官方 → 外站分量），不是绕开闸。
+// Letters from verified high-profile accounts used to be silently dropped. Add the exemption to gate level five
+// (blocklist -> type exemption -> graph -> joined-House official -> external standing), rather than bypassing the gate.
 describe('外站认证大 V 豁免', () => {
   const emptyGraph = { following: () => [] };
   const THRESHOLD = 100_000;

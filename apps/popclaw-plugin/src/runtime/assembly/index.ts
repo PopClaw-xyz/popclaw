@@ -196,7 +196,7 @@ export async function assembleRuntime<S extends object, P extends object = Recor
   // P5: one-shot legacy-file migrations.
   lifecycle.migrateLegacyFiles?.({ paths, marksStore });
 
-  const houseFeedReader = new HouseFeedReader({db:host.db,houses,stores:()=>houseStores});
+  const houseFeedReader = new HouseFeedReader({db:host.db,houses,stores:()=>houseStores,currentReadScope:ports.world.currentReadScope});
   const { orchestrator } = buildOnboarding({ host, boot, paths, ports, houses, egress, notifier, collaborators,
     snapshotClient:houseFeedReader, worldFeedCache, nameOf, mountedHouses, houseStarted, bondsStore, socialGraph, knownFollowers, socialLog, stateRepo });
 

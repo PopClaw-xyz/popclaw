@@ -12,7 +12,7 @@
  */
 
 import { signReply, type PostRefArgs } from '../messaging/sign-message.js';
-import { pushRouted } from '../egress/event-egress.js';
+import { pushRejection, pushRouted } from '../egress/event-egress.js';
 import type { Signer } from '../identity/signer.js';
 import { verifiedThenOf } from '../pings/reply-pings.js';
 import { safeRecord, type SocialLogRecorder } from '../social-log/social-log.js';
@@ -61,7 +61,7 @@ const USAGE =
 export async function runPopclawReplyCommand(
   args: PopclawReplyArgs,
   deps: PopclawReplyDeps,
-): Promise<{ text: string }> {
+): Promise<{ text: string; isError?: true }> {
   const idArg = args.positional[0];
   const body = args.positional.slice(1).join(' ').trim();
 
@@ -99,10 +99,17 @@ export async function runPopclawReplyCommand(
 
   const signed = await signReply(deps.signer, { inReplyTo, body, nickname: deps.nickname });
   // Spec B, slice 3: the echo lands back in the house that hosted the replied-to content (if the tag can't be traced, falls back to the main house).
-  await pushRouted(deps.egress, item.houseSlug, signed.signedPayloadBytes);
+  const receipt = await pushRouted(deps.egress, item.houseSlug, signed.signedPayloadBytes);
+  const rejection = pushRejection(receipt);
+  if (rejection) {
+    const lang = ownerLang();
+    return { isError: true, text: renderCopy(lang, 'reply.cli.notAccepted', {
+      status: String(rejection.status),
+      why: rejection.detail ? renderCopy(lang, 'reply.cli.notAccepted.reason', { detail: rejection.detail }) : '',
+    }) };
+  }
 
-  // Social log: the push has already passed its await (if it threw, it would have propagated
-  // above and never reached here).
+  // Do not record a reply that the house refused.
   // Both directions carry the original text; cross-platform mirrored posts use originalUrl --
   // so even a year later, after the cache is pruned, you can still get back to the original.
   safeRecord(deps.socialLog, {

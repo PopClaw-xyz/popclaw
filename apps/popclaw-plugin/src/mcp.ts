@@ -1,3 +1,4 @@
+import { currentInviteShareIdentity } from './invite/prepare-invite-share.js';
 // Evaluation-order imports: these modules were evaluated BEFORE the stdout
 // guard below at 2f857931, when this file still assembled the runtime inline.
 // Moving that wiring to runtime/assembly must not shrink or grow the window a
@@ -132,6 +133,7 @@ async function main(): Promise<void> {
 
   const { api, tools } = makeToolCollector((m) => logger.info({}, m));
   registerPopclawTools({
+    getInviteShareIdentity: async () => currentInviteShareIdentity(await lifecycle.peek()),
     // This root is single-owner local stdio. Hosted must use its own caller binding.
     socialSendHost: 'local-stdio',
     durableSocialDrafts: true,
@@ -337,20 +339,15 @@ async function main(): Promise<void> {
     try {
       const rt = await runtime();
       agentRuntime = rt;
-      // ONE call identity, derived once and used by both halves. The tool body
-      // is given its id by `dispatchMcpCall`, which rebuilds it from
-      // `requestId`; handing that call the id we already derived is what makes
-      // the two provably the same string. Deriving it twice would diverge the
-      // moment a host sends an id the sanitiser rejects, because the fallback
-      // is a timestamp — and every approval would then fail to be found.
+      // One opaque identity per invocation, independent of a client's repeated
+      // or malformed wire id. Both approval and execution receive it unchanged.
       const callRef = approvals.callRef(extra);
-      const requestId = callRef.slice('mcp_'.length);
       const dispatch = async () => {
         // Asks only if this tool registered a subject, then dispatches; a tool
         // with no subject is dispatched with no prompt at all. The ORDER lives
         // inside `aroundDispatch` because no test can import this file.
         const result = await approvals.aroundDispatch(tool.name, req.params.arguments, callRef, extra.signal,
-          () => dispatchMcpCall(tool, req.params.arguments, { requestId, signal: extra.signal }));
+          () => dispatchMcpCall(tool, req.params.arguments, extra, callRef));
         const response = toMcpToolResult(result);
         return decorateToolNotice(tool.name, response, () => offerToolNotice(runtimeToolNoticeContext(rt, notificationConsumerId(), extra.signal)));
       };

@@ -105,7 +105,7 @@ describe('runPopclawFeedCommand', () => {
     // platform content is still present
     expect(r.text).toContain('tweet #1');
     expect(r.text).toContain('video title');
-    // 台账 #012：这五档此前硬编码英文，本文件把语言钉成 zh-CN 也照样返回英文。
+    // Ledger #012: these five tiers were hardcoded English even when this file pinned zh-CN.
     expect(r.text).toContain('10 分钟前');
     expect(r.text).toContain('2 小时前');
     expect(r.text).toContain('1 天前');

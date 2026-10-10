@@ -322,29 +322,21 @@ describe('the dialog every MCP host is given', () => {
  * THE ID MUST BE THE SAME STRING ON BOTH SIDES.
  *
  * The wrapper asks under one call identity and the tool body consumes under
- * another that `dispatchMcpCall` derives. If they ever disagree, every
- * approval on MCP fails to be found and the tool can never send — and the
- * failure is silent, because both halves look correct on their own. The
- * fallback makes this a live hazard rather than a theoretical one: an id the
- * sanitiser rejects becomes `Date.now()`, which is a DIFFERENT value each time
- * it is computed.
+ * another would make its approval impossible to find. The root allocates one
+ * opaque ref and supplies that exact string to both halves, independent of
+ * the client's wire id shape or repeated use.
  */
 describe('the call identity the wrapper and the body agree on', () => {
   it('matches what dispatchMcpCall hands the tool body, for every id shape', async () => {
-    // The fixture has to cross every boundary where the two rules could
-    // disagree: the sanitiser's character class, its LENGTH bound (120 — an id
-    // of exactly 120 passes both a correct and a wrongly-widened rule, so it
-    // proves nothing on its own), and the unsanitary ids that take the
-    // timestamp fallback.
+    // Wire ids do not choose the invocation identity, including at the old
+    // sanitizer's length and character boundaries.
     for (const requestId of ['7', 7, 'abc-123', 'a.b:c_d', '', undefined,
       'x'.repeat(119), 'x'.repeat(120), 'x'.repeat(121), 'x'.repeat(150),
       'has space', 'has/slash', 'has#hash', '\u676d\u5dde']) {
       const callRef = mcpApprovalCallRef({ requestId });
-      // The root passes the derived id on, exactly as `src/mcp.ts` does.
-      const passed = callRef.slice('mcp_'.length);
       let seen: string | undefined;
       await dispatchMcpCall({ execute: async (id: string) => { seen = id; return null; } },
-        {}, { requestId: passed });
+        {}, { requestId }, callRef);
       expect(seen, `requestId ${String(requestId)}`).toBe(callRef);
     }
   });

@@ -65,7 +65,7 @@ describe('checkEdit —— 门口那道检查', () => {
     );
     expect('edit' in r).toBe(true);
     if (!('edit' in r)) return;
-    expect(Object.keys(r.edit.items!)).toEqual(['1']); // 空的和不是对象的都不算
+    expect(Object.keys(r.edit.items!)).toEqual(['1']); // Empty and non-object values do not count.
     expect(r.edit.leads).toEqual([2]);
     expect(r.edit.weather).toEqual(['航天']);
     expect(r.edit.pulls).toEqual({ '1': '一句原话' });
@@ -109,9 +109,9 @@ describe('publishNewspaper', () => {
     });
     await publishNewspaper(deps(upload as never), { publishToken: 't2', edit: edit() });
     const html = sent[0]!;
-    expect(html).toContain('猎鹰落回了发射台'); // 模型写的字
-    expect(html).toContain('https://popclaw.me/post/abc1234567'); // 它没见过的讨论页链接
-    expect(html).toContain('--paper:#f7f3ea'); // 骨架样式,不再靠模型复刻
+    expect(html).toContain('猎鹰落回了发射台'); // Model-written copy.
+    expect(html).toContain('https://popclaw.me/post/abc1234567'); // A discussion-page link the model has never seen.
+    expect(html).toContain('--paper:#f7f3ea'); // Structural styling no longer depends on model reproduction.
     expect(html.split('<style>').length - 1).toBe(1);
   });
 
@@ -136,13 +136,13 @@ describe('publishNewspaper', () => {
     });
     expect(upload).not.toHaveBeenCalled();
     expect(r.text).toContain('edit.items');
-    expect(getIssue('t3')).toBeDefined(); // 令牌还在
+    expect(getIssue('t3')).toBeDefined(); // The token remains.
   });
 
   it('没写稿的条目照登(拿它自己的第一句),但回执上要说出来', async () => {
     putIssue('t4', issue({ pulse: [item(), item({ author: 'b', sigil: 'zzzz1111' })] }));
     const r = await publishNewspaper(deps(), { publishToken: 't4', edit: edit() });
-    expect(r.text).toContain('edit.items'); // 「有 1 条没稿」
+    expect(r.text).toContain('edit.items'); // One item has no copy.
   });
 
   it('style.json 的抱怨一起上回执 —— 改了没生效必须当场说', async () => {
@@ -166,18 +166,19 @@ describe('publishNewspaper', () => {
   });
 
   /**
-   * 2026-08-29 真机:令牌对不上时,这里原本会拿「最近一次取到的素材」照发,回执上说一句
-   * 「令牌对不上」。可 `edit` 的编号是按**模型当时拿到的那份素材**编的 —— 套到另一份上,
-   * 每一条正文都挂到了别人名下(作者与原文链接是对的,正文是别人的)。
-   * 一份看起来完整、却每行都在说谎的报纸,比不出报纸糟得多。
+   * Real-device case on 2026-08-29: on token mismatch this path previously published the latest
+   * gathered material and merely mentioned the mismatch in its receipt. But edit numbering belongs
+   * to the material the model originally received; applying it elsewhere attributes each body to
+   * another person while author/link fields still look correct. A complete-looking newspaper that
+   * misattributes every line is worse than no publication.
    */
   it('令牌对不上 → **拒发**,绝不拿最近那一份来套(认错人比不出报糟得多)', async () => {
-    putIssue('t7', issue()); // 盘上确实有一份别的素材,正是当年会被拿来顶上的那一份
+    putIssue('t7', issue()); // Another material set really exists on disk: the one that used to be substituted.
     const upload = vi.fn();
     const r = await publishNewspaper(deps(upload as never), { publishToken: 'unknown', edit: edit() });
     expect(upload).not.toHaveBeenCalled();
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.tokenMismatch'));
-    expect(getIssue('t7')).toBeDefined(); // 别人的账不许被这次失败销掉
+    expect(getIssue('t7')).toBeDefined(); // This failure must not clear someone else's ledger.
   });
 
   it('一份账本都没有 → 同样拒发,并告诉它重取一次', async () => {

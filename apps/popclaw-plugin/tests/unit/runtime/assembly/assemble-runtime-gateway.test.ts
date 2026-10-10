@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clearPerProcess, getOrCreatePerProcess } from '../../../../src/runtime/once.js';
 import { NewspaperDispatchRegistry } from '../../../../src/newspaper/dedicated-session.js';
+import { sharedNativeReadContext } from '../../../../src/host/native-read-context.js';
+import type { HouseFeedReader } from '../../../../src/ingress/house-feed-reader.js';
 import { HouseRuntime } from '../../../../src/runtime/house-lifecycle/house-runtime.js';
 import { WorldRuntime } from '../../../../src/runtime/world-runtime.js';
 import { ExecutionStoreCatalog } from '../../../../src/host/execution-store.js';
@@ -179,7 +181,7 @@ type Bag = Record<string, unknown> & {
   boot: { popclawId: string };
   inviteWatch: { notifyOwner(): void };
   retryDmNotifications(): Promise<void>;
-  houseRuntime: HouseRuntime; worldRuntime: WorldRuntime;
+  houseRuntime: HouseRuntime; worldRuntime: WorldRuntime; houseFeedReader: HouseFeedReader;
 };
 
 let restorePrototypes: () => void = () => {};
@@ -329,6 +331,23 @@ describe('the gateway ports themselves', () => {
 });
 
 describe('the gateway bag, as the production root path builds it', () => {
+  it('passes the current host request to feed acquisition after runtime boot', async () => {
+    const { bag, hooks } = await boot();
+    const context = sharedNativeReadContext();
+    const identity = { agentId: 'main', sessionKey: 'agent:main:scope-wiring', sessionId: 'scope-session', runId: 'scope-run' };
+    const call = { toolName: 'popclaw_show_world_feed', toolCallId: 'scope-call' };
+    await hooks.get('llm_input')!({ ...identity, historyMessages: [] }, identity);
+    context.beforeToolCall(call, { ...identity, ...call });
+    await context.run({ ...identity, assertInvocationCurrent() {} }, call.toolName, call.toolCallId, undefined, async () => {
+      expect(context.current()?.isCurrent()).toBe(true);
+      const active = context.current(), observed: unknown[] = [], current = context.current;
+      vi.spyOn(context, 'current').mockImplementation(() => { const scope = current(); observed.push(scope); return scope; });
+      await bag.houseFeedReader.prepare();
+      expect(observed).toContain(active);
+    });
+    await bag.shutdown();
+  }, 30_000);
+
   it('carries the shared keys with default publicFeedDisplay; the follower poll is built, not started; one owner-target store', async () => {
     const { bag } = await boot();
     expect(Object.keys(bag).sort()).toEqual([

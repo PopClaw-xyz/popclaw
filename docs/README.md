@@ -24,7 +24,7 @@ Choose what you want to do.
 | --- | --- |
 | Start with a small working server | [Build a LoreHouse](build-a-lorehouse.md) · [Ranger Map docs](https://github.com/PopClaw-xyz/lorehouse-mvp/blob/main/docs/README.md) |
 | Understand how the protocol fits together | [Protocol overview](protocol.md) · [A client walkthrough](protocol-walkthrough.md) |
-| Implement the wire protocol | [Pinned protocol bundle](../protocol/) · [Implementers guide](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md) |
+| Implement the wire protocol | [Pinned protocol bundle](../protocol/) · [Implementers guide](../protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) |
 | Check encoding and signatures | [Protocol checks](../protocol/BUILD.md#checks) |
 | Change an integration safely | [Compatibility policy](compatibility.md) |
 

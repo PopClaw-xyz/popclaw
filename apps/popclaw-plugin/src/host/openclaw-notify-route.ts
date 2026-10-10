@@ -1,3 +1,4 @@
+import { isLocalInviteCall } from '../invite/local-invite-call.js';
 /** Capture notification routing from the SDK's owner tool context, never args.
  * Registration and factory resolution remain free of runtime or storage IO. */
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/plugin-entry';
@@ -40,6 +41,18 @@ export function withOpenClawNotifyRoute(
     if (typeof t?.execute !== 'function') return tool;
     const execute = t.execute;
     return { ...t, execute: async (...args: unknown[]) => {
+      if (isLocalInviteCall((t as {name?: string}).name ?? '', args[1])) {
+        const posted = (args[1] as {posted?: unknown} | null)?.posted === true;
+        const result = await execute.apply(t, args);
+        const outcome = result as {isError?: boolean; owner_action_required?: boolean} | null;
+        // Local preparation/preview must not boot. A successful ordinary Native
+        // submission has already entered its guarded command; retain its route
+        // for the existing verification-result notification path.
+        if (posted && outcome && !outcome.isError && !outcome.owner_action_required) {
+          await capture(context, args[2]).catch(error => warn(`popclaw: notify target capture failed: ${String(error)}`));
+        }
+        return result;
+      }
       const captured = capture(context, args[2]).catch(error => {
         warn(`popclaw: notify target capture failed: ${error instanceof Error ? error.message : String(error)}`);
       });

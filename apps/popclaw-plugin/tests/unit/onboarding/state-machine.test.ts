@@ -42,7 +42,7 @@ describe('OnboardingStateMachine', () => {
 
   it('transition rejects illegal next stage', () => {
     sm.ensureStarted(POPCLAW_ID);
-    // idle 只能去 arrival —— 直接 bail 到 completed 是非法的。
+    // Idle may only advance to arrival; bailing directly to completed is invalid.
     expect(() => sm.transition(POPCLAW_ID, 'completed')).toThrow(IllegalTransitionError);
   });
 
@@ -67,7 +67,7 @@ describe('OnboardingStateMachine', () => {
   it('transition to completed sets completed_at via markCompleted path', () => {
     sm.ensureStarted(POPCLAW_ID);
     sm.transition(POPCLAW_ID, 'arrival');
-    // 任何进行中阶段都能直接 bail 到 completed（主人随时说「先这样」）。
+    // Any active stage may bail directly to completed whenever the owner wants to stop.
     sm.transition(POPCLAW_ID, 'completed');
     expect(repo.get(POPCLAW_ID)?.completed_at).not.toBeNull();
   });
@@ -116,7 +116,7 @@ describe('OnboardingStateMachine', () => {
       sm.ensureStarted(POPCLAW_ID);
       sm.transition(POPCLAW_ID, 'arrival', { drafts: { arrival: { candidates: ['夜行'], blind: true } } });
       expect(sm.drafts(POPCLAW_ID)).toEqual({ arrival: { candidates: ['夜行'], blind: true } });
-      // 不带 opts 转移——drafts 应被清空
+      // Transition without opts must clear drafts.
       sm.transition(POPCLAW_ID, 'passport');
       expect(sm.drafts(POPCLAW_ID)).toEqual({});
     });

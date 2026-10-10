@@ -68,14 +68,15 @@ export function registerNewspaperTools(ctx: ToolsCtx): void {
     (toolCtx: { sessionKey?: string }) => ({
     name: 'popclaw_publish_newspaper',
     description:
-      'Call once your `edit` object is written, to lay the page out and publish it: renders the page from the materials → uploads to canvas → ' +
-      'returns the message you can send the owner (teaser + link). ' +
+      'Call as soon as ONE small batch of complete item copy (q, h and s) is ready; do not draft the entire issue before the first call or send the edit as chat text. ' +
+      'Each accepted batch is saved. Only after all selected items are complete does this tool save the final paper, upload it to canvas, and return the owner message (teaser + link). ' +
       'Your edit must carry the `basis` value printed on the material page, verbatim — it tells this tool which page your item numbers refer to. ' +
       'publish_token is optional — pass the one popclaw_newspaper returned if you can copy it exactly; ' +
       'a hand-in that arrives with neither a real token nor the basis is refused, not guessed — copy the `basis` line printed on the material page into every edit. ' +
       "Each item carries `q` — a passage copied verbatim from that item's own body — and publish checks it against that item: copy whose `q` is not in its own body is refused, so a summary cannot land under another item's number. " +
-      '**A long issue is handed in a batch at a time**: if the returned receipt says items are still unwritten, ' +
-      'call this again with only the copy you still owe — basis still in, token not needed; copy already published is never rewritten. ' +
+      '**Hand in one small batch at a time**: the first edit includes masthead, teaser and items. If the receipt says items are still unwritten, ' +
+      'read its page_cursor continuations with popclaw_newspaper when present, then call this again in the same turn with the same basis and only the items you still owe. ' +
+      'Previously accepted structure is inherited and accepted items are never rewritten. Complete every selected item; an unfinished receipt is not a final paper. ' +
       "The canvas link **may only come from this tool's returned text, and is forwarded to the owner verbatim** — " +
       'never invent/recall/assemble a canvas link yourself, an invented link is guaranteed to 404.',
     parameters: PublishNewspaperSchema,

@@ -622,6 +622,39 @@ export class HouseLifecycleManager {
     const trust = captureLegacyTrust(this.db, origin);
     if (baseline?.desired === 'enabled' && baseline.phase === 'connected' && emptyControlState(baseline)
       && baseline.pending_enter_request_id === null && trust?.binding && this.legacyParticipationTrustCurrent(origin, trust)) {
+      // A background confirmation may reuse the selected sessionless lane,
+      // but only an explicit owner command may refresh what this House has
+      // declared. Keep the durable participation tuple unchanged: the
+      // coordinator will compare the refreshed capability key, drain the old
+      // public receiver, and open the replacement from cursor zero.
+      if (ctx.authority && this.ownerAuth !== null) {
+        if (!this.prepareRelationBinding) return pending('HOUSE_BINDING_PREPARER_REQUIRED');
+        const signal = composeFlightSignal(ctx.flight.signal, this.stopController.signal, this.pauseController.signal);
+        const expected = JSON.stringify(baseline);
+        const configuration = this.configuredPinFor(origin);
+        const storageGeneration = storageDatabaseGeneration(this.db);
+        const current = () => !signal.aborted && ctx.authorized() && ctx.intentUnchanged()
+          && JSON.stringify(readParticipation(this.db, origin)) === expected
+          && this.legacyParticipationTrustCurrent(origin, trust)
+          && this.configuredPinFor(origin) === configuration
+          && storageDatabasePathAllowed(this.db, 'execution') && storageDatabasePathAllowed(this.db, 'consumers')
+          && storageDatabaseGeneration(this.db) === storageGeneration;
+        try {
+          const prepared = await this.prepareRelationBinding({ origin, rawBytes: new Uint8Array(manifest.rawBytes),
+            proofHeader: manifest.proofHeader, signal });
+          if (!current()) return pending('STALE_OPERATION');
+          const committed = this.db.transaction(tx => {
+            if (!current()) return false;
+            const refusal = prepared.commit(tx);
+            if (refusal !== undefined) throw new Error(refusal);
+            return true;
+          });
+          if (!committed) return pending('STALE_OPERATION');
+        } catch (error) {
+          if (current()) this.onRelationBindingRefused?.(origin, error instanceof Error ? error.message : 'MANIFEST_REFRESH_INVALID');
+          return pending(error instanceof Error ? error.message : 'MANIFEST_REFRESH_INVALID');
+        }
+      }
       ctx.releaseLogoutFence(); this.openGate(origin);
       return {scope:'local_installation',origin,status:'unsupported',sessionId:'',admission:'configured',legacyAvailable:true};
     }

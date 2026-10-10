@@ -1,5 +1,5 @@
 /**
- * T2: WorldSummaryClient 单元测试
+ * T2: WorldSummaryClient unit tests.
  */
 import { describe, it, expect } from 'vitest';
 import { WorldSummaryClient } from '../../../src/world/world-summary-client.js';
@@ -180,7 +180,7 @@ describe('WorldSummaryClient', () => {
     const result = await client.fetchSummary();
     expect(result).not.toBeNull();
     // nicknameFor on unknown id → first 8 chars of id
-    // 名册查无只报印信，不是 id 前缀 —— 这串是给主人看的（ADR-0032）。
+    // When the directory has no match, show only the sigil, not an ID prefix: this text is owner-facing (ADR-0032).
     expect(WorldSummaryClient.nicknameFor(result!, 'ZZZZ9999abcdef')).toBe(
       `#${deriveSigil('ZZZZ9999abcdef')}`,
     );

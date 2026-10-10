@@ -18,10 +18,12 @@ import {mintHouse} from '../../helpers/signed-manifest.js';
 import type {HouseStore} from '../../../src/ingress/world-feed-store.js';
 import {pinConfiguredHouses} from '../../../src/social-graph/default-house-pinning.js';
 import {runHouseLoginCommand} from '../../../src/commands/popclaw-house.js';
+import {readHouseCapabilityView} from '../../../src/world/world-capabilities.js';
 const ME='https://house.popclaw.me',WORLD='https://house.popclaw.world';
 const closes:Array<()=>Promise<void>>=[];
 afterEach(async()=>{for(const close of closes.splice(0).reverse())await close();vi.unstubAllGlobals();});
-async function fixture(override?: (port:HouseParticipationAdmissionPort)=>HouseParticipationAdmissionPort) {
+async function fixture(input: {publicV1?:boolean;override?: (port:HouseParticipationAdmissionPort)=>HouseParticipationAdmissionPort} | ((port:HouseParticipationAdmissionPort)=>HouseParticipationAdmissionPort) = {}) {
+  const options=typeof input==='function'?{}:input,override=typeof input==='function'?input:input.override;
   vi.stubGlobal('fetch',()=>{throw new Error('REAL_NETWORK_FORBIDDEN');});
   const root=mkdtempSync(join(tmpdir(),'participation-entry-')),paths=new PopclawPaths(root);
   let release!:()=>void;
@@ -29,21 +31,25 @@ async function fixture(override?: (port:HouseParticipationAdmissionPort)=>HouseP
   const boot=await bootstrapPlugin(host),db=host.db;
   const houses=new Map([ME,WORLD].map((origin,i)=>[origin,mintHouse({origin,seed:90+i,manifest:{relations:{ordered:1},read_auth:{schemes:['popclaw-identity-read-v2']},guide_url:'/guide.md'}})]));
   let guideFails=false;
+  let beforeManifest:(()=>Promise<void>)|undefined;
   const transport=vi.fn(async(input:RequestInfo|URL)=>{
     const url=input instanceof Request?input.url:String(input);
     if(new URL(url).pathname==='/guide.md')return new Response(guideFails?'':`${new URL(url).origin} existing business`,{status:guideFails?503:200});
+    if(new URL(url).pathname==='/v1/manifest')await beforeManifest?.();
     return houses.get(new URL(url).origin)!.fetch(url);
   });
   let evidence=true;
   const port=localParticipationPort(()=>evidence?{reference:'normal-install-receipt',actorId:boot.popclawId}:undefined);
   const rt=new HouseRuntime({db,signer:boot.signer,actorId:boot.popclawId,origins:boot.loreHouseUrls,participation:override?.(port)??port,
     onJoined:async origin=>{if(!boot.loreHouseUrls.includes(origin))(boot.loreHouseUrls as string[]).push(origin);},
-    fetch:transport,readAuthorityFor:origin=>houseReadAuthority({db,signer:boot.signer},origin),commandPollMs:1,commandTimeoutMs:1000,intentPollMs:60_000});
+    fetch:transport,readAuthorityFor:origin=>houseReadAuthority({db,signer:boot.signer},origin),
+    ...(options.publicV1 ? {publicV1Mode:true} : {}),commandPollMs:1,commandTimeoutMs:1000,intentPollMs:60_000});
   const stores=[ME,WORLD].map(baseUrl=>({baseUrl,db,cacheReadOnly:true,dbPath:paths.socialDb(),slug:new URL(baseUrl).hostname.replaceAll('.','-'),cache:{}}as unknown as HouseStore));
   rt.configureResources({host:{db}as never,recipientPopclawId:boot.popclawId,worldStreamMode:true,stores,openStore:async origin=>stores.find(s=>s.baseUrl===origin)!,isOfficialActor:()=>false});
   rt.start();
   closes.push(async()=>{await rt.stop();release();db.close();rmSync(root,{recursive:true,force:true});});
-  return {db,rt,boot,transport,houses,guideFails:()=>guideFails=true,noEvidence:()=>evidence=false};
+  return {db,rt,boot,transport,houses,guideFails:()=>guideFails=true,noEvidence:()=>evidence=false,
+    holdManifest:(work?:()=>Promise<void>)=>{beforeManifest=work;}};
 }
 it('normal installation joins only me with a receipt; guide availability and delivery are separate',async()=>{
   const f=await fixture();expect(f.boot.config.lore_houses).toEqual([ME]);expect(readParticipation(f.db,ME)).toBeNull();
@@ -54,6 +60,60 @@ it('normal installation joins only me with a receipt; guide availability and del
   if(guide.status==='available'){expect(guide.delivered).toBe(false);expect(guide.guide).toContain('existing business');expect(f.rt.markHouseGuideDelivered(guide)).toBe(true);}
   expect((await f.rt.readHouseGuide(ME))).toMatchObject({delivered:true});expect(await f.rt.activateInitialMe()).toBeUndefined();
   expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_participation_attempts')?.n).toBe(1);
+});
+it.each([[ME,90],[WORLD,91]] as const)('%s explicit repeat login refreshes the verified 02 log without changing sessionless participation',async(origin,seed)=>{
+  const f=await fixture({publicV1:true});
+  const withLog=(log:string)=>mintHouse({origin,seed,manifest:{relations:{ordered:1},
+    read_auth:{schemes:['popclaw-identity-read-v2']},guide_url:'/guide.md',
+    world_interaction:{version:1,public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',
+      envelope_baseline:'public-envelope-02',log_incarnation:log,initial_public_scopes:[]}}}});
+  f.houses.set(origin,withLog('old-log'));
+  const first=origin===ME?await f.rt.activateInitialMe():await f.rt.commands.loginHouse(origin);
+  expect(first).toMatchObject({admission:'configured'});
+  expect(readHouseCapabilityView(f.db,origin)?.publicStreamCapability?.publicStream.log_incarnation).toBe('old-log');
+  const row=readParticipation(f.db,origin)!;
+  expect(row).toMatchObject({desired:'enabled',phase:'connected',session_id:'',ack_key_hex:'',pending_enter_request_id:null});
+  const pin=f.db.queryOne('SELECT * FROM house_binding_pin WHERE origin=?',[origin]);
+  f.houses.set(origin,withLog('new-log'));
+  const result=await f.rt.commands.loginHouse(origin);
+  expect(result.status).toBe('unsupported');
+  expect(readHouseCapabilityView(f.db,origin)?.publicStreamCapability?.publicStream.log_incarnation).toBe('new-log');
+  expect(readParticipation(f.db,origin)).toEqual(row);
+  expect(f.db.queryOne('SELECT * FROM house_binding_pin WHERE origin=?',[origin])).toEqual(pin);
+  expect(f.db.queryAll<{log_incarnation:string;retired:number;conflicted:number}>(
+    'SELECT log_incarnation,retired,conflicted FROM world_public_manifest_logs_v1 WHERE origin=? ORDER BY log_incarnation',[origin]))
+    .toEqual([{log_incarnation:'new-log',retired:0,conflicted:0},{log_incarnation:'old-log',retired:1,conflicted:0}]);
+  const current=readHouseCapabilityView(f.db,origin)!.verified.capabilityRevision;
+  expect(f.db.queryOne('SELECT log_incarnation FROM world_public_manifest_log_evidence_v1 WHERE origin=? AND capability_revision=?',[origin,current]))
+    .toEqual({log_incarnation:'new-log'});
+  expect(f.transport.mock.calls.some(([input])=>new URL(input instanceof Request?input.url:String(input)).pathname==='/v1/house-session')).toBe(false);
+});
+it('a repeat login with a different House key keeps the old public selection active',async()=>{
+  const f=await fixture({publicV1:true});
+  const signed=(seed:number,log:string)=>mintHouse({origin:ME,seed,manifest:{relations:{ordered:1},read_auth:{schemes:['popclaw-identity-read-v2']},
+    world_interaction:{version:1,public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',envelope_baseline:'public-envelope-02',log_incarnation:log,initial_public_scopes:[]}}}});
+  f.houses.set(ME,signed(90,'old-log'));await f.rt.activateInitialMe();
+  const row=readParticipation(f.db,ME)!,pin=f.db.queryOne('SELECT * FROM house_binding_pin WHERE origin=?',[ME]);
+  f.houses.set(ME,signed(98,'hostile-log'));
+  const result=await f.rt.commands.loginHouse(ME);
+  expect(result.status).toBe('connecting');
+  expect(readHouseCapabilityView(f.db,ME)?.publicStreamCapability?.publicStream.log_incarnation).toBe('old-log');
+  expect(readParticipation(f.db,ME)).toEqual(row);expect(f.db.queryOne('SELECT * FROM house_binding_pin WHERE origin=?',[ME])).toEqual(pin);
+  expect(f.rt.captureGate(ME).isActive()).toBe(true);
+});
+it('logout during repeated manifest discovery cannot commit a fresh public selection',async()=>{
+  const f=await fixture({publicV1:true});
+  const signed=(log:string)=>mintHouse({origin:ME,seed:90,manifest:{relations:{ordered:1},read_auth:{schemes:['popclaw-identity-read-v2']},
+    world_interaction:{version:1,public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',envelope_baseline:'public-envelope-02',log_incarnation:log,initial_public_scopes:[]}}}});
+  f.houses.set(ME,signed('old-log'));await f.rt.activateInitialMe();
+  f.houses.set(ME,signed('new-log'));
+  let reached!:()=>void,resume!:()=>void;const started=new Promise<void>(r=>{reached=r;});
+  f.holdManifest(async()=>{reached();await new Promise<void>(r=>{resume=r;});});
+  const login=f.rt.commands.loginHouse(ME);await started;
+  await f.rt.commands.logoutHouse(ME);resume();
+  expect(await login).toMatchObject({status:'connecting'});
+  expect(readHouseCapabilityView(f.db,ME)?.publicStreamCapability?.publicStream.log_incarnation).toBe('old-log');
+  expect(readParticipation(f.db,ME)?.desired).toBe('disabled');expect(f.rt.captureGate(ME).isActive()).toBe(false);
 });
 it('without install source reads and initialization mint no participation or setup authority',async()=>{
   const f=await fixture();f.noEvidence();await f.rt.commands.getHouseStatus(ME);await f.rt.readHouseGuide(ME);expect(await f.rt.activateInitialMe()).toBeUndefined();

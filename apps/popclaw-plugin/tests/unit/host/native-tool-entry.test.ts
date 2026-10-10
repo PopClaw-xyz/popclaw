@@ -31,6 +31,13 @@ const statusExample = (text: string) => /```javascript\n([\s\S]*?)\n```/.exec(te
 const skill = () => readFileSync(resolve('skills/popclaw-social/SKILL.md'), 'utf8');
 
 describe('native tool entry through the current host surface', () => {
+  it('standing routing preserves direct-only inbox discovery before catalog lookup', () => {
+    const text = renderL1();
+    expect(text).toContain('popclaw_show_inbox is direct-only on OpenClaw CodeMode');
+    expect(text).toContain('does not appear in the exec catalog');
+    expect(text).toContain('For capabilities not exposed as direct tools');
+  });
+
   it('uses the actual SDK catalog to invoke a capability absent from flat tools', async () => {
     const s = await surface();
     const result = await s.exec.execute('synthetic-call', {title: 'Read synthetic PopClaw identity', code:

@@ -1,5 +1,5 @@
+import { verifySuccessCopy } from './verify-success-copy.js';
 /** L1 owner-facing content: text, drill-down invitations and ordered media references. */
-import { readableUrl } from '../lshow/sources/web-fallback.js';
 import type { NotificationItem } from './types.js';
 import { displayPerson } from '../identity/person-resolver.js';
 import { renderReceivedLetter } from '../messaging/dm-presentation.js';
@@ -32,14 +32,7 @@ function renderVerifyOutcome(item: NotificationItem, lang: Lang): string {
     const why = p.reason ? renderCopy(lang, 'notify.verifyFail.reason', { reason: p.reason }) : '';
     return renderCopy(lang, 'notify.verifyFail.body', { who, why });
   }
-  const followers = Number(p.followerCount ?? 0);
-  const snapshot =
-    followers > 0
-      ? renderCopy(lang, 'notify.verifyDone.snapshotWithFollowers', { followers: String(followers) })
-      : renderCopy(lang, 'notify.verifyDone.snapshotBare');
-  // Shown to the owner to read and share, so it is decoded (#282).
-  const share = p.profileUrl ? renderCopy(lang, 'notify.verifyDone.share', { profileUrl: readableUrl(p.profileUrl) }) : '';
-  return renderCopy(lang, 'notify.verifyDone.main', { who, snapshot, share });
+  return verifySuccessCopy(lang, p.platform || renderCopy(lang, 'notify.verifyOutcome.platformFallback'), p.handle || '', p);
 }
 
 /**

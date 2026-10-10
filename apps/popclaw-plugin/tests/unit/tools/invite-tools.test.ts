@@ -89,7 +89,7 @@ describe('popclaw_invite (preview → confirm)', () => {
     const fx = makeFx();
     const tool = inviteTool(fx.runtime);
 
-    const r = await tool.execute('c1', { platform: 'Twitter', handle: '@blackfeather' });
+    const r = await tool.execute('c1', { posted:true, platform: 'Twitter', handle: '@blackfeather' });
 
     expect(fx.initiate).not.toHaveBeenCalled();
     expect(fx.add).not.toHaveBeenCalled();
@@ -107,7 +107,7 @@ describe('popclaw_invite (preview → confirm)', () => {
     const fx = makeFx();
     const tool = inviteTool(fx.runtime);
 
-    const r = await tool.execute('c1', { platform: 'x', handle: 'blackfeather', nickname: 'Kaito' });
+    const r = await tool.execute('c1', { posted:true, platform: 'x', handle: 'blackfeather', nickname: 'Kaito' });
 
     expect(r.text).toMatch(/nickname: Kaito\b/);
     expect(r.text).not.toContain(renderCopy('en', 'invite.tool.nicknameDefault'));
@@ -119,7 +119,7 @@ describe('popclaw_invite (preview → confirm)', () => {
     const tool = inviteTool(fx.runtime);
 
     const preview = await tool.execute('c1', {
-      platform: 'Twitter',
+      posted:true, platform: 'Twitter',
       handle: '@blackfeather',
       proof_url: 'https://x.com/blackfeather/status/1234567890',
       sync: true,
@@ -150,7 +150,7 @@ describe('popclaw_invite (preview → confirm)', () => {
   it('a receipt without a task_id still submits, it just has nothing to watch', async () => {
     const fx = makeFx({ taskId: undefined });
     const tool = inviteTool(fx.runtime);
-    const preview = await tool.execute('c1', { platform: 'x', handle: 'blackfeather' });
+    const preview = await tool.execute('c1', { posted:true, platform: 'x', handle: 'blackfeather' });
     await tool.execute('c2', { confirm_token: preview.text.match(/invite-\d+/)![0] });
     expect(fx.initiate).toHaveBeenCalledTimes(1);
     expect(fx.add).not.toHaveBeenCalled();
@@ -159,7 +159,7 @@ describe('popclaw_invite (preview → confirm)', () => {
   it('--sync is opt-in: absent means the mirror consent was never given', async () => {
     const fx = makeFx();
     const tool = inviteTool(fx.runtime);
-    const preview = await tool.execute('c1', { platform: 'x', handle: 'blackfeather' });
+    const preview = await tool.execute('c1', { posted:true, platform: 'x', handle: 'blackfeather' });
     await tool.execute('c2', { confirm_token: preview.text.match(/invite-\d+/)![0] });
     expect(fx.initiate).toHaveBeenCalledWith(expect.objectContaining({ mirrorOptin: false }));
   });
@@ -171,10 +171,10 @@ describe('popclaw_invite (preview → confirm)', () => {
     const fx = makeFx();
     const tool = inviteTool(fx.runtime);
 
-    const plain = await tool.execute('c1', { platform: 'x', handle: 'blackfeather' });
+    const plain = await tool.execute('c1', { posted:true, platform: 'x', handle: 'blackfeather' });
     expect(plain.text).not.toContain(renderCopy('en', 'invite.tool.replaceLine'));
 
-    const swap = await tool.execute('c2', { platform: 'x', handle: 'blackfeather', replace: true });
+    const swap = await tool.execute('c2', { posted:true, platform: 'x', handle: 'blackfeather', replace: true });
     expect(swap.text).toContain(renderCopy('en', 'invite.tool.replaceLine'));
 
     await tool.execute('c3', { confirm_token: swap.text.match(/invite-\d+/)![0] });
@@ -186,7 +186,7 @@ describe('popclaw_invite (preview → confirm)', () => {
     const tool = inviteTool(fx.runtime);
 
     const r = await tool.execute('c1', {
-      platform: 'x',
+      posted:true, platform: 'x',
       handle: 'blackfeather',
       proof_url: 'https://x.com/blackfeather',
     });
@@ -205,7 +205,7 @@ describe('popclaw_invite (preview → confirm)', () => {
     const tool = inviteTool(fx.runtime);
 
     for (const blank of ['', '   ']) {
-      const r = await tool.execute('c1', { platform: 'x', handle: 'blackfeather', proof_url: blank });
+      const r = await tool.execute('c1', { posted:true, platform: 'x', handle: 'blackfeather', proof_url: blank });
       expect(fx.initiate).not.toHaveBeenCalled();
       expect(r.text).not.toMatch(/invite-\d+/); // no token minted → nothing to confirm
       expect(r.text).toContain(renderCopy('en', 'invite.badProofUrl', { got: blank }));
@@ -215,7 +215,7 @@ describe('popclaw_invite (preview → confirm)', () => {
   it('asks for the missing half instead of guessing it', async () => {
     const fx = makeFx();
     const tool = inviteTool(fx.runtime);
-    const r = await tool.execute('c1', { platform: 'x' });
+    const r = await tool.execute('c1', { posted:true, platform: 'x' });
     expect(fx.initiate).not.toHaveBeenCalled();
     expect(r.text).toContain(renderCopy('en', 'invite.tool.usage'));
   });
@@ -224,7 +224,7 @@ describe('popclaw_invite (preview → confirm)', () => {
     vi.useFakeTimers();
     const fx = makeFx();
     const tool = inviteTool(fx.runtime);
-    const preview = await tool.execute('c1', { platform: 'x', handle: 'blackfeather' });
+    const preview = await tool.execute('c1', { posted:true, platform: 'x', handle: 'blackfeather' });
     const token = preview.text.match(/invite-\d+/)![0];
 
     await tool.execute('c2', { confirm_token: token });
@@ -243,7 +243,7 @@ describe('popclaw_invite (preview → confirm)', () => {
     const fx = makeFx();
     const { find } = toolsOf(fx.runtime);
 
-    const preview = await find('popclaw_invite').execute('c1', { platform: 'x', handle: 'blackfeather' });
+    const preview = await find('popclaw_invite').execute('c1', { posted:true, platform: 'x', handle: 'blackfeather' });
     const token = preview.text.match(/invite-\d+/)![0];
 
     // Even with the owner willing to approve, the wrong door stays shut: an
@@ -266,7 +266,7 @@ describe('popclaw_invite (preview → confirm)', () => {
     fx.initiate.mockRejectedValueOnce(new Error('lore-house unreachable'));
     const tool = inviteTool(fx.runtime);
 
-    const preview = await tool.execute('c1', { platform: 'x', handle: 'blackfeather' });
+    const preview = await tool.execute('c1', { posted:true, platform: 'x', handle: 'blackfeather' });
     const failed = await tool.execute('c2', { confirm_token: preview.text.match(/invite-\d+/)![0] });
 
     expect(failed.text).toContain('lore-house unreachable');

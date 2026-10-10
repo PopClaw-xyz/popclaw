@@ -1,5 +1,6 @@
 /**
- * 主人本地时间的唯一推导点（ADR-0045，落地 charter D3 欠下的 `timeContext(ts, tz)`）。
+ * The single derivation point for owner-local time (ADR-0045, implementing the timeContext(ts, tz)
+ * owed by charter D3).
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 
@@ -101,19 +102,19 @@ describe('startOfLocalDay', () => {
   });
 
   it('跨夏令时切换那天也落在本地 0 点（美西 2026-03-08 春进）', () => {
-    const inDst = Math.floor(Date.UTC(2026, 2, 8, 20) / 1000); // 本地 3/8 13:00 PDT
+    const inDst = Math.floor(Date.UTC(2026, 2, 8, 20) / 1000); // Local 3/8 13:00 PDT.
     const s = startOfLocalDay(inDst, 'America/Los_Angeles');
     expect(timeContext(s, 'America/Los_Angeles')).toMatchObject({ ymd: '2026-03-08', hm: '00:00' });
   });
 });
 
-// 真机 / CI 2026-07-30~31（issue #332）：偏移串被当 IANA 名直接喂给 Intl。
-//   - node 22.19 的 ICU：`RangeError: Invalid time zone specified: +08`（直接调
-//     timeContext 那条路 **抛**）；
-//   - 走 resolveTz 那条路更阴：validTz 吞掉异常 → 静默回落系统时区 → **日期算错**
-//     却不报错（dream.test 里 2026-07-31 变 2026-07-30 就是它）。
-//   - node 22.23 的 ICU 恰好开始认 `+08`，于是 CI 自己绿了 —— bug 没修，只是隐身。
-// 偏移量根本不需要时区数据库，别再把命运交给 ICU 版本。
+// Real device / CI on 2026-07-30 to 31 (#332): an offset string was passed to Intl as an IANA zone.
+// Node 22.19 ICU raised `RangeError: Invalid time zone specified: +08` when calling
+// timeContext directly.
+// The resolveTz path was worse: validTz swallowed the exception and silently fell back to the system zone,
+// calculating the wrong date without error (dream.test changed 2026-07-31 to 2026-07-30).
+// Node 22.23 ICU happened to recognize +08, making CI green without fixing the hidden bug.
+// Fixed offsets need no time-zone database; do not depend on ICU version behavior.
 describe('偏移串时区自己算，绝不经过 Intl（issue #332）', () => {
   it('不给 Intl 碰：+07:45 这种偏移串一次都不构造 DateTimeFormat', () => {
     const spy = vi.spyOn(Intl, 'DateTimeFormat');
@@ -129,8 +130,8 @@ describe('偏移串时区自己算，绝不经过 Intl（issue #332）', () => {
     expect(timeContext(0, '+08').hm).toBe('08:00');
     expect(timeContext(0, '+08').ymd).toBe('1970-01-01');
     expect(timeContext(0, '-05:30').hm).toBe('18:30');
-    expect(timeContext(0, '-05:30').ymd).toBe('1969-12-31'); // 跨回前一天
-    expect(timeContext(0, '+0530').hm).toBe('05:30'); // 紧凑写法也认
+    expect(timeContext(0, '-05:30').ymd).toBe('1969-12-31'); // Crosses back into the previous day.
+    expect(timeContext(0, '+0530').hm).toBe('05:30'); // Compact notation is also accepted.
   });
 
   it('偏移串是合法时区（不该被 validTz 判死后静默回落）', () => {
@@ -141,7 +142,7 @@ describe('偏移串时区自己算，绝不经过 Intl（issue #332）', () => {
   });
 
   it('本地日界按那个偏移算', () => {
-    // 1970-01-01T00:00Z 在 +08 是当天 08:00 → 当地日界是前一天 16:00Z = -57600
+    // 1970-01-01T00:00Z is 08:00 that day at +08; local midnight is the previous day at 16:00Z, or -28800.
     expect(startOfLocalDay(0, '+08')).toBe(-8 * 3600);
   });
 });

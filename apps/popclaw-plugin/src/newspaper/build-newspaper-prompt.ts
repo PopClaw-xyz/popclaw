@@ -17,6 +17,8 @@ import { renderCopy, type Lang } from '../lexicon/index.js';
 import { langOf, ownerLang } from '../lexicon/owner-language.js';
 import { castList, followerLabel, needsEditorial, numberedPulse, type IssueData, type PulseItem } from './issue.js';
 
+import { writingPacket } from './writing-packet.js';
+
 export { houseCounts, castList, formatHouseCounts } from './issue.js';
 export type { PulseItem, PingItem, HouseLetterItem, MantleItem, HomeItem, HomeSection, IssueData } from './issue.js';
 
@@ -50,20 +52,6 @@ function bondLines(
 /** Kept in step with the renderer's quotas so the brief never invites more than the page will print. */
 const MAX_PULLS = 4;
 const MAX_XREFS = 8;
-
-/**
- * The safe size of one hand-in — a fallback, not a rule.
- *
- * The binding limit is the host's **output** cap, not its tool-result cap: OpenClaw
- * ships `maxTokens = 8192`, and an item costs ~110 tokens of copy. This number used to
- * be a hard instruction, because an issue was a fixed ninety items and three hand-ins
- * were unavoidable. The owner then struck the fixed count (2026-08-28) — the writer now
- * picks what it can write well, so a normal issue finishes in one hand-in and this
- * number never comes up. It stays for the day a writer over-picks, because a reply cut
- * off mid-tool-call loses the call itself, which is not a thin paper but no paper at
- * all (real hardware, 2026-08-27).
- */
-const BATCH_MAX = 30;
 
 export interface BriefOptions {
   contentRules: string;
@@ -136,6 +124,27 @@ export function materialBlocksFor(
     .join('\n');
 }
 
+/** Global planning context only: previews are never a substitute for reading the full body. */
+export function writingDirectory(issue: IssueData, pending: readonly number[], lang: Lang): string {
+  const owed = new Set(pending);
+  const lines = ['[Whole issue directory — original numbers; previews are NOT writing material]'];
+  for (const { p, n } of numberedPulse(issue.pulse)) {
+    const status = !needsEditorial(p) ? 'laid out verbatim' : owed.has(n) ? 'pending' : 'saved';
+    const preview = Array.from(p.text).slice(0, 160).join('').replace(/\s+/g, ' ');
+    // The author/source/classification labels use the same material authority; omit only the body.
+    lines.push(...materialItemLines({ ...p, text: '' }, n, lang).slice(0, -1),
+      `    ${status}; selection: ${p.pickedFor ?? 'unspecified'}; source platform: ${p.platform}; preview only: ${preview}`);
+  }
+  return lines.join('\n');
+}
+
+export function writingPacketNote(numbers: readonly number[]): string {
+  return `[Current writing packet: ${numbers.map(n => `[${n}]`).join(' ')}] ` +
+    'Read every continuation of this packet before handing in its copy. Write only from complete bodies, never directory previews. ' +
+    'Submit this small batch now; do not draft the whole issue before calling publish. ' +
+    'The accepted receipt supplies the next pending packet on this same basis. All selected originals remain saved; only the complete issue is published.';
+}
+
 /**
  * Build the agent-facing brief. The AGENT writes the copy in its own turn (on the
  * host's model — popclaw itself never calls an LLM, spec 2026-06-18), then submits
@@ -155,6 +164,8 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
   // Hoisted above the page because the head has to state this count and name the
   // closing line before either is printed (2026-09-13 batch markers).
   const editable = numberedPulse(issue.pulse).filter(({ p }) => needsEditorial(p));
+  const pending = editable.map(({ n }) => n);
+  const packet = writingPacket(issue, pending, opts.sessionKey);
   /**
    * The line this page ends with, bound to this batch by its own count and basis.
    *
@@ -162,7 +173,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
    * page on every trim step and weighs what it gets back, so the sentinel is inside
    * every measurement and can never be the thing that pushes a page over budget.
    */
-  const sentinel = m('batch.sentinel', { count: String(editable.length), id: opts.publishToken });
+  const sentinel = m('batch.sentinel', { count: String(packet.length), id: opts.publishToken });
   const lines: string[] = [];
 
   lines.push(
@@ -179,7 +190,8 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     ``,
     // What this page carries and how it ends, so "is it whole" is a thing the writer
     // can check rather than a thing we assert at it.
-    m('batch.head', { count: String(editable.length), sentinel }),
+    m('batch.head', { count: String(packet.length), sentinel }),
+    writingPacketNote(packet.map(({ n }) => n)),
     ``,
     // The case the instruction above never covered: no notice, no omission marker, and
     // the writer believes the page is short anyway. That is the state the 2026-09-13 run
@@ -200,7 +212,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     // basis nor a real token instead of guessing (r9). The token is still named for
     // hosts that can carry it.
     `[What you hand in] Call popclaw_publish_newspaper with \`edit\` = one JSON object of exactly this shape. **Copy the \`basis\` value below into every edit you hand in, verbatim** — it names the exact materials your item numbers refer to. It is **this page's own id**, not the \`candidate_basis\` you carried to get here: that one named the candidate page you chose from, and it is never what \`edit.basis\` carries. (A real publish_token="${opts.publishToken}" also binds this exact issue if your host can carry it; the basis needs no token at all.)`,
-    `**Item numbers are identities, not list positions.** Copy each printed [number] exactly into items/leads/pulls/xrefs/topics. Selected items keep their candidate-page numbers, so gaps are intentional (unselected or non-editorial items), not missing material. Never renumber them 1..N. Use only the full materials below, not candidate previews. Any unknown number rejects the entire hand-in without saving it.`,
+    `**Item numbers are identities, not list positions.** Copy each printed [number] exactly into items/leads/pulls/xrefs/topics. Selected items keep their candidate-page numbers, so gaps are intentional (unselected or non-editorial items), not missing material. Never renumber them 1..N. Use only complete bodies in the current packet for item copy, never directory or candidate previews. Any unknown number rejects the entire hand-in without saving it.`,
     `**\`q\` is the anchor.** Before writing an item, copy a passage of its body verbatim into \`q\`; publish checks \`q\` against that very item's body and refuses copy whose \`q\` is not found there, so a summary can never land under another item's number. Write \`h\` and \`s\` from the same body you just quoted. \`q\` is checked and never printed — copy it from the text after \`${m('pulse.body', { text: '' }).trim()}\` (never the label), at least about four English words or five Chinese characters, or the whole body when it is shorter; a passage that other items also contain does not count. \`pulls\` is the quotation the page prints.`,
     ``,
     `{`,
@@ -221,7 +233,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     ``,
     `- **Every selected editorial item must be written up in \`items\`, across as many batches as needed.** The full issue stays saved and is published only when all selected items are complete.`,
     `- **\`basis\` rides in every hand-in, batches included** — copy it from the line above. It is the one thing that tells publish which page your numbers refer to; a hand-in with neither a basis nor a real publish_token is refused, not guessed.`,
-    `- **Try to finish in one hand-in — but hand in early rather than squeeze.** A reply cut off mid-tool-call loses the call itself and there is no paper at all (real hardware, 2026-08-27, and again 2026-08-30 when a flash-tier model died mid-way through thirty-two items in one call). About a dozen items per hand-in is safe on every host — a stock host takes up to about ${BATCH_MAX} — so when in doubt hand the first dozen in and continue after the receipt. Whatever you hand in is kept, and the receipt tells you how many are still unwritten; a later batch needs only \`items\` (each with its own \`q\`, plus \`pulls\`/\`xrefs\`/\`topics\` if you have them).`,
+    `- **Write and submit one small batch at a time.** Once that batch has complete \`q\`, \`h\` and \`s\` values, call popclaw_publish_newspaper immediately; do not draft or plan the entire issue before the first tool call, or put the edit in a chat message instead. About a dozen items per hand-in is an upper drafting guideline, not a guarantee that it fits every host: use fewer for long items or a smaller output budget. Whatever you hand in is kept. If the receipt says items are still unwritten, read its page_cursor continuations when present, then continue in this same turn with the next small batch. A later batch needs only the same \`basis\` and the remaining \`items\` (each with its own \`q\`, plus \`pulls\`/\`xrefs\`/\`topics\` if you have them). Finish every selected item; an unfinished receipt is not the final paper.`,
     `- \`h\` is a faithful headline, never clickbait. \`s\` is the summary: an item you put in \`leads\` gets 5-8 sentences; an item marked \`${m('tier.card')}\` gets 3-6; an item marked \`${m('tier.brief')}\` gets 2-3. **These are ceilings, not quotas — when the source is short, stop.**`,
     `- **Every item earns its own space or it should not have been chosen.** The paper exists so the owner finds people worth knowing: an item summed up in a line gives him nothing to be interested in, and nobody to follow. Read all continuation pages and write the selected items in batches with faithful depth. The issue has no total content quota.`,
     `- \`masthead\`, \`items\` and \`teaser\` are required on the **first** hand-in; everything else may be left out.`,
@@ -229,7 +241,7 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     `- \`pulls\` at most ${MAX_PULLS} in the issue, \`xrefs\` at most ${MAX_XREFS}, and anything past the quota is dropped. A pull quote is a sentence **already present in that item's own text**; a cross-reference names a real shared thing between two items (the same fog, the same person writing and waiting on a reply) — a bare pointer ("see the front page") is not one.`,
     `- \`deckNotes\` is keyed by lore-house slug (the slugs are listed with the materials), \`newbies\` by the sigil after a person's name. Only the new faces marked in the ${castLabel} roster may appear in \`newbies\`, and each entry is written **in the manner of a person, not a statistics line**: where they come from, what the materials say they did today, and how they touch the owner's circle — every word of it verifiable in the materials.`,
     `- \`translations\` is for the lines at the very end of these materials — the ones the layout prints word for word. Translate the ones that are not in ${ownerLanguage}; leave the rest out. **Never** put a person's name, a #sigil or a place name in it.`,
-    `- \`teaser\`: an opening hook (**${issue.totalCount} items** gathered ${issue.windowLabel}, and the drifts they fall on), then about 7 headlines one per line **each opening with a person's name#sigil**, then a closing line saying the rest is in the full paper. This is what the owner reads before opening it.`,
+    `- \`teaser\`: an opening hook (**${issue.totalCount} items** gathered ${issue.windowLabel}, and the drifts they fall on), then up to 7 headlines grounded in complete bodies you have read (fewer when this packet has fewer items), one per line **each opening with a person's name#sigil**, then a closing line saying the rest is in the full paper. This is what the owner reads before opening it.`,
   );
 
   // CONTENT rules (newspaper/content.md) — the editorial voice; the layout half of the old codex is gone (it is code now).
@@ -309,11 +321,12 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
       total: String(issue.totalCount),
       toWrite: String(editable.length),
       laidOut: String(issue.pulse.length - editable.length),
-      integrity: 'All selected originals are saved. Read every page_cursor continuation until the complete-document end marker.',
+      integrity: 'All selected originals are saved. Read every continuation of the current packet; the next accepted receipt supplies the next packet.',
     }),
-    m('pulse.head', { count: String(editable.length) }),
+    ...(packet.length < editable.length ? ['', writingDirectory(issue, pending, lang), ''] : []),
+    m('pulse.head', { count: String(packet.length) }),
   );
-  for (const { p, n } of editable) lines.push(...materialItemLines(p, n, lang));
+  for (const { p, n } of packet) lines.push(...materialItemLines(p, n, lang));
   // Lines the layout prints word for word. They are other people's own words, so the
   // renderer never rewrites them — but a line in a language the owner cannot read is
   // worth nothing to them (owner's ruling, 2026-08-26), and only the writer of this

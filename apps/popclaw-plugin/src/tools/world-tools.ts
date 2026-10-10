@@ -27,6 +27,7 @@ import { WorldSummaryClient } from '../world/world-summary-client.js';
 import { aggregateNotableAuthors } from '../world/notable-authors.js';
 import { resolveAuthor } from '../world/author-resolver.js';
 import { rememberObservedPostIds } from '../world/post-ref.js';
+import { readHouseCapabilityView } from '../world/world-capabilities.js';
 import {
   formatHotPostLine,
   formatNotableAuthorLine,
@@ -38,6 +39,8 @@ import {
   notablePeopleHeading,
 } from '../world/summary-format.js';
 import { houseSilenceOf, houseSilenceText } from '../ingress/house-silence.js';
+import type { PublicDisplayResult } from '../ingress/public-feed-display.js';
+import type { HostDb } from '../host/host-db.js';
 import { followReceivedText, followResolved } from '../commands/follow.js';
 import { runPopclawUnfollowCommand } from '../commands/popclaw-unfollow.js';
 import { safeRecord } from '../social-log/social-log.js';
@@ -335,14 +338,62 @@ export function registerWorldTools(ctx: ToolsCtx): void {
           Math.max(1, Math.floor(typeof p.count === 'number' ? p.count : 1)),
         );
         const wd = await getWorldDeps();
-        const { sources, allFailed } = await fetchAuthorSources(wd);
+        const rt = await runtimeBag(deps) as {
+          publicFeedDisplay?: { read(query?: { limit?: number; author?: string }): PublicDisplayResult };
+          host?: { db?: HostDb };
+        } | undefined;
+        const localPublicDisplay = rt?.publicFeedDisplay;
+        let localPublicItems: WorldSnapshotItemLike[] | undefined;
+        let localPublicOrigins: Set<string> | undefined;
+        let localCoverageLimited = false;
+        let sources;
+        let allFailed = false;
+        if (localPublicDisplay) {
+          // A synchronous display read is the verified local journal path. Do
+          // not use prepare() here: HouseFeedReader.prepare() may fetch legacy
+          // /world-feed snapshots for ordinary Houses mounted beside a public
+          // stream House.
+          let observation: PublicDisplayResult;
+          try {
+            observation = localPublicDisplay.read({ limit: WORLD_SNAPSHOT_LIMIT });
+          } catch {
+            return { type: 'text' as const, text: lanternDownText(lang) };
+          }
+          const publicSources = observation.sources.filter(source => {
+            if (source.protocol === 'public-v1') return true;
+            // A selected capability can still be unavailable (for example a
+            // changed pin or journal). Keep that refusal on the public lane;
+            // only manifests with no public-stream declaration use legacy
+            // discovery.
+            try {
+              const view = rt.host?.db ? readHouseCapabilityView(rt.host.db, source.origin) : null;
+              return view !== null && view.publicStream.validation !== 'absent';
+            } catch {
+              return false;
+            }
+          });
+          if (publicSources.length > 0) {
+            localPublicOrigins = new Set(publicSources.map(source => source.origin));
+            localPublicItems = observation.items
+              .filter(hit => localPublicOrigins!.has(hit.source.origin) && !hit.mirrorSigner)
+              .map(hit => ({ ...hit.item, textPreview: hit.body || hit.item.textPreview || '', houseSlug: hit.source.slug }));
+            sources = buildAuthorSources(null, localPublicItems);
+            localCoverageLimited = observation.truncated || publicSources.some(source =>
+              source.unavailable || source.incomplete || source.truncated);
+          } else {
+            ({ sources, allFailed } = await fetchAuthorSources(wd));
+          }
+        } else {
+          ({ sources, allFailed } = await fetchAuthorSources(wd));
+        }
         if (allFailed) {
           return { type: 'text' as const, text: lanternDownText(lang) };
         }
         const candidates = resolveAuthor(p.name, sources);
         let only = candidates[0];
         if (candidates.length > 1) {
-          return { type: 'text' as const, text: disambiguationText(p.name, candidates, lang) };
+          return { type: 'text' as const, text: disambiguationText(p.name, candidates, lang) +
+            (localCoverageLimited ? `\n${renderCopy(lang, 'world.author.localCoverage')}` : '') };
         }
         if (!only) {
           // No such name in the world feed → go through PersonResolver (the four forms of
@@ -350,6 +401,9 @@ export function registerWorldTools(ctx: ToolsCtx): void {
           // may simply not have posted recently.
           const person = await resolvePersonRef(p.name, deps);
           if (person.kind !== 'resolved') {
+            if (localPublicItems !== undefined && localCoverageLimited && person.kind === 'notFound') {
+              return { type: 'text' as const, text: renderCopy(lang, 'feed.public.authorLimited') };
+            }
             // Say the reason once: only a genuine no-such-person case should suggest the
             // summary view; ambiguity and lore-house-unreachable each have their own wording
             // (stacking both would just contradict each other).
@@ -381,15 +435,43 @@ export function registerWorldTools(ctx: ToolsCtx): void {
           actor: { id: only.popclawId, name: only.nickname },
         });
         let items: WorldSnapshotItemLike[];
-        try {
-          items = await wd.snapshotClient.fetchSnapshot({
-            author: only.popclawId,
-            limit: count,
-          });
-        } catch {
-          return { type: 'text' as const, text: lanternDownText(lang) };
+        if (localPublicItems !== undefined) {
+          // Query the same local display lane with the resolved author before
+          // applying the requested count. The display filters across its
+          // retained journal window first, so an author outside the global
+          // newest-100 rows remains readable without a remote snapshot.
+          try {
+            const observation = localPublicDisplay!.read({ author: only.popclawId, limit: count });
+            const currentByOrigin = new Map(observation.sources
+              .filter(source => localPublicOrigins!.has(source.origin))
+              .map(source => [source.origin, source] as const));
+            const currentSources = [...localPublicOrigins!].map(origin => currentByOrigin.get(origin));
+            const readableOrigins = new Set(currentSources
+              .filter(source => source?.protocol === 'public-v1' && !source.unavailable)
+              .map(source => source!.origin));
+            localPublicItems = observation.items
+              .filter(hit => readableOrigins.has(hit.source.origin) && !hit.mirrorSigner)
+              .map(hit => ({ ...hit.item, textPreview: hit.body || hit.item.textPreview || '', houseSlug: hit.source.slug }));
+            localCoverageLimited ||= currentSources.some(source =>
+              !source || source.protocol !== 'public-v1' || source.unavailable || source.incomplete || source.truncated);
+            items = localPublicItems.filter(item => item.authorPopclawId === only!.popclawId).slice(0, count);
+          } catch {
+            return { type: 'text' as const, text: lanternDownText(lang) };
+          }
+        } else {
+          try {
+            items = await wd.snapshotClient.fetchSnapshot({
+              author: only.popclawId,
+              limit: count,
+            });
+          } catch {
+            return { type: 'text' as const, text: lanternDownText(lang) };
+          }
         }
         if (items.length === 0) {
+          if (localPublicItems !== undefined && localCoverageLimited) {
+            return { type: 'text' as const, text: renderCopy(lang, 'feed.public.authorLimited') };
+          }
           return {
             type: 'text' as const,
             text: renderCopy(lang, 'world.author.noRecentSnapshot', { nickname: only.nickname }),
@@ -405,7 +487,8 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         rememberObservedPostIds(items);
         return {
           type: 'text' as const,
-          text: renderAuthorHistory({ author: only, items, requestedCount: count, webBaseUrl: wd.webBaseUrl, lang }),
+          text: renderAuthorHistory({ author: only, items, requestedCount: count, webBaseUrl: wd.webBaseUrl, lang }) +
+            (localCoverageLimited ? `\n\n${renderCopy(lang, 'world.author.localCoverage')}` : ''),
         };
       },
     });

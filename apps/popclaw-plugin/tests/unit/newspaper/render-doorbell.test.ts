@@ -72,15 +72,15 @@ describe('作者旁的入口', () => {
   });
 
   it('卡片头的按钮在 .who 锚点之外、同一行行尾——按钮不许嵌进链接里(审查修复)', () => {
-    // 审查裁定:chip 嵌在 <a class="who"> 里,点击既按铃又开作者主页新标签,且是无效嵌套。
-    // 修法与简讯行同款:锚点外的同款行(.who-row)行尾。脚本侧另有 preventDefault 兜底。
+    // Review decision: placing the chip inside <a class="who"> both rings the bell and opens the author's homepage, and creates invalid nesting.
+    // Use the brief-row fix: put it at the end of the equivalent .who-row outside the anchor; the script also uses preventDefault.
     const { html } = render(issue({ pulse: [item({ tier: 'card' })] }));
     const who = html.match(/<a class="who"[^>]*>[\s\S]*?<\/a>/)![0];
     expect(who).not.toContain('follow-btn');
     const row = html.match(/<div class="who-row">[\s\S]*?<\/div>/)![0];
     expect(row).toContain('<a class="who"');
     expect(row).toContain('data-followee="pid-levelsio"');
-    expect(row).toContain('</a><button class="follow-btn"'); // 锚点先、按钮后,同一行
+    expect(row).toContain('</a><button class="follow-btn"'); // Anchor first, button second, on the same row.
   });
 
   it('头版 lead 的作者块同款入口,同样在锚点外', () => {
@@ -98,24 +98,24 @@ describe('作者旁的入口', () => {
     const cnt = brief.indexOf('class="cnt"');
     expect(chip).toBeGreaterThan(-1);
     expect(cnt).toBeGreaterThan(-1);
-    expect(chip).toBeLessThan(cnt); // 行尾、counts 之前,全报一个位置
+    expect(chip).toBeLessThan(cnt); // At the row end, before counts, consistently throughout the newspaper.
   });
 
   it('无 popclaw 身份的作者:非交互的外部平台 tag,绝无按钮', () => {
     const { html } = render(mixed());
     expect(html).toContain(`<span class="tag">${L('page.externalTag')}</span>`);
-    // 两位可关注作者(levelsio 卡 + b 简讯),转载君没有 —— 按钮数正好是可关注作者数
+    // Two followable authors (levelsio card and b brief), excluding the repost author: button count equals followable-author count.
     expect(html.split('class="follow-btn"').length - 1).toBe(2);
   });
 
   it('简讯行的外部作者带同一枚外部平台 tag(小号);popclaw 作者的简讯行不带', () => {
-    // 判据 3 的「行内静态标识」不挑档:卡片位有 personMeta 的 tag,简讯行也要有
-    // 同一枚(同一键、同一写法,样式随简讯行小一号),只是不交互。
+    // Criterion 3's inline static marker applies to every tier: cards use the personMeta tag and brief rows must use
+    // the same key and text, scaled down for a brief row, without interaction.
     const { html } = render(
       issue({
         pulse: [
-          item({ author: '外君', sigil: '', authorPopclawId: '', profileUrl: '' }), // 简讯,外部作者
-          item({ author: 'b', sigil: 'zz', authorPopclawId: 'pid-b' }), // 简讯,popclaw 作者
+          item({ author: '外君', sigil: '', authorPopclawId: '', profileUrl: '' }), // Brief item, external author.
+          item({ author: 'b', sigil: 'zz', authorPopclawId: 'pid-b' }), // Brief item, popclaw author.
         ],
       }),
     );
@@ -123,16 +123,16 @@ describe('作者旁的入口', () => {
     const ext = rows.find((r) => r.includes('外君'))!;
     const own = rows.find((r) => r.includes('pid-b'))!;
     expect(ext).toContain(`<span class="tag">${L('page.externalTag')}</span>`);
-    expect(ext).not.toContain('follow-btn'); // 外部作者:静态 tag,不是按钮
-    expect(own).not.toContain(`<span class="tag">${L('page.externalTag')}</span>`); // 有身份:无此 tag
-    expect(html).toContain('.brief .tag{'); // 样式随简讯行小号
+    expect(ext).not.toContain('follow-btn'); // External author: static tag, not a button.
+    expect(own).not.toContain(`<span class="tag">${L('page.externalTag')}</span>`); // Has an identity: omit this tag.
+    expect(html).toContain('.brief .tag{'); // Smaller styling for a brief row.
   });
 
   it('不烤 isFollowing:本地关注状态不再产出「已关注」span,初始一律 cta', () => {
     const { html } = render(issue({ pulse: [item({ tier: 'card', isFollowing: true })] }));
-    // 旧渲染的「已关注」span 走的是已删除的 page.following 键;负断言改锚在
-    // 幸存的同文案键 page.followFollowed 上,语义不变:静态页绝不产出这个 span
-    // (「已关注」标记是读者证脚本客户端画的,见 render-newspaper 的 chip.followed)。
+    // The old following span used the deleted page.following key; anchor the negative assertion on
+    // the surviving page.followFollowed key with the same text. Semantics are unchanged: static pages never generate this span.
+    // The reader-pass script creates the following marker client-side; see chip.followed in render-newspaper.
     expect(html).not.toContain(`<span class="tag">${L('page.followFollowed')}</span>`);
     expect(html).toContain(`data-label="levelsio#65v29fn1">${L('page.followCta')}</button>`);
   });
@@ -143,7 +143,7 @@ describe('作者旁的入口', () => {
     expect(html).toContain('cursor:pointer');
     expect(html).toContain('.follow-btn:hover{');
     expect(html).toContain('.brief .follow-btn{');
-    expect(html).toContain('.who-row{'); // 卡片行容器:锚点与按钮同一行
+    expect(html).toContain('.who-row{'); // Card-row container: anchor and button share a row.
   });
 });
 
@@ -153,7 +153,7 @@ describe('报头与页脚', () => {
     expect(owned.html).toContain(L('page.mastheadOwner', { owner: '听风' }));
     const masthead = owned.html.slice(owned.html.indexOf('class="masthead"'), owned.html.indexOf('class="rule2"'));
     expect(masthead).toContain(L('page.mastheadOwner', { owner: '听风' }));
-    // 不传 owner:一行都不出(样式表里的类定义不算 —— 印出来才算)
+    // Without owner, render no such line; stylesheet class declarations do not count as visible output.
     expect(render(mixed()).html).not.toContain('class="masthead-owner"');
   });
 
@@ -161,7 +161,7 @@ describe('报头与页脚', () => {
     const r = render(mixed(), EDIT, {}, { ownerNickname: '听风' });
     expect(r.html).toContain(L('page.footerOwner'));
     expect(r.html).toContain(L('page.footerShare', { owner: '听风' }));
-    expect(r.html).toContain(L('page.footerExternal')); // mixed() 里有一位转载作者
+    expect(r.html).toContain(L('page.footerExternal')); // mixed() contains one repost author.
     const clean = render(issue({ pulse: [item({ tier: 'card' })] }), EDIT, {}, { ownerNickname: '听风' });
     expect(clean.html).not.toContain(L('page.footerExternal'));
   });
@@ -177,13 +177,13 @@ describe('内联脚本与零 id 誓约', () => {
 
   it('v3-⑤ 真属性:被关注者的 base58 在页上(data-followee),主人的 id 不在', () => {
     const { html } = render(mixed(), EDIT, {}, { ownerNickname: '听风' });
-    // 按设计,按钮目标就是 ~44 位 base58 的被关注者 id——这一条必须在页上。
+    // By design, the button target is the followee's roughly 44-character base58 ID and must appear on the page.
     expect(html).toContain(`data-followee="${AUTHOR_ID}"`);
-    // 主人的 id 整页不出现:渲染器不收它,夹具把它塞进主人自己的帖子(见上)
-    // 钉死「issue 数据里握着它也绝不回显」这个真属性。
+    // The owner's ID never appears: the renderer does not accept it, and the fixture embeds it in the owner's own post above
+    // to verify that even an ID present in issue data is never echoed.
     expect(html).not.toContain(OWNER_ID);
-    // 全局正则保留,但现在测的是:除了有意印进 data-followee 的按钮目标,
-    // 页面没有别的 id 形状长串(url、事件 id、house 字段、内联脚本都不许漏)。
+    // Keep the global regex, but now assert that apart from deliberate data-followee button targets,
+    // the page has no ID-shaped strings, including leaks through URLs, event IDs, house fields or inline scripts.
     expect(html.split(AUTHOR_ID).join('')).not.toMatch(/[1-9A-HJ-NP-Za-km-z]{40,}/);
   });
 });
@@ -194,7 +194,7 @@ describe('耳栏原样保留', () => {
       issue({
         pulse: [
           item({ tier: 'card', newcomerDays: 2 }),
-          item({ author: 'c', sigil: 'yy', authorPopclawId: 'pid-c' }), // 老面孔,不进耳版
+          item({ author: 'c', sigil: 'yy', authorPopclawId: 'pid-c' }), // Known face, excluded from the new-faces sidebar.
         ],
       }),
     );
@@ -202,6 +202,6 @@ describe('耳栏原样保留', () => {
     const ear = html.slice(earStart, html.indexOf('</aside>', earStart));
     expect(ear).toContain(`<span class="tag">${L('page.notFollowing')}</span>`);
     expect(ear).not.toContain('pid-c');
-    expect(ear).not.toContain('follow-btn'); // 耳栏不加按钮 —— 门铃只装在署名行上
+    expect(ear).not.toContain('follow-btn'); // No buttons in the ear column: doorbells belong only on bylines.
   });
 });

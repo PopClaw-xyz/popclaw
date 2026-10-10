@@ -7,5 +7,5 @@ export function firstReleaseView(origin: string, houseKey: string, supported = f
   return { verified: { house, capabilityRevision, manifestBytes: new Uint8Array(), proofBytes: new Uint8Array(), pinProvenance: 'configured_pin' },
     publicStream: state, actions: { ...state, kinds: { 'example.reply': state } }, privateMessages: { ...absent, kinds: {} },
     guide: state, executionClosure: absent,
-    publicStreamCapability: { house, capabilityRevision, publicStream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_1', envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: ['sc_public'] } } };
+    publicStreamCapability: { house, capabilityRevision, publicStream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_1', envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: ['sc_public'] } } };
 }

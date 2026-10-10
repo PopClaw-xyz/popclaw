@@ -39,27 +39,26 @@ pack-plugin:
     mv "$src" "$dst"
     # A tarball missing prebuilt bindings installs fine on the packer's own
     # machine and dies on everyone else's — the failure surfaces days later, on
-    # someone else's host. Count them here, where it is still cheap to fix.
+    # someone else's host. Verify each platform/architecture/ABI in the archive.
     # (`POPCLAW_NATIVE_DEPS_MINIMAL=1` is the known way to produce such a
     # tarball; this catches any other cause too.)
-    bindings=$(tar -tzf "$dst" | grep -c '\.node$' || true)
-    if [ "$bindings" -lt 11 ]; then
+    if ! node scripts/prepare-native-deps.mjs --verify-tarball "$dst"; then
       rm -f "$dst"
-      echo "pack aborted: only ${bindings} native bindings in the tarball (expect >=11)." >&2
+      echo "pack aborted: the tarball does not contain the full native prebuild matrix." >&2
       echo "  the prebuild matrix did not run — check POPCLAW_NATIVE_DEPS_MINIMAL is unset, then re-pack." >&2
       exit 1
     fi
-    echo "packed → $dst  (${bindings} native bindings)"
+    echo "packed → $dst  (native matrix verified)"
     echo "boot log will show:  popclaw: build ${version} <YYYY-MM-DD HH:MM>+08 ${sha}${dirty} (<branch>)"
 
 # Pack the thin `popclaw-mcp` shell: two bin aliases and an exact dependency on
 # `popclaw`, and nothing else.
 #
-# Deliberately NOT part of pack-plugin. That recipe's ">= 11 native bindings"
-# floor is a promise about the IMPLEMENTATION package; the shell has to pass the
+# Deliberately NOT part of pack-plugin. That recipe's full native matrix
+# is a promise about the IMPLEMENTATION package; the shell has to pass the
 # opposite test — a shell carrying a bundle, bindings or migrations is a shell
 # that copied the runtime, which is the one thing the two-package split exists
-# to prevent. Neither floor may be loosened to accommodate the other package.
+# to prevent. Neither guard may be loosened to accommodate the other package.
 #
 # The checks below read the TARBALL, not the working tree: `files` in
 # package.json decides what is packed, prepack-style rewrites can change a

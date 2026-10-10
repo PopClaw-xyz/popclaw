@@ -257,7 +257,7 @@ describe('WorldFeedCache (SQLite per-host store)', () => {
     const seen = cache.authorFirstSeen();
     expect(seen.get('A')).toBe(100);
     expect(seen.get('B')).toBe(200);
-    expect(seen.has('')).toBe(false); // 无署名不是一个人
+    expect(seen.has('')).toBe(false); // Missing attribution does not identify a single person.
   });
 });
 

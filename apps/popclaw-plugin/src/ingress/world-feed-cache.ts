@@ -10,6 +10,7 @@ import { inspectPublicCarrier } from './public-stream-wire.js';
  *   - `record(item, bytes, receivedAt?)` → INSERT OR REPLACE (dedupe on
  *     (platform, platform_post_id), last-write-wins, NO eviction — fixes the
  *     old 1000-item global-ring bug where followed authors' history fell out).
+ *     An identical persisted observation (including received_at) does no write.
  *     Wired as the `onItem` callback of WorldFeedStreamClient:
  *     `onItem: (item, bytes) => cache.record(item, bytes)`.
  *
@@ -82,6 +83,10 @@ const WRITE_COLS =
   'platform, platform_post_id, event_id, platform_post_created_at, author_popclaw_id, ' +
   'handle, original_url, text_preview, reply_to_platform, reply_to_post_id, reply_to_author_popclaw_id';
 const COLS = WRITE_COLS + ', raw';
+const STORED_COLS = `${WRITE_COLS}, received_at, raw`;
+const RECORD_SQL = `INSERT OR REPLACE INTO world_feed (${STORED_COLS})
+  SELECT ${STORED_COLS.split(',').map(() => '?').join(',')}
+  WHERE NOT EXISTS (SELECT 1 FROM world_feed WHERE ${STORED_COLS.split(',').map(column => `${column.trim()} IS ?`).join(' AND ')})`;
 
 /**
  * A bulk scan that must survive one bad row.
@@ -221,16 +226,15 @@ export class WorldFeedCache implements WorldFeedReader {
         this.opts.debug(`world-feed: unknown kind ${kind} — ${norm.platform}/${norm.platformPostId} cached anyway`);
       }
     }
-    this.opts.db.execute(
-      `INSERT OR REPLACE INTO world_feed (${WRITE_COLS}, received_at, raw)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [
-        norm.platform, norm.platformPostId, norm.eventId, norm.platformPostCreatedAt,
-        norm.authorPopclawId, norm.handle, norm.originalUrl, norm.textPreview,
-        norm.replyToPlatform ?? null, norm.replyToPostId ?? null, norm.replyToAuthorPopclawId ?? null,
-        ts, Buffer.from(raw),
-      ],
-    );
+    const values = [
+      norm.platform, norm.platformPostId, norm.eventId, norm.platformPostCreatedAt,
+      norm.authorPopclawId, norm.handle, norm.originalUrl, norm.textPreview,
+      norm.replyToPlatform ?? null, norm.replyToPostId ?? null, norm.replyToAuthorPopclawId ?? null,
+      ts, Buffer.from(raw),
+    ];
+    // Compare every persisted field atomically. New observation times still refresh
+    // retention; changed metadata and stale SQL projections still replace the row.
+    this.opts.db.execute(RECORD_SQL, [...values, ...values]);
   }
 
   /** No-op retained for callers that await it (was the async-flush stub). */

@@ -29,7 +29,7 @@ export function pinSocialSendPlan(rt: PluginRuntime, house: string | undefined):
 }
 /** Rebuild only the send operation using this process's signer and current
  * invocation. Pinned routing cannot silently follow a new home or rejoined House. */
-export async function sendSocialDraft(snapshot: DraftSnapshot, rt: PluginRuntime): Promise<{text: string}> {
+export async function sendSocialDraft(snapshot: DraftSnapshot, rt: PluginRuntime): Promise<{text: string; isError?: true}> {
   const plan = snapshot.sendPlan!;
   if (plan.origin) {
     const target = rt.egress.capturePlan().targets.find(t => t.slug === snapshot.house);

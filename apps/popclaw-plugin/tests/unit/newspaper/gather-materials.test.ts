@@ -7,14 +7,17 @@ import {
 import { tierLabel, type BondTier } from '../../../src/bonds/bond-tier.js';
 import { renderCopy } from '../../../src/lexicon/index.js';
 
-// D8：素材机械槽的断言调同一个渲染函数算预期值，不抄字面量。
+// D8: compute expected material-slot output with the shared renderer rather than duplicating literals.
 const mat = (key: string, vars: Record<string, string> = {}): string =>
   renderCopy('zh-CN', `newspaper.material.${key}`, vars);
-/** `作者: <称呼>` —— 数出现次数时用，不带 `[N] ` 的行号。 */
+/**
+ * `作者: <称呼>`: used to count occurrences, without the `[N] ` line number.
+ */
 const authorOf = (who: string): string => mat('pulse.author', { i: '1', who }).replace('[1] ', '');
 /** The fixed literal text before a template's first `{var}` — a block-presence/count check independent of which value fills it in. */
 const matPrefix = (key: string): string => mat(key).split('{')[0]!;
 import { getIssue, _resetIssuesForTest } from '../../../src/newspaper/issue-store.js';
+import { readNewspaperDocument } from '../../../src/newspaper/reading-page.js';
 import { buildIssueFromPicks } from '../../../src/newspaper/pick-issue.js';
 import { urlsOf } from './_issue-fixture.js';
 import type { IssueData } from '../../../src/newspaper/issue.js';
@@ -58,10 +61,10 @@ function deps(over: Partial<GatherDeps> = {}): GatherDeps {
 
 
 /**
- * 两步协议下的「一步」壳：候选页 → 全选 → 素材页。
- * 旧断言量的都是素材页的内容（编号、作者头、灯坊分布…），协议变了但那些不变量没变，
- * 所以用这个壳把两步并回一步，逐条断言原样保留。挑选本身（每人上限、picks 校验）
- * 有自己的用例，不在这批里。
+ * A one-step wrapper around the two-step protocol: candidate page, select all, material page.
+ * Existing assertions cover material invariants (numbers, author headers, house distribution) that
+ * survive the protocol change. The wrapper preserves those assertions; selection limits and picks
+ * validation have separate tests.
  */
 function gatherNewspaperMaterials(d: GatherDeps, o: { hours?: number } = {}): GatherResult {
   const r = gatherRaw(d, o);
@@ -71,8 +74,8 @@ function gatherNewspaperMaterials(d: GatherDeps, o: { hours?: number } = {}): Ga
     mintToken: d.mintToken,
     contentRules: d.readContentRules?.() ?? '',
     leadMax: d.readStyle?.().leadMax ?? 3,
-    perAuthorMax: Number.MAX_SAFE_INTEGER, // 这批用例量的不是上限
-    // 这个夹具把全部候选原样交回,不该让"挑不够按热闹补齐"那条掺进来。
+    perAuthorMax: Number.MAX_SAFE_INTEGER, // These tests do not measure the limit.
+    // Return all candidates unchanged in this fixture; do not involve popularity-based top-up.
     floor: 0,
     topUpTo: 0,
   });
@@ -84,8 +87,8 @@ type GatherResult =
   | { kind: 'ready'; payload: string; publishToken: string };
 
 describe('gatherNewspaperMaterials', () => {
-  // build-newspaper-prompt.ts 的 bondLines() 档位标签走 tierLabel()，默认
-  // ownerLang() —— 钉死 zh-CN，这批断言检查的是迁移前的产线中文原文（零回归）。
+  // bondLines() in build-newspaper-prompt.ts uses tierLabel(), which defaults to
+  // ownerLang(). Pin zh-CN because these assertions preserve the production Chinese text from before migration.
   beforeAll(() => setOwnerLang('zh-CN', 'config'));
   afterAll(() => setOwnerLang(undefined));
   beforeEach(() => _resetIssuesForTest());
@@ -159,7 +162,7 @@ describe('gatherNewspaperMaterials', () => {
     expect(r.payload).not.toContain(full); // raw 64-hex never leaks into the materials
   });
 
-  // ——— 改版切片 A：P0 坊/kind 透传 + P1 交情本 ———
+  // Redesign slice A: P0 house/kind passthrough and P1 bond book.
 
   it('P0: passes houseSlug + kind through and prints the 坊分布 line', () => {
     const d = deps({
@@ -227,7 +230,7 @@ describe('gatherNewspaperMaterials', () => {
     expect(r.payload).not.toContain('拉黑的人说的话');
     expect(r.payload).not.toContain('拒收的人说的话');
     expect(r.payload).toContain('正常人说的话');
-    expect(r.payload).toContain('**1 items** gathered'); // totalCount 也只算进了报纸的
+    expect(r.payload).toContain('**1 items** gathered'); // totalCount also counts only items included in the newspaper.
   });
 
   it('P1: blocked / reject 档的来信也不进待回', () => {
@@ -277,7 +280,7 @@ describe('gatherNewspaperMaterials', () => {
       ] as never },
     });
     gatherNewspaperMaterials(d, { hours: 24 });
-    // v0.2：不再另存一份 stats —— 社交日志那本账直接从 issue 推，两处不可能对不上。
+    // v0.2 no longer stores separate stats: social-log figures derive directly from the issue and cannot disagree.
     const issue = stored();
     expect(issue.totalCount).toBe(1);
     expect(issue.pings).toHaveLength(1);
@@ -285,7 +288,7 @@ describe('gatherNewspaperMaterials', () => {
     expect(issue.dateLabel).toContain('1970');
   });
 
-  // ——— 改版切片 B+C：P4 荐因素材 / P5 新人标 / P1 尾巴近况 / P2 告示牌 / P3 出场人物 ———
+  // Redesign slices B+C: P4 recommendation reasons / P5 newcomer marks / P1 recent-activity footer / P2 manifests / P3 participants.
 
   const one = (over: Record<string, unknown> = {}) => ({
     cache: {
@@ -329,12 +332,12 @@ describe('gatherNewspaperMaterials', () => {
         { platform: 'popclaw', platformPostId: 'p1', eventId: 'e1', platformPostCreatedAt: 99000,
           authorPopclawId: 'A', handle: 'a', originalUrl: '', textPreview: 't', body: '原帖',
           media: [], replyToAuthorHandle: '', replyCount: 0, markCount: 0 },
-        // 已关注的 F 回了 A 的帖 → A 那条应出荐因
+        // Followed F replied to A's post: A's item should include a recommendation reason.
         { platform: 'popclaw', platformPostId: 'p2', eventId: 'e2', platformPostCreatedAt: 99100,
           authorPopclawId: 'F', handle: 'f', originalUrl: '', textPreview: 't', body: '回帖',
           media: [], replyToAuthorHandle: '', replyCount: 0, markCount: 0,
           replyToPostId: 'p1', replyToAuthorPopclawId: 'A' },
-        // 未关注的 U 回了 B 的帖 → 不算路径
+        // Unfollowed U replied to B's post: this does not form a recommendation path.
         { platform: 'popclaw', platformPostId: 'p3', eventId: 'e3', platformPostCreatedAt: 99200,
           authorPopclawId: 'U', handle: 'u', originalUrl: '', textPreview: 't', body: '路人回帖',
           media: [], replyToAuthorHandle: '', replyCount: 0, markCount: 0,
@@ -370,8 +373,8 @@ describe('gatherNewspaperMaterials', () => {
     });
     const r = gatherNewspaperMaterials(d, { hours: 24 });
     if (r.kind !== 'ready') throw new Error('want ready');
-    expect(r.payload).toContain(mat('cast.newcomer', { days: '3' })); // 98→100 天 = 第 3 天
-    // OLD 不出：数的是新人标前缀的出现次数，不绑死某一个具体天数
+    expect(r.payload).toContain(mat('cast.newcomer', { days: '3' })); // Day 98 to day 100 means the third day.
+    // OLD is excluded: count newcomer-prefix occurrences without coupling to a specific day count.
     expect(r.payload.split(matPrefix('cast.newcomer')).length - 1).toBe(1);
   });
 
@@ -403,23 +406,23 @@ describe('gatherNewspaperMaterials', () => {
     expect(stored().houseVoices).toEqual({ 'popclaw.world': '走出去看看的地方' });
   });
 
-  // ——— 切片 E：真机四修（同人回填 / popclaw.me 卡头 / 信内链接 / 订阅坊零素材） ———
+  // Slice E: four real-device fixes (same-person backfill / popclaw.me card headers / message links / subscribed houses with no material).
 
   it('E1: 同一 popclaw_id 的无名条目按 id 回填名字与头像,绝不跨 id', () => {
     const d = deps({
       cache: { recentForReading: () => [
-        // 主帖：有名字、有 handle、有认证绑定（信息最全的一条）
+        // Main post: nickname, handle and verified binding provide the most complete record.
         { platform: 'x', platformPostId: 'p1', eventId: 'e1', platformPostCreatedAt: 99000,
           authorPopclawId: 'MUSK', handle: 'elonmusk', actorNickname: 'Elon Musk',
           actorVerified: [{ platform: 'x', handle: 'elonmusk', profileUrl: 'https://x.com/elonmusk', followerCount: 21000000 }],
           originalUrl: '', textPreview: 't', body: '主帖', media: [], replyToAuthorHandle: '',
           replyCount: 0, markCount: 0 },
-        // 回帖：ingest 把作者名整列丢了 → 只有 id
+        // Reply: ingest dropped the entire author-name column, leaving only the ID.
         { platform: 'x', platformPostId: 'p2', eventId: 'e2', platformPostCreatedAt: 99100,
           authorPopclawId: 'MUSK', handle: '', actorNickname: '', actorVerified: [],
           originalUrl: '', textPreview: 't', body: '回帖', media: [], replyToAuthorHandle: '',
           replyCount: 0, markCount: 0 },
-        // 另一个人的无名条目：映射里没有他 → 照旧「(无署名)」
+        // Another person's unnamed item: absent from the mapping, so retain the unnamed label.
         { platform: 'x', platformPostId: 'p3', eventId: 'e3', platformPostCreatedAt: 99200,
           authorPopclawId: 'GHOST', handle: '', actorNickname: '', actorVerified: [],
           originalUrl: '', textPreview: 't', body: '幽灵帖', media: [], replyToAuthorHandle: '',
@@ -428,13 +431,13 @@ describe('gatherNewspaperMaterials', () => {
     });
     const r = gatherNewspaperMaterials(d, { hours: 24 });
     if (r.kind !== 'ready') throw new Error('want ready');
-    expect(r.payload.split(authorOf('Elon Musk')).length - 1).toBe(2); // 主帖 + 回帖都署上名
-    // I3：粉丝属于人 → 只在作者名录里出现一次（回填照旧，两条素材都署得上名）
+    expect(r.payload.split(authorOf('Elon Musk')).length - 1).toBe(2); // Both main post and reply are attributed.
+    // I3: followers belong to people and appear once in the author directory; backfill still credits both items.
     expect(r.payload.match(/2100 万粉/g)!.length).toBe(1);
-    // 头像 v0.2 起连名录都不印了 —— 版面自己去 issue 里取
+    // Since v0.2 even the directory omits avatars; the layout reads them from the issue.
     expect(r.payload).not.toContain('unavatar.io');
     expect(stored().pulse.filter((x) => x.avatarUrl.includes('unavatar.io/twitter/elonmusk'))).toHaveLength(2);
-    // GHOST 回填不到 → 照旧「(无署名)」，绝不借别人的名字
+    // GHOST cannot be backfilled: retain the unnamed label and never borrow another person's name.
     expect(
       r.payload.split(authorOf(mat('pulse.unattributed', { platform: 'x' }))).length - 1,
     ).toBe(1);
@@ -489,13 +492,13 @@ describe('gatherNewspaperMaterials', () => {
     if (r.kind !== 'ready') throw new Error('want ready');
     const home = stored().pulse[0]!.profileUrl;
     expect(home).toMatch(/^https:\/\/popclaw\.me\/elonmusk\/\w+$/);
-    // v0.2：主页/平台主页都只在素材里，版面自己取；简报一个 URL 都不给
+    // v0.2: home/platform URLs remain in material for the layout to read; the briefing contains no URLs.
     expect(r.payload).not.toContain('platform page: ');
     const issue = getIssue('tok_test')!;
     const urls = urlsOf(issue);
     expect(urls.has(home)).toBe(true);
-    expect(urls.has('https://x.com/elonmusk')).toBe(true); // 「↗ 查看原文」类出口也放行
-    expect(issue.pulse[0]!.handle).toBe('elonmusk'); // 名录仍报 handle(新人小传要用「平台 + 粉丝」)
+    expect(urls.has('https://x.com/elonmusk')).toBe(true); // Links such as the view-original exit are also allowed.
+    expect(issue.pulse[0]!.handle).toBe('elonmusk'); // The directory still reports handles (newcomer bios need platform plus followers).
   });
 
   it('E3: 待回正文里的 http(s) 链接单独成行并进白名单', () => {
@@ -509,7 +512,7 @@ describe('gatherNewspaperMaterials', () => {
     const r = gatherNewspaperMaterials(d, { hours: 24 });
     if (r.kind !== 'ready') throw new Error('want ready');
     const withLinks = stored().pings.filter((x) => x.links?.length);
-    expect(withLinks).toHaveLength(1); // 没链接的那封不带 links
+    expect(withLinks).toHaveLength(1); // A message without links has no links field.
     expect(withLinks[0]!.links).toEqual(['https://popclaw.world/%E8%92%82%E6%B3%95', 'http://a.example/x']);
     const urls = urlsOf(getIssue('tok_test')!);
     expect(urls.has('https://popclaw.world/%E8%92%82%E6%B3%95')).toBe(true);
@@ -547,9 +550,11 @@ describe('gatherNewspaperMaterials', () => {
     expect(r.payload).not.toContain(mat('houseDistribution', { counts: '' }));
   });
 
-  // ——— 切片 F：world 叠零依赖五修 ———
+  // Slice F: five fixes for the world section with no new dependencies.
 
-  /** 一条坊事件素材（字段名逐字取自实拉的 world 告示牌 schema）。 */
+  /**
+   * One house-event material item; field names match the fetched world manifest schema verbatim.
+   */
   const houseItem = (
     over: Record<string, unknown> = {},
   ): Record<string, unknown> => ({
@@ -582,7 +587,7 @@ describe('gatherNewspaperMaterials', () => {
     const fields = stored().pulse[0]!.houseFields!;
     expect(fields.place_name).toBe('山塘街');
     expect(fields['present.2.owner_popclaw_id']).toMatch(/^杜工部#/);
-    expect(JSON.stringify(fields)).not.toContain('OWNER_B'); // 裸 id 不上版面
+    expect(JSON.stringify(fields)).not.toContain('OWNER_B'); // Raw IDs must not appear in the layout.
     expect(urlsOf(getIssue('tok_test')!).has('https://popclaw.world/h/3m8v5x1p')).toBe(true);
   });
 
@@ -606,7 +611,7 @@ describe('gatherNewspaperMaterials', () => {
     if (r.kind !== 'ready') throw new Error('want ready');
     const pages = stored().pulse.map((x) => x.postPageUrl);
     expect(pages).toContain('https://popclaw.me/post/meevent123');
-    expect(pages).not.toContain('https://popclaw.me/post/wevent1234'); // world 的 id 在主坊不存在
+    expect(pages).not.toContain('https://popclaw.me/post/wevent1234'); // The world ID does not exist in the primary house.
     expect(urlsOf(getIssue('tok_test')!).has('https://popclaw.me/post/wevent1234')).toBe(false);
   });
 
@@ -625,13 +630,13 @@ describe('gatherNewspaperMaterials', () => {
     expect(r.payload).toContain(
       mat('pings.head', { count: '1', letters: mat('pings.letters', { count: '1' }) }),
     );
-    // 世界来信由版面排，不进简报 —— 它的坊归属、图、链接都在 issue 上
+    // World correspondence is handled by the layout, not the briefing; house attribution, images and links are on the issue.
     const letter = stored().houseLetters![0]!;
     expect(letter.houseSlug).toBe('popclaw-world');
     expect(letter.imageLinks).toEqual(['https://cdn.example/pc.jpg']);
     expect(letter.links).toEqual(['https://popclaw.world/h/3m8v5x1p']);
-    expect(letter.body).toContain('记'.repeat(100)); // 80 字预览之外的正文也在
-    // 分流不许变成漏账：两个数各归各位，版面两处照它印
+    expect(letter.body).toContain('记'.repeat(100)); // The body beyond the 80-character preview is also present.
+    // Splitting routes must not lose accounting: each count stays in its own place, and both layout sections use it.
     expect([stored().pings.length, stored().houseLetters!.length]).toEqual([1, 1]);
     expect(urlsOf(getIssue('tok_test')!).has('https://cdn.example/pc.jpg')).toBe(true);
   });
@@ -661,8 +666,8 @@ describe('gatherNewspaperMaterials', () => {
     });
     const r = gatherNewspaperMaterials(d, { hours: 24 });
     if (r.kind !== 'ready') throw new Error('want ready');
-    // v0.2：门楣这一行直接上版面了,所以它必须是一句话 —— 版式法典 §八 明写
-    // 「内部字段名不上版面」。素材仍是 `phase=returned · place_name=…`,成句在这里做。
+    // v0.2: this masthead line goes directly into the layout and must be a sentence; layout rules section 8 explicitly
+    // prohibit internal field names on the page. Material stays `phase=returned · place_name=...`; sentence construction happens here.
     expect(stored().mantles).toEqual([
       {
         houseSlug: 'popclaw-world',
@@ -678,7 +683,7 @@ describe('gatherNewspaperMaterials', () => {
       language: 'zh-CN',
       configuredHouseSlugs: ['popclaw-world'],
       houseOfficialIds: () => ['STAGE'],
-      // 窗口外（now=100000，窗口 24h）的一封老信：只有门楣够得着它。
+      // An old message outside the 24-hour window (now=100000): only the masthead can use it.
       inbox: { recent: () => [
         { ts: 1000, fromPopclawId: 'STAGE', toPopclawId: 'me', body: '小家伙从女木岛回来了', receivedAtMs: 0 },
       ] as never },
@@ -688,9 +693,9 @@ describe('gatherNewspaperMaterials', () => {
     if (r.kind !== 'ready') throw new Error('want ready');
     const mantle = stored().mantles![0]!;
     expect(mantle.level).toBe(3);
-    expect(mantle.dateLabel).toBeTruthy(); // 跨窗口的素材必带日期
+    expect(mantle.dateLabel).toBeTruthy(); // Material from outside the window must include a date.
     expect(mantle.text).toContain('小家伙从女木岛回来了');
-    expect(r.payload).not.toContain(mat('letters.head', { count: '1' })); // 窗口外的信不进栏目，只够门楣
+    expect(r.payload).not.toContain(mat('letters.head', { count: '1' })); // Out-of-window messages do not enter the section, only the masthead.
   });
 
   it('F4④: 什么都没有 → 退到坊门卡；⑤ 连门卡都没有 → 门楣整行不出', () => {
@@ -720,7 +725,7 @@ describe('gatherNewspaperMaterials', () => {
       { hours: 24 },
     );
     if (bare.kind !== 'ready') throw new Error('want ready');
-    expect(stored().mantles).toBeUndefined(); // ⑤ 级 = 门楣整行不出
+    expect(stored().mantles).toBeUndefined(); // Level 5 omits the whole masthead line.
   });
 
   it('feeds the original body, not the 280 preview, into the materials', () => {
@@ -736,12 +741,14 @@ describe('gatherNewspaperMaterials', () => {
     });
     const res = gatherNewspaperMaterials(d, { hours: 24 });
     expect(res.kind).toBe('ready');
-    // 简报给的是正文本身而不是那 280 字预览（v0.2 的简讯档预算是 400 字，仍宽于预览）。
+    // The briefing receives the body itself, not the 280-character preview (the v0.2 brief budget is 400 characters, still larger).
     if (res.kind === 'ready') expect(res.payload).toContain(longBody);
   });
 });
 
-/** B1/B2（ADR-0045）：报头日期与「今天」的窗口都按主人本地日历日。 */
+/**
+ * B1/B2 (ADR-0045): masthead dates and today's window both use the owner's local calendar day.
+ */
 describe('gatherNewspaperMaterials — 主人本地日切', () => {
   beforeEach(() => {
     _resetIssuesForTest();
@@ -749,7 +756,9 @@ describe('gatherNewspaperMaterials — 主人本地日切', () => {
   });
   afterEach(() => setOwnerTz(undefined));
 
-  /** 2026-07-30T20:30:00Z —— 上海已是 7/31 04:30，洛杉矶还是 7/30 13:30。 */
+  /**
+   * 2026-07-30T20:30:00Z: Shanghai is already 7/31 04:30; Los Angeles is still 7/30 13:30.
+   */
   const NOW = Math.floor(Date.UTC(2026, 6, 30, 20, 30) / 1000);
   const at = (ts: number): Partial<GatherDeps> => ({
     now: () => NOW,
@@ -776,7 +785,7 @@ describe('gatherNewspaperMaterials — 主人本地日切', () => {
   });
 
   it('不传 hours = 真日切：本地 0 点之前的东西不算今天', () => {
-    setOwnerTz('Asia/Shanghai'); // 本地 7/31 00:00 = 2026-07-30T16:00Z
+    setOwnerTz('Asia/Shanghai'); // Local 7/31 00:00 equals 2026-07-30T16:00Z.
     const beforeMidnight = Math.floor(Date.UTC(2026, 6, 30, 15, 50) / 1000);
     expect(gatherNewspaperMaterials(deps(at(beforeMidnight)), {}).kind).toBe('empty');
 
@@ -790,7 +799,7 @@ describe('gatherNewspaperMaterials — 主人本地日切', () => {
     const beforeMidnight = Math.floor(Date.UTC(2026, 6, 30, 15, 50) / 1000);
     const r = gatherNewspaperMaterials(deps(at(beforeMidnight)), { hours: 24 });
     expect(r.kind).toBe('ready');
-    // 措辞跟着窗口走：滚动窗不许再自称「今天」。
+    // Wording follows the window: a rolling window must not call itself today.
     if (r.kind === 'ready') expect(r.payload).toContain('gathered in the last 24 hours');
   });
 
@@ -833,8 +842,8 @@ describe('I5: 正文预算与条数上限', () => {
     return stored().pulse[0]!.text;
   }
 
-  // v0.2：预算跟着密度档走 —— 简讯只写一两句,喂它 1200 字是上一版的形状,
-  // 那时模型还兼排版、可能自己把一条提档。现在档位由 gather 定、版面照排,两边同一个决定。
+  // v0.2: budgets follow density tiers. Brief items need only a sentence or two; 1200 characters belonged to the prior version,
+  // when the model also handled layout and could promote an item. Now gather chooses the tier and layout follows the same decision.
   it('简讯档保留完整写作原文', () => {
     const text = one({});
     expect(text).not.toContain('…');
@@ -859,16 +868,19 @@ describe('I5: 正文预算与条数上限', () => {
     }));
     const r = gatherRaw(deps({ cache: { recentForReading: () => many as never } }), { hours: 24 });
     if (r.kind !== 'candidates') throw new Error('want candidates');
-    // 100 条一条不落 —— 旧行为是 slice(0, 80)，主人 2026-08-26 否掉了「读了多少就放多少」。
+    // Keep all 100 items. Old behavior used slice(0, 80); on 2026-08-26 the owner rejected making output count depend on how much was read.
     expect(getIssue(r.candidateToken)!.pulse.length).toBe(100);
-    // 但候选页本身要塞得进宿主一条消息（≥200k 模型 64,000 加权）。
+    // The candidate page must still fit one host message (64,000 weighted units for models with context >=200k).
     expect(weightedChars(r.payload) * 1.013).toBeLessThan(64_000);
   });
 
-  // ——— Host tool-result budget (2026-08-25 真机)：payload 超过宿主单条工具返回上限，
-  // 宿主会**砍中间**且不通知工具。这一组测的是「我们永远不递超预算的东西」这一侧的契约。
+  // Host tool-result budget (real device, 2026-08-25): if payload exceeds the single-result limit,
+  // the host truncates the middle without notifying the tool. These tests enforce our side: never return an over-budget payload.
   describe('payload budget', () => {
-    /** N 条素材，每条正文都是长中文 —— 中文每字算 4 个单位，几条就能顶穿预算。 */
+    /**
+     * N material items with long Chinese bodies; each Chinese character costs four units, so a few
+     * can exceed the budget.
+     */
     const bulky = (n: number) =>
       Array.from({ length: n }, (_, i) => ({
         handle: `u${i}`, textPreview: 't', body: '甲'.repeat(600), media: [],
@@ -881,7 +893,9 @@ describe('I5: 正文预算与条数上限', () => {
         deps({ cache: { recentForReading: () => bulky(n) as never } }),
         { hours: 24 },
       );
-    /** payload 里真实出现的素材条目数（`[N] 作者: …` 那些行）。 */
+    /**
+     * Actual number of material items in the payload (the `[N] 作者: ...` lines).
+     */
     const itemCount = (payload: string): number => payload.match(/\n\[\d+\] /g)?.length ?? 0;
 
     it('加权字符：ASCII 一个算一个，中文一个算四个', () => {
@@ -894,18 +908,23 @@ describe('I5: 正文预算与条数上限', () => {
     it('素材撑爆单页预算时保留完整一期并给续读位置', () => {
       const r = gather(80);
       if (r.kind !== 'ready') throw new Error('want ready');
-      // 单页塞得进宿主一条消息的上限（≥200k 模型是 64,000，量到多少用多少）。
-      // ⚠️ 这是「一口给多少」不是「一顿吃多少」——条数由挑选阶梯定，不由这个数定。
+      // One page must fit the host's measured message limit (64,000 for context >=200k).
+      // This controls each serving, not the whole issue; selection tiers determine item counts.
       expect(weightedChars(r.payload) * 1.013).toBeLessThan(64_000);
-      // 砍过了，而且素材段头那句「共 N 条」与真实条目数对得上（不许砍了却还报 80）。
+      // All 80 originals stay in the ledger; this source weight gives five complete bodies in the current packet.
       expect(stored().pulse).toHaveLength(80);
       expect(r.payload).toContain('page_cursor=');
-      expect(r.payload).toContain(mat('pulse.head', { count: '80' }));
+      expect(stored().pulse.every(p => p.text === '甲'.repeat(600))).toBe(true);
+      expect(r.payload).toContain('[Current writing packet: [1] [2] [3] [4] [5]]');
+      const document = readNewspaperDocument('tok_test').text;
+      expect(document).toContain(mat('pulse.head', { count: '5' }));
+      expect(document).not.toContain(mat('pulse.head', { count: '80' }));
+      expect(document).toContain(mat('pulse.author', { i: '80', who: 'u79' }));
     });
 
     it('砍的时候先砍无署名的 —— 有人的条目留到最后（铁律②：不许有没有人的新闻）', () => {
-      // 200 条无署名在前（更新）、20 条有署名在后（更旧）—— 纯按新旧砍会把有人的全砍光。
-      // （候选页一行只放 80 字预览，所以要够多条才撑爆一页。）
+      // 200 newer unnamed items precede 20 older named items; recency-only trimming would remove every named author.
+      // Candidate rows show only 80-character previews, so many rows are needed to exceed one page.
       const feed = [
         ...Array.from({ length: 200 }, (_, i) => ({
           handle: '', textPreview: 't', body: '甲'.repeat(600), media: [],
@@ -923,10 +942,10 @@ describe('I5: 正文预算与条数上限', () => {
       const r = gatherRaw(deps({ cache: { recentForReading: () => feed as never } }), { hours: 24 });
       if (r.kind !== 'candidates') throw new Error('want candidates');
       expect(getIssue(r.candidateToken)!.pulse.length).toBe(220);
-      // 顺序不变：无署名的先走光，剩下的全是有人的条目。
-      // （预算比从前紧，条目又是 600 字的大块头，所以有署名的也会被砍到——
-      //  但永远是无署名的先死光，这条铁律没让。）
-      // 20 个有署名的一个不少；被砍掉的全是无署名的。
+      // Ordering stays fixed: exhaust unnamed items first, leaving named items.
+      // The tighter budget and 600-character items can also require trimming named items,
+      // but only after all unnamed items are gone; that invariant is unchanged.
+      // All 20 named items remain; every removed item is unnamed.
       for (let i = 0; i < 20; i += 1) expect(getIssue(r.candidateToken)!.pulse.some(p => p.author === `star${i}`)).toBe(true);
       expect(r.payload).toContain('page_cursor=');
       expect(weightedChars(r.payload) * 1.013).toBeLessThan(64_000);

@@ -130,6 +130,47 @@ describe('makeIntentPullClient.pull', () => {
     await expect(client.pull(owner, 0)).rejects.toThrow();
   });
 
+  it.each([
+    ['missing latest timestamp', { latest_ts: undefined }],
+    ['null latest timestamp', { latest_ts: null }],
+    ['non-numeric latest timestamp', { latest_ts: 'bad-time' }],
+    ['numeric string latest timestamp', { latest_ts: String(FIXED_NOW) }],
+    ['missing first timestamp', { first_ts: undefined }],
+    ['null first timestamp', { first_ts: null }],
+    ['unsafe latest timestamp', { latest_ts: Number.MAX_VALUE }],
+    ['unsafe first timestamp', { first_ts: Number.MAX_SAFE_INTEGER + 1 }],
+    ['fractional latest timestamp', { latest_ts: FIXED_NOW + 0.5 }],
+    ['fractional first timestamp', { first_ts: FIXED_NOW + 0.5 }],
+    ['non-string label', { followee_label: null }],
+    ['non-string followee', { followee_popclaw_id: 123 }],
+    ['missing owner', { owner_popclaw_id: undefined }],
+    ['non-numeric click count', { click_count: '2' }],
+  ])('rejects the entire mixed batch with a %s', async (_name, invalid) => {
+    const fake = fakeFetch(200, JSON.stringify({ intents: [ROWS[0], { ...ROWS[0], ...invalid }] }));
+    const client = makeIntentPullClient({ baseUrl: 'http://canvas.test', signer, fetchJson: fake.fetchJson });
+    await expect(client.pull(owner, 0)).rejects.toThrow(/malformed/);
+  });
+
+  it.each(['null', '[]', '42'])('rejects a non-row %s in a mixed batch', async (invalid) => {
+    const fake = fakeFetch(200, `{"intents":[${JSON.stringify(ROWS[0])},${invalid}]}`);
+    const client = makeIntentPullClient({ baseUrl: 'http://canvas.test', signer, fetchJson: fake.fetchJson });
+    await expect(client.pull(owner, 0)).rejects.toThrow(/malformed/);
+  });
+
+  it('rejects a JSON number that parses as an infinite timestamp', async () => {
+    const text = JSON.stringify({ intents: ROWS }).replace(String(ROWS[0]!.latest_ts), '1e400');
+    const fake = fakeFetch(200, text);
+    const client = makeIntentPullClient({ baseUrl: 'http://canvas.test', signer, fetchJson: fake.fetchJson });
+    await expect(client.pull(owner, 0)).rejects.toThrow(/malformed/);
+  });
+
+  it('accepts safe integer millisecond timestamps without adding a freshness policy', async () => {
+    const rows = [{ ...ROWS[0], latest_ts: Number.MAX_SAFE_INTEGER }];
+    const fake = fakeFetch(200, JSON.stringify({ intents: rows }));
+    const client = makeIntentPullClient({ baseUrl: 'http://canvas.test', signer, fetchJson: fake.fetchJson });
+    await expect(client.pull(owner, 0)).resolves.toEqual(rows);
+  });
+
   it('refuses an owner that is not the signer own id, without hitting the wire', async () => {
     const fake = fakeFetch(200, JSON.stringify({ intents: [] }));
     const client = makeIntentPullClient({

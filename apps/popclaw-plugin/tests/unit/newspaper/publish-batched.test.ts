@@ -58,8 +58,9 @@ describe('分批交稿', () => {
   afterEach(() => dropScratch(scratch));
 
   /**
-   * 派工台账要分得清「交了一批被收下了」和「一次都没交成」(2026-09-13)。
-   * `landed` 只说主人拿没拿到报纸;`accepted` 说的是这一次交稿的字有没有被留下。
+   * The dispatch ledger must distinguish an accepted batch from no successful submission
+   * (2026-09-13). landed describes whether the owner received the newspaper; accepted describes
+   * whether this submission's copy was retained.
    */
   it('交了一批但没写完 → accepted 为真、landed 为假;全部写完 → 两个都真', async () => {
     putIssue('t-accepted', three());
@@ -92,35 +93,36 @@ describe('分批交稿', () => {
     const upload = vi.fn(async () => ({ url: 'https://canvas/x/1?t=tok' }));
     const r = await publishNewspaper(deps(upload as never), { publishToken: 't1', edit: firstBatch });
 
-    // 一期报纸只有一个链接。缺了大半条目的那一版不该到主人手里,
-    // 而画布每传一次就换一个新链接 —— 先发一版残的、再发一版全的,是同一天两个链接。
+    // One issue has one link. A version missing most items must not reach the owner,
+    // and each canvas upload creates another link; publishing partial then complete versions would create two links for one day.
     expect(upload).not.toHaveBeenCalled();
     expect(r.text).not.toContain('canvas');
-    // 「还欠哪几号」必须点名 —— 只报个数,遇上素材页被砍中间的机器就是死路
+    // Name the outstanding item numbers; a count alone is unusable if the host truncated the material page's middle.
     expect(r.text).toContain(
       renderCopy('en', 'newspaper.publish.moreToWrite', { count: '2', numbers: '[2] [3]', token: 't1' }),
     );
-    expect(getIssue('t1')).toBeDefined(); // 账还在,下一批还能补
+    expect(getIssue('t1')).toBeDefined(); // The ledger remains so another batch can fill the gaps.
     expect(getEdit('t1')?.items).toEqual(firstBatch.items);
   });
 
   /**
-   * 回执只报编号是不够的:素材页是上下文里最大的一块,也是最先被截掉的一块,
-   * 写手往往已经看不见它了。看不见还要补稿 = 凭印象写,而凭印象写正是 2026-09-10/11
-   * 真机上「摘要挂到别人名下」的来处。所以还欠的那几条,把素材原样再贴一遍。
+   * A receipt containing only item numbers is insufficient: material is the largest context block
+   * and often the first truncated, so the writer may no longer see it. Asking for copy without
+   * material invites writing from memory, which caused misattributed summaries on real machines on
+   * 2026-09-10/11. Repeat the original material for outstanding items.
    */
   it('没写完的回执要把还欠那几条的素材原样重贴 —— 已经写过的那条不重贴', async () => {
     putIssue('t-again', three());
     const r = await publishNewspaper(deps(), { publishToken: 't-again', edit: firstBatch });
     expect(r.text).toContain(renderCopy('en', 'newspaper.publish.materialAgain', { count: '2' }));
-    // 还欠的两条:作者行与正文都在。
+    // Both outstanding items include author lines and bodies.
     expect(r.text).toContain('sama#2222aaaa');
     expect(r.text).toContain('karpathy#3333bbbb');
     expect(r.text).toContain('second');
     expect(r.text).toContain('third');
-    // 已经写过的那条不占回执的地方。
+    // The already-written item does not consume receipt space.
     expect(r.text).not.toContain('levelsio#65v29fn1');
-    // 说明在前、素材在后:宿主截断时留下的是该干什么,不是素材。
+    // Instructions precede material so host truncation retains what to do, not just source content.
     expect(r.text.indexOf(renderCopy('en', 'newspaper.publish.materialAgain', { count: '2' }))).toBeGreaterThan(
       r.text.indexOf(renderCopy('en', 'newspaper.publish.moreToWrite', { count: '2', numbers: '[2] [3]' })),
     );
@@ -146,10 +148,10 @@ describe('分批交稿', () => {
       },
     });
 
-    // brief 档只印摘要,所以断言落在摘要上 —— 断言要落在版面真印出来的那半。
+    // The brief tier prints only the summary, so assert the summary actually rendered in the layout.
     const html = sent[0]!;
-    expect(html).toContain('it landed.'); // 第一批写的还在
-    expect(html).not.toContain('a second pass at the same item.'); // 只填空不改写
+    expect(html).toContain('it landed.'); // Copy from the first batch remains.
+    expect(html).not.toContain('a second pass at the same item.'); // Fill gaps only; do not rewrite.
     expect(html).toContain('it went up.');
     expect(html).toContain('it came down.');
   });
@@ -174,8 +176,8 @@ describe('分批交稿', () => {
       publishToken: 't4',
       edit: { items: { '2': { q: 'second', h: 'b', s: 'bb.' }, '3': { q: 'third', h: 'c', s: 'cc.' } } },
     });
-    expect(r.text).toContain('today in three lines'); // 沿用第一批的导读
-    expect(r.text).toContain('https://canvas/x/1?t=tok'); // 写完了才有链接
+    expect(r.text).toContain('today in three lines'); // Keep the first batch's introduction.
+    expect(r.text).toContain('https://canvas/x/1?t=tok'); // A link exists only after completion.
     expect(r.text).not.toContain(renderCopy('en', 'newspaper.publish.editNoMasthead'));
   });
 
@@ -193,7 +195,7 @@ describe('分批交稿', () => {
     });
     expect(upload).toHaveBeenCalledOnce();
     expect(r.text).toContain('canvas down');
-    expect(getIssue('t5')).toBeUndefined(); // 写完了就销账
+    expect(getIssue('t5')).toBeUndefined(); // Completion clears the ledger.
   });
 
   it('令牌对不上 → 拒发,更不会替它开一条补稿的路', async () => {
@@ -229,10 +231,10 @@ describe('checkEdit 在有存稿时放宽', () => {
 });
 
 /**
- * 「写给另一套编号的稿子」—— 2026-08-29 乙机就是这么坏的：它判定素材被截断，跑去 feed
- * 补全，然后按**它自己那套编号**交稿。令牌是对的，所以旧代码照单全收，把每一条正文都套到
- * 了别人名下。令牌只能证明「稿子是对着这份素材写的」——前提是写手真用了给它的编号。
- * 所以要核，不能信。
+ * Copy written against another numbering scheme: on host B on 2026-08-29, the agent inferred
+ * truncation, fetched feed material and submitted copy using its own numbering. The correct token
+ * let old code accept it and attribute each body to someone else. A token proves the source issue
+ * only if the writer used the supplied numbering; validate that assumption rather than trusting it.
  */
 describe('稿子写给了另一套编号', () => {
   beforeEach(() => {
@@ -278,14 +280,14 @@ describe('稿子写给了另一套编号', () => {
 });
 
 /**
- * 补稿是**逐字段**填空，不是整键覆盖。
+ * Supplemental copy fills gaps per field, not per whole key.
  *
- * `items` 是唯一一个值为对象的表。整键合并在这里不叫「填空」，叫「下一层的整体替换」：
- * 第一批只交了标题 `{h}`，第二批把 `{h, s}` 交上来时，整个键被第一批盖掉，**正文永久丢失**。
- * 而 `hasCopy` 只要 h 或 s 有一个就算「写过了」——所以这一条也永远不会出现在「还欠哪几号」里，
- * 版面上就是一条有标题、没正文的条目，无痕。
+ * items is the only object-valued table. Whole-key merging replaces the next level instead of
+ * filling gaps: a first batch with only {h} overrides a second batch with {h, s}, permanently
+ * losing the body. hasCopy accepts either h or s, so the item also disappears from the outstanding
+ * list and silently renders a title without a body.
  *
- * 外部会诊里唯一一家（且是没有工具、纯读代码原文的那家）抓到的。
+ * Only one external reviewer caught this, working from source text without tools.
  */
 describe('补稿逐字段填空', () => {
   beforeEach(() => {
@@ -342,7 +344,10 @@ describe('补稿逐字段填空', () => {
   });
 });
 
-/** 前缀判据现在是契约,不再是巧合:候选令牌必须以 `c` 开头,否则挑选那一侧的闸就成了摆设。 */
+/**
+ * The prefix is now contractual, not incidental: candidate tokens must start with `c`, otherwise
+ * selection gating is ineffective.
+ */
 describe('候选令牌的铸造形状', () => {
   it('铸出来的候选令牌以 c 开头', () => {
     const minted = `c${`tok_${'abcdefghij'}`}`;

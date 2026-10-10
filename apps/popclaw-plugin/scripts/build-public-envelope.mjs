@@ -31,7 +31,7 @@ const generated = check ? resolve(staging, 'public-envelope-generated.js') : art
 // a later bundle is not on this list and fails.
 const DECLARATION_OMITS = ['ACK_DOMAIN', 'REQUEST_DOMAIN', 'SIGIL_LEN', 'canonicalAckCore', 'canonicalRequestCore', 'crockford32Lower', 'normalizeSigilInput', 'sigil'];
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-const digest = 'f7993f282db354476efe2ef5bf9eb6fb07282934df2b5fc884465bb2cbd3fcec';
+const digest = 'c530e69b51dcf8358b0e239b67d936dc9443ba7cad1f59b34b34520ad5e11337';
 execFileSync('python3', [resolve(bundle, 'scripts/verify-bundle.py'), '--expected', digest], { stdio: 'inherit' });
 const deps = createRequire(resolve(bundle, 'packages/contracts/ts/algorithms/package.json'));
 function pinnedDependency(specifier) {

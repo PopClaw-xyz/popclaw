@@ -1,6 +1,7 @@
 /**
- * 一次性收割的收纳半边。两条硬约束与做梦的 recordDream 同款：
- * 没标签拒收（散文不能被本地匹配）、写完原样念给主人（他看不见就没法推翻）。
+ * Storage half of one-time taste harvesting. The same two constraints as recordDream apply: reject
+ * untagged prose that local matching cannot use, and read the saved content back verbatim so the
+ * owner can challenge it.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { mkdtemp, readFile } from 'node:fs/promises';
@@ -28,16 +29,16 @@ describe('writeTasteFromMemory', () => {
   it('写进 from-memory.md，不碰做梦那一路', async () => {
     const tasteRoot = await root();
     await writeTasteFromMemory({ tasteRoot }, {
-      tags: ['红包合约', '识字游戏', '红包合约'], // 重复
+      tags: ['红包合约', '识字游戏', '红包合约'], // Duplicate.
       mute: ['名人八卦'],
       summary: '依据：7/23 那次关于合约的对话',
     });
     expect(await readLearnedTaste({ tasteRoot }, LEARNED_FROM_MEMORY)).toEqual({
-      tags: ['红包合约', '识字游戏'], // 去重
+      tags: ['红包合约', '识字游戏'], // Deduplicate.
       mute: ['名人八卦'],
       summary: '依据：7/23 那次关于合约的对话',
     });
-    // 做梦那一路原封不动（两个证据源互不覆盖）
+    // Leave the dream path unchanged; the two evidence sources do not overwrite each other.
     expect((await readLearnedTaste({ tasteRoot }, LEARNED_DREAMED)).tags).toEqual([]);
   });
 
@@ -52,7 +53,7 @@ describe('writeTasteFromMemory', () => {
     const r = await writeTasteFromMemory({ tasteRoot }, { tags: ['终端工具链'], summary: '依据…' });
     expect(r.text).toContain('终端工具链');
     expect(r.text).toContain('依据…');
-    expect(r.text).toContain('core');            // 主权层压过建议层
+    expect(r.text).toContain('core');            // Sovereign layer outranks suggestions.
     expect(r.text).toContain(LEARNED_FROM_MEMORY);
   });
 
@@ -78,8 +79,8 @@ describe('writeTasteFromMemory', () => {
   });
 });
 
-// 真机验收撞出来的：换一批检索词就会挖到不同的切片（一轮是「识字游戏/Flutter」，
-// 另一轮是「星舰/社交哲学」）。覆盖会让主人"再跑一次"反而丢标签 —— 最伤信任的退步。
+// Real-device acceptance finding: different search terms retrieve different slices (one round found literacy games/Flutter,
+// another Starship/social philosophy). Overwriting would make rerunning lose tags, a damaging loss of trust.
 describe('writeTasteFromMemory — 合并而不是覆盖', () => {
   it('第二次收割不丢第一次的标签，新的排前面', async () => {
     const tasteRoot = await root();
@@ -87,8 +88,8 @@ describe('writeTasteFromMemory — 合并而不是覆盖', () => {
     const r = await writeTasteFromMemory({ tasteRoot }, { tags: ['SpaceX 星舰', 'Flutter'] });
 
     const t = await readLearnedTaste({ tasteRoot }, LEARNED_FROM_MEMORY);
-    expect(t.tags).toEqual(['SpaceX 星舰', 'Flutter', '识字游戏']); // 新在前、去重、旧的还在
-    expect(t.mute).toEqual(['喊单']);                              // 旧的 mute 也不丢
+    expect(t.tags).toEqual(['SpaceX 星舰', 'Flutter', '识字游戏']); // New entries first, deduplicated, while old entries remain.
+    expect(t.mute).toEqual(['喊单']);                              // Preserve old mute entries too.
     expect(r.text).toContain('本次新增：SpaceX 星舰');
   });
 

@@ -147,20 +147,20 @@ describe('structured tool results', () => {
 describe('dispatchMcpCall', () => {
   const spy = () => { const seen: unknown[][] = []; return { seen, execute: async (...args: unknown[]) => { seen.push(args); return { text: 'ok' }; } }; };
 
-  it('passes the request id through and forwards the arguments and the per-call signal', async () => {
+  it('passes the trusted invocation ref and forwards arguments and the per-call signal', async () => {
     const tool = spy(), controller = new AbortController();
-    await dispatchMcpCall(tool, { house: 'https://world.invalid' }, { requestId: 42, signal: controller.signal });
-    expect(tool.seen).toEqual([['mcp_42', { house: 'https://world.invalid' }, controller.signal]]);
+    await dispatchMcpCall(tool, { house: 'https://world.invalid' }, { requestId: 42, signal: controller.signal }, 'mcp_trusted');
+    expect(tool.seen).toEqual([['mcp_trusted', { house: 'https://world.invalid' }, controller.signal]]);
   });
 
-  it('falls back to the clock for an id the owner-confirmation adapter would reject', async () => {
-    // A JSON-RPC id is free-form text. Left raw, these would make every world
-    // action on that host fail as OWNER_CONFIRMATION_INVOCATION_INVALID.
-    for (const requestId of ['claude/code#7', 'req 7', 'a'.repeat(121), '']) {
+  it('allocates safe unique refs independently of missing, repeated and malformed wire ids', async () => {
+    const refs = new Set<unknown>();
+    for (const requestId of ['duplicate', 'duplicate', undefined, 'claude/code#7', 'req 7', 'a'.repeat(121), '']) {
       const tool = spy();
       await dispatchMcpCall(tool, undefined, { requestId });
       const [callId, args, signal] = tool.seen[0]!;
-      expect(callId).toMatch(/^mcp_\d+$/);
+      expect(callId).toMatch(/^mcp_[a-f0-9-]{36}$/);
+      expect(refs.has(callId)).toBe(false); refs.add(callId);
       if (requestId) expect(callId).not.toContain(requestId);
       expect(args).toEqual({});
       expect(signal).toBeUndefined();

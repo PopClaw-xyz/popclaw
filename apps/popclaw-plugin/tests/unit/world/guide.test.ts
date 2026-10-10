@@ -1,11 +1,11 @@
 /**
- * T2: parseGuideFrontmatter 单元测试
+ * T2: parseGuideFrontmatter unit tests.
  *
- * 含一条端到端用例（读一份脱敏的 guide.md fixture）+ 多条合成用例。
- *
- * fixture 是 lore-house guide.md 的脱敏副本：插件仓测试时不依赖 apps/lore-house
- * （那个包不进公开仓）。私有 monorepo 里额外跑一条 skipIf 用例，用真实
- * guide.md 校验跨包契约仍然吻合（只查结构性事实，不断言脱敏掉的真实值）。
+ * One end-to-end case reads a sanitized guide.md fixture; the rest use synthetic inputs.
+ * The fixture is a sanitized LoreHouse guide.md copy, so plugin tests do not depend on
+ * apps/lore-house, which is excluded from the public repository. In the private monorepo,
+ * an additional skipIf case checks the real guide.md for cross-package contract alignment,
+ * asserting structural facts only, not sanitized real values.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
@@ -42,7 +42,7 @@ describe('raw summary capability without changing the tolerant display parser', 
 });
 
 // ---------------------------------------------------------------------------
-// 端到端：读脱敏的 guide.md fixture
+// End-to-end: read the sanitized guide.md fixture.
 // ---------------------------------------------------------------------------
 describe('parseGuideFrontmatter — guide.md fixture', () => {
   it('parses the fixture guide.md and returns 2 streams', () => {
@@ -100,28 +100,28 @@ describe('parseGuideFrontmatter — guide.md fixture', () => {
     });
 
     /**
-     * 出关闸门：英文咒语/标题/告示牌**必须卡进插件的上限**，否则不是"难看"，
-     * 是握手层整行丢弃（first_move >20 → 门卡上一个字都不出）/ 拦腰截断。
-     * 上限数字与 house-handshake.ts 的 FIRST_MOVE_MAX / HEADLINE_MAX、
-     * gather-materials.ts 的 VOICE_MAX 对齐；改那边就得改这里。
+     * Release gate: English incantations, headlines, and noticeboards must fit plugin limits.
+     * Overflow is not cosmetic: handshake drops the whole line (first_move >20 leaves the
+     * door card blank) or truncates it. Keep these limits aligned with FIRST_MOVE_MAX /
+     * HEADLINE_MAX in house-handshake.ts and VOICE_MAX in gather-materials.ts; update together.
      */
     it('本坊自己声明的 _en 值全部卡在插件上限之内（自吃狗粮）', () => {
       const fm = parseGuideFrontmatter(readFileSync(realGuidePath, 'utf-8'))
         .frontmatter as WorldDescriptor;
       expect(fm.entry?.firstMoveEn).toBeDefined();
-      expect(fm.entry?.firstMoveEn!.length).toBeLessThanOrEqual(20); // 超了=门卡整行消失
+      expect(fm.entry?.firstMoveEn!.length).toBeLessThanOrEqual(20); // Overflow removes the entire door-card line.
       expect(fm.entry?.headlineEn).toBeDefined();
-      expect(fm.entry?.headlineEn!.length).toBeLessThanOrEqual(40); // 超了=拦腰截断
+      expect(fm.entry?.headlineEn!.length).toBeLessThanOrEqual(40); // Overflow truncates mid-text.
       expect(fm.voiceEn).toBeDefined();
-      expect(fm.voiceEn!.length).toBeLessThanOrEqual(40); // 报纸告示牌 VOICE_MAX
-      // 中文那半一字未动
+      expect(fm.voiceEn!.length).toBeLessThanOrEqual(40); // Newspaper noticeboard VOICE_MAX.
+      // The Chinese half is unchanged.
       expect(fm.entry?.firstMove).toBe('带我看看江湖上在说什么');
     });
   });
 });
 
 // ---------------------------------------------------------------------------
-// 合成用例
+// Synthetic cases.
 // ---------------------------------------------------------------------------
 describe('parseGuideFrontmatter — synthetic cases', () => {
   it('returns {frontmatter: null, body: original} when no frontmatter', () => {

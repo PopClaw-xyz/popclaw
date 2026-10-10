@@ -49,7 +49,7 @@ describe('runPopclawMessageCommand', () => {
     const env = popclaw.event.EventEnvelope.decode(sp.payload);
     expect(env.directMessage).toBeTruthy();
     expect(env.directMessage!.toPopclawId).toBe(recipientId);
-    // #227: 正文只在密文里；field 4 只剩占位串，灯坊读不到一个字。
+    // #227: the body exists only in ciphertext; field 4 contains only a placeholder, so the House cannot read the body.
     expect(env.directMessage!.body).toBe(DM_ENCRYPTED_BODY_PLACEHOLDER);
     const opened = recipient.openDm(env.directMessage!, await signer.popclawId());
     expect(opened.ok && opened.plaintext).toBe('hey, want to chat?');
@@ -77,7 +77,7 @@ describe('runPopclawMessageCommand', () => {
       { signer, egress, nickname: 'TestNick' },
     );
     expect(out.text).toMatch(/popclaw_id/i);
-    // 认人（ADR-0028 修订）：错误文案不再把主人赶去 /popclaw reply。
+    // Identity resolution (ADR-0028 revision): error copy no longer redirects the owner to /popclaw reply.
     expect(out.text).not.toMatch(/reply/i);
     expect(egress.push).not.toHaveBeenCalled();
   });
@@ -329,7 +329,7 @@ describe('runPopclawMessageCommand', () => {
     });
   });
 
-  // #231：斜杠命令 `--image` 与 popclaw_draft_message 的 image_path 是同一条路。
+  // #231: the slash command's `--image` and popclaw_draft_message's image_path use the same path.
   describe('--image', () => {
     function tmpImage(name: string, bytes: Uint8Array): string {
       const p = join(mkdtempSync(join(tmpdir(), 'popclaw-msg-img-')), name);
@@ -359,8 +359,8 @@ describe('runPopclawMessageCommand', () => {
       expect(opened.ok && Array.from(opened.bytes)).toEqual(Array.from(bytes));
     });
 
-    // 纯图无字（2026-07-29 真机）：微信里甩张表情包从来不用配字，「正文必填」
-    // 是文字时代遗产。有图就够了。
+    // Image-only DM (real host, 2026-07-29): sending a sticker in WeChat needs no caption; requiring
+    // a body is a text-only legacy. The image is enough.
     it('纯图无正文也能发出：收件人解出图，正文是空串', async () => {
       const signer = makeSigner();
       const recipient = makeSigner(99);
@@ -379,8 +379,8 @@ describe('runPopclawMessageCommand', () => {
       const sp = popclaw.identity.SignedPayload.decode(egress.push.mock.calls[0]![0] as Uint8Array);
       const payload = sp.payload;
       const dm = popclaw.event.EventEnvelope.decode(payload).directMessage!;
-      // 灯坊零改动的依据：field 4 仍是占位串（非空）→ 「body 或 ciphertext 至少
-      // 其一」那道闸照过；真正的空正文在密文里。
+      // Why the House needs no change: field 4 remains a nonempty placeholder, so the body-or-ciphertext
+      // gate still passes; the genuinely empty body is inside the ciphertext.
       expect(dm.body).toBe(DM_ENCRYPTED_BODY_PLACEHOLDER);
       const senderId = await signer.popclawId();
       expect(recipient.openDm(dm, senderId)).toMatchObject({ ok: true, plaintext: '' });
@@ -389,7 +389,7 @@ describe('runPopclawMessageCommand', () => {
         senderId,
       );
       expect(opened.ok && Array.from(opened.bytes)).toEqual(Array.from(bytes));
-      // prost 重编码 == 我们编的 → CID 不漂移（空正文没有引入 proto3 默认值）。
+      // prost re-encoding equals our encoding: CID stays stable; an empty body adds no proto3 default values.
       const reencoded = popclaw.event.EventEnvelope.encode(
         popclaw.event.EventEnvelope.decode(payload),
       ).finish();
@@ -408,7 +408,7 @@ describe('runPopclawMessageCommand', () => {
       expect(egress.push).not.toHaveBeenCalled();
     });
 
-    // 防退化：带正文那条老路的 canonical bytes 一个字节都不许变。
+    // Regression guard: the existing path with a body must keep every canonical byte unchanged.
     it('带正文的既有路径 canonical bytes 不变（prost 重编码逐字节相等）', async () => {
       const signer = makeSigner();
       const recipient = makeSigner(99);

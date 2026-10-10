@@ -1,10 +1,9 @@
 /**
- * 被关注通知（spec 2026-07-27 切片②③）。
+ * Follower notifications (spec 2026-07-27, slices 2 and 3).
  *
- * 两条不变量必须被钉死：
- *   1. 首次运行只建基线不通知 —— 存量粉丝不能当新粉刷屏。
- *   2. relative-value 闸对 `followed_you` 显式豁免 —— 新粉必然圈外，
- *      不豁免会把新粉通知全数丢掉。
+ * Pin two invariants: the first run builds a baseline without notifying, so existing followers do
+ * not cause a flood; the relative-value gate explicitly exempts followed_you because new followers
+ * are necessarily outside the graph and would otherwise all be suppressed.
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { dirname, resolve } from 'node:path';
@@ -34,7 +33,9 @@ const ME = 'ownerId';
 const HOUSE = { slug: 'popclaw.me', baseUrl: 'https://me.example' };
 const WORLD = { slug: 'popclaw.world', baseUrl: 'https://world.example' };
 
-/** 每个 baseUrl 一份粉丝名单；未列出的坊 → 500。 */
+/**
+ * A follower list per baseUrl; unlisted houses return 500.
+ */
 function fakeFetch(byBaseUrl: Record<string, string[]>): typeof globalThis.fetch {
   return vi.fn(async (input: unknown) => {
     const url = String(input);
@@ -60,7 +61,7 @@ function harness(followers: Record<string, string[]>, over: Partial<FollowerSync
     ownerPopclawId: ME,
     store: new KnownFollowersStore(db, () => 1000),
     notifier,
-    socialGraph: { following: () => [] },   // 主人谁也没关注 → 新粉必然圈外
+    socialGraph: { following: () => [] },   // The owner follows nobody, so a new follower is necessarily outside the graph.
     socialLog: { record: (e) => logged.push({ kind: e.kind, id: e.actor?.id }) },
     displayName: (id) => (id === 'fanA' ? '甲' : ''),
     fetch: fakeFetch(followers),
@@ -81,7 +82,7 @@ describe('已知粉丝集 + diff 补漏', () => {
     expect(n).toBe(0);
     expect(deliver).not.toHaveBeenCalled();
     expect(notifier.count('L2')).toBe(0);
-    // 但基线确实建起来了 —— 下一轮才认得出谁是新的。
+    // The baseline was still built, allowing the next round to identify newcomers.
     expect(deps.store.list(HOUSE.slug).sort()).toEqual(['fanA', 'fanB']);
     expect(deps.store.hasBaseline(HOUSE.slug)).toBe(true);
   });
@@ -89,7 +90,7 @@ describe('已知粉丝集 + diff 补漏', () => {
   it('第二轮的新增者才是新粉 → L2 followed_you + 一条带坊标签的消息', async () => {
     const followers: Record<string, string[]> = { [HOUSE.baseUrl]: ['fanA'] };
     const { deps, notifier, deliver, logged } = harness(followers);
-    await syncFollowers(deps, [HOUSE]);           // 基线
+    await syncFollowers(deps, [HOUSE]);           // Baseline.
 
     followers[HOUSE.baseUrl] = ['fanA', 'fanNew'];
     const n = await syncFollowers(deps, [HOUSE]);
@@ -104,13 +105,13 @@ describe('已知粉丝集 + diff 补漏', () => {
     // twice — once pushed here, once relayed on the owner's next turn. The
     // queue row above IS the delivery now; the L2 handoff leg carries it.
     expect(deliver).not.toHaveBeenCalled();
-    // social-log 也收了这条被动事件。
+    // social-log also records this passive event.
     expect(logged).toContainEqual({ kind: 'followed_you', id: 'fanNew' });
   });
 
   it('闸对 followed_you 显式豁免：新粉圈外照样通知', async () => {
     const followers: Record<string, string[]> = { [HOUSE.baseUrl]: [] };
-    // socialGraph.following() 恒空 = 新粉一定不在 bond-book ∪ follows 内。
+    // socialGraph.following() is always empty, so the new follower is outside the union of bond book and follows.
     const { deps, notifier } = harness(followers);
     await syncFollowers(deps, [HOUSE]);
 
@@ -139,7 +140,7 @@ describe('已知粉丝集 + diff 补漏', () => {
     const { deps } = harness(followers);
     await syncFollowers(deps, [HOUSE]);
 
-    delete followers[HOUSE.baseUrl];             // 灯坊 500
+    delete followers[HOUSE.baseUrl];             // House returns 500.
     await expect(syncFollowersOnce(deps, HOUSE)).rejects.toThrow();
     expect(deps.store.list(HOUSE.slug)).toEqual(['fanA']);
   });
@@ -147,15 +148,15 @@ describe('已知粉丝集 + diff 补漏', () => {
   it('某坊失联不拖垮其他坊', async () => {
     const followers: Record<string, string[]> = { [WORLD.baseUrl]: [] };
     const { deps } = harness(followers);
-    await syncFollowers(deps, [HOUSE, WORLD]);   // me 坊 500，world 坊建基线
+    await syncFollowers(deps, [HOUSE, WORLD]);   // me house returns 500; world house builds its baseline.
 
     followers[WORLD.baseUrl] = ['fanA'];
     const n = await syncFollowers(deps, [HOUSE, WORLD]);
     expect(n).toBe(1);
   });
 
-  // 名号查不到退回**印信**，不是 id 前缀：两个不同的陌生人都渲染成 `@unknownP`
-  // 时主人分不出是两个人，而印信天然把他们分开。
+  // If the nickname is unavailable, fall back to the sigil, not an ID prefix. Two strangers both rendered as @unknownP
+  // are indistinguishable to the owner, while sigils distinguish them naturally.
   it('多坊按坊分组渲染，名号查不到只报印信', () => {
     const { deps } = harness({});
     const text = renderFollowedYou(deps, [
@@ -170,8 +171,8 @@ describe('已知粉丝集 + diff 补漏', () => {
     expect(text).not.toContain('unknownP');
   });
 
-  // 交情上下文（2026-07-29）：老熟人回头关注你，主人该知道这是谁；新粉里
-  // 绝大多数是陌生人 —— 给他们硬凑一行等于每 30 分钟发一次噪音。
+  // Bond context (2026-07-29): if an acquaintance follows back, tell the owner who it is. Most new followers
+  // are strangers; fabricating a context line for them creates noise every 30 minutes.
   it('新粉在交情本里有内容 → 各带一行「他在你的交情本里：…」', () => {
     const { deps } = harness(
       {},
@@ -205,7 +206,7 @@ describe('已知粉丝集 + diff 补漏', () => {
     const { deps, notifier } = harness(followers, {
       bondContext: (id) => (id === 'fanA' ? '　 ↳ 好友' : ''),
     });
-    await syncFollowers(deps, [HOUSE]); // 首跑建基线
+    await syncFollowers(deps, [HOUSE]); // First run builds the baseline.
     followers[HOUSE.baseUrl] = ['fanA', 'strangerB'];
     await syncFollowers(deps, [HOUSE]);
     const queued = notifier.drain('L2');

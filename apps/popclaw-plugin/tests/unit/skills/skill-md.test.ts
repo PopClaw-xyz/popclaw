@@ -127,6 +127,16 @@ function descriptionOf(text: string): string {
 }
 
 describe('skills/popclaw-social/SKILL.md', () => {
+  it('prioritizes the visible direct-only inbox and limits catalog discovery to other capabilities', () => {
+    const text = flat(readSkillText()).replace(/`/g, '');
+    expect(text).toContain('popclaw_show_inbox is direct-only on OpenClaw CodeMode');
+    expect(text).toContain('does not appear in the exec catalog');
+    expect(text).toContain('call the visible direct tool first');
+    expect(text).toContain('An empty catalog result does not prove the inbox is unavailable');
+    expect(text).toContain('For capabilities not exposed as direct tools');
+    expect(text).not.toContain('Its catalog contains the enabled plugin tools');
+  });
+
   it.each([
     ['health check', '**The health check rides'],
     ['feedback recipe', '**Draft feedback to the makers.**'],

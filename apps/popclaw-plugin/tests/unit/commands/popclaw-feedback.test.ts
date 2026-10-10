@@ -1,5 +1,5 @@
 /**
- * /popclaw feedback bug|need <正文> — DM to the house's guide-declared contact.
+ * /popclaw feedback bug|need <body> — DM to the house's guide-declared contact.
  *
  * The DM path itself is `runPopclawMessageCommand`'s test surface; here we
  * only pin what this command owns: contact resolution from guide.md, the
@@ -154,7 +154,7 @@ describe('runPopclawFeedbackCommand', () => {
     });
   });
 
-  // 反馈跟着墙走（ADR-0042 修订）：某座坊自己玩法的墙 → 那座坊的联系人。
+  // Feedback follows the wall (ADR-0042 amendment): a house's activity wall routes to that house's contact.
   describe('--house <slug>', () => {
     const WORLD_ID = '4kQ9pXwZmyLxr9y6bLKQqUifKPCe6njtEvS5MRDR9Zvy';
     const WORLD_GUIDE = [
@@ -179,11 +179,11 @@ describe('runPopclawFeedbackCommand', () => {
       expect(d.fetchGuide).not.toHaveBeenCalled();
       const [args, passedDeps] = sendDmOf(d).mock.calls[0]!;
       expect(args.positional[0]).toBe(WORLD_ID);
-      // 信头带上目标坊 —— 收信人（尤其兜底时的主坊）一眼看出这条说的是哪座坊。
+      // Include the target house in the header so the recipient (especially the fallback primary house) knows which house this concerns.
       expect(args.positional[1]).toBe(
         `[feedback/v1] kind=need house=popclaw-world plugin=${STAMP}\n明信片想批量寄`,
       );
-      // 信要进那座坊联系人的信箱 —— 私信按 houseOfRecipient 路由。
+      // Deliver to that house contact's inbox: DMs route by houseOfRecipient.
       expect(passedDeps.houseOfRecipient(WORLD_ID)).toBe('popclaw-world');
       expect(out.text).toContain('popclaw-world');
     });
@@ -204,15 +204,15 @@ describe('runPopclawFeedbackCommand', () => {
         { positional: ['bug', '坏了'], flags: { house: 'popclaw-me' } },
         d,
       );
-      // 主坊说明书未必落盘：走 GuideClient，不去翻握手缓存。
+      // The primary house guide may not be on disk: use GuideClient, not the handshake cache.
       expect(readHouseGuide).not.toHaveBeenCalled();
       expect(d.fetchGuide).toHaveBeenCalled();
       const [, passedDeps] = sendDmOf(d).mock.calls[0]!;
       expect(passedDeps.houseOfRecipient).toBe(d.houseOfRecipient);
     });
 
-    // 根坊兜底（ADR-0042 Amendment 2）：目标坊没声明联系人 → 不再拒绝，改送主坊
-    // （popclaw 产品与联邦交流问题的总收集点），信头带原目标坊。
+    // Root-house fallback (ADR-0042 Amendment 2): when the target declares no contact, send to the primary house instead of rejecting.
+    // It is the collection point for PopClaw product and federation feedback; retain the original target house in the header.
     describe('root-house fallback', () => {
       it('falls back to the primary contact when the target house declares none', async () => {
         const d = deps({ readHouseGuide: vi.fn().mockReturnValue(null) });
@@ -225,7 +225,7 @@ describe('runPopclawFeedbackCommand', () => {
         expect(args.positional[1]).toBe(
           `[feedback/v1] kind=bug house=nowhere-town plugin=${STAMP}\n坏了`,
         );
-        // 兜底 = 真的发给主坊联系人 → 私信照主坊那条默认路由走。
+        // Fallback really sends to the primary house contact, using the default DM route through that house.
         expect(passedDeps.houseOfRecipient).toBe(d.houseOfRecipient);
         expect(out.text).toContain('兜底');
         expect(out.text).toContain('nowhere-town');
@@ -258,8 +258,8 @@ describe('runPopclawFeedbackCommand', () => {
       });
     });
 
-    // 真机的坊叫 house.popclaw.world（slug house-popclaw-world），人嘴里说的是
-    // popclaw.world —— 只折字符会折出谁都没有的 slug，于是每次 --house 都落空。
+    // The real house is house.popclaw.world (slug house-popclaw-world), while people say
+    // popclaw.world; character folding alone creates a nonexistent slug, making every --house lookup fail.
     describe('resolves against the mounted houses', () => {
       const KNOWN = ['house-popclaw-me', 'house-popclaw-world'];
       const wired = (over: Record<string, unknown> = {}) =>
@@ -337,8 +337,8 @@ describe('runPopclawFeedbackCommand', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  // 打字工具（popclaw_feedback）的 kind 是 bug|need 的枚举，压根到不了 up/down
-  // 这条弃用别名，所以它不接 react 依赖。真有人从别处打进来 → 诚实说，别炸。
+  // The typed tool (popclaw_feedback) restricts kind to bug|need, so it cannot reach the deprecated up/down
+  // alias and needs no react dependency. If another caller reaches it, explain honestly instead of crashing.
   it('says so honestly when the up/down alias arrives without react deps', async () => {
     const d = deps({ react: undefined });
     const out = await runPopclawFeedbackCommand({ positional: ['up', '12345'] }, d);

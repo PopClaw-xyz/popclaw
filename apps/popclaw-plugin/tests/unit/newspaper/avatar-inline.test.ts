@@ -1,8 +1,9 @@
 /**
- * 把脸烤进页面（方案 A，主人 2026-08-26 拍板）。
+ * Embed avatars in the page (plan A, approved 2026-08-26).
  *
- * 铁律只有一条：**最坏情况必须等于旧行为**。取不到、不是图、单张太大、超出本页
- * 预算 —— 一律保留远端 url，那本来就是今天的做法。任何一条走成「没有头像」都是回退。
+ * One invariant: the worst case must match the old behavior. Fetch failure, non-image data,
+ * excessive image size, or page budget exhaustion must retain the remote URL, as before.
+ * Any path that removes the avatar is a regression.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
@@ -96,14 +97,14 @@ describe('inlineAvatars', () => {
   });
 
   it('预算用完就停,而且先花在出现次数最多的那张脸上', async () => {
-    // A 出现三次、B 一次；预算只够一张。
+    // A appears three times, B once; the budget fits only one image.
     const one = `data:image/png;base64,${Buffer.alloc(300).toString('base64')}`.length;
     const { html, notes } = await inlineAvatars(withMono(A) + withMono(A) + withMono(A) + withMono(B), {
       fetchImage: async () => png(300),
       budget: one + 10,
     });
-    expect(html).not.toContain(`src="${A}"`); // 出现最多的那张进了页面
-    expect(html).not.toContain('unavatar.io'); // 另一张退回自画的字母头像,不是远端
+    expect(html).not.toContain(`src="${A}"`); // Embed the most frequent image.
+    expect(html).not.toContain('unavatar.io'); // The other falls back to a generated letter avatar, not a remote image.
     expect(srcs(html).filter((u) => u === MONO)).toHaveLength(1);
     expect(notes.join()).toContain("past this page's budget");
   });

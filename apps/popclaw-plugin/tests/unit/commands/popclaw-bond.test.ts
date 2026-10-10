@@ -69,8 +69,8 @@ describe('runBondCommand', () => {
     expect(d.bondsStore.get('ALICE')!.tierSource).toBe('manual');
   });
 
-  // /popclaw bond 的设档路径与工具路径同规——
-  // 回执走「#印信」名字链（绝不裸 id 前缀），直接设档 settle 该人 pending 提议。
+  // The tier-setting path of /popclaw bond follows the same rules as the tool path.
+  // Receipts use the sigil name chain, never a raw ID prefix; directly setting a tier settles this person's pending proposal.
   it('add（直接设档）回执走「#印信」，并 settle 命中的 pending 提议', async () => {
     const db = new InMemoryHostDb();
     runMigrations(db, MIGRATIONS_DIR);
@@ -216,12 +216,12 @@ describe('runBondCommand', () => {
     expect(lines[0]).toBe('关注（2）：');
     // newest (since desc) first: BOB then ALICE
     expect(lines[1]).toContain('小波#');
-    expect(lines[2]).toContain('—#'); // ALICE has no nickname/feed handle → 查无 dash
+    expect(lines[2]).toContain('—#'); // ALICE has no nickname/feed handle: display the not-found dash.
   });
 
-  // 认人（ADR-0028 修订）：列人输出补机器字段——显示仍人话，钥匙给 agent。
+  // Identity resolution (ADR-0028 revision): person lists remain human-readable and also provide machine identifiers to the agent.
   it('list/follows carry the FULL popclaw_id next to 名号#印信', async () => {
-    const longId = 'ALICE' + 'x'.repeat(30); // 前 10 位 ≠ 完整 id
+    const longId = 'ALICE' + 'x'.repeat(30); // The first 10 characters are not the full ID.
     const d = deps([{ popclawId: longId, since: 1 }]);
     d.bondsStore.setNickname(longId, '阿丽');
     await runBondCommand({ positional: ['add', longId] }, d);

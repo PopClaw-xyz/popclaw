@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { visibleLogger } from '../../../src/runtime/visible-logger.js';
 
-// 这层是整套故障诊断依赖的仪器（宿主 warn/error → stderr → /dev/null）。
-// 仪器要有自检：坏了没人会发现，因为坏的表现就是"什么都看不见"。
+// This is the diagnostic instrument (host warn/error -> stderr -> /dev/null).
+// It needs a self-check: a broken instrument produces no visible output and otherwise goes unnoticed.
 describe('visibleLogger', () => {
   function bed() {
     const host = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -27,7 +27,7 @@ describe('visibleLogger', () => {
     const { host, log } = bed();
 
     log.info('popclaw: build 0.1.0');
-    // SDK 的 `debug` 是可选面（`PluginLogger.debug?`），调用点得容它缺席。
+    // SDK debug is optional (PluginLogger.debug?); call sites must tolerate its absence.
     log.debug?.('noisy');
 
     expect(host.info.mock.calls.flat()).toEqual(['popclaw: build 0.1.0']);

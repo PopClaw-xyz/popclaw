@@ -78,6 +78,9 @@ export interface WorldToolsDeps {
 }
 
 export interface RegisterToolsDeps {
+  /** Native-only conversation presence; an absent scope means a fresh/unknown input. */
+  currentGuideReadScope?: () => import('../runtime/read-request-scope.js').GuideReadScope | undefined;
+  getInviteShareIdentity?: () => Promise<import('../invite/prepare-invite-share.js').InviteShareIdentity | null>;
   /** Installed local roots persist ordinary social manuscripts in host.db. */
   durableSocialDrafts?: boolean;
   /** Existing trusted single-owner stdio consumer; not a human chat proof. */

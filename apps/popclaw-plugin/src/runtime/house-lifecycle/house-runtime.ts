@@ -387,8 +387,8 @@ export class HouseRuntime {
       });
     } catch (error) { return Promise.reject(error); }
   }
-  pendingHouseGuides(): Promise<HouseGuideContext[]> {
-    return pendingHouseGuides(this.opts.db, origin => this.readHouseGuide(origin));
+  pendingHouseGuides(present?: ReadonlySet<string>): Promise<HouseGuideContext[]> {
+    return pendingHouseGuides(this.opts.db, origin => this.readHouseGuide(origin), present);
   }
   markGuidesInAgentInput(serialized: string): void { markGuidesInAgentInput(this.opts.db, serialized); }
   markHouseGuideDelivered(context: HouseGuideContext): boolean { return markHouseGuideDelivered(this.opts.db,context); }

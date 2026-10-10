@@ -42,6 +42,25 @@ function makeItem(over: Partial<CachedFeedItem> = {}): CachedFeedItem {
 }
 
 describe('MarkService', () => {
+  it.each([409, 403, 503, 200])('mark() and unmark() report a resolved HTTP %i receipt', async status => {
+    const store = freshStore();
+    const tasteRoot = tmpTasteRoot();
+    const egress = { push: async () => ({ status, detail: 'synthetic refusal', deduplicated: true }) };
+    const svc = new MarkService({ store, signer: makeTestSigner('BlackFeather'), egress, nickname: 'Owner', taste: { tasteRoot } });
+    const marked = await svc.mark(makeItem());
+    const revoked = await svc.unmark(VALID_EVENT_ID);
+    expect(store.has(VALID_EVENT_ID)).toBe(false);
+    expect(readFileSync(join(tasteRoot, 'learned', 'picks.jsonl'), 'utf8')).toContain('"signal":"saved"');
+    expect(revoked.wasMarked).toBe(true);
+    for (const result of [marked, revoked]) {
+      expect(result.pushed).toBe(status === 200);
+      if (status !== 200) {
+        expect(result.error).toContain(String(status));
+        expect(result.error).toContain('synthetic refusal');
+      } else expect(result.error).toBeUndefined();
+    }
+  });
+
   it('mark() stores row, appends taste pick, calls egress, returns pushed:true', async () => {
     const store = freshStore();
     const signer = makeTestSigner('BlackFeather');

@@ -591,7 +591,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const sender = takeDraft(draft_id, SEND_DRAFT_KINDS);
       if (!sender) return unavailable();
       const reply = await withSocialSendInvocation(assertCurrent, sender);
-      return {type: 'text' as const, text: snapshot.kind === 'dm'
+      return {type: 'text' as const, ...('isError' in reply && reply.isError === true ? {isError: true} : {}), text: snapshot.kind === 'dm'
         ? JSON.stringify({owner_text: reply.text, ...('eventId' in reply && reply.eventId ? {event_id: reply.eventId} : {}), instruction: DM_DISPLAY_INSTRUCTION + ' ' + sendResultDiscipline('en')})
         : reply.text};
       } finally {

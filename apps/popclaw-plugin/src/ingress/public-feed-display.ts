@@ -25,6 +25,8 @@ export interface PublicDisplaySource {
   readonly unavailable: boolean;
   readonly truncated: boolean;
   readonly observedAt: number | null;
+  /** Remote coverage cutoff read with the items; null means no checkpoint yet. */
+  readonly checkpointHighWater?: string | null;
   readonly code?: string;
 }
 export interface PublicDisplayItem {
@@ -35,7 +37,7 @@ export interface PublicDisplayItem {
   readonly bodyUnavailable?: boolean;
   readonly relaySnapshot: boolean;
   readonly mirrorSigner: boolean;
-  readonly source: { readonly origin: string; readonly slug: string; readonly observedAt: number; readonly sequence: string; readonly logIncarnation: string };
+  readonly source: { readonly origin: string; readonly slug: string; readonly observedAt: number; readonly sequence: string; readonly logIncarnation: string; readonly frameDigest?: string };
   readonly alsoInHouses?: readonly string[];
 }
 export interface PublicDisplayResult {
@@ -43,7 +45,19 @@ export interface PublicDisplayResult {
   readonly sources: readonly PublicDisplaySource[];
   readonly truncated: boolean;
 }
-export interface PublicDisplayQuery extends WorldFeedQuery { readonly includeThreads?: boolean }
+export interface PublicDisplayQuery extends WorldFeedQuery {
+  readonly includeThreads?: boolean;
+  /** Internal full candidate acquisition. A later read cannot enlarge a prepared window. */
+  readonly completeWindow?: boolean;
+  readonly ownProjection?: boolean;
+}
+export interface PreparedPublicSource {
+  readonly origin: string;
+  readonly slug: string;
+  readonly status: PublicDisplaySource;
+  readonly items: readonly PublicDisplayItem[];
+  assertCurrent(): void;
+}
 export interface PublicFeedDisplayOptions {
   sources(): readonly { origin: string; slug: string; capture(): PublicDisplayCapture }[];
 }
@@ -51,25 +65,69 @@ function time(value: unknown): number { const n = numberOrZero(value); return Nu
 function unavailable(source: { origin: string; slug: string }, capture: PublicDisplayCapture | undefined, error: unknown): PublicDisplaySource {
   return { origin: source.origin, slug: source.slug, capabilityRevision: capture?.capability.capabilityRevision ?? '',
     logIncarnation: capture?.capability.publicStream.log_incarnation ?? '', history: capture?.history ?? true,
-    incomplete: true, unavailable: true, truncated: false, observedAt: null,
+    incomplete: true, unavailable: true, truncated: false, observedAt: null, checkpointHighWater: null,
     code: error instanceof Error ? error.message : 'PUBLIC_DISPLAY_UNAVAILABLE' };
 }
 
-/** Every query owns its result. The sources callback follows later mounts but
- * never opens a house itself or borrows the global catalog's snapshot path. */
+/** Preserve protobuf int64 values and absent fields while giving each caller owned bytes. */
+export function clonePublicDisplayItem(hit: PublicDisplayItem): PublicDisplayItem {
+  const { item, ...fields } = hit;
+  const cloned: popclaw.event.IWorldFeedItem = popclaw.event.WorldFeedItem.toObject(
+    popclaw.event.WorldFeedItem.decode(popclaw.event.WorldFeedItem.encode(item).finish()));
+  if (cloned.envelope) cloned.envelope = new Uint8Array(cloned.envelope);
+  return { ...structuredClone(fields), item: cloned };
+}
+
+/** A publication owns its rows. Authority is checked again on every use. */
+function publishSource(source: PreparedPublicSource): PreparedPublicSource {
+  let status = { ...source.status }, items = source.items;
+  try { source.assertCurrent(); }
+  catch (error) {
+    items = []; status = { ...status, unavailable: true, incomplete: true,
+      code: error instanceof Error ? error.message : 'PUBLIC_DISPLAY_UNAVAILABLE' };
+  }
+  return { ...source, status, items: items.map(clonePublicDisplayItem) };
+}
+function querySources(sources: readonly PreparedPublicSource[], query: PublicDisplayQuery, completeWindow: boolean, search = ''): PublicDisplayResult {
+  const limit = completeWindow && query.completeWindow ? Infinity
+    : Number.isSafeInteger(query.limit) && query.limit! > 0 ? Math.min(query.limit!, 100) : 20;
+  const merged = new Map<string, PublicDisplayItem>();
+  const terms = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  for (const source of sources) {
+    for (const hit of source.items) {
+      const item = hit.item;
+      if (query.includeThreads === false && item.replyToPostId && !item.quotedEventId) continue;
+      if (query.author && item.authorPopclawId !== query.author) continue;
+      if (query.platform && item.platform !== query.platform) continue;
+      const text = [hit.kind, hit.body, item.textPreview, item.handle, item.actorNickname, item.originalUrl, item.origin?.url].join(' ').toLocaleLowerCase();
+      if (terms.some(term => !text.includes(term))) continue;
+      const id = item.eventId!, first = merged.get(id);
+      if (first) merged.set(id, { ...first, alsoInHouses: [...(first.alsoInHouses ?? []), source.slug] });
+      else merged.set(id, hit);
+    }
+  }
+  const items = [...merged.values()].sort((a, b) => time(b.item.platformPostCreatedAt) - time(a.item.platformPostCreatedAt)
+    || String(a.item.platformPostId).localeCompare(String(b.item.platformPostId)));
+  return { items: items.slice(0, limit), sources: sources.map(source => source.status),
+    truncated: items.length > limit || sources.some(source => source.status.truncated) };
+}
+
+/** The sources callback follows later mounts without opening a House or using HTTP. */
 export class PublicFeedDisplay {
   constructor(private readonly options: PublicFeedDisplayOptions) {}
-  /** A prepared display belongs to one invocation; the journal-only adapter needs no IO. */
-  async prepare(_query: PublicDisplayQuery = {}): Promise<PublicFeedDisplay> { return this; }
-  read(query: PublicDisplayQuery = {}): PublicDisplayResult { return this.query(query); }
-  search(query: string, limit = 10): PublicDisplayResult { return this.query({ limit }, query); }
-
-  private query(query: PublicDisplayQuery, search?: string): PublicDisplayResult {
-    const limit = Number.isSafeInteger(query.limit) && query.limit! > 0 ? Math.min(query.limit!, 100) : 20;
-    const sources: PublicDisplaySource[] = [], merged = new Map<string, PublicDisplayItem>();
-    const houses: Array<{ source: { origin: string; slug: string }; capture?: PublicDisplayCapture;
-      status: PublicDisplaySource; items: PublicDisplayItem[] }> = [];
-    const terms = (search ?? '').trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  /** Only a prepared display exposes an invocation's fixed source evidence. */
+  get publicSources(): readonly PreparedPublicSource[] { return []; }
+  async prepare(query: PublicDisplayQuery = {}): Promise<PublicFeedDisplay> {
+    return new PreparedPublicFeedDisplay(this.captureSources(query), query.completeWindow === true);
+  }
+  read(query: PublicDisplayQuery = {}): PublicDisplayResult {
+    return querySources(this.captureSources(query).map(publishSource), query, query.completeWindow === true);
+  }
+  search(query: string, limit = 10): PublicDisplayResult {
+    return querySources(this.captureSources({}).map(publishSource), { limit }, false, query);
+  }
+  private captureSources(query: PublicDisplayQuery): PreparedPublicSource[] {
+    const houses: PreparedPublicSource[] = [];
     for (const source of this.options.sources()) {
       let capture: PublicDisplayCapture | undefined;
       try {
@@ -80,38 +138,22 @@ export class PublicFeedDisplay {
           || capture.producerPolicy.capabilityRevision !== capture.capability.capabilityRevision) throw new Error('PUBLIC_DISPLAY_CAPTURE_MISMATCH');
         capture.assertCurrent();
         const captured = capture;
-        const result = readPublicJournalSnapshot(captured.executionDb, tx => readPublicJournal(tx, captured, source));
+        const result = readPublicJournalSnapshot(captured.executionDb, tx => readPublicJournal(tx, captured, source,
+          { completeWindow: query.completeWindow, ownProjection: query.ownProjection }));
         captured.assertCurrent();
-        houses.push({ source, capture, ...result });
+        houses.push({ origin: source.origin, slug: source.slug, ...result, assertCurrent: () => captured.assertCurrent() });
       } catch (error) {
-        houses.push({ source, status: unavailable(source, capture, error), items: [] });
+        houses.push({ origin: source.origin, slug: source.slug, status: unavailable(source, capture, error), items: [], assertCurrent() {} });
       }
     }
-    // A later House may take time to scan. Recheck every earlier capture at
-    // publication, before deduplication can retain its body or attribution.
-    for (const house of houses) {
-      if (house.capture) {
-        try { house.capture.assertCurrent(); }
-        catch (error) { house.status = unavailable(house.source, house.capture, error); house.items = []; }
-      }
-      sources.push(house.status);
-      for (const hit of house.items) {
-        const item = hit.item;
-        if (query.includeThreads === false && item.replyToPostId && !item.quotedEventId) continue;
-        if (query.author && item.authorPopclawId !== query.author) continue;
-        if (query.platform && item.platform !== query.platform) continue;
-        const text = [hit.kind, hit.body, item.textPreview, item.handle, item.actorNickname, item.originalUrl, item.origin?.url].join(' ').toLocaleLowerCase();
-        if (terms.some(term => !text.includes(term))) continue;
-        const id = item.eventId!;
-        const first = merged.get(id);
-        if (first) merged.set(id, { ...first, alsoInHouses: [...(first.alsoInHouses ?? []), house.source.slug] });
-        else merged.set(id, hit);
-      }
-    }
-    const items = [...merged.values()].sort((a, b) => time(b.item.platformPostCreatedAt) - time(a.item.platformPostCreatedAt)
-      || String(a.item.platformPostId).localeCompare(String(b.item.platformPostId)));
-    return { items: items.slice(0, limit), sources, truncated: items.length > limit || sources.some(source => source.truncated) };
+    return houses;
   }
+}
 
-
+class PreparedPublicFeedDisplay extends PublicFeedDisplay {
+  constructor(private readonly captured: readonly PreparedPublicSource[], private readonly completeWindow: boolean) { super({ sources: () => [] }); }
+  override get publicSources(): readonly PreparedPublicSource[] { return this.captured.map(publishSource); }
+  override async prepare(): Promise<PublicFeedDisplay> { return this; }
+  override read(query: PublicDisplayQuery = {}): PublicDisplayResult { return querySources(this.publicSources, query, this.completeWindow); }
+  override search(query: string, limit = 10): PublicDisplayResult { return querySources(this.publicSources, { limit }, false, query); }
 }

@@ -1,13 +1,15 @@
 /**
- * 「这一页是完整的」这句话，只在我们真知道这台机器的上限时才说得出口。
+ * Claiming a complete page is justified only when this machine's limit is actually known.
  *
- * 2026-08-29 乙机说「素材被截断了」，然后跑去 feed 补全，结果整份报纸把每个人的话安到了
- * 别人头上。它很可能说的是实话：宿主超限时**保头保尾、砍掉中间、不通知工具**，而候选页
- * 上印着「一条不缺、没有任何内容被截断」。真实上限只有在宿主发来 `model_call_started`
- * 时才知道 —— MCP 那条根收不到任何宿主事件，重启后的第一次调用也收不到。
+ * On 2026-08-29 machine B reported truncated materials, fetched feed data to fill gaps, and
+ * misattributed every person's words. The truncation claim may have been true: the host keeps
+ * both ends and removes the middle on overflow without notifying the tool, while the candidate
+ * page claimed nothing was missing or truncated. The real limit is known only after a host
+ * model_call_started event; MCP receives no host events, nor does the first call after restart.
  *
- * 主人 2026-08-30 的裁定（方案 C）：**赌大照旧，但不知道的时候就别写那句保证**，
- * 并给模型一条诚实的出路。它发现缺页时的唯一出路不能是「不信插件、自己去取数据」。
+ * Owner decision, 2026-08-30 (plan C): retain the optimistic budget, but omit the guarantee
+ * when the limit is unknown and give the model an honest exit. Fetching its own replacement
+ * data because it distrusts the plugin must not be the only response to missing content.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildCandidatePage, candidateOrder } from '../../../src/newspaper/build-candidate-page.js';
@@ -44,7 +46,7 @@ describe('页面完整性这句保证', () => {
     const p = page();
     expect(p).not.toContain(L('integrity.known'));
     expect(p).toContain('complete saved candidate document');
-    // 出路必须写明,否则模型发现缺页时只剩「自己去取数据」这一条路 —— 认错人就是这么来的
+    // State the exit explicitly; otherwise missing pages leave only self-fetching data, which caused misattribution.
     expect(p).toContain('never substitute a fresh feed');
   });
 
@@ -64,15 +66,17 @@ describe('页面完整性这句保证', () => {
   });
 
 /**
- * 「下面的编号从 1 到 N 依次排下来」——这句话印在候选页上，必须为真。
+ * The candidate page promises numbers in order from 1 to N; that must be true.
  *
- * 页面顺序由「同作者条数」决定（有交情的在前，陌生人少的在前，一两条的合成「零散来稿」
- * 收在页尾）。而**预算裁剪会改变条数**：一个从四条被砍到两条的作者会越过「零散」门槛、
- * 被挪到页尾——可编号是裁剪前那一轮发的。实测能排出 [1][2][3][6][7][8][9][10][4][5]。
+ * Page order depends on per-author counts: bonded authors first, then strangers with fewer
+ * items; one- or two-item authors join scattered submissions at the end. Budget trimming
+ * changes those counts. An author trimmed from four to two moves to the end, but numbering
+ * was assigned before trimming, yielding [1][2][3][6][7][8][9][10][4][5].
  *
- * 2026-08-27 两台机器就是看着这种跳号，判定「内容被截断了」，跑去 feed 补全，
- * 一台把整份候选集端上了版面，另一台把输出预算烧光挂死。修法是裁剪之后重新分一次组
- * （幂等：组的大小刚刚才排过序），让页面顺序、落盘顺序、编号重新变回同一件事。
+ * Both machines interpreted these gaps as truncation on 2026-08-27 and fetched feed data.
+ * One published the whole candidate set; the other exhausted its output budget and stalled.
+ * Regroup after trimming (idempotent since group sizes were just sorted) to align page order,
+ * persisted order, and numbering again.
  */
   it('这一页装不下今天全部 → 不许再说「完整」,要说「中间可能真的被截掉了」', () => {
     const p = buildCandidatePage(issue({ pulse: [item()] }), {
@@ -89,7 +93,7 @@ describe('页面完整性这句保证', () => {
     });
     expect(p).toContain('Follow page_cursor');
     expect(p).not.toContain(L('integrity.known'));
-    // 裁掉了多少,必须说 —— 以前页面只印裁剪后的数,当成「今天就这么点事」
+    // Report how much was trimmed; previously the page showed only the remaining count as though that were the whole day.
     expect(p).toContain('399');
   });
 
@@ -106,8 +110,8 @@ describe('页面完整性这句保证', () => {
       dayTotal: 336,
       overBudget: false,
     });
-    expect(p).toContain('336'); // 今天全天
-    expect(p).toContain('2');   // 这一页
+    expect(p).toContain('336'); // The entire day.
+    expect(p).toContain('2');   // This page.
   });
 });
 
@@ -131,11 +135,11 @@ describe('候选页编号必须单调 —— 页面自己是这么承诺的', ()
     let dropped = 0;
     const trimmed = ordered.filter((p) => !(p.author === 'A' && dropped++ < 2));
 
-    // 裁剪之后**不**重新分组 —— 这是修复前的行为,留在这里当反例
+    // No regrouping after trimming: preserve the pre-fix behavior here as a counterexample.
     const before = numbersOn(trimmed);
     expect(isAscending(before)).toBe(false);
 
-    // 裁剪之后重新分组 —— 现在 gather 就是这么做的
+    // Regroup after trimming, as gather now does.
     const after = numbersOn(candidateOrder(trimmed, 'zh-CN'));
     expect(isAscending(after)).toBe(true);
     expect(after).toEqual([...Array(after.length)].map((_, i) => i + 1));

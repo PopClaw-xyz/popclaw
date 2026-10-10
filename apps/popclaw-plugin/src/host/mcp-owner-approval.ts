@@ -53,7 +53,7 @@ import type { ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js
 import {
   OWNER_APPROVAL_WINDOW_MS, OWNER_CONFIRMATION_ANSWER_INVALID, OWNER_CONFIRMATION_CANCELLED,
   OWNER_CONFIRMATION_FAILED, OWNER_CONFIRMATION_INACTIVE,
-  askOwnerApprovalBeforeDispatch, discardUnconsumedOwnerApproval, setOwnerApprovalSurface,
+  askOwnerApprovalBeforeDispatch, beginMcpOwnerApprovalCall, setOwnerApprovalSurface,
   unconsumedGrantReport,
   type ApprovalDisplayBudget, type OwnerApprovalAskResult, type OwnerApprovalPrompt,
 } from './owner-approval.js';
@@ -62,6 +62,7 @@ import { renderCopy } from '../lexicon/index.js';
 import { APPROVAL_LAYOUT, displayWidth, type ApprovalDialogProfile } from './approval-presentation.js';
 import { OWNER_APPROVAL_WINDOW_MAX_SECONDS } from './approval-window.mjs';
 import { ownerLang } from '../lexicon/owner-language.js';
+import { allocateMcpCallRef } from '../tools/mcp-adapter.js';
 
 type FormSchema = ElicitRequestFormParams['requestedSchema'];
 
@@ -92,12 +93,8 @@ export interface McpOwnerApprovalBackend {
   /**
    * The call identity the TOOL BODY will be given for this MCP request.
    *
-   * It must be the same string on both sides or the record can never be found,
-   * and the derivation is not ours: `dispatchMcpCall` builds it from the
-   * JSON-RPC request id. Duplicated here rather than imported because that
-   * module belongs to another thread this round; a test pins the two against
-   * each other so a change on either side goes red rather than silently
-   * failing every approval.
+   * Allocated once per invocation, not derived from the JSON-RPC wire id.
+   * The root passes this exact string to the wrapper and the tool body.
    */
   callRef(extra: { readonly requestId?: string | number }): string;
   /**
@@ -375,11 +372,9 @@ export function buildApprovalDialog(
   };
 }
 
-/** The id `dispatchMcpCall` will hand the tool body. Kept byte-identical to it
- *  on purpose — see `McpOwnerApprovalBackend.callRef`. */
-export function mcpApprovalCallRef(extra: { readonly requestId?: string | number }): string {
-  const id = String(extra.requestId ?? '');
-  return `mcp_${/^[A-Za-z0-9_.:-]{1,120}$/.test(id) ? id : Date.now()}`;
+/** A new invocation identity; the caller retains its wire id separately. */
+export function mcpApprovalCallRef(_extra: { readonly requestId?: string | number }): string {
+  return allocateMcpCallRef();
 }
 
 export function createMcpOwnerApproval(options: McpOwnerApprovalOptions): McpOwnerApprovalBackend {
@@ -499,8 +494,9 @@ export function createMcpOwnerApproval(options: McpOwnerApprovalOptions): McpOwn
     },
     async aroundDispatch<T>(toolName: string, params: unknown, callRef: string,
       signal: AbortSignal | undefined, body: () => Promise<T>): Promise<T> {
-      await this.beforeDispatch(toolName, params, callRef, signal);
+      const finish = beginMcpOwnerApprovalCall(toolName, callRef);
       try {
+        await this.beforeDispatch(toolName, params, callRef, signal);
         return await body();
       } finally {
         // THE SEAM'S OWN SILENT FAILURE, MADE LOUD.
@@ -516,7 +512,7 @@ export function createMcpOwnerApproval(options: McpOwnerApprovalOptions): McpOwn
         // point is that this can no longer be invisible. Dropping the record
         // is the other half: no grant may outlive the call it was given for.
         // `finally`, so a throwing body is reported too.
-        if (discardUnconsumedOwnerApproval(toolName, callRef)) {
+        if (finish()) {
           // The sentence itself lives beside the drop, so the native root's
           // `after_tool_call` guard reports one defect in one wording.
           reportDefect({ tool: toolName, call_ref: callRef },

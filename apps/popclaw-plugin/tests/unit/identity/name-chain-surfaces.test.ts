@@ -1,6 +1,7 @@
 /**
- * 唯一名字链的**表面**回归：备注名一旦有，主人看到的每一处称呼都得跟着改。
- * 每个 it = 一个表面（世界速览 / 报纸 / 认人回执 / 通知 / 标记 / 信箱）。
+ * Single name-chain surface regression: once an owner alias exists, every owner-visible name must
+ * follow it. Each it covers one surface: world overview, newspaper, identity receipt, notification,
+ * mark or inbox.
  */
 import { describe, expect, it } from 'vitest';
 import { makeNameChain } from '../../../src/identity/person-name.js';
@@ -17,7 +18,9 @@ import type { InboxStore } from '../../../src/messaging/inbox-store.js';
 
 const ID = 'BFhFRcpqjFT8cQKmyLprxrgTAG14ttEkxCqCYcbBZWzB';
 const SIGIL = deriveSigil(ID);
-/** 主人给他起了备注名「老王」，他自报的名号是「Blackfeather」。 */
+/**
+ * The owner calls this person "老王"; their self-reported nickname is Blackfeather.
+ */
 const nameOf = makeNameChain({ bond: () => ({ nickname: 'Blackfeather', remarkName: '老王' }) });
 
 function summaryWith(nickname: string): WorldSummaryResponse {
@@ -82,12 +85,12 @@ describe('name chain surfaces — 备注名盖过一切自报名', () => {
     };
     const before = gatherNewspaperMaterials(deps, { hours: 24 });
     const after = gatherNewspaperMaterials({ ...deps, nameOf }, { hours: 24 });
-    // 名字链在候选页上就要生效——挑人正是靠它认人（两步协议：候选页 → 挑 → 素材页）。
+    // Apply the name chain on the candidate page: selection depends on recognizing people (candidate page -> picks -> material page).
     expect(before.kind).toBe('candidates');
     expect(after.kind).toBe('candidates');
     if (before.kind !== 'candidates' || after.kind !== 'candidates') return;
     expect(after.payload).toContain('老王');
-    expect(after.payload).toContain(`老王#${SIGIL}`); // 私信行 fromShort
+    expect(after.payload).toContain(`老王#${SIGIL}`); // DM row's fromShort.
     expect(before.payload).not.toContain('老王');
   });
 

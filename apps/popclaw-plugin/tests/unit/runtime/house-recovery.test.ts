@@ -84,7 +84,7 @@ async function fixture(native=false) {
   cleanup.push(async()=>{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));});
   function manifest() {
     const document={house_session:{version:1,endpoint:'/v1/house-session',ack_pubkey:hex,operations:['enter','renew','leave','status'],lease_seconds:90,renew_interval_seconds:30},
-      world_interaction:{version:1,public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',envelope_baseline:'public-envelope-01',log_incarnation:log,initial_public_scopes:[]},
+      world_interaction:{version:1,public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',envelope_baseline:'public-envelope-02',log_incarnation:log,initial_public_scopes:[]},
         actions:{status_endpoint:'/v1/world-actions/status',result_authority_pubkey:key,kinds:['test.note'],attachments:[]},
         guide:{path:'/v1/guide.md',sha256:cidFromCanonical(guide),revision:version}},
       intent_kinds:[{kind:'test.note',schema_version:1,transport:'house',signer:'user',description:'Synthetic note',

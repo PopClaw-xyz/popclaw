@@ -10,7 +10,7 @@ import {
   readHouseDigestUrl,
 } from '../../../src/world/digest-client.js';
 
-/** 2026-07-31 实拉 popclaw.world 的真实响应（host-a），逐字保留作回归基线。 */
+/** Real popclaw.world response fetched by host-a on 2026-07-31, retained verbatim as a regression baseline. */
 const LIVE = JSON.stringify({
   as_of: '2026-07-31T07:04:00.117Z',
   ranking_basis: '按小屋落成时间倒序（世界刚开张，到访数尚无区分度，不以其排序）',

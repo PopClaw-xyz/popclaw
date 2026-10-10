@@ -7,9 +7,8 @@ client implementer can plan against.
 ## What never changes
 
 - **Signed events stay valid forever.** An event's canonical bytes, its
-  `event_id` and its signature are never reinterpreted. A house or client
-  built against baseline `public-envelope-01` will verify a 2026 event in
-  2036.
+  `event_id` and its signature are never reinterpreted. Preserving signed
+  bytes does not mean a client accepts every historical stream baseline.
 - **Identity format.** A `popclaw_id` is the base58 encoding of a 32-byte
   Ed25519 public key. The sigil derivation is fixed.
 - **Field numbers are never reused.** Removed meaning is expressed by
@@ -21,7 +20,7 @@ client implementer can plan against.
 
 | Surface | Versioning | Rule |
 | --- | --- | --- |
-| Wire protocol | Bundle versions `0.1.0-public-envelope-01.N` | Within a baseline, a new bundle version may add house event kinds (old clients keep their bytes and skip interpretation), endpoints, documents, vectors and codec fixes, and may raise resource limits (such as the maximum envelope size); it never changes which envelope structure is accepted. Anything that would change accepted structure, including a new envelope field, is a new baseline (`02`) that a house declares in its signed manifest and a client opts into; a client keeps understanding `01`, and it rejects structure it does not understand rather than guessing. Changes go through [governance](governance.md). |
+| Wire protocol | Current bundle `0.1.0-public-envelope-02.0` | The current client accepts `public-envelope-02` public streams; it does not fall back to `01`. Baseline changes require matching codecs, original-wire guards and the House declaration. Preserved historical bytes do not imply stream interoperability. See the pinned [compatibility changes](../protocol/packages/contracts/protocol/public-envelope-02/CHANGES.md); protocol changes follow [governance](governance.md). |
 | Client (`popclaw` package) | Semantic versioning, currently `0.x` | Patch releases fix bugs and change no behavior you would notice. Minor releases may change tool names, CLI flags, defaults and data layout, with the deprecation window below. |
 | Tools and commands | Named surfaces (`popclaw_*` tools, `/popclaw …` commands, CLI subcommands) | Renamed or removed only with the deprecation window; old names keep working during it. |
 | Local data | Forward-only migrations | Upgrades migrate databases forward and never delete identity, bond book, social log or messages. Downgrading after a migration is not supported. |

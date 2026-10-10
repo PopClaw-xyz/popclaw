@@ -1,11 +1,12 @@
 /**
- * 2026-08-30 定案的信道故障:主人主力宿主路径(ollama.com 云端 glm-5.2:cloud)会把
- * 工具调用参数里任何 `*_token` 键的值在半路洗成 `***` —— 全转录历史 62/62 全灭,
- * 模型正文里写真令牌也没用。所以 publish 这一侧不能把令牌当硬要求。2026-09-06 r9
- * 收口为无猜测契约:令牌缺失/占位符时,edit 里的 `basis`(素材页印出、指令教写作
- * 端原样带回)就是绑定凭证 —— 带了按它精确选定;没带则一律拒发(noProvenance),
- * 绝不回退「绑最新」。护栏(notChosen / wrongNumbering / 全覆盖才发)一条不少。
- * 真样令牌查无此票 → 依旧响亮拒绝,绝不静默顶包。
+ * Channel failure confirmed on 2026-08-30: the owner's main host path (ollama.com cloud glm-5.2:cloud)
+ * replaces every `*_token` argument with `***` in transit, all 62/62 historical calls, even when a
+ * real token appears in model text. Publish therefore cannot require a token. The r9 no-guess
+ * contract, 2026-09-06, uses edit.basis, printed on the material page and copied verbatim, as
+ * provenance when the token is missing or a placeholder. A basis selects exactly that issue; without
+ * it, refuse with noProvenance, never bind latest. Keep all notChosen, wrongNumbering and complete-
+ * coverage gates. A real-looking token absent from the ledger is still loudly refused, never silently
+ * substituted.
  */
 import { createLocalNewspaperIssueArchive } from '../../../src/host/local-newspaper-artifacts.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -39,7 +40,9 @@ function deps(upload = vi.fn(async () => ({ url: 'https://canvas/x/1?t=tok' })))
 const todaysIssue = (over: Parameters<typeof issue>[0] = {}): ReturnType<typeof issue> =>
   issue({ dateLabel: todayDateLabel(), ...over });
 
-/** 夹具条目正文里原样抄下的一段 —— 每条稿子的 `q`(copy-anchor.ts 要核的锚)。 */
+/**
+ * A verbatim passage from the fixture item's body: each edit's `q`, checked by copy-anchor.ts.
+ */
 const Q = 'the booster landed on the pad';
 
 const edit = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
@@ -64,7 +67,7 @@ describe('publish_token 可选 —— 信道会把令牌洗成 ***,协议必须�
     expect(upload).toHaveBeenCalledOnce();
     expect(r.text).toContain('https://canvas/v/9?t=k');
     expect(r.text).toContain(renderCopy('en', 'newspaper.publish.basisBoundNote', { token: 'tok_live' }));
-    expect(getIssue('tok_live', dir)).toBeUndefined(); // 发完照常销账
+    expect(getIssue('tok_live', dir)).toBeUndefined(); // Settle the ledger normally after publication.
   });
 
   it('令牌是 *** (宿主洗过的样子) → 当作没给,同样按 basis 绑定', async () => {
@@ -84,7 +87,7 @@ describe('publish_token 可选 —— 信道会把令牌洗成 ***,协议必须�
     const r = await publishNewspaper(deps(upload as never), { edit: edit() });
     expect(upload).not.toHaveBeenCalled();
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.noProvenance'));
-    expect(getIssue('tok_live', dir)).toBeDefined(); // 账没被消耗,补个 basis 再交就行
+    expect(getIssue('tok_live', dir)).toBeDefined(); // The ledger was not consumed; add a basis and submit again.
   });
 
   it('盘上只有候选集 → 同样拒绝,候选集不许被消耗', async () => {
@@ -105,13 +108,13 @@ describe('publish_token 可选 —— 信道会把令牌洗成 ***,协议必须�
     });
     expect(upload).not.toHaveBeenCalled();
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.tokenMismatch'));
-    expect(getIssue('tok_live', dir)).toBeDefined(); // 别人的账不许被这次失败销掉
+    expect(getIssue('tok_live', dir)).toBeDefined(); // The failure must not settle someone else's ledger.
   });
 
-  // 2026-09-06 r7:两份成刊并存时,「绑最新」正是把 A 期稿子发到 B 期版面上的串位
-  // 引擎(Codex 同会话 A/B 探针复现)—— r9 起:无 basis 响亮拒发;带 basis 精确
-  // 选定,后铸的抢不走。basis 是 edit 里的普通字段,洗 *_token 的信道对它没有
-  // 规则可施 —— 这是协议形状加指令的要求,不是宿主必然保留的物理保证。
+  // r7, 2026-09-06: with two issues present, binding latest displaced A's copy into B's layout
+  // (reproduced by the same-session Codex A/B probe). Since r9: loudly refuse without basis; with basis, select exactly
+  // the named issue. A newer issue cannot steal it. basis is an ordinary edit field unaffected by rules targeting *_token;
+  // this is a protocol shape plus instruction, not a physical guarantee that every host preserves it.
   it('两份成刊并存、edit 没带 basis → 无从知道编号属于哪页,响亮拒发,谁也不绑', async () => {
     putIssue('tok_old', todaysIssue({ pulse: [item({ eventId: 'old1', author: 'oldface', sigil: 'aaaa0000' })] }), dir);
     putIssue('tok_new', todaysIssue({ pulse: [item({ eventId: 'new1', author: 'newface', sigil: 'bbbb1111' })] }), dir);
@@ -119,7 +122,7 @@ describe('publish_token 可选 —— 信道会把令牌洗成 ***,协议必须�
     const r = await publishNewspaper(deps(upload as never), { edit: edit() });
     expect(upload).not.toHaveBeenCalled();
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.noProvenance'));
-    expect(getIssue('tok_old', dir)).toBeDefined(); // 两本账分毫未动
+    expect(getIssue('tok_old', dir)).toBeDefined(); // Both ledgers remain unchanged.
     expect(getIssue('tok_new', dir)).toBeDefined();
   });
 
@@ -135,9 +138,9 @@ describe('publish_token 可选 —— 信道会把令牌洗成 ***,协议必须�
       edit: edit({ basis: 'tok_old', items: { '1': { q: Q, h: '旧刊的标题', s: '按旧刊编号写的正文。' } } }),
     });
     expect(r.landed).toBe(true);
-    expect(sent[0]).toContain('oldface'); // 版面上的作者来自 basis 选定的那份成刊
-    expect(sent[0]).not.toContain('newface'); // 后铸的那份一个字都不许上版
-    expect(getIssue('tok_new', dir)).toBeDefined(); // 没被选中的账没被动
+    expect(sent[0]).toContain('oldface'); // Layout authors come from the issue selected by basis.
+    expect(sent[0]).not.toContain('newface'); // The later issue contributes no text to the layout.
+    expect(getIssue('tok_new', dir)).toBeDefined(); // The unselected ledger is unchanged.
   });
 
   it('编号对不上这套护栏在 basis 路径上同样生效(多数编号不在 → 拒发)', async () => {
@@ -161,22 +164,22 @@ describe('publish_token 可选 —— 信道会把令牌洗成 ***,协议必须�
 });
 
 // ---------------------------------------------------------------------------
-// 同日守门(2026-09-03 夜裁定):昨夜没写完的残刊绝不能劫持今天的交稿。真机
-// (甲机)的事故形态:昨晚的 issue 文件越过了 2 小时 TTL(机器夜里关过
-// /日界翻篇),被「最新成刊」绑走。r9 之后 publish 不再走账本扫描,残刊的
-// 清扫归 sweepStaleIssues(见 issue-store 测试);这里钉的是:无论谁在场,
-// 无凭证的交稿一律拒绝,且拒绝不消耗任何账。
+// Same-day gate (owner ruling, night of 2026-09-03): last night's unfinished issue must not hijack today's edit.
+// On host A, last night's issue exceeded the two-hour TTL after the machine shut down overnight
+// or crossed a day boundary, yet was selected as latest. Since r9 publish no longer scans ledgers;
+// sweepStaleIssues owns stale-issue removal (see issue-store tests). Here we pin the rule that regardless of surviving issues,
+// a provenance-free edit is refused and consumes no ledger.
 // ---------------------------------------------------------------------------
 describe('同日守门 —— 昨天的残刊不劫持今天的交稿', () => {
   it('昨夜没写完的残刊在场 → 无凭证交稿照样拒绝,残刊文件原样留着(清扫归 sweep)', async () => {
-    putIssue('tok_yday', issue({ dateLabel: '2026年9月2日' }), dir); // 固定的过去日期 ≠ 今天
-    putEdit('tok_yday', { masthead: '昨天的旧报' }, dir); // 没写完的存稿还挂在上面
-    _resetIssuesForTest(); // 换个进程视角:只剩盘上那本
+    putIssue('tok_yday', issue({ dateLabel: '2026年9月2日' }), dir); // A fixed past date is not today.
+    putEdit('tok_yday', { masthead: '昨天的旧报' }, dir); // The unfinished saved edit is still attached to it.
+    _resetIssuesForTest(); // Switch to a fresh-process perspective: only the disk ledger remains.
     const upload = vi.fn();
     const r = await publishNewspaper(deps(upload as never), { edit: edit() });
     expect(upload).not.toHaveBeenCalled();
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.noProvenance'));
-    expect(existsSync(join(dir, 'tok_yday.json'))).toBe(true); // 拒绝不删账;死账由清扫收走
+    expect(existsSync(join(dir, 'tok_yday.json'))).toBe(true); // Refusal does not delete ledgers; sweeping removes stale ones.
   });
 
   it('今天的成刊带着没写完的存稿 → 带 basis 照常续写(同日恢复不受影响)', async () => {
@@ -234,7 +237,7 @@ describe('候选血统 —— ctok basis + 真令牌绑子刊,拒收话里点名
         material: 'tok_child',
       }),
     );
-    expect(getIssue('tok_child', dir)).toBeDefined(); // 拒绝不消耗
+    expect(getIssue('tok_child', dir)).toBeDefined(); // Refusal does not consume the ledger.
   });
 
   it('两个都是成刊形状、互不相同 → 仍是旧的矛盾拒收(没有哪个更「素材页」)', async () => {

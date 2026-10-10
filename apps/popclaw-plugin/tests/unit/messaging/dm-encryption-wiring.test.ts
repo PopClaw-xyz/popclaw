@@ -9,7 +9,7 @@
  * that gave the three roots one shared copy, this file exercises that copy
  * directly, so every assertion below is a statement about production code.
  *
- * The load-bearing assertion of the whole file is 「一封解不开的信毒不死循环」:
+ * The load-bearing assertion is that an undecryptable message must not break the receive loop:
  * that loop has a history of 3×/9× duplicate-delivery bugs, and a decryption
  * step is a brand-new way to throw inside it.
  */
@@ -158,7 +158,7 @@ describe('DM 写路径 · signDirectMessage 加密', () => {
     expect(dm.body).not.toBe('');
     expect(dm.ciphertext!.length).toBeGreaterThan(0);
     expect(dm.nonce!.length).toBe(24);
-    // 明文不得以任何形式留在线上字节里
+    // Plaintext must not remain in wire bytes in any form.
     const wire = Buffer.from(popclaw.event.DirectMessage.encode(dm).finish()).toString('utf8');
     expect(wire).not.toContain('are you free');
   });
@@ -183,7 +183,7 @@ describe('DM 读路径 · 单点解密', () => {
     return sentDm(alice, ME, '你好，江湖见 🏮').then((dm) => {
       w.feed(dm);
       expect(w.delivered).toEqual(['你好，江湖见 🏮']);
-      // 本地存的是明文（下游消费者一行不改）
+      // Local storage contains plaintext; downstream consumers are unchanged.
       expect(w.store.recent(10).map((x) => x.body)).toEqual(['你好，江湖见 🏮']);
     });
   });
@@ -199,7 +199,7 @@ describe('DM 读路径 · 单点解密', () => {
     const w = await wire(me);
     const good1 = await sentDm(alice, ME, 'first', 1);
     const bad = await sentDm(alice, ME, 'poison', 2);
-    bad.ciphertext = new Uint8Array([1, 2, 3, 4, 5]); // 损坏
+    bad.ciphertext = new Uint8Array([1, 2, 3, 4, 5]); // Corrupt the data.
     const good2 = await sentDm(alice, ME, 'third', 3);
 
     expect(() => {
@@ -210,7 +210,7 @@ describe('DM 读路径 · 单点解密', () => {
 
     expect(w.delivered).toEqual(['first', 'third']);
     expect(w.skipped).toEqual(['decrypt_failed']);
-    expect(w.store.recent(10)).toHaveLength(2); // 坏的那封连库都没进
+    expect(w.store.recent(10)).toHaveLength(2); // The bad letter never entered the database.
   });
 
   it('发给别人的密文（我不是收件人）→ 跳过，不落库', async () => {
@@ -282,7 +282,7 @@ describe('DM 去重 · body_hash 在解密之后算', () => {
     const w = await wire(me);
     const dm = await sentDm(alice, ME, 'replayed', 42);
     w.feed(dm);
-    w.feed(dm); // 逐字节相同的回补帧
+    w.feed(dm); // A backfill frame with identical bytes.
     expect(w.delivered).toEqual(['replayed']);
     expect(w.store.recent(10)).toHaveLength(1);
   });
@@ -311,11 +311,11 @@ describe('红包票据形状的私信按普通认证文本处理', () => {
   it('票据 JSON 加密发出、解密收到，按普通私信投递且可去重（不解析、不执行支付指令）', async () => {
     const w = await wire(me);
     const dm = await sentDm(alice, ME, ticketBody, 500);
-    expect(dm.body).toBe(DM_ENCRYPTED_BODY_PLACEHOLDER); // 灯坊运营者读不到内容
+    expect(dm.body).toBe(DM_ENCRYPTED_BODY_PLACEHOLDER); // The House operator cannot read the content.
     w.feed(dm);
-    w.feed(dm); // SSE 回补重放同一封密文 → 只投递一次
+    w.feed(dm); // SSE backfill replays the same ciphertext: deliver only once.
 
-    // 没有票据消费者：正文就是一封普通认证私信，原样送达、可去重恢复。
+    // No receipt consumer: the body is an ordinary authenticated DM, delivered unchanged with deduplicated recovery.
     expect(w.delivered).toEqual([ticketBody]);
     expect(w.store.recent(10)).toHaveLength(1);
     expect(w.notices[0]).toContain('inbox — DM from');

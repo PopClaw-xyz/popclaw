@@ -11,9 +11,9 @@ describe('buildInjection (ADR-0043 §1 L1+L2)', () => {
     const injection = buildInjection('出一份报纸');
     expect(injection?.prependContext).toContain('popclaw_newspaper');
     expect(injection?.prependContext).toContain('should most likely call');
-    expect(injection?.prependContext).toContain('popclaw_publish_newspaper'); // 链条说完
-    expect(injection?.prependContext).toContain('tell the owner it failed'); // 忠实尾巴随行
-    // hits 只喂日志/trace，不回传宿主；trigger 是表内常量（隐私铁律，routing/trace.ts）。
+    expect(injection?.prependContext).toContain('popclaw_publish_newspaper'); // The full chain is included.
+    expect(injection?.prependContext).toContain('tell the owner it failed'); // The faithful-result tail accompanies it.
+    // hits feed only logs/trace, never the host; trigger is a table constant (privacy invariant, routing/trace.ts).
     expect(injection?.hits).toEqual([{ tool: 'popclaw_newspaper', trigger: '报纸' }]);
   });
 
@@ -24,7 +24,7 @@ describe('buildInjection (ADR-0043 §1 L1+L2)', () => {
     expect(injection?.hits).toBeUndefined();
   });
 
-  // L1 的负例席位是本 ADR 的灵魂（§3）——直接回归 host-a 病理。
+  // L1's negative example is central to this ADR (section 3): a direct regression for the host-a failure.
   it('L1 carries the failure demo', () => {
     const l1 = buildInjection('随便说点什么')?.appendSystemContext ?? '';
     expect(l1).toContain('超时');
@@ -35,7 +35,7 @@ describe('buildInjection (ADR-0043 §1 L1+L2)', () => {
     expect(buildInjection('a')?.appendSystemContext).toBe(buildInjection('b')?.appendSystemContext);
   });
 
-  // 断电闸（§6）：一个环境变量全关，不改配置、不重装。
+  // Emergency off switch (section 6): one environment variable disables everything without config changes or reinstall.
   it('injects nothing when POPCLAW_TOOL_ROUTING=off', () => {
     process.env.POPCLAW_TOOL_ROUTING = 'off';
     expect(buildInjection('出一份报纸')).toBeUndefined();
@@ -56,11 +56,11 @@ describe('buildInjection (ADR-0043 §1 L1+L2)', () => {
   });
 });
 
-// 真机 2026-07-31（同一个坑第四次）：host-c 那台包对、`popclaw_recent_attachments`
-// 注册上了（45→46）、语音 14:45 就在盘上，而 agent（kimi-k2.7）**一次都没调那个
-// 工具**，直接从"这是 Feishu 收到的"推断出"拿不到本地路径"。前两级修法（给口子、
-// 写描述）有效是因为那时"没有口子/不知道有"；这次口子有、描述也写了，它压根没打开
-// 工具箱。所以这一级不再指望它想起来 —— 把路径摆进它这一轮的上下文。
+// Real host-c, 2026-07-31, the fourth recurrence: the package was correct and `popclaw_recent_attachments`
+// was registered (45 -> 46); voice media had been on disk since 14:45, but the agent (kimi-k2.7) never called
+// the tool. It inferred from "received via Feishu" that no local path was available. The first two fixes (provide a capability
+// and describe it) worked when the tool was missing or unknown; now both existed but the agent never opened the toolbox.
+// This layer therefore does not rely on recall: put the paths directly into the current turn's context.
 describe('recentAttachmentNotice — 把路径摆到模型眼前', () => {
   const now = 1_800_000_000_000;
   const f = (path: string, ageMin: number, size = 17_000) => ({
@@ -81,7 +81,7 @@ describe('recentAttachmentNotice — 把路径摆到模型眼前', () => {
     expect(out.indexOf('/in/voice.ogg')).toBeLessThan(out.indexOf('/in/pic.jpg'));
   });
 
-  // 这两句是这一刀的全部要害：它上次的失败正是"声称拿不到"+"让主人另存"。
+  // These two sentences are the whole fix: the previous failure claimed paths were inaccessible and asked the owner to save separately.
   it('明写不许声称拿不到、不许让主人先另存', () => {
     const out = recentAttachmentNotice([f('/in/voice.ogg', 1)], now)!;
     expect(out).toContain('attachment_path');

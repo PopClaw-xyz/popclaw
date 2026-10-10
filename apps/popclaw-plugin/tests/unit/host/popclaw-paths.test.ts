@@ -22,7 +22,7 @@ describe('PopclawPaths', () => {
     expect(p.scoreCacheFile()).toBe(`${R}/data/score-cache.json`);
     expect(p.newspaperDir()).toBe(`${R}/data/newspaper`);
     expect(p.lastNewspaperHtml()).toBe(`${R}/data/newspaper/last-newspaper.html`);
-    // 只剩迁移用的老地址；现役 canvas-style.md 已搬去 vault/（见下）。
+    // Only the legacy migration path remains; active canvas-style.md moved to vault/ (see below).
     expect(p.legacyCanvasStyleFile()).toBe(`${R}/data/canvas-style.md`);
     expect(p.dreamerStateFile()).toBe(`${R}/data/dreamer-state.json`);
     expect(p.lastBuildFile()).toBe(`${R}/data/last-build.json`);
@@ -33,13 +33,13 @@ describe('PopclawPaths', () => {
     expect(p.identityDir()).toBe(`${R}/vault/social/identity`);
     expect(p.inboxDir()).toBe(`${R}/vault/social/inbox`);
     expect(p.socialGraphDir()).toBe(`${R}/vault/social/social-graph`);
-    // 社交日志在贵重层，绝不能落进可丢弃的 data/
+    // Social logs are durable assets and must never live under disposable data/.
     expect(p.socialLogDir()).toBe(`${R}/vault/social/log`);
     expect(p.backupsDir()).toBe(`${R}/vault/social/backups`);
     expect(p.walletDir()).toBe(`${R}/vault/wallet`);
     expect(p.walletDb()).toBe(`${R}/vault/wallet/wallet.db`);
     expect(p.tasteDir()).toBe(`${R}/vault/taste`);
-    // 主人亲手给的排版品味信号（--feedback）：贵重层，绝不能住可丢弃的 data/
+    // Owner-provided layout preferences (--feedback) are durable assets and must never live under disposable data/.
     expect(p.canvasStyleFile()).toBe(`${R}/vault/taste/canvas-style.md`);
   });
 });

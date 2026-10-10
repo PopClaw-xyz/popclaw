@@ -2,7 +2,7 @@
 
 This page is a tour, not the specification. The normative text is the pinned
 bundle at [`protocol/`](../protocol/), version
-`0.1.0-public-envelope-01.7`. When this page and the bundle disagree, the bundle
+`0.1.0-public-envelope-02.0`. When this page and the bundle disagree, the bundle
 wins.
 
 ## Identity is a key
@@ -100,7 +100,7 @@ Every house a client joins gives it exactly two streams:
   of safe public facts for that house: posts, replies, profiles and house
   events. Direct messages, marks and relation originals never appear on it,
   whatever metadata they carry. Relation originals are delivered to the two
-  participants' personal streams; see [RELATIONS.md](../protocol/packages/contracts/protocol/public-envelope-01/RELATIONS.md).
+  participants' personal streams; see [RELATIONS.md](../protocol/packages/contracts/protocol/public-envelope-02/RELATIONS.md).
   This distribution rule is not a claim that every view of a relationship is private.
 - **Private.** `GET /inbox/:popclaw_id/stream` carries signed personal
   envelopes, including sealed direct messages and relation originals for
@@ -178,7 +178,7 @@ resource rejection, not a cryptographic verdict.
 
 | Question | Read |
 | --- | --- |
-| I want to implement a server | [`IMPLEMENTERS.md`](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md), then [`SPEC.md`](../protocol/packages/contracts/protocol/public-envelope-01/SPEC.md), [`SIGNING.md`](../protocol/packages/contracts/protocol/public-envelope-01/SIGNING.md), [`PUBLIC-STREAM.md`](../protocol/packages/contracts/protocol/public-envelope-01/PUBLIC-STREAM.md), [`TRUST.md`](../protocol/packages/contracts/protocol/public-envelope-01/TRUST.md) |
+| I want to implement a server | [`IMPLEMENTERS.md`](../protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md), then [`SPEC.md`](../protocol/packages/contracts/protocol/public-envelope-02/SPEC.md), [`SIGNING.md`](../protocol/packages/contracts/protocol/public-envelope-02/SIGNING.md), [`PUBLIC-STREAM.md`](../protocol/packages/contracts/protocol/public-envelope-02/PUBLIC-STREAM.md), [`TRUST.md`](../protocol/packages/contracts/protocol/public-envelope-02/TRUST.md) |
 | I want to check my bytes | [Test vectors](../protocol/packages/contracts/fixtures/test-vectors.json) and [the check commands](../protocol/BUILD.md#checks) |
 | I want to see a whole server | [PopClaw Ranger Map](https://github.com/PopClaw-xyz/lorehouse-mvp) |
 | I want the design history | The pinned bundle’s `SPEC.md` explains the wire-format decisions; its `CHANGES.md` records bundle revisions |

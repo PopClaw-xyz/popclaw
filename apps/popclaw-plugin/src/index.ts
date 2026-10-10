@@ -1,3 +1,7 @@
+import { sharedNativeReadContext } from './host/native-read-context.js';
+import { registerNativeReadContextHooks } from './host/native-read-context-hooks.js';
+import { withNativeReadContext } from './host/native-read-context-tools.js';
+import { currentInviteShareIdentity } from './invite/prepare-invite-share.js';
 import { resolveReceiveMode } from './runtime/receive-mode.js';
 import { registerOpenClawPromptHooks } from './host/openclaw-prompt-hooks.js';
 import { assertStorageBootstrap, registerStorageRuntime } from './host/storage-maintenance.js';
@@ -272,7 +276,10 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
      * uses it." Still the same single instance within a process (P-006 §3,
      * singular resources, unchanged).
      */
+    const nativeReadContext = sharedNativeReadContext();
+    registerNativeReadContextHooks(api, nativeReadContext);
     const lifecycle = createLazyRuntime((closing) => {
+      closing.addEventListener('abort', () => nativeReadContext.closeAll(), { once: true });
       if (closing.aborted) return Promise.reject(new Error('HOST_RUNTIME_STOPPED'));
       return adoptOrRebootRuntime(
         'runtime',
@@ -328,11 +335,6 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     // a load/bypass process must stay cheap).
     let liveRuntime: OpenClawPluginRuntime | null = null;
     let liveOrchestrator: OnboardingOrchestrator | null = null;
-    try {
-      api.on('llm_input', event => { liveRuntime?.houseRuntime.markGuidesInAgentInput(JSON.stringify(event.historyMessages)); });
-    } catch (err) {
-      api.logger.error(`popclaw: guide delivery hook registration failed — ${String(err)}`);
-    }
     // gateway_stop keeps its own handle: `liveRuntime` is already cleared
     // inside the service stop (claim-gate semantics), while closing streams
     // and databases happens later — it must remain closable after the clear.
@@ -823,11 +825,18 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
     // The runtime() lexical closure is the lazy ignition path in register().
     toolsRegisteredCount = registerPopclawTools({
       socialSendHost: 'native',
+      getInviteShareIdentity: async () => {
+        const memo = peekPerProcess<Promise<OpenClawPluginRuntime>>('runtime');
+        const rt = await peekCurrentRuntime<OpenClawPluginRuntime>('runtime');
+        return runtimeMemoCurrent('runtime', memo) ? currentInviteShareIdentity(rt) : null;
+      },
       durableSocialDrafts: true,
       nativeToolNotices: true,
       getToolNoticeContext: async signal => { const rt = await runtime(); return runtimeToolNoticeContext(rt, `native:${rt.boot.popclawId}`, signal, true); },
+      currentGuideReadScope: () => nativeReadContext.current(),
       api: withOpenClawNotifyRoute(
-        api as unknown as Parameters<typeof registerPopclawTools>[0]['api'], runtime, message => api.logger.warn(message)),
+        withNativeReadContext(api as unknown as Parameters<typeof registerPopclawTools>[0]['api'], nativeReadContext),
+        runtime, message => api.logger.warn(message)),
       runtime,
       runCommand: async work => (await runtime()).houseRuntime.runCommand(work),
       getHouseCommandContext: async () => { const rt = await runtime(); return {coordinator: () => rt.houseRuntime.commands, recovery: rt.houseRuntime.recovery, lang: ownerLang,

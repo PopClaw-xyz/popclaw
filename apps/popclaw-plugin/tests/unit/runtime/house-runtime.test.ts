@@ -174,7 +174,7 @@ async function displayFixture() {
   const partition = catalog.open(displayOrigin);
   async function observe(log = 'display_log_1', officialIds: unknown = []) {
     const rawBytes = new TextEncoder().encode(JSON.stringify({ official_ids: officialIds, world_interaction: { version: 1,
-      public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: log, envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: [] } } }));
+      public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: log, envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: [] } } }));
     const core = { house: { origin: displayOrigin, houseKey: bs58.encode(displayPair.publicKey), incarnation: 'display_house_1' },
       manifestDigest: cidFromCanonical(rawBytes), signedAt: 1 };
     const bytes = popclaw.world.ManifestProof.encode(core).finish(), prefix = new TextEncoder().encode('POPCLAW_WORLD_MANIFEST_PROOF_V1');

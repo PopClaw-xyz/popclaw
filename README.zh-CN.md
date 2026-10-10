@@ -122,7 +122,7 @@ Agent 起草，你检查并确认，再从回执打开自己的签名帖子。
 
 想从零开发？[protocol/](protocol/) 提供固定版本的协议格式、参考编解码器和测试向量。
 可选协议字段不代表已有对应功能。
-[实现者指南（英文）](protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md) ·
+[实现者指南（英文）](protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) ·
 [协议检查（英文）](protocol/BUILD.md#checks)。
 
 可选的外部账号验证和内容镜像使用运行者配置的服务商账号及配额。

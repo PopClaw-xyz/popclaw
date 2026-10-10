@@ -78,7 +78,7 @@ async function fixture(mode: string | null = 'public-v1', intent = true, held = 
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('FIXTURE_ADDRESS');
   const origin = `http://127.0.0.1:${address.port}`;
   manifest = JSON.stringify({ house: { name: 'Synthetic public House', slug: 'fixture' }, official_ids: [], world_interaction: { version: 1,
-    public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_root', envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: [] } } });
+    public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_root', envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: [] } } });
   const rawBytes = new TextEncoder().encode(manifest), core = { house: { origin, houseKey: bs58.encode(houseKey.publicKey), incarnation: 'house_root' },
     manifestDigest: cidFromCanonical(rawBytes), signedAt: 1 };
   const coreBytes = popclaw.world.ManifestProof.encode(core).finish(), prefix = new TextEncoder().encode('POPCLAW_WORLD_MANIFEST_PROOF_V1');
@@ -199,6 +199,10 @@ function storageObservation(db: LocalHostDb, global = false) {
 }
 
 async function verifyDisplayQueries(f: Awaited<ReturnType<typeof fixture>>, run: ReturnType<Awaited<ReturnType<typeof fixture>>['start']>, phase: string, history = false) {
+  // The configured publisher's independent first tick is not part of a display
+  // RPC. Its fixture 404 settles this process's tick before the observation
+  // window; the next backed-off tick is beyond this case's deadline.
+  await until(() => run.stderr().includes('page-state sync tick failed (non-fatal): Error: sync request pull failed: 404'), run.stderr);
   const execution = new LocalHostDb(f.executionPath, { readOnly: true });
   const global = new LocalHostDb(f.paths.socialDb(), { readOnly: true });
   const cacheFiles = () => existsSync(f.paths.lorehousesDir()) ? readdirSync(f.paths.lorehousesDir()).filter(name => name.endsWith('.db')).sort() : [];

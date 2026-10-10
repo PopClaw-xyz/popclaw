@@ -52,9 +52,9 @@ describe('projectState', () => {
 });
 
 /**
- * ADR-0037 —— 投影键必须是 `(followee, house_slug)`。单键 followee 的旧投影里，
- * 任一坊的 FollowRevoked 会把这个人从**所有**坊抹掉（feed 加权、DM 闸、status
- * 集体失明，而坊侧还记着）。
+ * ADR-0037: projection keys must be (followee, house_slug). The old followee-only projection let
+ * FollowRevoked from any house erase the person from every house, blinding feed weighting, DM gates
+ * and status while houses still retained their follows.
  */
 describe('projectState — 双键（followee, house_slug）', () => {
   const declaredIn = (house: string, followee: string, ts: number): DeclaredEvent => ({
@@ -74,14 +74,14 @@ describe('projectState — 双键（followee, house_slug）', () => {
     ]);
     expect(state.followingByHouse.get('me')?.map((e) => e.popclawId)).toEqual(['B']);
     expect(state.followingByHouse.get('world') ?? []).toEqual([]);
-    // 人级并集仍认识他 —— 私信亲疏看人不看坊。
+    // The person-level union still recognizes them: DM relationship policy is person-scoped, not house-scoped.
     expect(state.following.map((e) => e.popclawId)).toEqual(['B']);
   });
 
   it('人级并集一人一条（同一人在两坊关注不重复计数）', () => {
     const state = projectState('A', [declaredIn('me', 'B', 100), declaredIn('world', 'B', 300)]);
     expect(state.following).toHaveLength(1);
-    // 并集条目取最近一次宣告（「最近关注」的展示口径）。
+    // Union entries use the latest declaration for the recently-followed display.
     expect(state.following[0]!.since).toBe(300);
   });
 
@@ -104,8 +104,8 @@ describe('projectState — 双键（followee, house_slug）', () => {
       { type: 'FollowDeclared', followee: 'B', followType: 'PUBLIC',
         tasteSubscribed: false, timestamp: 100, signature: 's' },
     ]);
-    // 不放宽成「对任何坊都算数」：那会让 me 坊的关注在 world 坊也拿到加权，
-    // 正是 ADR-0037 要消除的串坊噪音。
+    // Do not broaden this to every house: that would give a me-house follow weighting in world,
+    // precisely the cross-house noise ADR-0037 is intended to remove.
     expect(followsInHouse(state, 'B', 'world')).toBe(false);
     expect(state.followingByHouse.get('')?.map((e) => e.popclawId)).toEqual(['B']);
   });

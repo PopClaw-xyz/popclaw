@@ -99,27 +99,30 @@ function completeDeps(overrides: Record<string, unknown> = {}) {
 }
 
 /**
- * 手机一行放得下约 15 个全角字 = 30 格。超过就被动回绕，一行两断，读起来像
- * 出了错。这是把「软目标 ≤15 全角」从口头基准变成 CI 能跑的检查的唯一办法。
+ * A phone line holds about 15 full-width characters (30 cells). Longer lines wrap into confusing
+ * fragments. This check makes the soft target of at most 15 full-width characters enforceable in
+ * CI.
  */
 const PHONE_LINE_CELLS = 30;
 
 /**
- * 允许超宽的行，每一类都独占一行、只连累自己。
+ * Each permitted over-wide line stands alone and affects only itself.
  *
- * **死规矩：豁免不得与受益于它的改动同车。** 本清单的任何新增，都不许出现在
- * "正好需要这条豁免才能过关"的那个 PR 里——要么单独提、要么先改宽的那行。
- * 立这条是因为已经犯过一次：本轮把一行 24.5 全角的合并行照抄进来，然后在这里
- * 给它开了个口子，等于称体重之前先把秤调松两格，外部冷评审当场量出来。
- * 自省靠不住，这条规则靠得住——它不依赖当事人当天状态好不好。
+ * Hard rule: an exemption must never ship in the same PR as the change that needs it. Add an
+ * exemption separately or shorten the offending line first. This rule follows an incident where a
+ * 24.5-full-width-character line was copied in and exempted here, effectively weakening the
+ * measuring tool to pass the change; an external reviewer caught it. The rule does not depend on
+ * the author's vigilance that day.
  */
 const EXEMPT_FROM_LINE_WIDTH = [
-  /^popclaw\.me\//, // 名帖 URL
-  /\/popclaw /, // 斜杠命令行
-  /(^|\s)[/~][\w.~/-]{6,}/, // 绝对路径行（⚙ 配置 /Users/...）
+  /^popclaw\.me\//, // Profile URL.
+  /\/popclaw /, // Slash-command line.
+  /(^|\s)[/~][\w.~/-]{6,}/, // Absolute-path line (configuration path under /Users/...).
 ];
 
-/** `**bold**` 的星号是标记不是字，量行宽前先摘掉。 */
+/**
+ * The stars in `**bold**` are markup, not visible characters; remove them before measuring width.
+ */
 function renderedWidth(line: string): number {
   return displayWidth(line.replace(/\*\*/g, ''));
 }
@@ -132,9 +135,9 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
       [
         `🏮 **blackfeather_ai** #${SIGIL}`,
         '✓ X @elonmusk',
-        '认证时粉丝数：约12k',
+        '认证时的 X 粉丝数：约12k',
         '✓ GitHub @octocat',
-        '认证时粉丝数：未确认',
+        '认证时的 GitHub 粉丝数：未确认',
         '',
         '**你的江湖**',
         '关注 4 人',
@@ -167,8 +170,8 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
       },
     });
     await runStatusCommand(deps as never);
-    // plan C spec §4：零关注排第一；剩下名号（安顿/通知频道已删）——认证是可选项，
-    // 不占人路径的这个位置，也不计入「还差 N 件」。
+    // Plan C spec §4: zero follows comes first, followed by nickname (onboarding/notification channel removed). Verification is optional.
+    // It occupies no numbered step here and does not count toward the remaining required tasks.
     expect(lines.join('\n')).toBe(
       [
         `🏮 **ranger-HafABC** #${SIGIL}`,
@@ -239,7 +242,7 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
     });
   });
 
-  // plan C spec §4 ②：attune skip 落点 —— core 层为空才出现，查不到不出现。
+  // Plan C spec §4, item 2: after skipping attune, show this only if the core layer is empty, not when it cannot be read.
   it('surfaces the taste-seed todo when the core taste layer is empty', async () => {
     const { deps, lines } = completeDeps({
       tasteLoader: { enabledSources: async () => [] },
@@ -287,8 +290,8 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
     const { deps, lines } = completeDeps();
     await runStatusCommand(deps as never);
     const joined = lines.join('\n');
-    // 「统计接通中」是占位符（没有数据时的内部状态），必须消失；
-    // 「本坊关注我 N」是 #190 之后的真数据，折进数字条里留着。
+    // The connecting-statistics placeholder is internal state used without data and must disappear.
+    // The actual local-house follower count introduced after #190 remains in the numeric summary.
     expect(joined).not.toContain('统计接通中');
     expect(joined).not.toContain('💗');
     expect(joined).toContain('关注我 12 人');
@@ -297,7 +300,7 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
   it('hides 本坊关注我 when the lore house does not report it', async () => {
     const { deps, lines } = completeDeps({ fetch: okFetch({ profiles: [] }) });
     await runStatusCommand(deps as never);
-    // 查不到就不出现 —— ⚠️/待办已经解释原因，再加一句「暂时查不到」是拿内部状态占行。
+    // Omit unavailable data: warnings/todos already explain why, and an extra unavailable message wastes a line on internal state.
     expect(lines.join('\n')).not.toContain('关注我');
   });
 
@@ -325,9 +328,9 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
     expect(lines.join('\n')).not.toContain('已升级');
   });
 
-  // 台账 #014 的另一半：完整 build 串（`0.1.0 2026-08-26 12:21+08 c27aab30 (HEAD)`）
-  // 曾经原样进一行（实测 135 格）；status 只报短 stamp（与升级通知同源的
-  // shortBuildStamp），完整串是 /popclaw version 的事。事实/由/至/时间各占一行。
+  // Ledger #014, second half: the full build string (`0.1.0 2026-08-26 12:21+08 c27aab30 (HEAD)`)
+  // once occupied a single line (135 measured cells). Status reports only the short stamp, using the same
+  // shortBuildStamp as upgrade notices; /popclaw version owns the full string. Fact/from/to/time each get a line.
   it('upgrade footer: 事实 / 由 / 至 / 升级时间各一行，完整 stamp 缩成短 stamp（zh）', async () => {
     // The stamp is owner-local, not UTC (ledger #014): 04:21Z is 12:21 in +08.
     setOwnerTz('Asia/Shanghai');
@@ -344,7 +347,7 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
       expect(joined).toContain(
         ['popclaw 插件已升级', '由 0.1.0 · 8/25 15:05', '至 0.1.0 · 8/26 12:21', '升级时间 2026-08-26 12:21'].join('\n'),
       );
-      // sha 与完整串不再出现在 status 里（/popclaw version 才是它的地方）。
+      // SHA and full build string no longer appear in status; /popclaw version owns them.
       expect(joined).not.toContain('42c3b689');
       expect(joined).not.toContain('c27aab30');
     } finally {
@@ -492,13 +495,13 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
       socialGraph: { following: () => [] },
       bondsStore: { list: () => [] },
       dmSenderCount: () => 0,
-      fetch: okFetch({ profiles: [] }), // 灯坊也没报粉丝数
+      fetch: okFetch({ profiles: [] }), // The house did not report a follower count either.
     });
     await runStatusCommand(deps as never);
     const joined = lines.join('\n');
     expect(joined).not.toContain('你的江湖');
     expect(joined).not.toContain('看交情本');
-    // 通知行 still shows, un-indented, since it has no parent block.
+    // The notification line still appears without indentation because it has no parent block.
     expect(joined).toContain('\n📣 通知频道：#general');
   });
 
@@ -508,8 +511,8 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
     const joined = lines.join('\n');
     expect(joined).toContain('关注 4 人');
     expect(joined).toContain('私信过你 3 人');
-    // The 交情 row is gone; the trailing spaces keep this needle off the
-    // 「/popclaw bond 看交情本」hint line, which is still printed.
+    // The bond row is gone; trailing spaces keep this needle from matching the
+    // `/popclaw bond 看交情本` hint line, which is still printed.
     expect(joined).not.toContain('交情  ');
 
   });
@@ -646,7 +649,7 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
     expect(lines.join('\n').toLowerCase()).not.toContain('down');
   });
 
-  // ADR-0040: 认证发起后到落定之间那段沉默，正是主人最想问的那一段。
+  // ADR-0040: the silence between requesting verification and its resolution is when the owner most wants an update.
   it('shows the ⏳ pending row and suppresses the 认证 todo while an invite is open', async () => {
     const { deps, lines } = completeDeps({
       fetch: okFetch({ house_follower_count: 1, profiles: [] }),
@@ -665,15 +668,15 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
     expect(checkPendingInvites).toHaveBeenCalledOnce();
   });
 
-  // 顺序是 load-bearing：先问灯坊、再读账本。反过来的话，一份刚刚落定的申请
-  // 还会在报告里挂着 ⏳，主人明明已经收到通过通知了，status 却说还在核验中。
+  // Ordering is essential: query the house before reading the ledger. Reversing this leaves a just-resolved request
+  // marked pending even though the owner has received its approval notice.
   it('an invite the lazy sweep just resolved no longer shows ⏳', async () => {
     const open = [{ platform: 'x', handle: 'blackfeather_ai' }];
     const { deps, lines } = completeDeps({
       fetch: okFetch({ house_follower_count: 1, profiles: [] }),
       pendingInvites: () => open,
       checkPendingInvites: async () => {
-        open.length = 0; // 灯坊说落定了 → 账本里不再是「进行中」
+        open.length = 0; // The house reports resolution, so the ledger must no longer say in progress.
       },
     });
     await runStatusCommand(deps as never);
@@ -688,8 +691,8 @@ describe('runStatusCommand — 气泡（human 路径）', () => {
     expect(lines.join('\n')).toContain('✅ 身份档案齐全');
   });
 
-  // ADR-0037：关注按坊宣告。并集人数与分坊条数对不上是正常的（同一个人可以在
-  // 两座坊各关注一次）—— 分坊那行只在真有多座坊时出现。
+  // ADR-0037: follows are declared per house. Union counts can differ from per-house counts because one person
+  // can be followed in two houses; show the per-house line only when multiple houses actually exist.
   it('多坊时补一行分坊；并集人数不重复计数', async () => {
     const { deps, lines } = completeDeps({
       socialGraph: {
@@ -966,15 +969,15 @@ describe('runStatusCommand — 工具路径（agent 读者）', () => {
     });
     await runStatusCommand(deps as never);
     const joined = lines.join('\n');
-    // 4 项待办（零关注 / taste 种子 / 认证 / 名号），但认证是可选项，不占编号
-    // 名额也不计入「还差 N 步」——只数零关注 / taste 种子 / 名号这 3 项必做的。
+    // Four todos (zero follows / taste seed / verification / nickname), but optional verification occupies no numbered
+    // slot and does not count toward remaining steps; count only the three required tasks.
     expect(joined).toContain('📋 还差 3 步，身份档案就齐全了');
     expect(joined).toContain('1. 关注几个人 — 我手上一个人都没有，明早的报纸会很空。要我帮你找几个吗？');
     expect(joined).toContain('　 → /popclaw recommend，或对我说「推荐几个值得关注的人」');
     expect(joined).toContain('2. 跟我说说你最近关心什么 — 我带给你的东西就会越来越像你——像为你定制的');
     expect(joined).toContain('3. 名号是我替你取的 — 名字没定下来前，别人按名字找不到、也关注不了你——除非已经拿到你的 popclaw_id');
     expect(joined).not.toContain('4. ');
-    // 认证仍然出现，但不带编号，且读起来是可选项。
+    // Verification still appears, without a number, and clearly reads as optional.
     expect(joined).toContain('· 认证一个外部账号 — 名号后面挂个背书，别人一眼知道你是谁——可选，不用急');
   });
 
@@ -1063,8 +1066,8 @@ describe('runStatusCommand — 📣 通知频道 line', () => {
   });
 });
 
-// 沉默的失效是最坏的失效：两台真机 taste 全空跑了几个月一声不吭，正因为没有任何
-// 地方会说出来（spec 2026-07-26 第 3 步 ③ 降级要响）。
+// Silent failure is the worst failure: two real machines ran for months with empty taste profiles because
+// nothing reported this condition (spec 2026-07-26, step 3, item 3: degraded operation must be visible).
 describe('runStatusCommand — night digest write-back freshness', () => {
   const NOW = 1_800_000_000;
 
@@ -1106,26 +1109,26 @@ describe('runStatusCommand — night digest write-back freshness', () => {
   });
 });
 
-// 两个洞（主人提问逼出来的）：待办排在第 6 位而 MAX_TODOS=3 → 对最需要看到它的人
-// 永远显示不出来；以及「没排过」和「排了没跑」被说成同一种病。
+// Two gaps exposed by the owner's questions: the todo ranked sixth while MAX_TODOS=3, so the people needing it
+// could never see it; also, never scheduled and scheduled but never run were reported as the same problem.
 describe('runStatusCommand — 夜间消化待办的位置与措辞', () => {
   const NOW = 1_800_000_000;
 
-  // 瘦身版（1+1 第①刀）之后人只看一条待办，三格排位这件事只在 agent 路径上还
-  // 有意义——但那正是它当初出 bug 的地方：夜间消化一旦排进不了前 3 就永远不响。
-  // plan C 排序下它最多排第 3（前面只有 taste + 认证；零关注与它互斥）。
+  // After the reduced human view (1+1, first change), people see one todo; the three-slot ranking matters only
+  // for agents, precisely where the bug occurred: nightly digestion outside the top three was never surfaced.
+  // Under Plan C it ranks at worst third (after taste and verification; zero follows is mutually exclusive).
   it('三格全满时仍然显示 —— 一条"降级要响"的提醒不能放在响不了的位置', async () => {
     const { deps, lines } = completeDeps({
       audience: 'agent',
       lastDreamAt: null,
       now: () => NOW,
-      tasteLoader: { enabledSources: async () => [] }, // taste 种子待办占位
+      tasteLoader: { enabledSources: async () => [] }, // Reserve the taste-seed todo slot.
       fetch: vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ profiles: [] }) }),
     });
     await runStatusCommand(deps as never);
     const out = lines.join('\n');
-    expect(out).toContain('1. 跟我说说你最近关心什么'); // 仍排第一
-    expect(out).toContain('夜间消化');                   // 没被挤掉
+    expect(out).toContain('1. 跟我说说你最近关心什么'); // Still ranks first.
+    expect(out).toContain('夜间消化');                   // Not displaced.
   });
 
   it('查到「没排过」→ 让主人开口授权', async () => {
@@ -1148,7 +1151,7 @@ describe('runStatusCommand — 夜间消化待办的位置与措辞', () => {
     expect(out).not.toContain('每天凌晨 3 点');
   });
 
-  // B8（ADR-0045）：cron 的钟点按哪个时区算，主人得看得见。
+  // B8 (ADR-0045): the owner must see which time zone the cron schedule uses.
   it('排了的任务如实报出生效时区；没带 tz 就报宿主机本地', async () => {
     const withTz = completeDeps({
       lastDreamAt: NOW - 5 * 86_400, now: () => NOW, dreamCron: { scheduled: true, tz: 'Europe/Berlin' },
@@ -1171,7 +1174,10 @@ describe('runStatusCommand — 夜间消化待办的位置与措辞', () => {
 });
 
 describe('runStatusCommand — 名片没挂上灯坊的待办（issue #280 §3.3）', () => {
-  /** 本地 config 里的名号 —— 待办的判据与建议命令都取这里（不取 boot 快照）。 */
+  /**
+   * Nickname from local config: both todo eligibility and the suggested command use this value, not
+   * the boot snapshot.
+   */
   function hostWithLocalName(nickname: string, source = 'auto') {
     return {
       config: { loadJson: async () => ({ ranger_profile: { nickname, name_source: source } }) },
@@ -1187,7 +1193,7 @@ describe('runStatusCommand — 名片没挂上灯坊的待办（issue #280 §3.3
         profiles: [
           { platform: 'x', handle: 'elonmusk', verified_at: '2026-05-20T00:00:00Z', follower_count: 12_000 },
         ],
-        // 200 且无 card：有认证行但名片缺席（Amendment A1 的那半张脸）
+        // HTTP 200 without card: verification rows exist, but the profile is absent (Amendment A1).
       }),
     });
     await runStatusCommand(deps as never);
@@ -1196,7 +1202,7 @@ describe('runStatusCommand — 名片没挂上灯坊的待办（issue #280 §3.3
 
   it('建议命令用本地 config 名号，不用 boot 快照（复审 finding 1：改名后快照是旧名）', async () => {
     const { deps, lines } = completeDeps({
-      nickname: '旧名号', // boot 快照，改名后重启前一直是它
+      nickname: '旧名号', // Boot snapshot, unchanged after renaming until restart.
       host: hostWithLocalName('新名号', 'owner'),
       fetch: okFetch({ house_follower_count: 0, profiles: [
         { platform: 'x', handle: 'elonmusk', verified_at: '2026-05-20T00:00:00Z', follower_count: 1 },
@@ -1257,9 +1263,9 @@ describe('runStatusCommand · en lane (S3 lexicon parity)', () => {
       [
         `🏮 **blackfeather_ai** #${SIGIL}`,
         '✓ X @elonmusk',
-        'Followers at verification: about 12k',
+        'X followers at verification: about 12k',
         '✓ GitHub @octocat',
-        'Followers at verification: unconfirmed',
+        'GitHub followers at verification: unconfirmed',
         '',
         '**Your World**',
         'following 4 people',
@@ -1333,9 +1339,9 @@ describe('splitAtOr — language-bound line-break anchor (丙案 #3)', () => {
   });
 });
 
-// #374：路由挂错命名空间，L1/L2 三周零触发而日志毫无异常。体检报告里这一行是
-// 主人一条命令就能拿到的结论，所以各态必须泾渭分明——尤其"刚开机还没触发"
-// 绝不能说成"链路断"。台账 #013：结论行 + 细节/行动行，zh 每行不超手机行宽。
+// #374: routing was registered in the wrong namespace; L1/L2 never fired for three weeks with no log anomaly.
+// This health-report line gives the owner a one-command diagnosis, so states must remain distinct, especially
+// just started with no trigger versus disconnected. Ledger #013: diagnosis plus detail/action lines; each Chinese line fits a phone.
 describe('routingLine — 工具路由自报（#374/#013）', () => {
   const stats = (over: Partial<RoutingStats> = {}): RoutingStats => ({
     mode: 'wired',
@@ -1426,10 +1432,10 @@ describe('routingLine — 工具路由自报（#374/#013）', () => {
   });
 });
 
-// 07-31 的语言事故：cadence 被写进 data/cadence/，loader 读的是 config/cadence/，
-// 三台机全静默按默认值跑，其中一台把英文模板永久锁死，日志里一个字都没有。
-// 这两行要能让主人一眼分清「en-US 是你设定的」和「en-US 是我压根没找到你的文件」——
-// 出处才是把一个值变成诊断的那半句。
+// The 07-31 language incident: cadence was written to data/cadence/ while the loader read config/cadence/.
+// Three machines silently used defaults; one permanently selected English templates, without any log explanation.
+// These two lines must distinguish an explicitly configured en-US from en-US used because no file was found.
+// Provenance is what turns a value into a diagnosis.
 describe('configLines — 配置自报（绝对路径 + 生效语言/时区的出处）', () => {
   const report = (over: Partial<ConfigReport> = {}): ConfigReport => ({
     cadencePath: '/root/config/cadence/cadence.json',
@@ -1456,7 +1462,7 @@ describe('configLines — 配置自报（绝对路径 + 生效语言/时区的�
     // on defaults, which in this release is the ordinary case.
     expect(path).toContain('还没创建');
     expect(path).not.toContain('⚠️');
-    // 这一句就是 07-31 那台机器本该看到的：en-US 不是谁选的，是没人说过话。
+    // This is what the 07-31 machine should have shown: nobody selected en-US; nobody had spoken yet.
     expect(effective).toBe('　 语言 en-US（默认值 — 没人设定过）· 时区 UTC（本机时区）');
   });
 

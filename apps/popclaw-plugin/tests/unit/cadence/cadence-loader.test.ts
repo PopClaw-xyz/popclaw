@@ -60,7 +60,7 @@ describe('CadenceLoader', () => {
     }));
     const cfg = await new CadenceLoader({ cadenceDir: join(root, 'cadence') }).load();
     expect(cfg.delivery.timezone).toBe('America/New_York');
-    // 不设 = 留空，运行时回落系统时区（绝不写死一个默认时区）。
+    // Unset stays empty; runtime falls back to the system timezone, never a hardcoded default.
     expect(defaultCadence().delivery.timezone).toBeUndefined();
   });
 

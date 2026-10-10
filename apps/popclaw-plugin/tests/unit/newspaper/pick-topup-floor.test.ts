@@ -1,14 +1,14 @@
 /**
- * 补齐落在**地板上**,不落在建议区间上(2026-09-13)。
+ * Top-up targets the floor, not the suggested range (2026-09-13).
  *
- * `read-tools` 一直把 `topUpTo` 接成 `PICK_SUGGESTED_MIN`(20),而 `floor` 是
- * `PICK_FLOOR`(15):于是一个挑了 14 条的写作端 —— 那是唯一有资格判断「什么属于这份
- * 报纸」的一方给出的、审慎的答案 —— 会被按热闹补到 20 条,凭空多出六条没人替主人挑过
- * 的东西。插件有资格强制的只有地板;建议区间仍然是建议,照旧印在候选页上。
+ * read-tools wired topUpTo to PICK_SUGGESTED_MIN (20) while floor was PICK_FLOOR (15). A writer
+ * selecting 14 items, as the party responsible for editorial choice, would get six unselected
+ * popularity-based additions. The plugin may enforce only the floor; the suggested range remains
+ * advisory on the candidate page.
  *
- * 这一条是选题一致性的修正,与 2026-09-13 那次「交白卷」的故障无关。
- *
- * 接线只在 `read-tools` 里,所以这里走真正的工具入口,不直接调 `buildIssueFromPicks`。
+ * This corrects editorial consistency and is unrelated to the blank-submission incident on
+ * 2026-09-13. Wiring lives in read-tools, so exercise the real tool entry rather than calling
+ * buildIssueFromPicks directly.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
@@ -22,7 +22,9 @@ import { issue, item } from './_issue-fixture.js';
 
 let dir: string;
 
-/** 三十条、三十个人 —— 免得每人上限先一步把补齐挡掉。 */
+/**
+ * Thirty items from thirty people keep the per-person limit from blocking top-up first.
+ */
 const thirty = (): ReturnType<typeof issue> =>
   issue({
     dateLabel: todayDateLabel(),
@@ -33,12 +35,14 @@ const thirty = (): ReturnType<typeof issue> =>
         author: `a${i + 1}`,
         sigil: `sig${i + 1}`,
         authorPopclawId: `pid-${i + 1}`,
-        replyCount: 30 - i, // 越靠前越热闹
+        replyCount: 30 - i, // Earlier items are more popular.
       }),
     ),
   });
 
-/** picks 那一支不重新抓取,所以运行时只需要 paths。 */
+/**
+ * The picks path does not refetch, so the runtime needs only paths.
+ */
 function makePaper(): (params: Record<string, unknown>) => Promise<{ text: string }> {
   const tools: Array<{ name: string; execute: (c: string, p: unknown) => Promise<{ type: string; text: string }> }> = [];
   const api = {
@@ -65,8 +69,8 @@ function makePaper(): (params: Record<string, unknown>) => Promise<{ text: strin
   return (params) => paper.execute('c1', params);
 }
 
-/** 素材页上实际印出来的条目数。 */
-const printed = (text: string): number => [...text.matchAll(/^\[\d+\] 作者: /gm)].length;
+/** Unique selected identities: the directory and packet bodies share their original numbers. */
+const printed = (text: string): number => new Set([...text.matchAll(/^\[(\d+)\] 作者: /gm)].map(m => m[1])).size;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'popclaw-topup-floor-'));
@@ -76,7 +80,7 @@ afterEach(() => _resetIssuesForTest(dir));
 
 describe('补齐的落点', () => {
   it('地板和落点是同一个数 —— 建议区间不是配额', () => {
-    expect(PICK_SUGGESTED_MIN).toBeGreaterThan(PICK_FLOOR); // 前提还在,这一条才有意义
+    expect(PICK_SUGGESTED_MIN).toBeGreaterThan(PICK_FLOOR); // This case is meaningful only while this precondition holds.
   });
 
   it('挑了 3 条 → 补到地板就停,不再冲着建议区间多补', async () => {

@@ -101,7 +101,10 @@ const HOUSES: MountedHouse[] = [
   { slug: 'house-b', name: '灯坊乙' },
 ];
 
-/** 副坊自报了第一件事（R1 spec §1）；主坊仍是零声明——两条路各测一遍。 */
+/**
+ * The secondary house declares a first action (R1 spec §1); the primary declares none, covering
+ * both paths.
+ */
 const HOUSES_WITH_ENTRY: MountedHouse[] = [
   HOUSES[0]!,
   {
@@ -124,10 +127,15 @@ class FakePresenter {
   }
 }
 
-/** 多坊 egress fake：既给 push（单坊路径），也给 broadcastEach（逐坊落章）。 */
+/**
+ * Multi-house egress fake providing push (single-house path) and broadcastEach (per-house
+ * stamping).
+ */
 class FakeEgress {
   pushes: Uint8Array[] = [];
-  /** 每座坊的 HTTP 状态；'throw' = 网络级失败。 */
+  /**
+   * HTTP status per house; 'throw' means a network failure.
+   */
   statuses: Array<number | 'throw'> = [201, 201];
   supportsBroadcastEach = true;
 
@@ -160,11 +168,17 @@ interface MakeOptions {
   /** Reuse a host (same config + state DB) = a restart between two turns. */
   host?: InMemoryHostAdapter;
   nickname?: string;
-  /** LLM 回复；null = 无 LLM；'throw' = complete() 抛。 */
+  /**
+   * LLM response; null means no LLM, and 'throw' means complete() throws.
+   */
   llmReply?: string | null;
-  /** 每坊广播状态。 */
+  /**
+   * Broadcast status per house.
+   */
   pushStatuses?: Array<number | 'throw'>;
-  /** egress 只有 push（单坊实现）。 */
+  /**
+   * Egress exposes only push (single-house implementation).
+   */
   singleHouse?: boolean;
   persona?: string;
   handles?: string[];
@@ -175,14 +189,21 @@ interface MakeOptions {
   coreText?: string;
   learnedThrow?: boolean;
   markThrow?: boolean;
-  /** 画布上传失败（服务够不着）。 */
+  /**
+   * Canvas upload fails because the service is unreachable.
+   */
   canvasDown?: boolean;
-  /** 完全不接画布（MCP/dev 组合根）。 */
+  /**
+   * Canvas is not wired at all (MCP/dev composition root).
+   */
   noCanvas?: boolean;
   follow?: (ref: string) => Promise<ErrandFollowOutcome>;
   noFollow?: boolean;
   houses?: MountedHouse[];
-  /** 「已开始」判定（坊官方来过信）。缺席 = 没接线（查不到）。 */
+  /**
+   * Started predicate (the house's official account sent a message); absent means not wired, hence
+   * unknown.
+   */
   houseStarted?: (slug: string) => boolean;
 }
 
@@ -210,7 +231,7 @@ function makeOrchestrator(opts: MakeOptions = {}) {
           complete: async (prompt: string) => {
             llmPrompts.push(prompt);
             if (llmReply === 'throw') throw new Error('LLM down');
-            // 取名与重排共用一个 client，按输出契约分流。
+            // Naming and reranking share one client, routed by output contract.
             return prompt.includes('"order"') ? '{"order":[3,1,2]}' : llmReply;
           },
         };
@@ -320,31 +341,41 @@ function makeOrchestrator(opts: MakeOptions = {}) {
 
 type Ctx = ReturnType<typeof makeOrchestrator>;
 
-/** 走到 passport（取名用第一候选）。 */
+/**
+ * Advance to passport using the first name candidate.
+ */
 async function toPassport(ctx: Ctx): Promise<{ text: string }> {
   await ctx.orch.handleStartCommand(); // → arrival
   return ctx.orch.handleAdvance('next', '你定'); // arrival → passport
 }
 
-/** 走到 lantern。 */
+/**
+ * Advance to lantern.
+ */
 async function toLantern(ctx: Ctx): Promise<{ text: string }> {
   await toPassport(ctx);
   return ctx.orch.handleAdvance('next'); // passport → lantern
 }
 
-/** 走到 attune。 */
+/**
+ * Advance to attune.
+ */
 async function toAttune(ctx: Ctx): Promise<{ text: string }> {
   await toLantern(ctx);
-  return ctx.orch.handleAdvance('next'); // lantern 裸回车 → attune
+  return ctx.orch.handleAdvance('next'); // Bare Enter at lantern advances to attune.
 }
 
-/** 走到 errand（attune 跳过）。 */
+/**
+ * Advance to errand, skipping attune.
+ */
 async function toErrand(ctx: Ctx): Promise<{ text: string }> {
   await toAttune(ctx);
   return ctx.orch.handleAdvance('skip'); // attune skip → errand
 }
 
-/** 走到 cadence（errand 跳过）。 */
+/**
+ * Advance to cadence, skipping errand.
+ */
 async function toCadence(ctx: Ctx): Promise<{ text: string }> {
   await toErrand(ctx);
   return ctx.orch.handleAdvance('skip'); // errand skip → cadence
@@ -420,11 +451,14 @@ describe('arrival（取名开局）', () => {
     expect(res.text).not.toContain('ranger-');
   });
 
-  /** #422 真机：这四个字曾被当成主人亲手取的名号签进身份、还盖了双坊章。 */
+  /**
+   * #422 real-device case: these four characters were signed as the owner's chosen nickname and
+   * stamped by both houses.
+   */
   it('#422：「你来挑吧」= 交回给我们挑，绝不签成名号', async () => {
     await ctx.orch.handleStartCommand();
     const res = await ctx.orch.handleAdvance('next', '你来挑吧');
-    expect(await configNickname(ctx)).toBe('凤栖梧'); // 第一候选
+    expect(await configNickname(ctx)).toBe('凤栖梧'); // First candidate.
     expect(res.text).not.toContain('你来挑吧');
   });
 
@@ -801,7 +835,7 @@ describe('passport（领护照）', () => {
     expect(ctx.uploads).toHaveLength(1);
     expect(ctx.uploads[0]!.ttlHours).toBe(72);
     expect(ctx.uploads[0]!.title).toContain(`凤栖梧#${SIGIL}`);
-    // 印信小课整体在页上，聊天框不再念第二遍。
+    // The whole sigil lesson is on the page; do not repeat it in chat.
     expect(ctx.uploads[0]!.html).toContain('印 信 小 课');
   });
 
@@ -824,7 +858,7 @@ describe('passport（领护照）', () => {
     const res = await toPassport(ctx);
     expect(res.text).toContain('HTTP 500');
     expect(ctx.sm.current(PID)).toBe('passport');
-    expect(await configNickname(ctx)).toBe('凤栖梧'); // 名号已本地记下
+    expect(await configNickname(ctx)).toBe('凤栖梧'); // Nickname has been stored locally.
     ctx.egress.statuses = [201, 201];
     const retry = await ctx.orch.handleAdvance('next');
     expect(retry.text).toContain('已盖章');
@@ -892,7 +926,7 @@ describe('lantern（认坊 = guide + 速览合一）', () => {
     expect(res.text).toContain('灯坊甲（有你的名帖 ✓）');
     expect(res.text).toContain('1. [mrbeast] Last to leave wins $100k');
     expect(res.text).toContain('https://canvas.test/p/2');
-    // 先确认 guide 声明，再并行取 summary / snapshot，各一次
+    // Confirm guide declarations first, then fetch summary and snapshot in parallel, once each.
     expect(ctx.world.guideFetches).toBe(1);
     expect(ctx.world.summaryFetches).toBe(1);
     expect(ctx.world.snapshotFetches).toBe(1);
@@ -1034,10 +1068,10 @@ describe('attune（对味 · 核心演出）', () => {
 
     const md = await readFile(join(tasteRoot, 'core/private.md'), 'utf-8');
     expect(md).toContain('我关心 AI agent 之间的谈判');
-    // 重排复用既有 rankBySummaryTaste 通路：正好多一次调用，且喂的是主人原话
+    // Reranking reuses rankBySummaryTaste: exactly one additional call using the owner's original words.
     expect(ctx.llmPrompts).toHaveLength(before + 1);
     expect(ctx.llmPrompts.at(-1)).toContain('我关心 AI agent 之间的谈判');
-    // LLM order=[3,1,2] → 新第 1 条是原第 3 条
+    // LLM order=[3,1,2]: the new first item is the original third item.
     expect(res.text).toContain('（原第 3 条）');
     expect(res.text).toContain('热度和主人关心的东西不是一回事');
     expect(ctx.sm.current(PID)).toBe('errand');
@@ -1047,7 +1081,7 @@ describe('attune（对味 · 核心演出）', () => {
   it('lantern 阶段（core 空）不花 LLM 重排 —— 首跑热度序的 bug 在 attune 才消灭', async () => {
     const ctx = makeOrchestrator();
     await toLantern(ctx);
-    // 只花了取名那一次；排序 prompt（"order" 契约）一次都没发生。
+    // Only the naming call occurred; no ranking prompt with the order contract was sent.
     expect(ctx.llmPrompts.filter((p) => p.includes('"order"'))).toHaveLength(0);
     expect(ctx.llmPrompts).toHaveLength(1);
   });
@@ -1169,7 +1203,7 @@ describe('errand（头一件差事）', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ⑥ cadence + 毕业
+// Step 6: cadence and graduation.
 // ---------------------------------------------------------------------------
 
 describe('cadence（定节奏 + 毕业 + 攻略）', () => {
@@ -1212,16 +1246,16 @@ describe('cadence（定节奏 + 毕业 + 攻略）', () => {
 
     expect(res.text).toContain('popclaw_canvas');
     expect(res.text).toContain('ttl_hours 设 72');
-    // 只列真发生过的
+    // List only actions that actually occurred.
     expect(res.text).toContain('定了名号「凤栖梧」');
     expect(res.text).toContain('关注了 mrbeast#AAAA1111');
-    // 口味自述原文进素材
+    // Include the original taste self-description as material.
     expect(res.text).toContain('我关心 AI agent 之间的谈判');
-    // 坊玩法来自数据（坊名零写死）
+    // House activities come from data, without hardcoded house names.
     expect(res.text).toContain('灯坊甲 怎么玩');
-    // 人话⇄能力对照
+    // Human wording to capability mapping.
     expect(res.text).toContain('「今天江湖上有什么」');
-    // 通知频道：告知不索要
+    // Notification channel: inform rather than request.
     expect(res.text).toContain('在这儿找你');
   });
 
@@ -1229,19 +1263,19 @@ describe('cadence（定节奏 + 毕业 + 攻略）', () => {
     const ctx = makeOrchestrator();
     await toPassport(ctx);
     await ctx.orch.handleAdvance('skip'); // passport → lantern
-    await ctx.orch.handleAdvance('skip'); // lantern skip → errand（连带跳 attune）
+    await ctx.orch.handleAdvance('skip'); // Skipping lantern advances to errand, also skipping attune.
     await ctx.orch.handleAdvance('skip'); // errand skip → cadence
     const res = await ctx.orch.handleAdvance('skip'); // cadence skip → completed
     expect(ctx.sm.current(PID)).toBe('completed');
     expect(res.text).toContain('口味档案还是空的');
     expect(res.text).toContain('还一个人都没关注');
-    // 没表态就别替主人排定时任务
+    // Do not schedule jobs for the owner without their agreement.
     expect(res.text).toContain('别自作主张排定时任务');
   });
 });
 
 // ---------------------------------------------------------------------------
-// bail / 生命周期 / 只读路径
+// Bail / lifecycle / read-only paths.
 // ---------------------------------------------------------------------------
 
 describe('bail（「先这样」）', () => {
@@ -1291,10 +1325,10 @@ describe('生命周期', () => {
     expect((await ctx.orch.handleAdvance('next')).text).toMatch(/已经办完/);
   });
 
-  // MCP 公民（Claude Code / Codex）根本没有斜杠命令：`/popclaw start` 只存在于网关。
-  // 从前 idle 上的 advance 只回一句「请先键 /popclaw start」，于是一个纯 MCP 新公民
-  // 永远进不了第一幕 —— 六幕只能靠手改状态库才走得通。continue 从 idle 起步 = 主人
-  // 开口、agent 代敲，与他自己键 /popclaw start 等价（「安顿是清单不是轨道」）。
+  // MCP citizens (Claude Code / Codex) have no slash commands; /popclaw start exists only in the gateway.
+  // Previously advance from idle only instructed the user to type /popclaw start, so a new MCP-only citizen
+  // could never reach the first act without manually editing state. Continue from idle means the owner speaks
+  // and the agent acts, equivalent to typing /popclaw start: onboarding is a checklist, not a forced track.
   it('idle 时 advance = 开局（MCP 没有斜杠命令可敲）', async () => {
     const ctx = makeOrchestrator();
     await ctx.orch.start();
@@ -1306,16 +1340,16 @@ describe('生命周期', () => {
 
   it('idle 时 advance 走的就是 start 那条路（没起过库也一样）', async () => {
     const ctx = makeOrchestrator();
-    // 连 ensureStarted 都没跑过：真·全新公民的第一次调用。
+    // ensureStarted has never run: the first call by a completely new citizen.
     const res = await ctx.orch.handleAdvance('next', '开始吧');
     expect(ctx.sm.current(PID)).toBe('arrival');
     expect(res.text).toContain('1. 凤栖梧');
   });
 
-  // skip 是「跳过当前这一幕」。一幕都还没开始时没有什么可跳的 —— 保持原样，
-  // 免得一句 skip 反倒把安顿悄悄开起来。这也是那句 notStarted 提示如今**唯一**
-  // 还走得到的路，所以 #409 的宿主中立措辞断言跟着搬到了这里：MCP 宿主没有斜杠
-  // 命令，指名道姓念一条 /popclaw start 是假指令。
+  // Skip means skip the current act; before any act starts there is nothing to skip. Preserve state
+  // rather than silently starting onboarding. This is now the only reachable notStarted path,
+  // so #409's host-neutral wording assertion lives here: MCP hosts have no slash
+  // commands, and prescribing /popclaw start would give an unusable instruction.
   it('idle 时 skip 不开局，且说"跟我说一声"、不念斜杠命令', async () => {
     const ctx = makeOrchestrator();
     await ctx.orch.start();
@@ -1329,14 +1363,14 @@ describe('生命周期', () => {
   it('7 天兜底：读路径顺手判 completed（零新定时器）', async () => {
     const ctx = makeOrchestrator();
     await toLantern(ctx);
-    // 同一张表，换一个"七天后"的读取者
+    // The same table read by another reader seven days later.
     const late = new OnboardingStateRepository(ctx.host.db, () => 1700000000 + 7 * 24 * 3600);
     expect(late.get(PID)?.stage).toBe('completed');
   });
 });
 
 // ---------------------------------------------------------------------------
-// R1：坊自报「第一件事」（entry）+ 护照两扇门 + 随时重渲
+// R1: house-declared first action (entry), two passport doors, and rerendering at any time.
 // ---------------------------------------------------------------------------
 
 describe('R1 护照页「你能去哪」（spec §2）', () => {
@@ -1348,7 +1382,7 @@ describe('R1 护照页「你能去哪」（spec §2）', () => {
     expect(html).toContain('▸ 捏一个你自己的公仔，它替你去旅行');
     expect(html).toContain('href="https://house-b.test/"');
     expect(html).toContain('第一件事：对我说「带我进世界」');
-    // 画布挂了信息不丢：同一批内容在卡片文本里也有一行。
+    // Canvas failure must not lose information: the same content has a line in the card text.
     expect(res.text).toContain('灯坊乙 · 捏一个你自己的公仔，它替你去旅行 · 对我说「带我进世界」就开始');
   });
 
@@ -1372,8 +1406,8 @@ describe('R1 护照页「你能去哪」（spec §2）', () => {
   });
 
   it('签发日期走主人本地日历日，不是 UTC 日（台账 #011）', async () => {
-    // 固定钟 1700000000 = UTC 2023-11-14 22:13，在 +08 已经是 11-15 清晨。
-    // 裸 toISOString() 会把“今天的报纸/名帖”印成昨天。
+    // Fixed time 1700000000 is UTC 2023-11-14 22:13, already the morning of 11-15 at +08.
+    // A bare toISOString() would date today's newspaper/profile as yesterday.
     setOwnerTz('Asia/Shanghai');
     try {
       const ctx = makeOrchestrator();
@@ -1388,7 +1422,7 @@ describe('R1 护照页「你能去哪」（spec §2）', () => {
 
   it('「两扇门」那句只在真有两扇门时说', async () => {
     const withEntry = makeOrchestrator({ houses: HOUSES_WITH_ENTRY });
-    expect((await toPassport(withEntry)).text).not.toContain('两扇门'); // 只有 1 座坊声明
+    expect((await toPassport(withEntry)).text).not.toContain('两扇门'); // Only one house declares an entry.
     const both = makeOrchestrator({
       houses: [{ ...HOUSES[0]!, entry: { headline: '这儿说话', firstMove: '带我看看' } }, HOUSES_WITH_ENTRY[1]!],
     });
@@ -1401,7 +1435,7 @@ describe('R1 lantern 坊行（spec §3.1）', () => {
     const withEntry = makeOrchestrator({ houses: HOUSES_WITH_ENTRY });
     const res = await toLantern(withEntry);
     expect(res.text).toContain('灯坊乙（有你的名帖 ✓） — 捏一个你自己的公仔，它替你去旅行');
-    // 主坊没声明 entry：那一行与今天一字不差。
+    // Primary house declares no entry; the line remains exactly as before.
     expect(res.text).toContain('灯坊甲（有你的名帖 ✓） — 这里怎么玩：说人话就行。');
 
     const plain = makeOrchestrator();
@@ -1414,7 +1448,7 @@ describe('R1 lantern 坊行（spec §3.1）', () => {
     const html = ctx.uploads.at(-1)!.html;
     expect(html).not.toContain('有你的名帖 ✓');
     expect(html).not.toContain('捏一个你自己的公仔');
-    expect(html).toContain('Last to leave wins $100k'); // 人和事照旧
+    expect(html).toContain('Last to leave wins $100k'); // People and activities remain unchanged.
   });
 });
 
@@ -1424,7 +1458,7 @@ describe('R1 errand 轻提一行（spec §3.3）', () => {
     const res = await toErrand(ctx);
     expect(res.text).toContain('灯坊乙 那边还没开始');
     expect(res.text).toContain('说「带我进世界」');
-    // 缺口进毕业清单（status 待办同源），不追问第二次。
+    // Gaps enter the graduation checklist, sharing status todo logic, without asking again.
     const grad = await ctx.orch.handleAdvance('skip'); // errand → cadence
     const done = await ctx.orch.handleAdvance('next', '2');
     expect(`${grad.text}\n${done.text}`).toContain('灯坊乙 那边还没开始');
@@ -1456,25 +1490,25 @@ describe('R1 护照随时重渲（spec §6）', () => {
   it('毕业之后「再给我一张护照」→ 用当下数据重出一张', async () => {
     const ctx = makeOrchestrator();
     await ctx.orch.handleStartCommand();
-    await ctx.orch.handleAdvance('next', '1'); // 先定下名号（占位名一律不外推）
+    await ctx.orch.handleAdvance('next', '1'); // Set the nickname first; placeholder names must never be broadcast.
     await ctx.orch.handleAdvance('next', '先这样'); // bail → completed
     const uploadsBefore = ctx.uploads.length;
     const res = await ctx.orch.handleAdvance('next', '再给我一张护照');
     expect(res.text).toContain(SIGIL);
     expect(ctx.uploads.length).toBe(uploadsBefore + 1);
     expect(ctx.uploads.at(-1)!.ttlHours).toBe(72);
-    expect(ctx.sm.current(PID)).toBe('completed'); // 不动状态机
+    expect(ctx.sm.current(PID)).toBe('completed'); // Do not change state-machine state.
   });
 
   it('还是占位名就想要护照 → 如实说还没定名号，绝不外推占位名片', async () => {
     const ctx = makeOrchestrator();
     await ctx.orch.handleStartCommand();
-    await ctx.orch.handleAdvance('next', '先这样'); // bail，名号仍是占位
+    await ctx.orch.handleAdvance('next', '先这样'); // Bail while the nickname is still a placeholder.
     const uploadsBefore = ctx.uploads.length;
     const res = await ctx.orch.handleAdvance('next', '再给我一张护照');
     expect(res.text).toContain('名号');
     expect(res.text).not.toContain('网络不通');
-    expect(ctx.egress.pushes).toHaveLength(0); // 占位名片一次都没出去
+    expect(ctx.egress.pushes).toHaveLength(0); // No placeholder profile was sent.
     expect(ctx.uploads.length).toBe(uploadsBefore);
   });
 
@@ -1484,7 +1518,7 @@ describe('R1 护照随时重渲（spec §6）', () => {
     const res = await ctx.orch.handleAdvance('next', '名帖过期了，重出一张');
     expect(res.text).toContain('对我说「带我进世界」就开始');
     expect(ctx.uploads.at(-1)!.html).toContain('第一件事：对我说「带我进世界」');
-    expect(ctx.sm.current(PID)).toBe('passport'); // 重渲不是推进
+    expect(ctx.sm.current(PID)).toBe('passport'); // Rerendering is not advancement.
   });
 });
 
@@ -1507,18 +1541,18 @@ describe('R1 bailed_at（spec §5 落盘修复）', () => {
 
   it('bail 之后重新走完（cadence 毕业）→ bailed_at 被清除', async () => {
     const ctx = makeOrchestrator();
-    // 先 bail 一次，制造一个挂着的 bailed_at。
+    // Bail once first to leave a bailed_at value.
     await ctx.orch.handleStartCommand();
     await ctx.orch.handleAdvance('next', '先这样');
     let cfg = (await ctx.host.config.loadJson('plugin')) as { onboarding?: { bailed_at?: number } };
     expect(typeof cfg.onboarding?.bailed_at).toBe('number');
 
-    // state machine 已经 completed；把它拨回 idle 模拟"回来接着走"（handleStartCommand
-    // 幂等地重新入队），再一路走到真毕业。
+    // The state machine is already completed; set it back to idle to simulate returning (handleStartCommand
+    // requeues idempotently), then proceed through real graduation.
     ctx.repo.updateStage(PID, 'idle', {});
     await ctx.orch.handleStartCommand(); // idle → arrival
     await toCadence(ctx);
-    await ctx.orch.handleAdvance('next', '1'); // → completed（真毕业）
+    await ctx.orch.handleAdvance('next', '1'); // Completed through real graduation.
 
     cfg = (await ctx.host.config.loadJson('plugin')) as { onboarding?: { bailed_at?: number } };
     expect(cfg.onboarding?.bailed_at).toBeUndefined();
@@ -1528,7 +1562,7 @@ describe('R1 bailed_at（spec §5 落盘修复）', () => {
     const ctx = makeOrchestrator();
     await toCadence(ctx);
     await ctx.orch.handleAdvance('next', '2'); // declined newspaper
-    await ctx.orch.handleAdvance('next', '先这样'); // 毕业后 bail 是 no-op（已 completed）
+    await ctx.orch.handleAdvance('next', '先这样'); // Bail after graduation is a no-op because state is already completed.
     const cfg = (await ctx.host.config.loadJson('plugin')) as { onboarding?: { newspaper?: string } };
     expect(cfg.onboarding?.newspaper).toBe('declined');
   });
@@ -1562,7 +1596,7 @@ describe('currentCardText()（只读：零网络、零 LLM、零状态变更）'
     const text = await ctx.orch.currentCardText();
     expect(text).toContain('in your own voice');
     expect(text).toContain('凤栖梧');
-    expect(ctx.llmPrompts).toHaveLength(before); // 零 LLM
+    expect(ctx.llmPrompts).toHaveLength(before); // No LLM calls.
   });
 
   it('passport / lantern 用会话缓存复述，零网络', async () => {
@@ -1582,7 +1616,7 @@ describe('currentCardText()（只读：零网络、零 LLM、零状态变更）'
     await toAttune(ctx);
     expect(await ctx.orch.currentCardText()).toContain('what are you into lately');
     await ctx.orch.handleAdvance('next', '我关心 AI agent 之间的谈判');
-    expect(await ctx.orch.currentCardText()).toContain("anyone above they'd like to follow"); // 已进 errand
+    expect(await ctx.orch.currentCardText()).toContain("anyone above they'd like to follow"); // Already at errand.
     await ctx.orch.handleAdvance('skip'); // → cadence
     expect(await ctx.orch.currentCardText()).toMatch(/the world's paper here every day at \d{2}:00/);
   });
@@ -1649,7 +1683,7 @@ describe('六幕卡正文跟着主人的语种走（S5 §9.5 不混语言）', (
     const res = await ctx.orch.handleStartCommand();
     expect(res.text).toContain('先用一句话说清这里是什么');
     expect(res.text).not.toContain('does the socializing');
-    // 同一张卡上的两块：正文 + 「直接回答就行」那一行
+    // Two parts of one card: body and the direct-answer line.
     expect(res.text).toContain('直接回答就行');
   });
 
@@ -1663,15 +1697,15 @@ describe('六幕卡正文跟着主人的语种走（S5 §9.5 不混语言）', (
 
   it('主人用中文作答 → 从那一刻起整幕都是中文（脚本嗅探那一档也算数）', async () => {
     const ctx = makeOrchestrator();
-    await ctx.orch.handleStartCommand(); // 还没线索 → 默认 en
-    const res = await ctx.orch.handleAdvance('next', '凤栖梧'); // 中文 → 切 zh
+    await ctx.orch.handleStartCommand(); // No signal yet: default to English.
+    const res = await ctx.orch.handleAdvance('next', '凤栖梧'); // Chinese input switches to Chinese.
     expect(ownerLangTag()).toBe('zh-CN');
     expect(res.text).toContain('的名帖已经签出来了');
     expect(res.text).not.toContain("namecard is signed");
   });
 
-  // 把控权交给主人。他不必在 1/2 里挑——
-  // 直接报一个点就算答应了（没人会给一份自己不要的报纸定时刻）。
+  // Let the owner choose freely, without forcing a 1/2 selection.
+  // Giving a time implies agreement: nobody schedules a newspaper they do not want.
   it('cadence：主人直接报个点 → 当作答应，并按他报的点排', async () => {
     setOwnerLang('zh-CN', 'config');
     const ctx = makeOrchestrator();
@@ -1688,7 +1722,7 @@ describe('六幕卡正文跟着主人的语种走（S5 §9.5 不混语言）', (
     const grad = await ctx.orch.handleAdvance('next', '1');
     expect(grad.text).toContain('给主人一句毕业词');
     expect(grad.text).toContain('这一趟真做过的');
-    expect(grad.text).toMatch(/说好了每天 \d{2}:00 收报纸/); // done 条目（时刻随「此刻」变，只钉形状）
+    expect(grad.text).toMatch(/说好了每天 \d{2}:00 收报纸/); // Done entry: time varies with now, so assert only its shape.
     expect(grad.text).toContain('人话 ⇄ 能力'); // phrasebook
     expect(grad.text).toContain('我以后有事就在这儿找你'); // channelNoticeText
     expect(grad.text).not.toContain('Actually done this run');
@@ -1717,48 +1751,48 @@ describe('六幕卡正文跟着主人的语种走（S5 §9.5 不混语言）', (
 });
 
 /**
- * 2026-08-23 MCP 无头冒烟（全新身份、owner 说中文）漏出来的两条：
+ * Two findings from the 2026-08-23 headless MCP smoke test with a fresh identity and
+ * Chinese-speaking owner:
  *
- *  ① 六幕文案里冒出英文占位形态「the owner」——「让the owner的 agent 替他社交」。
- *     `ownerAddressing` 那时是**启动期求值一次**的字符串（`mcp.ts` / `index.ts`
- *     构造 orchestrator 时 `renderCopy(ownerLang(), …)`）。全新身份的第一轮，
- *     语言链还什么都没定（无 cadence、无 env、状态文件空），求值结果就是英文；
- *     等首轮嗅探把语种切成 zh 之后，卡片正文正确地渲成了中文，可 `{who}` 槽里
- *     塞的还是那个冻住的英文字符串。MCP 上尤其准死：那条链上根本没有
- *     `before_prompt_build` 钩子，唯一的嗅探点是 `handleAdvance` 的答案文本，
- *     必然晚于首卡渲染。
- *  ② 同一表面中英混排：挂坊首动作行的**脚手架**（`say "…" to start`）是硬编码
- *     英文，包着坊自报的中文数据。
+ * 1. English placeholder text, the owner, leaked into Chinese act copy. ownerAddressing was a
+ * string evaluated once at startup by renderCopy(ownerLang(), ...) when mcp.ts/index.ts constructed
+ * the orchestrator. Before the first language signal (no cadence, environment or saved state), it
+ * became English. Later sniffing switched card bodies to Chinese but left the frozen {who} slot in
+ * English. MCP has no before_prompt_build hook; its only sniff point is handleAdvance's answer
+ * text, necessarily after the first card.
+ * 2. The first-action scaffold, `say "..." to start`, was hardcoded English around house-provided
+ * Chinese data.
  *
- * 两条都不是语言链的优先级错了，是"值被提前捕获/写死"。这里按真实时序钉住。
+ * Neither issue was language-priority ordering; both came from early capture or hardcoding. These
+ * tests reproduce the real timing.
  */
 describe('全新身份首轮：占位形态与脚手架都不许漏英文（2026-08-23 冒烟）', () => {
   beforeEach(() => setOwnerLang(undefined));
   afterEach(() => setOwnerLang(undefined));
 
   it('zh 首轮嗅探切换后，六幕全程零 "the owner"，门那一行的脚手架也是中文', async () => {
-    // 全新身份 = 语言链空白：没有 cadence、没有 env、状态文件里什么都没有。
-    // 首卡因此渲成 en——这是设计如此，不是 bug；真正要钉的是**嗅探之后**。
+    // A fresh identity has no language signals: no cadence, no environment, and empty state.
+    // The first card therefore renders in English by design; the assertion targets behavior after sniffing.
     const ctx = makeOrchestrator({ houses: HOUSES_WITH_ENTRY });
     await ctx.orch.handleStartCommand();
 
-    // 主人用中文答第一句 → 脚本嗅探把语种定成 zh-CN。
+    // The owner's first Chinese answer lets script detection select zh-CN.
     const passport = await ctx.orch.handleAdvance('next', '凤栖梧');
     expect(ownerLangTag()).toBe('zh-CN');
 
-    // 从这一刻起，主人看到的每一面都不许带英文占位形态。
+    // From this point every owner-facing surface must exclude the English placeholder.
     const surfaces = [
       passport,
       await ctx.orch.handleAdvance('next'), // → lantern
       await ctx.orch.handleAdvance('next'), // → attune
       await ctx.orch.handleAdvance('skip'), // → errand
       await ctx.orch.handleAdvance('skip'), // → cadence
-      await ctx.orch.handleAdvance('next', '1'), // → 毕业
+      await ctx.orch.handleAdvance('next', '1'), // Advance to graduation.
     ].map((r) => r.text);
     for (const text of surfaces) expect(text).not.toContain('the owner');
     expect(surfaces.join('\n')).toContain('主人');
 
-    // ②：坊自报的中文数据外面包的是中文脚手架，不是 `say "…" to start`。
+    // Case 2: Chinese house data is wrapped in Chinese scaffold, not `say "..." to start`.
     expect(passport.text).toContain('对我说「带我进世界」就开始');
     expect(passport.text).not.toContain('to start');
   });
@@ -1772,20 +1806,20 @@ describe('全新身份首轮：占位形态与脚手架都不许漏英文（2026
     // A typed name is asked back before it is signed (N1); the yes signs it.
     await ctx.orch.handleAdvance('next', 'Fenix');
     const passport = await ctx.orch.handleAdvance('next', '1');
-    expect(ownerLangTag()).toBe('en-US'); // config 压得住嗅探
+    expect(ownerLangTag()).toBe('en-US'); // Config takes precedence over sniffing.
     expect(passport.text).toContain('say "带我进世界" to start');
     expect(passport.text).not.toContain('对我说');
   });
 });
 
 /**
- * 2026-08-24 真机（中文主人、fresh MCP 身份）：第一屏整卡英文，而外面驱动的
- * agent 自己全程在写中文。兜底链没错，错在 `LANG=en_US.UTF-8` 这一档被当成了
- * 「主人说过话了」——开发机上这值几乎是宇宙常数，MCP 宿主又原样传给它 spawn
- * 的进程，于是 env 一填，刻意双语的首屏就被关掉，纯英文首卡直出。
+ * Real-device case on 2026-08-24 (Chinese owner, fresh MCP identity): the first card was entirely
+ * English while the driving agent spoke Chinese. The fallback chain was correct, but
+ * LANG=en_US.UTF-8 was treated as evidence that the owner had spoken. This common developer-machine
+ * value is inherited by MCP child processes, disabling the deliberately bilingual first card.
  *
- * 新判据 `hasRealLanguageSignal()`：只有 config / 观察（agent|guess）算真信号；
- * 仅 env 或全空 → 第一接触面保持刻意双语（英文在上、中文在下）。
+ * New predicate hasRealLanguageSignal(): only config or observed language (agent|guess) counts.
+ * Environment-only or no signal keeps first contact bilingual, English above Chinese.
  */
 describe('第一接触面：env 不算真信号（2026-08-24 真机）', () => {
   const freshLangFile = (): string =>
@@ -1798,15 +1832,15 @@ describe('第一接触面：env 不算真信号（2026-08-24 真机）', () => {
     expect(ownerLangSource()).toBe('env');
 
     const arrival = await makeOrchestrator().orch.handleStartCommand();
-    expect(arrival.text).toContain('does the socializing'); // 英文正文
-    expect(arrival.text).toContain('先用一句话说清这里是什么'); // 中文正文
-    expect(arrival.text).toContain('Just answer'); // 英文那一问
-    expect(arrival.text).toContain('直接回答就行'); // 中文那一问
+    expect(arrival.text).toContain('does the socializing'); // English body.
+    expect(arrival.text).toContain('先用一句话说清这里是什么'); // Chinese body.
+    expect(arrival.text).toContain('Just answer'); // English question.
+    expect(arrival.text).toContain('直接回答就行'); // Chinese question.
   });
 
   it('env=en_US 但已观察到中文 → 单语中文，不再双语', async () => {
     useOwnerLangSignals({ file: freshLangFile(), env: { LANG: 'en_US.UTF-8' } });
-    observeOwnerText('咱们开始吧'); // 一句中文 = 真信号
+    observeOwnerText('咱们开始吧'); // One Chinese utterance is a real signal.
     expect(ownerLangTag()).toBe('zh-CN');
 
     const arrival = await makeOrchestrator().orch.handleStartCommand();
@@ -1825,28 +1859,29 @@ describe('第一接触面：env 不算真信号（2026-08-24 真机）', () => {
   });
 
   /**
-   * #419 的尾巴：双语首屏铺开了，兜底名号却还是按 `ownerLang()` 单选一条——零真
-   * 信号时落 en，于是中文那半卡里嵌着英文候选（真机逐字："Night drifter"）。
-   * 候选必须按车道生成；且两半条数相等、编号对齐，主人回「2」才不会有歧义。
+   * Follow-up to #419: the first screen was bilingual but fallback names still selected a single
+   * ownerLang() lane, defaulting to English without a real signal and putting the literal Night
+   * drifter in the Chinese card. Generate candidates per lane with equal counts and aligned
+   * numbering so replying 2 is unambiguous.
    */
   it('无材料的双语首屏：两半各一条候选，中文那半是中文名', async () => {
     useOwnerLangSignals({ file: freshLangFile(), env: { LANG: 'en_US.UTF-8' } });
     const arrival = await makeOrchestrator({ llmReply: null }).orch.handleStartCommand();
 
     const picks = [...arrival.text.matchAll(/(?:^|\n)\s*1\. *(.+)/g)].map((m) => m[1]!.trim());
-    expect(picks).toHaveLength(2); // 两半各一条 = 条数相等
-    expect(arrival.text).not.toMatch(/(?:^|\n)\s*2\. /); // 兜底只有一条，两半编号自然对齐
+    expect(picks).toHaveLength(2); // One item in each half gives equal counts.
+    expect(arrival.text).not.toMatch(/(?:^|\n)\s*2\. /); // A single fallback candidate naturally aligns numbering across both halves.
     expect(picks[0]).toBe(fallbackName(PID, 'en'));
     expect(picks[1]).toBe(fallbackName(PID, 'zh-CN'));
-    expect(picks[1]).not.toMatch(/[A-Za-z]/); // 中文半卡零拉丁候选
+    expect(picks[1]).not.toMatch(/[A-Za-z]/); // No Latin-script candidate in the Chinese half.
     expect(picks[0]).not.toBe(picks[1]);
   });
 
   it('主人用中文回话 → 采纳的是他读的那半的中文兜底名', async () => {
     useOwnerLangSignals({ file: freshLangFile(), env: { LANG: 'en_US.UTF-8' } });
     const ctx = makeOrchestrator({ llmReply: null });
-    await ctx.orch.handleStartCommand(); // 双语首屏，drafts 里存的是 en 那条
-    observeOwnerText('你来挑吧'); // 主人开口 = 真信号，语种落定
+    await ctx.orch.handleStartCommand(); // Bilingual first screen; drafts contain the English candidate.
+    observeOwnerText('你来挑吧'); // The owner speaks, providing a real signal and settling the language.
     await ctx.orch.handleAdvance('next', '你来挑吧');
     expect(await configNickname(ctx)).toBe(fallbackName(PID, 'zh-CN'));
   });

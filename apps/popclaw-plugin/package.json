@@ -35,7 +35,7 @@
     "build:bundle": "pnpm run build:protocol && tsc -p tsconfig.json && node scripts/prepare-native-deps.mjs && node scripts/bundle.mjs",
     "prepack": "pnpm run build:bundle && node scripts/prepack.mjs",
     "postpack": "node scripts/postpack.mjs",
-    "test": "vitest run && pnpm run test:setup-connector && pnpm run test:native-owner-approval",
+    "test": "vitest run && pnpm run test:setup-connector && pnpm run test:native-owner-approval && pnpm run test:native-read-context",
     "test:setup-connector": "node --import tsx --test tests/setup/connector-codex-timeout.test.ts tests/setup/probe-tool-surface.test.ts",
     "test:native-runtime-manifest": "node --test scripts/tests/native-runtime-manifest.fixture.mjs",
     "test:native-owner-approval": "node --test scripts/tests/owner-approval-native.fixture.mjs",
@@ -44,7 +44,8 @@
     "mcp": "tsx src/mcp.ts",
     "setup:protocol": "pnpm --dir ../../protocol install --frozen-lockfile --ignore-scripts",
     "build:protocol": "node scripts/build-public-envelope.mjs",
-    "check:protocol": "node scripts/build-public-envelope.mjs --check"
+    "check:protocol": "node scripts/build-public-envelope.mjs --check",
+    "test:native-read-context": "node --test scripts/tests/native-read-context.fixture.mjs"
   },
   "engines": {
     "node": ">=24.16.0 <25 || >=26.1.0"

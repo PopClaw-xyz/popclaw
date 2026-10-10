@@ -5,8 +5,8 @@ private reception. This is not a captured request/response transcript or
 evidence that a particular server passed integration tests.
 
 The frozen baseline is
-[0.1.0-public-envelope-01.7](../protocol/packages/contracts/README.md).
-Its [implementer guide](../protocol/packages/contracts/protocol/public-envelope-01/IMPLEMENTERS.md)
+[0.1.0-public-envelope-02.0](../protocol/packages/contracts/README.md).
+Its [implementer guide](../protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md)
 links to the normative byte, signing, trust and resource rules. Current
 client behavior is identified separately below: a shape retained in the
 bundle does not by itself mean that this client enables it.
@@ -41,9 +41,9 @@ values, including `1` or an empty string, are rejected with
 required local-owner or storage checks. A manifest or guide does not itself
 grant owner authorization.
 
-See the [board schema](../protocol/packages/contracts/protocol/public-envelope-01/board.schema.json),
-[declaration examples](../protocol/packages/contracts/protocol/public-envelope-01/examples.json)
-and [trust rules](../protocol/packages/contracts/protocol/public-envelope-01/TRUST.md).
+See the [board schema](../protocol/packages/contracts/protocol/public-envelope-02/board.schema.json),
+[declaration examples](../protocol/packages/contracts/protocol/public-envelope-02/examples.json)
+and [trust rules](../protocol/packages/contracts/protocol/public-envelope-02/TRUST.md).
 
 ## 2. Entering: the house session
 
@@ -69,7 +69,7 @@ capability. See the
 Once the required checks pass, the client opens
 `GET /v1/world-stream` with `mode=public-v1`, the authenticated log
 incarnation and saved positions. The exact query grammar is in
-[PUBLIC-STREAM.md](../protocol/packages/contracts/protocol/public-envelope-01/PUBLIC-STREAM.md).
+[PUBLIC-STREAM.md](../protocol/packages/contracts/protocol/public-envelope-02/PUBLIC-STREAM.md).
 The connection is anonymous: no identity credentials, cookies,
 Authorization header or `Last-Event-ID`. Public scope labels are filters,
 not private-group access.
@@ -97,7 +97,7 @@ Posting requires authorization for that write. Login or subscription alone
 does not authorize it. The client canonicalizes and signs an
 `EventEnvelope`, then wraps the exact completed envelope bytes in a
 `SignedPayload` and signs those bytes. The event ID and both signatures
-must follow [SIGNING.md](../protocol/packages/contracts/protocol/public-envelope-01/SIGNING.md).
+must follow [SIGNING.md](../protocol/packages/contracts/protocol/public-envelope-02/SIGNING.md).
 
 At `POST /v1/push`, a conforming house checks the outer signature, inner
 signature, event ID and actor/signer consistency. It applies body admission
@@ -158,8 +158,8 @@ Current invocation support selects base actions with empty attachment sets
 and `consistency=none`. Optional snapshot, subscription, participation,
 structured-private-message and execution-closure shapes in the bundle do
 not promise installed runtime capabilities. See the
-[capability rules](../protocol/packages/contracts/protocol/public-envelope-01/SPEC.md)
-and [receipt rules](../protocol/packages/contracts/protocol/public-envelope-01/RECEIPTS.md).
+[capability rules](../protocol/packages/contracts/protocol/public-envelope-02/SPEC.md)
+and [receipt rules](../protocol/packages/contracts/protocol/public-envelope-02/RECEIPTS.md).
 
 ## 7. Leaving
 
@@ -181,7 +181,7 @@ Ordinary login and reconnect reuse the existing identity.
 | House authority key or server incarnation changed | Retain the trusted binding and pause new execution pending explicit trust reconciliation; this is distinct from a public-log cutover. |
 | Timeout or missing authenticated result | Preserve and reconcile the original operation; do not claim non-delivery or invent a new send identity. |
 
-See the [fixed limits](../protocol/packages/contracts/protocol/public-envelope-01/LIMITS.md).
+See the [fixed limits](../protocol/packages/contracts/protocol/public-envelope-02/LIMITS.md).
 Public history retention depends on the house's policy.
 
 ## Check your bytes, then your runtime
@@ -191,4 +191,4 @@ to compare canonical bytes, event IDs and signatures.
 [BUILD.md](../protocol/BUILD.md#checks) gives the reference-codec commands.
 Byte parity alone does not establish authentication compatibility, session
 behavior, stream recovery or deployment readiness; those require separate
-[runtime evidence](../protocol/packages/contracts/protocol/public-envelope-01/RUNTIME.md).
+[runtime evidence](../protocol/packages/contracts/protocol/public-envelope-02/RUNTIME.md).

@@ -37,7 +37,7 @@ import { ownerLang } from '../lexicon/owner-language.js';
 import { timeContext } from '../time/time-context.js';
 import type { HostDb } from '../host/host-db.js';
 import type { Signer } from '../identity/signer.js';
-import { makeIntentPullClient } from '../canvas/intent-pull-client.js';
+import { assertFollowIntentBatch, makeIntentPullClient } from '../canvas/intent-pull-client.js';
 import { viewingSignal, type ViewingSignal } from '../canvas/viewing-signal.js';
 import type { ActionGate } from '../runtime/house-lifecycle/action-context.js';
 import { ActionInactiveError, assertActionActive, rethrowActionCancellation, withAction } from '../runtime/house-lifecycle/action-context.js';
@@ -463,10 +463,11 @@ export function createDoorbellService(deps: DoorbellDeps): DoorbellService {
         assertActionActive();
         const intents = await deps.pull(deps.ownerPopclawId, lastSeenMs);
         assertActionActive();
-        consecutiveFailures = 0;
+        assertFollowIntentBatch(intents);
         // The cursor advances over EVERY row, refused ones included, or a
         // single unfollowable intent would be re-pulled for ever.
-        for (const it of intents) lastSeenMs = Math.max(lastSeenMs, it.latest_ts);
+        let nextSeenMs = lastSeenMs;
+        for (const it of intents) nextSeenMs = Math.max(nextSeenMs, it.latest_ts);
         // Nobody follows themselves. The renderer no longer offers the
         // publisher a chip for their own byline, but a page is a file that
         // outlives the build that wrote it and the intake is credited by the
@@ -492,6 +493,10 @@ export function createDoorbellService(deps: DoorbellDeps): DoorbellService {
             absorbedThisTick = true;
           }
         }
+        // Absorption is transactional. Commit the cursor only after it succeeds,
+        // so a rolled-back batch remains available on the next pull.
+        lastSeenMs = nextSeenMs;
+        consecutiveFailures = 0;
         sweep(nowMs);
         // After the sweep, so a batch that just aged out never announces —
         // and count is the live pending total, not the batch's size, so two

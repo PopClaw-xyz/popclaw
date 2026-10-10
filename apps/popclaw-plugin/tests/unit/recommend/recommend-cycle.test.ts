@@ -79,8 +79,8 @@ describe('runRecommendCycle', () => {
     expect(aFollowed).toBeLessThan(aUnknown);
   });
 
-  // ADR-0037「内容注意力看坊」：同一个作者，我只在 me 坊关注了他 —— 他在 world
-  // 坊的帖子不该蹭到关注加权。
+  // ADR-0037, content attention is house-scoped: following an author only in the me house must not give
+  // their world-house posts follow-based weighting.
   it('关注加权按坊：只加在我在那座坊关注了他的条目上', async () => {
     const cache = { recent: vi.fn().mockReturnValue([
       cacheItem({ platformPostId: 'inworld', authorPopclawId: 'dual', houseSlug: 'world' }),

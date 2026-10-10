@@ -1,7 +1,8 @@
 /**
- * ADR-0040 — 认证瞬间快照（QuestResult 7/8/9）。
+ * ADR-0040: snapshot at verification time (QuestResult 7/8/9).
  *
- * 三条铁律：APPROVE 才取；取失败照样 APPROVE（零值上报）；非 APPROVE 一分不花。
+ * Three invariants: fetch only on APPROVE; fetch failure still APPROVEs with zero values; never
+ * spend a fetch on non-APPROVE.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { VerifyInviteHandler } from '../../../src/quest/verify-invite-handler.js';

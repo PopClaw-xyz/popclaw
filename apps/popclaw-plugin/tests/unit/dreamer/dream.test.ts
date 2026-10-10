@@ -99,12 +99,12 @@ describe('gatherDreamMaterials', () => {
     expect(r.kind).toBe('ready');
     if (r.kind !== 'ready') return;
     expect(r.payload).toContain('popclaw_id=ALICE');
-    expect(r.payload).toContain('investor'); // 已有标签必须带上,否则会被冲掉
-    expect(r.payload).toContain('shipped a rocket'); // 原料 A
-    expect(r.payload).toContain('我也想造火箭'); // 原料 B
+    expect(r.payload).toContain('investor'); // Include existing tags or they will be overwritten.
+    expect(r.payload).toContain('shipped a rocket'); // Material A.
+    expect(r.payload).toContain('我也想造火箭'); // Material B.
     expect(r.payload).toContain('苍梧阁');
-    expect(r.payload).toContain('我关心航天工程的实现细节'); // 主权层
-    expect(r.payload).toContain('开源治理'); // 上次的建议层
+    expect(r.payload).toContain('我关心航天工程的实现细节'); // Sovereign layer.
+    expect(r.payload).toContain('开源治理'); // Previous suggestion layer.
     expect(r.payload).toContain('dream_test');
     expect(r.payload).toContain('popclaw_record_dream');
   });
@@ -135,7 +135,7 @@ describe('gatherDreamMaterials', () => {
         cache: { recent: () => [post('ALICE', NOW - 900, 'old news')] },
       }),
     );
-    expect(r.kind).toBe('empty'); // 没有更新的帖 + 没有日志
+    expect(r.kind).toBe('empty'); // No newer posts and no logs.
   });
 
   it('social log alone is enough to dream (taste has no dependency on the feed)', () => {
@@ -143,9 +143,9 @@ describe('gatherDreamMaterials', () => {
     expect(r.kind).toBe('ready');
   });
 
-  // B4（ADR-0045 / charter D3）：那天在哪个时区，就按哪个时区叙述那天。
+  // B4 (ADR-0045 / charter D3): describe each day using the timezone that applied that day.
   it('每条日志按它自己 write-time 存的 tz 记日期，没存 tz 才回落 owner tz', () => {
-    // 2026-07-30T20:30Z：+08 已是 7/31，-07 还是 7/30。
+    // 2026-07-30T20:30Z: already 7/31 at +08, still 7/30 at -07.
     const ts = Math.floor(Date.UTC(2026, 6, 30, 20, 30) / 1000);
     setOwnerTz('America/Los_Angeles');
     const r = gatherDreamMaterials(
@@ -226,9 +226,9 @@ describe('recordDream', () => {
     expect(written[0]!.tags).toEqual(['航天']);
   });
 
-  // 做梦夜里整理出来的东西，此前没有任何主动
-  // 投递路 —— 主人不跑 `/popclaw review` 就永远沉默。晨间精华（升档提议 +【大事】）
-  // 入 L2，主人下次开口时 agent 顺口捎出。
+  // Nightly dream output previously had no proactive
+  // delivery path: it stayed silent unless the owner ran `/popclaw review`. Morning highlights (tier proposals + major events)
+  // enter L2 so the agent can mention them on the owner's next turn.
   it('晨间精华入 L2：升档提议与【大事】各成一条', async () => {
     const bonds = freshBonds();
     bonds.setFollowed('ALICE', true);
@@ -257,7 +257,7 @@ describe('recordDream', () => {
     expect(proposal?.payload).toMatchObject({ popclawId: 'ALICE', toTier: 'friend' });
     const milestone = queued.find((q) => q.kind === 'bond_milestone');
     expect(milestone?.payload).toMatchObject({ popclawId: 'ALICE', summary: '像是要结婚了' });
-    // 不是【大事】的日常动态不打扰主人。
+    // Ordinary updates that are not major events must not interrupt the owner.
     expect(queued.filter((q) => q.kind === 'bond_milestone')).toHaveLength(1);
   });
 
@@ -295,7 +295,7 @@ describe('recordDream', () => {
     });
 
     const alice = bonds.get('ALICE')!;
-    expect(alice.tags).toEqual(['rocket', 'founder']); // 去重 + trim
+    expect(alice.tags).toEqual(['rocket', 'founder']); // Deduplicate and trim.
     expect(alice.description).toBe('builds rockets');
     expect(alice.lastDreamTs).toBe(NOW - 1000);
     expect(bonds.recentDynamics('ALICE', 10)).toHaveLength(2);
@@ -376,9 +376,9 @@ describe('recordDream', () => {
 });
 
 // ---------------------------------------------------------------------------
-// dream_basis — 兼容腿回执（主人授权 2026-09-06）：素材页把
-// 同一个回执标识再用非 `*_token` 的名字印一遍，agent 把它作为普通字段抄回 people
-// 载荷里。报纸 edit.basis 协议的 dream 版：双读、不猜、失败不销账不误标已处理。
+// dream_basis compatibility receipt (authorized 2026-09-06): the material page prints
+// the same receipt identifier under a non-*_token name for the agent to copy into people as a regular field.
+// The dream equivalent of newspaper edit.basis: accept both fields, never guess, and consume or mark processed only on success.
 // ---------------------------------------------------------------------------
 
 /** Mint a batch with a CHOSEN token — the fixed 'dream_test' minter can't tell two batches apart. */
@@ -404,24 +404,24 @@ describe('gatherDreamMaterials — 素材页双名回执', () => {
     if (r.kind !== 'ready') throw new Error('want ready');
     expect(r.payload).toContain('dream_token = "dream_r1"');
     expect(r.payload).toContain('dream_basis = "dream_r1"');
-    // 教的是顶层非 token 名参数（people 内层也认，同值）—— 不依赖 people 非空
+    // Teach the top-level parameter with a non-token name (the same value also works inside people), independent of nonempty people.
     expect(r.payload).toContain('dream_basis argument');
   });
 });
 
 // ---------------------------------------------------------------------------
-// 页首「本批元数据」块（F1 布局修复）。2026-09-06 那轮的
-// 证据边界：持久化副本含本批回执（内层 text 坐标 12429/12562）；
-// 历史材料含旧错误报告（字面 truncated/dream_token 字样）；「历史叙事干扰了模型
-// 判断」是待验证假设——宿主最终供模文本与模型内部原因均未验证。修复纯布局：本批
-// 回执 + 「历史报告 ≠ 本次调用」规则提到一切动态历史材料之前；页尾原回执块原样
-// 保留（同一个 x.dreamToken 渲染两处）；窗口/游标/采样/renderLogLine 裁剪、
-// recordDream 校验零变动。全部合成数据 —— 本文件证明布局与保留，不证明任何模型
-// 行为（那要等装机后下一次自然轮/受控 dream 才有证据）。
+// Leading batch-metadata block (F1 layout fix). Evidence boundary for the 2026-09-06 run:
+// the persisted copy contained this batch's receipt (inner text positions 12429/12562).
+// Historical material included an old error report with literal truncated/dream_token text. Historical narrative
+// confusing the model remains an unverified hypothesis: neither the final host prompt nor model internals were verified. Layout-only fix:
+// move the current receipt and the historical-report-is-not-this-call rule before all dynamic historical material. Keep the original
+// footer receipt block unchanged (render the same x.dreamToken twice); leave windows, cursors, sampling, renderLogLine truncation,
+// and recordDream validation unchanged. All data is synthetic: this file proves layout and retention, not model
+// behavior, which needs a subsequent natural or controlled dream run after installation.
 // ---------------------------------------------------------------------------
 
 const FRONT_MARKER = "[This batch's metadata — read before the history below]";
-/** 8/31 那条真实 bug 上报的形状：正文逐字引用了含 truncated/dream_token 的旧句子。 */
+/** Shape of the real 8/31 bug report: the body quotes an older sentence containing truncated/dream_token verbatim. */
 const OLD_BUG_REPORT =
   'feedback: popclaw_dream tool output is truncated before the dream_token is shown, please fix';
 
@@ -436,19 +436,19 @@ describe('buildDreamPayload — 页首本批元数据块（先于一切历史材
         readSocialLog: () => [
           logRec({ text: OLD_BUG_REPORT }),
           logRec({ kind: 'reply_received', text: '收到，复现了', in_reply_to: { text: OLD_BUG_REPORT } }),
-          logRec({ text: 'y'.repeat(400) }), // 超过 LOG_TEXT_PREVIEW=300：历史区照样按既有上限裁剪
+          logRec({ text: 'y'.repeat(400) }), // Exceeds LOG_TEXT_PREVIEW=300: history still uses the existing truncation limit.
         ],
       }),
     );
     if (r.kind !== 'ready') throw new Error('want ready');
-    // 元数据块是页面第一行，先于 Material A / Material B（一切动态历史材料）
+    // Metadata is the first page line, preceding Material A / Material B (all dynamic historical material).
     expect(r.payload.indexOf(FRONT_MARKER)).toBe(0);
     expect(r.payload.indexOf(FRONT_MARKER)).toBeLessThan(r.payload.indexOf('[Material A'));
     expect(r.payload.indexOf(FRONT_MARKER)).toBeLessThan(r.payload.indexOf("[Material B"));
-    // 历史区不清洗：旧 bug 上报原文（含 truncated/dream_token 字样）逐字在场——合成场景素材，非模型认知复现
+    // Do not sanitize history: preserve the old bug report verbatim, including truncated/dream_token; synthetic material, not a reproduction of model reasoning.
     expect(r.payload).toContain(OLD_BUG_REPORT);
-    expect(r.payload.match(/truncated/g)).toHaveLength(2); // text 一处 + replying to 一处
-    // 「保留历史」≠ 取消上限：>300 字符仍被 renderLogLine 裁成 300 + …
+    expect(r.payload.match(/truncated/g)).toHaveLength(2); // One occurrence in text and one in replying to.
+    // Retaining history does not remove limits: renderLogLine still truncates >300 characters to 300 + …
     expect(r.payload).toContain(`text="${'y'.repeat(300)}…"`);
     expect(r.payload).not.toContain('y'.repeat(301));
   });
@@ -461,7 +461,7 @@ describe('buildDreamPayload — 页首本批元数据块（先于一切历史材
     if (r.kind !== 'ready') throw new Error('want ready');
     expect(r.payload.indexOf(FRONT_MARKER)).toBe(0);
     expect(r.payload.indexOf(FRONT_MARKER)).toBeLessThan(r.payload.indexOf("[Material B"));
-    expect(r.payload.match(/entry\d+/g)).toHaveLength(66); // 长历史一条不少
+    expect(r.payload.match(/entry\d+/g)).toHaveLength(66); // Retain every long-history entry.
   });
 
   it('③ 页首与页尾回执渲染严格一致（同一个 x.dreamToken，两处一字不差）', () => {
@@ -477,13 +477,13 @@ describe('buildDreamPayload — 页首本批元数据块（先于一切历史材
     if (r.kind !== 'ready') throw new Error('want ready');
     const tokens = r.payload.match(/dream_token = "[^"]*"/g) ?? [];
     const bases = r.payload.match(/dream_basis = "[^"]*"/g) ?? [];
-    expect(tokens).toHaveLength(2); // 页首 + 页尾，一个不多一个不少
+    expect(tokens).toHaveLength(2); // Exactly one at the top and one at the bottom.
     expect(bases).toHaveLength(2);
-    expect(new Set(tokens).size).toBe(1); // 两处渲染严格同串
+    expect(new Set(tokens).size).toBe(1); // Both renderings use exactly the same string.
     expect(new Set(bases).size).toBe(1);
     expect(tokens[0]).toBe('dream_token = "dream_f1"');
     expect(bases[0]).toBe('dream_basis = "dream_f1"');
-    expect(r.payload.indexOf(tokens[0]!)).toBeLessThan(r.payload.lastIndexOf(tokens[0]!)); // 首前尾后
+    expect(r.payload.indexOf(tokens[0]!)).toBeLessThan(r.payload.lastIndexOf(tokens[0]!)); // Header first, footer last.
   });
 
   it('④ taste-only 素材（没有人物新帖）→ 页首元数据块同样在场', () => {
@@ -500,12 +500,12 @@ describe('buildDreamPayload — 页首本批元数据块（先于一切历史材
     const r = gatherDreamMaterials(gatherDeps({ readSocialLog: () => [logRec()] }));
     if (r.kind !== 'ready') throw new Error('want ready');
     const front = r.payload.slice(0, r.payload.indexOf('[Two outputs]'));
-    // r37/r39 钉的句子：错误报告说的是过去的调用；缺/冲突即停，不猜、不回退历史值
+    // Sentences pinned by r37/r39: error reports concern past calls; stop on missing or conflicting receipts, without guessing or using historical values.
     expect(front).toContain('describe PAST calls, not this one');
     expect(front).toContain('stop — do not guess, do not fall back to values found in history');
-    // r37 明确不采用无条件「本页完整」保证 —— 页首不得出现这个承诺
+    // r37 rejects an unconditional complete-page guarantee; the header must not make that promise.
     expect(front).not.toMatch(/complete/i);
-    // r39 第 2 点：不得暗示两个字段必须齐备（任何一条可用腿都算数，PR#560 兼容不回退）
+    // r39 point 2: do not imply both fields are required; either usable path suffices (retain PR#560 compatibility).
     expect(front).toContain('either one alone proves this batch');
   });
 
@@ -568,14 +568,14 @@ describe('recordDream — dream_basis 双标识回执', () => {
     const { deps, written, stamped } = recordDeps(bonds);
     const r = await recordDream(deps, {
       dreamToken: '***',
-      people: [{ popclaw_id: 'ALICE', dream_basis: '"dream_b1"', tags: ['rocket'] }], // 带引号原样抄回也认
+      people: [{ popclaw_id: 'ALICE', dream_basis: '"dream_b1"', tags: ['rocket'] }], // Accept a value copied back with quotation marks.
       taste: { tags: ['航天'] },
     });
     expect(r.text).toContain('🌙');
     expect(bonds.get('ALICE')!.lastDreamTs).toBe(NOW - 1000);
     expect(written[0]!.tags).toEqual(['航天']);
     expect(stamped).toEqual([NOW]);
-    // 同一套生命周期规则：销账后同标识再交（这回走令牌腿）→ 过期
+    // Same lifecycle: resubmitting a consumed identifier (via the token path this time) is expired.
     const again = await recordDream(deps, { dreamToken: token, taste: { tags: ['x'] } });
     expect(again.text).toContain('过期');
   });
@@ -595,8 +595,8 @@ describe('recordDream — dream_basis 双标识回执', () => {
     expect(r.text).toContain('dream_c1');
     expect(written).toHaveLength(0);
     expect(stamped).toHaveLength(0);
-    expect(bonds.get('ALICE')!.lastDreamTs).toBeNull(); // 未误标已处理
-    // 谁都没被销账：两条腿各自单独重提都能成
+    expect(bonds.get('ALICE')!.lastDreamTs).toBeNull(); // Not incorrectly marked processed.
+    // Neither was consumed: each path can still be resubmitted independently.
     expect((await recordDream(deps, { dreamToken: b, taste: { tags: ['x'] } })).text).toContain('🌙');
     expect((await recordDream(deps, { dreamToken: a, taste: { tags: ['x'] } })).text).toContain('🌙');
   });
@@ -634,7 +634,7 @@ describe('recordDream — dream_basis 双标识回执', () => {
       people: [{ popclaw_id: 'ALICE', dream_basis: 'dream_gone', tags: ['x'] }],
       taste: { tags: ['航天'] },
     });
-    expect(r.text).toContain('dream_basis'); // 说清是哪条腿过期，不是笼统的令牌过期
+    expect(r.text).toContain('dream_basis'); // Specify which path expired, rather than reporting generic token expiry.
     expect(r.text).toContain('过期');
     expect((await recordDream(deps, { dreamToken: token, taste: { tags: ['x'] } })).text).toContain('🌙');
   });
@@ -657,7 +657,7 @@ describe('recordDream — dream_basis 双标识回执', () => {
     expect((await recordDream(deps, { dreamToken: 'dream_p1', taste: { tags: ['x'] } })).text).toContain('🌙');
   });
 
-  // S3 rollout slice 4 — en lane（新拒收文案同样双 lane）。
+  // S3 rollout slice 4: en lane (new rejection copy also covers both language lanes).
   it('renders the new refusals in en when set', async () => {
     setOwnerLang('en', 'config');
     const bonds = freshBonds();
@@ -679,9 +679,9 @@ describe('recordDream — dream_basis 双标识回执', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 批次回执独立于 people。taste-only 交稿、整场
-// 跳过所有人物，都是 gather 明文允许的正常整理 —— 回执不得依赖 people 非空。
-// 顶层非 token 名的 `dream_basis` 参数是主形态；people 内层同值兼容、矛盾即拒。
+// Batch receipts are independent of people. Taste-only submissions and skipping
+// all people are normal workflows explicitly allowed by gather; receipts must not depend on nonempty people.
+// The top-level non-token-named dream_basis is primary; the same value inside people is compatible, and contradictions are rejected.
 // ---------------------------------------------------------------------------
 
 describe('recordDream — 顶层 dream_basis：回执独立于 people', () => {
@@ -694,7 +694,7 @@ describe('recordDream — 顶层 dream_basis：回执独立于 people', () => {
     expect(r.text).toContain('🌙');
     expect(written[0]!.tags).toEqual(['航天']);
     expect(stamped).toEqual([NOW]);
-    expect(bonds.get('ALICE')!.lastDreamTs).toBeNull(); // 没有人物结论，不动游标
+    expect(bonds.get('ALICE')!.lastDreamTs).toBeNull(); // No conclusions about people; do not move the cursor.
   });
 
   it('①b people=[] 且仅 taste + 顶层 basis → 过', async () => {
@@ -714,7 +714,7 @@ describe('recordDream — 顶层 dream_basis：回执独立于 people', () => {
     const r = await recordDream(deps, {
       dreamToken: '***',
       dreamBasis: token,
-      people: [{ popclaw_id: 'ALICE' }], // 全空 = 这次对她没结论，下轮再看
+      people: [{ popclaw_id: 'ALICE' }], // All empty means no conclusion about her this time; revisit next round.
       taste: { tags: ['航天'] },
     });
     expect(r.text).toContain('🌙');
@@ -726,17 +726,17 @@ describe('recordDream — 顶层 dream_basis：回执独立于 people', () => {
     const bonds = freshBonds();
     bonds.setFollowed('ALICE', true);
     const token = batch(bonds, 'dream_s4');
-    // (a) 结构关：宿主拿这份 JSON Schema 校验入参 —— dream_token 已可缺省，
-    // 不带 token 的调用不得在结构层被拒（schema 就是宿主校验的真实契约，
-    // MCP 直通 inputSchema，见 mcp.ts / toInputSchema）。
+    // (a) Structure gate: the host validates arguments with this JSON Schema; dream_token is now optional.
+    // Calls without a token must not fail structural validation (this schema is the host's actual validation contract;
+    // MCP passes inputSchema through directly, see mcp.ts / toInputSchema).
     const basisOnly = { dream_basis: token, taste: { tags: ['航天'] } };
     expect(Value.Check(RecordDreamSchema, basisOnly)).toBe(true);
-    expect(Value.Check(RecordDreamSchema, {})).toBe(true); // 两者都缺是账本层的拒，不是结构层的
-    // (b) 归一关：coerce 不因缺 dream_token 丢字段、不抛
+    expect(Value.Check(RecordDreamSchema, {})).toBe(true); // Missing both is a ledger-layer rejection, not a structural one.
+    // (b) Normalization gate: coerce neither drops fields nor throws when dream_token is missing.
     const input = coerceRecordDream(basisOnly);
     expect(input.dreamToken).toBe('');
     expect(input.dreamBasis).toBe(token);
-    // (c) 账本关：真批次、同等校验 → 写回成功
+    // (c) Ledger gate: real batch, identical validation → successful writeback.
     const { deps, written } = recordDeps(bonds);
     const r = await recordDream(deps, input);
     expect(r.text).toContain('🌙');
@@ -770,7 +770,7 @@ describe('recordDream — 顶层 dream_basis：回执独立于 people', () => {
   it('顶层与 people 内层并存：同值一致即过，矛盾即拒（不挑一边）', async () => {
     const bonds = freshBonds();
     bonds.setFollowed('ALICE', true);
-    const both = batch(bonds, 'dream_s8'); // 一致腿自己销自己的账
+    const both = batch(bonds, 'dream_s8'); // The consistent path consumes only its own receipt.
     const token = batch(bonds, 'dream_s8b', NOW - 997);
     const other = batch(bonds, 'dream_s9', NOW - 998);
 
@@ -794,7 +794,7 @@ describe('recordDream — 顶层 dream_basis：回执独立于 people', () => {
     });
     expect(conflict.text).toContain('互不相同');
     expect(written).toHaveLength(0);
-    // 两张台账都没被销账
+    // Neither ledger has been consumed.
     expect((await recordDream(deps, { dreamToken: token, taste: { tags: ['x'] } })).text).toContain('🌙');
     expect((await recordDream(deps, { dreamToken: other, taste: { tags: ['x'] } })).text).toContain('🌙');
   });
@@ -811,8 +811,8 @@ describe('recordDream — 顶层 dream_basis：回执独立于 people', () => {
   });
 });
 
-// 能力应该在「第一次真的有价值」的那一刻自我介绍（spec §5）。一个必须被排期才能
-// 工作的机制，却从不开口要求被排期 —— 那不叫留待后续，叫没做完。
+// A capability should introduce itself when it first provides real value (spec §5). A mechanism that needs scheduling
+// but never asks to be scheduled is unfinished, not deferred work.
 describe('recordDream — 梦做完那一刻问要不要每晚自动', () => {
   async function record(dreamCron?: RecordDreamDeps['dreamCron']) {
     const bonds = freshBonds();

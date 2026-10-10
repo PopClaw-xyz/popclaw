@@ -1,13 +1,13 @@
 /**
  *
- *   原创 Post / 红包 / invite / 注册          → 主坊
- *   Reply / Quote / Mark（含 revoke）        → 被回/被标内容的来源坊
- *   DM（切片④）                              → 那人最近一封来信的坊；无来信 → 主坊
- *   FollowDeclared                           → followee 的发现坊
- *   FollowRevoked                            → 当初 declare 的同一坊
- *   Profile 名片                             → 广播所有坊
+ *   Original Post / red packet / invite / registration → primary house
+ *   Reply / Quote / Mark (including revoke) → source house of the target content
+ *   DM (slice ④) → house of that person's latest incoming message; none → primary house
+ *   FollowDeclared → house where the followee was discovered
+ *   FollowRevoked → same house as the original declaration
+ *   Profile card → broadcast to all houses
  *
- * 每行都配一条"标签不可考 → 主坊"的兜底，外加末尾的单坊回归。
+ * Each row includes an unknown-house-label fallback to the primary house, followed by single-house regression coverage.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
@@ -52,7 +52,7 @@ const cleanProfileFetch = vi.fn(async (input: string | URL | Request) => {
   }), { status: 200 });
 });
 
-/** 记账式多坊 egress：谁收到了几条。 */
+/** Multi-house egress ledger: how many events each house received. */
 function egressOver(...slugs: string[]) {
   const counts = new Map<string, number>(slugs.map((s) => [s, 0]));
   const houses: HouseEgress[] = slugs.map((slug) => ({
@@ -86,7 +86,7 @@ function item(over: Partial<CachedFeedItem> = {}): CachedFeedItem {
   };
 }
 
-/** cache 桩：lookup / findFullEventId / findByEventIdPrefix 都答同一条 item。 */
+/** Cache stub: lookup / findFullEventId / findByEventIdPrefix all return the same item. */
 function cacheOf(found: CachedFeedItem | null) {
   return {
     lookup: () => found,
@@ -228,7 +228,7 @@ describe('路由表 · Follow → 发现坊；Revoke → 同一坊', () => {
     const { db, sg } = graph(e, () => discovered);
     await sg.start();
     await sg.declareFollow('BBB');
-    discovered = HOME; // 缓存变了：他后来在主坊也发过帖
+    discovered = HOME; // Cache changed: he later posted in the primary house too.
     await sg.revokeFollow('BBB');
     expect(e.all()).toEqual({ [HOME]: 0, [WORLD]: 2 });
     const rows = db.queryAll<{ type: string; house_slug: string }>('SELECT type, house_slug FROM follow_events ORDER BY id');
@@ -249,7 +249,7 @@ describe('路由表 · Follow → 发现坊；Revoke → 同一坊', () => {
   it('存量旧行（house_slug 空）取关 → 主坊，不炸', async () => {
     const e = egressOver(HOME, WORLD);
     const { db, sg } = graph(e, () => WORLD);
-    // 手写一条"迁移前"的 declare（不带坊）。
+    // Handwrite a pre-migration declaration without a house.
     db.execute(
       `INSERT INTO follow_events (type, followee, follow_type, taste_subscribed, timestamp, signature)
        VALUES ('FollowDeclared', 'OLD', 'PUBLIC', 0, 1, '')`,

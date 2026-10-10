@@ -1,5 +1,5 @@
 /**
- * #231 第 2 刀 — 私信带图的磁盘那一端（读本地图 / 收到的图落盘）。
+ * #231, part 2: the disk side of DM images (reading local images and saving received ones).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs';
@@ -61,7 +61,7 @@ describe('loadDmAttachment — 发送侧的闸', () => {
     writeFileSync(p, Buffer.from([1]));
     const r = loadDmAttachment(p);
     expect(r.ok).toBe(false);
-    // heic 仍然不收 —— 放开的是语音/文本，不是「什么都收」；文案要把认的列出来。
+    // Still reject heic; the expanded formats are voice/text, not arbitrary files. List accepted formats in the message.
     expect(!r.ok && r.text).toMatch(/jpg\/png\/gif\/webp/);
   });
 
@@ -120,7 +120,7 @@ describe('saveDmMedia — 收信侧落盘', () => {
     const media = { mime: 'image/gif', bytes: new Uint8Array([1]) };
     const first = saveDmMedia(dir, dm, media);
     expect(saveDmMedia(dir, dm, media)).toBe(first);
-    // 时间与印信两段不变 → 重放仍写同一个路径（名号会变的那一小撮见 dmMediaFileName 注释）
+    // Timestamp and sigil stay stable, so replay writes the same path (nickname changes are covered in dmMediaFileName's comment).
     expect(readdirSync(dir)).toHaveLength(1);
   });
 
@@ -188,7 +188,7 @@ describe('receiveDmMedia — 解密 + 落盘的那一行', () => {
   });
 });
 
-// 放开格式（2026-07-31）：语音与 agent 读得懂的文本。zip / 可执行文件仍然不收。
+// Expanded formats (2026-07-31): voice and agent-readable text. Still reject zip files and executables.
 describe('loadDmAttachment — 语音与文本', () => {
   function write(name: string, bytes = 16): string {
     const p = join(mkdtempSync(join(tmpdir(), 'popclaw-att-')), name);
@@ -216,22 +216,22 @@ describe('loadDmAttachment — 语音与文本', () => {
     if (!r.ok) expect(r.text).toContain('发不了');
   });
 
-  // mime 是发信方写进盒子的：落盘扩展名若跟着他走，他就能决定文件在你磁盘上叫什么。
+  // The sender supplies mime in the box. Deriving the extension from it would let them choose the local filename.
   it('认不出的 mime 落成 .bin，绝不让发信人挑扩展名', () => {
     const dir = mkdtempSync(join(tmpdir(), 'popclaw-save-'));
     const p = saveDmMedia(dir, { ts: 1, fromPopclawId: 'ABCDEFGH' }, {
       mime: 'application/x-sh',
       bytes: new Uint8Array([1, 2, 3]),
     });
-    expect(p).toMatch(/\.bin$/); // 认不出的 mime → .bin，发信人挑不了扩展名
+    expect(p).toMatch(/\.bin$/); // Unknown mime maps to .bin; the sender cannot choose the extension.
   });
 });
 
-// 主人原话（2026-07-31）：`1785481431-5E7DAm6B.ogg` 这种"一串英文数字"可读性太差，
-// 收多了会搞混。三样材料分工：时间给顺序、名号给可读、印信兜底且伪造不了。
+// Owner feedback, 2026-07-31: a name like `1785481431-5E7DAm6B.ogg` is unreadable and becomes
+// confusing in bulk. Timestamp orders files, nickname aids reading, and the unforgeable sigil disambiguates.
 describe('dmMediaFileName — 落盘名要人看得懂', () => {
-  // 名字里带主人本地日期 → **每条用例都必须钉住时区**，否则本地 +08 过、CI 跑 UTC 挂
-  // （2026-07-31 真机就这么挂过一次）。
+  // The name includes the owner's local date: every test must pin the timezone, or +08 passes locally while UTC fails on CI.
+  // This happened on a real host on 2026-07-31.
   beforeEach(() => setOwnerTz('Asia/Shanghai'));
   afterEach(() => setOwnerTz(null));
 
@@ -248,7 +248,7 @@ describe('dmMediaFileName — 落盘名要人看得懂', () => {
     expect(dmMediaFileName(TS, 'X', 'ogg', naming)).toContain('2026-07-31_03');
   });
 
-  // 名号是**发信方自报的** —— 绝不能原样进路径。
+  // The sender self-reports their nickname; never put it into a path unchanged.
   it.each([
     ['../../evil', 'evil'],
     ['a/b', 'ab'],

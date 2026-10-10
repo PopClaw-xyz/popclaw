@@ -72,4 +72,4 @@ describe('controlled execution partition cutover', () => {
 // evidence}, world_owner_action_reservations, world_native_action_reservations)
 // no longer have one anywhere in src because their schema is generated now.
 // Measured: 35 of 41 are still literal and none merely moved to another file.
-// （用例本体已删，上面的记录即它存在过的理由。函数本身归 world 车道退役工单。）
+// The test body was removed; the record above explains why it existed. Retirement of the function belongs to the world workstream.
