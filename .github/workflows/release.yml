@@ -174,7 +174,6 @@ jobs:
           package-manager-cache: false
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        if: steps.target.outputs.mode == 'fresh'
         with:
           python-version: "3.12"
 
@@ -446,6 +445,38 @@ jobs:
           # attestation. If this fails, the retained artefacts belong to a
           # different publish and the shell must not point at them.
           scripts/verify-published-package.sh popclaw "$VERSION" "$MAIN_TGZ"
+
+      - name: Smoke the exact packages before publication
+        id: prepublish_smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          # All modes use these same bytes: fresh, dry run and retained-shell
+          # resume. A failed smoke blocks every subsequent publish step.
+          # No SDK install or host registration here; the existing native
+          # matrix remains required and host admission has separate evidence.
+          mkdir -p "${RUNNER_TEMP}/package-smoke"
+          python3 scripts/smoke-release-packages.py \
+            --main-tgz "$MAIN_TGZ" \
+            --shell-tgz "$SHELL_TGZ" \
+            --metadata "${RUNNER_TEMP}/artefacts/release-metadata.json" \
+            --checksums "${RUNNER_TEMP}/artefacts/SHA256SUMS.txt" \
+            --node "$(command -v node)" \
+            --output "${RUNNER_TEMP}/package-smoke/results" \
+            2>&1 | tee "${RUNNER_TEMP}/package-smoke/console.log"
+
+      - name: Retain package smoke evidence
+        if: ${{ always() && (steps.prepublish_smoke.outcome == 'success' || steps.prepublish_smoke.outcome == 'failure') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-smoke-${{ steps.target.outputs.tag }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/package-smoke/console.log
+            ${{ runner.temp }}/package-smoke/results/receipt.json
+            ${{ runner.temp }}/package-smoke/results/*.log
+            ${{ runner.temp }}/package-smoke/results/*.jsonl
+          if-no-files-found: error
+          retention-days: ${{ env.ARTEFACT_RETENTION_DAYS }}
 
       # ---- publish ----
 
