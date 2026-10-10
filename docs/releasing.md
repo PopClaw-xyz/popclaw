@@ -122,11 +122,52 @@ The resume run downloads `release-artefacts-<tag>` from that run and then, in
 Then it checks that `popclaw@<version>` on the registry has the same integrity
 as the retained `popclaw` tarball, publishes the shell and verifies it. It does
 not install, build, test or pack anything. `only: shell` without
-`resume_from_run_id` is refused, and so is `resume_from_run_id` with
-`only: all` — that would mean republishing `popclaw`.
+`resume_from_run_id` is refused. Combining `resume_from_run_id` with
+`only: all` is refused except for the fixed first-release recovery below;
+it never permits replacing a published version.
 
 Artefacts are retained for **90 days**: long enough for the owner to decide
 without a deadline, and the maximum GitHub allows for a public repository.
+
+## Fixed first-release recovery: both retained packages
+
+The original run `38074322285` completed packing and smoke checks but failed
+publishing `popclaw` with npm E404; neither `0.1.0` package was published by
+that run. Before dispatch, confirm that the reviewed recovery workflow
+revision is present on the selected ref and that the npm account/publisher
+problem has been resolved.
+
+The sole `only: all` resume exception uses these exact dispatch inputs:
+
+| input | value |
+|---|---|
+| `tag` | `v0.1.0` |
+| `dry_run` | `false` |
+| `only` | `all` |
+| `resume_from_run_id` | `38074322285` |
+
+The recovery must verify the original public repository/run identity and
+unchanged tag commit `d9a849e177a2c760bc50a2b1bd2849b88abc723e`, plus
+`release-metadata.json` and the retained checksums. Its fixed artifact is
+`release-artefacts-v0.1.0`, ID `11677679013`, artifact digest
+`sha256:41354d6ec1bd30e5b2f98548e063d495f39f60bedafd46675e448433b351ff5d`.
+The package SHA-256 values are:
+
+| retained file | SHA-256 |
+|---|---|
+| `popclaw-plugin-0.1.0+2026-10-11-0219-d9a849e.tgz` | `5b72e6f341f6eae0bf247100875bb7aa26c19c8362cf2e9f11c81baf4121ad2f` |
+| `popclaw-mcp-0.1.0.tgz` | `b01e68c42ad007bf7517673aaa2f2991e408535ee8cdd0ae1bd629ca0e6d45f9` |
+
+Nothing is rebuilt or repacked. For each exact registry version, verify an
+existing package against the retained bytes and attestation requirements;
+publish only a missing version. A mismatch stops recovery, never triggers an
+overwrite. Verify `popclaw` before publishing its dependent shell, then verify
+the shell. The ordinary shell-only recovery above remains available.
+
+Keep the two records separate: `d9a849e` / run `38074322285` built and tested
+these bytes; a later workflow commit/run performs publication. Inspect and
+record that publication's actual provenance. Do not describe it as a successful
+publish by the original run or assume provenance points to the build commit.
 
 ## One-time setup, maintainer only
 

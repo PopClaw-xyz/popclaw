@@ -19,6 +19,7 @@ build:
     pnpm --filter popclaw run build
 
 test:
+    python3 scripts/test-release-retained-both.py
     pnpm --filter popclaw test
 
 lint:

@@ -45,13 +45,13 @@ on:
         type: boolean
         default: true
       only:
-        description: "Which packages to publish. `shell` is only valid when resuming."
+        description: "Packages: all for a fresh release or the fixed v0.1.0 retained recovery; shell for a half-published release."
         required: false
         type: choice
         default: all
         options: [all, shell]
       resume_from_run_id:
-        description: "Resume a half-finished release: the run ID whose retained artefacts to publish from. Requires only=shell. Nothing is rebuilt."
+        description: "Resume a half-finished release: the run ID whose retained artefacts to publish from. Use shell for a half-published release; all is restricted to the original v0.1.0 run. Nothing is rebuilt."
         required: false
         type: string
         default: ""
@@ -63,7 +63,7 @@ concurrency:
   # Never cancel a release mid-flight; a second one simply waits. Keyed by tag,
   # so a resume run for v0.1.0 queues behind the original v0.1.0 run instead of
   # racing it to the same version number.
-  group: release-${{ github.event.inputs.tag || github.ref }}
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -136,13 +136,13 @@ jobs:
             echo "::error::resume_from_run_id must be a numeric workflow run ID, got '$resume'"
             exit 1
           fi
-          # The two inputs only make sense together. `only=shell` without a run
-          # ID would mean "publish a shell built from a fresh, untested build";
-          # a run ID with `only=all` would mean "republish popclaw", which the
-          # registry forbids and which this workflow must never attempt.
+          # Retained-both recovery is deliberately limited to this first release.
+          # Other releases keep the existing missing-shell recovery contract.
           if [ -n "$resume" ] && [ "$only" != "shell" ]; then
-            echo "::error::resuming from run ${resume} requires only=shell: popclaw is already published and a version can never be republished"
-            exit 1
+            if [ "$only" != "all" ] || [ "$resume" != "38074322285" ] || [ "$tag" != "v0.1.0" ]; then
+              echo "::error::retained all requires original run 38074322285 and tag v0.1.0"
+              exit 1
+            fi
           fi
           if [ -z "$resume" ] && [ "$only" != "all" ]; then
             echo "::error::only=${only} is a resume-only mode; it needs resume_from_run_id so the shell is published from the artefacts that were tested, not from a fresh build"
@@ -155,6 +155,7 @@ jobs:
             echo "version=${tag#v}"
             echo "dry_run=$dry_run"
             echo "mode=$mode"
+            echo "only=$only"
             echo "resume_run_id=$resume"
           } >> "$GITHUB_OUTPUT"
           echo "building $tag (mode=$mode, dry_run=$dry_run)"
@@ -432,26 +433,102 @@ jobs:
             | tee "${RUNNER_TEMP}/retained.env"
           grep -E '^(MAIN|SHELL)_TGZ=' "${RUNNER_TEMP}/retained.env" >> "$GITHUB_ENV"
 
+      - name: Check the original retained-both release and registry state
+        id: resume_state
+        if: steps.target.outputs.mode == 'resume' && steps.target.outputs.only == 'all'
+        shell: bash
+        env:
+          ORIGINAL_RUN: ${{ steps.target.outputs.resume_run_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PYTHON'
+          import hashlib, json, os, pathlib, urllib.request
+
+          def get(url):
+              request = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "popclaw-release-recovery"})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  if response.status != 200:
+                      raise ValueError("Unexpected response status")
+                  return json.load(response)
+
+          def require(ok, message):
+              if not ok:
+                  raise ValueError(message)
+
+          run_id = "38074322285"
+          commit = "d9a849e177a2c760bc50a2b1bd2849b88abc723e"
+          repository = "PopClaw-xyz/popclaw"
+          require(os.environ["ORIGINAL_RUN"] == run_id, "Wrong original run")
+          require(os.environ["GITHUB_REPOSITORY"] == repository, "Wrong repository")
+          api = "https://api.github.com/repos/" + repository + "/actions/runs/" + run_id
+          original = get(api)
+          require(original["id"] == int(run_id) and original["head_sha"] == commit
+                  and original["head_branch"] == "v0.1.0" and original["event"] == "push"
+                  and original["path"] == ".github/workflows/release.yml"
+                  and original["status"] == "completed" and original["conclusion"] == "failure"
+                  and original["repository"]["id"] == 1402869531, "Original run identity mismatch")
+          artifacts = get(api + "/artifacts")["artifacts"]
+          require(any(a["id"] == 11677679013 and a["name"] == "release-artefacts-v0.1.0"
+                      and a["digest"] == "sha256:41354d6ec1bd30e5b2f98548e063d495f39f60bedafd46675e448433b351ff5d"
+                      and not a["expired"] and a["workflow_run"]["head_sha"] == commit
+                      for a in artifacts), "Original retained artifact identity mismatch")
+          folder = pathlib.Path(os.environ["RUNNER_TEMP"]) / "artefacts"
+          expected = {
+              "main": ("popclaw-plugin-0.1.0+2026-10-11-0219-d9a849e.tgz", "5b72e6f341f6eae0bf247100875bb7aa26c19c8362cf2e9f11c81baf4121ad2f"),
+              "shell": ("popclaw-mcp-0.1.0.tgz", "b01e68c42ad007bf7517673aaa2f2991e408535ee8cdd0ae1bd629ca0e6d45f9"),
+          }
+          metadata = json.loads((folder / "release-metadata.json").read_text())
+          require(metadata == dict(tag="v0.1.0", commit=commit, version="0.1.0",
+                                   main=expected["main"][0], shell=expected["shell"][0]), "Original metadata mismatch")
+          for role, (name, digest) in expected.items():
+              require(hashlib.sha256((folder / name).read_bytes()).hexdigest() == digest,
+                      "Original " + role + " bytes mismatch")
+          present = {}
+          for role, name in [("main", "popclaw"), ("shell", "popclaw-mcp")]:
+              packument = get("https://registry.npmjs.org/" + name)
+              require(packument["name"] == name and isinstance(packument["versions"], dict), "Invalid registry response")
+              present[role] = "0.1.0" in packument["versions"]
+          require(present["main"] or not present["shell"], "Shell exists without the main package; stop for inspection")
+          # Presence is not verification. Existing versions go through the same
+          # byte/provenance verifier below before any publication is permitted.
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              for role, exists in present.items():
+                  output.write(role + "_present=" + str(exists).lower() + "\n")
+                  output.write(role + "_missing=" + str(not exists).lower() + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("Original build: v0.1.0 / " + commit + " / run " + run_id + ".\n")
+              summary.write("This recovery publishes retained bytes; provenance identifies this publish workflow commit/run, not the original build run.\n")
+          PYTHON
+
       - name: The registry already holds exactly this popclaw
         id: verify_retained_main
-        if: steps.target.outputs.mode == 'resume'
+        if: steps.target.outputs.mode == 'resume' && (steps.target.outputs.only == 'shell' || steps.resume_state.outputs.main_present == 'true')
         shell: bash
         env:
           VERSION: ${{ steps.target.outputs.version }}
         run: |
           set -euo pipefail
-          # Resume exists because popclaw is already live. Prove that before
+          # When popclaw is already live, prove its identity before
           # publishing a shell that pins it: same version, same bytes, same
           # attestation. If this fails, the retained artefacts belong to a
           # different publish and the shell must not point at them.
           scripts/verify-published-package.sh popclaw "$VERSION" "$MAIN_TGZ"
+
+      - name: Verify an already-published retained shell
+        if: steps.resume_state.outputs.shell_present == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          scripts/verify-published-package.sh popclaw-mcp "$VERSION" "$SHELL_TGZ"
 
       - name: Smoke the exact packages before publication
         id: prepublish_smoke
         shell: bash
         run: |
           set -euo pipefail
-          # All modes use these same bytes: fresh, dry run and retained-shell
+          # All modes use these same bytes: fresh, dry run and retained
           # resume. A failed smoke blocks every subsequent publish step.
           # No SDK install or host registration here; the existing native
           # matrix remains required and host admission has separate evidence.
@@ -485,6 +562,8 @@ jobs:
         shell: bash
         env:
           MODE: ${{ steps.target.outputs.mode }}
+          MAIN_MISSING: ${{ steps.resume_state.outputs.main_missing }}
+          SHELL_PRESENT: ${{ steps.resume_state.outputs.shell_present }}
         run: |
           set -euo pipefail
           # A dry run exercises everything above and the publish request shape,
@@ -494,21 +573,23 @@ jobs:
           # exercised by a real, authenticated publish. A green dry run proves
           # the build. The first real publish of each package is the first test
           # of that package's binding.
-          if [ "$MODE" = "fresh" ]; then
+          if [ "$MODE" = "fresh" ] || [ "${MAIN_MISSING:-}" = "true" ]; then
             npm publish "$MAIN_TGZ" --dry-run --access public
           fi
-          npm publish "$SHELL_TGZ" --dry-run --access public
+          if [ "${SHELL_PRESENT:-}" != "true" ]; then
+            npm publish "$SHELL_TGZ" --dry-run --access public
+          fi
           echo "dry run only — nothing was published, no attestation exists, no binding was verified"
 
       - name: Publish popclaw with provenance
         id: publish_main
-        if: steps.target.outputs.mode == 'fresh' && steps.target.outputs.dry_run != 'true'
+        if: (steps.target.outputs.mode == 'fresh' || steps.resume_state.outputs.main_missing == 'true') && steps.target.outputs.dry_run != 'true'
         shell: bash
         run: npm publish "$MAIN_TGZ" --provenance --access public
 
       - name: The published popclaw is the tarball that was tested
         id: verify_main
-        if: steps.target.outputs.mode == 'fresh' && steps.target.outputs.dry_run != 'true'
+        if: steps.publish_main.outcome == 'success'
         shell: bash
         env:
           VERSION: ${{ steps.target.outputs.version }}
@@ -525,6 +606,7 @@ jobs:
         # taken against the retained tarball instead of a fresh publish.
         if: >-
           steps.target.outputs.dry_run != 'true' &&
+          steps.resume_state.outputs.shell_present != 'true' &&
           (steps.verify_main.outcome == 'success' || steps.verify_retained_main.outcome == 'success')
         shell: bash
         run: npm publish "$SHELL_TGZ" --provenance --access public
