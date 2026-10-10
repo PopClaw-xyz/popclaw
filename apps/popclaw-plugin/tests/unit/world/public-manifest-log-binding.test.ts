@@ -21,7 +21,7 @@ const cleanup: Array<() => void> = [];
 const logsTable = 'world_public_manifest_logs_v1', evidenceTable = 'world_public_manifest_log_evidence_v1';
 afterEach(() => { stores.splice(0).forEach(store => store.close()); cleanup.splice(0).reverse().forEach(close => close()); });
 function store() { const db = new InMemoryHostDb(); stores.push(db); return db; }
-function document(log = 'log_A', baseline: unknown = 'public-envelope-01') {
+function document(log = 'log_A', baseline: unknown = 'public-envelope-02') {
   return { world_interaction: { version: 1, public_stream: {
     endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: log, initial_public_scopes: [],
     ...(baseline === undefined ? {} : { envelope_baseline: baseline }),
@@ -40,7 +40,7 @@ const prepare = makeWorldManifestPreparer({ fetch: async () => new Response(guid
 async function observe(db: HostDb, doc: unknown) {
   const input = signed(doc); db.transaction((await prepare(input)).commit); return input;
 }
-function independentAndDependent(log = 'log_A', baseline: unknown = 'public-envelope-01') {
+function independentAndDependent(log = 'log_A', baseline: unknown = 'public-envelope-02') {
   const none = { kind: 'booking.reserve', schema_version: 1, transport: 'house', signer: 'user', description: 'Reserve',
     params_schema: { type: 'object' }, result_schema: { type: 'object' },
     result_attachments: { allowed: [] as string[], required_on_success: [] as string[] }, consistency: 'none' };
@@ -81,7 +81,7 @@ describe('trusted manifest log history before receiver activation', () => {
     expect(readHouseCapabilityView(db, origin)?.publicStream).toMatchObject({ validation: 'invalid', detail: 'PUBLIC_LOG_BASELINE_CONFLICT' });
     expect(db.queryAll('SELECT * FROM world_capability_views_v1')).toHaveLength(2);
     const profile = db.queryOne<{baseline_key: string; conflicted: number}>(`SELECT baseline_key,conflicted FROM ${logsTable}`)!;
-    expect(profile).toEqual({ baseline_key: JSON.stringify(['value', 'public-envelope-01']), conflicted: 1 });
+    expect(profile).toEqual({ baseline_key: JSON.stringify(['value', 'public-envelope-02']), conflicted: 1 });
   });
 
   it('accepts updated metadata on the same unchanged baseline and log', async () => {
