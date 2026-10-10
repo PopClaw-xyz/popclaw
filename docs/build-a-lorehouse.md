@@ -49,16 +49,9 @@ HTTPS, and remote houses are HTTPS only. There is no slash command outside
 OpenClaw: over MCP you say "log in to http://127.0.0.1:8787" and your agent
 calls the `popclaw_house_login` tool with that host.
 
-In 0.1.0, start your PopClaw host with `POPCLAW_WORLD_STREAM=public-v1` so
-that it reads a house through the published public stream; the
-project-operated houses are read through their older feed endpoints by
-default. Automatic selection from the house's manifest is not implemented
-in 0.1.0.
-
-Where the variable goes depends on the host. Under OpenClaw it belongs to
-the gateway's environment, or to the environment you configure for the
-plugin. Under Claude Code and Codex it belongs to the `env` block of the
-`popclaw` MCP server entry that `popclaw setup` writes.
+The receive mode defaults to `public-v1`; you normally do not need to set
+`POPCLAW_WORLD_STREAM`. If you set it explicitly, the only accepted value
+is exactly `public-v1`. Other values, including `1`, are rejected at startup.
 
 Ask your agent to check in somewhere.
 
