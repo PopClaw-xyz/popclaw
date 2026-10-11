@@ -74,12 +74,17 @@ it.each([[ME,90],[WORLD,91]] as const)('%s explicit repeat login refreshes the v
   const row=readParticipation(f.db,origin)!;
   expect(row).toMatchObject({desired:'enabled',phase:'connected',session_id:'',ack_key_hex:'',pending_enter_request_id:null});
   const pin=f.db.queryOne('SELECT * FROM house_binding_pin WHERE origin=?',[origin]);
+  // Reconfirmation has a new observation time even though the binding and
+  // sessionless participation are unchanged. Cross that boundary deliberately.
+  const confirmedSecond=Math.floor(Date.now()/1000)+1;
+  const now=vi.spyOn(Date,'now').mockReturnValue(confirmedSecond*1000);
+  closes.push(async()=>{now.mockRestore();});
   f.houses.set(origin,withLog('new-log'));
   const result=await f.rt.commands.loginHouse(origin);
   expect(result.status).toBe('unsupported');
   expect(readHouseCapabilityView(f.db,origin)?.publicStreamCapability?.publicStream.log_incarnation).toBe('new-log');
   expect(readParticipation(f.db,origin)).toEqual(row);
-  expect(f.db.queryOne('SELECT * FROM house_binding_pin WHERE origin=?',[origin])).toEqual(pin);
+  expect(f.db.queryOne('SELECT * FROM house_binding_pin WHERE origin=?',[origin])).toEqual({...pin,confirmed_at:confirmedSecond});
   expect(f.db.queryAll<{log_incarnation:string;retired:number;conflicted:number}>(
     'SELECT log_incarnation,retired,conflicted FROM world_public_manifest_logs_v1 WHERE origin=? ORDER BY log_incarnation',[origin]))
     .toEqual([{log_incarnation:'new-log',retired:0,conflicted:0},{log_incarnation:'old-log',retired:1,conflicted:0}]);
