@@ -70,10 +70,7 @@ export function buildCollaborators(input: {
   const guideClient = new GuideClient({ baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl) });
   const summaryClient = new WorldSummaryClient({
     baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl),
-    readGeneration: () => {
-      const gate = houses.captureGate(boot.loreHouseUrl);
-      return { token: gate.signal, isCurrent: () => !gate.signal.aborted && gate.isActive() };
-    },
+    readGeneration: () => ports.world.summaryReadGeneration?.(houses, boot.loreHouseUrl),
   });
   const marksStore = new MarksStore(host.db);
   const markService = new MarkService({
