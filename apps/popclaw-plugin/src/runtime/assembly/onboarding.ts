@@ -68,7 +68,13 @@ export function buildCollaborators(input: {
   const tasteRoot = paths.tasteDir();
   const tasteLoader = new TasteLoader({ tasteDir: tasteRoot, logger: { warn: ports.log.warn } });
   const guideClient = new GuideClient({ baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl) });
-  const summaryClient = new WorldSummaryClient({ baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl) });
+  const summaryClient = new WorldSummaryClient({
+    baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl),
+    readGeneration: () => {
+      const gate = houses.captureGate(boot.loreHouseUrl);
+      return { token: gate.signal, isCurrent: () => !gate.signal.aborted && gate.isActive() };
+    },
+  });
   const marksStore = new MarksStore(host.db);
   const markService = new MarkService({
     store: marksStore,

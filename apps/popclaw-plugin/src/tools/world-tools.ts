@@ -220,6 +220,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         'follow someone with popclaw_follow, reply/post with the draft tools).',
       parameters: WorldSummaryToolSchema,
       execute: async (_callId: string, params: unknown) => {
+        const scope = deps.currentGuideReadScope?.();
         const p = params as { window_hours?: number; retry?: boolean };
         const windowHours =
           typeof p.window_hours === 'number' && Number.isFinite(p.window_hours) && p.window_hours > 0
@@ -239,7 +240,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         const declaration = summaryDeclaration(guide.text);
         if (declaration === 'unsupported') throw new Error(renderCopy(lang, 'world.summary.unsupported'));
         if (declaration === 'unknown') throw new Error(renderCopy(lang, 'world.summary.availabilityUnknown'));
-        const scope = deps.currentGuideReadScope?.();
+        const generation = wd.summaryClient.captureReadGeneration?.();
         // Start the enrichment only for a fresh summary read. A repeated remote
         // failure must not spend another snapshot wait or invent a feed fallback.
         let snapshotRead: Promise<WorldSnapshotItemLike[]> | undefined;
@@ -250,7 +251,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
             : wd.summaryClient.fetchSummary(windowHours).then((summary): WorldSummaryResult => summary
               ? {ok:true,summary} : {ok:false,failure:{code:'HOUSE_REMOTE_UNKNOWN'}}))
             .catch((error): WorldSummaryResult => ({ok:false,failure:houseReadFailure(error)}));
-        });
+        }, generation);
         if (!summaryResult.ok) {
           // Native hosts report the failed call; MCP's normal catch sets
           // isError=true. A failed REST read must not be a successful text tool.
@@ -324,6 +325,9 @@ export function registerWorldTools(ctx: ToolsCtx): void {
           } catch {
             // No note this turn; the summary still goes out intact.
           }
+        }
+        if ((scope && !scope.isCurrent()) || (generation && !generation.isCurrent())) {
+          throw new Error(formatHouseReadFailure(lang, { code: 'HOUSE_ACTION_STALE' }));
         }
         return { type: 'text' as const, text: blocks.join('\n\n') };
       },
