@@ -28,6 +28,8 @@ import { renderCopy } from '../../../src/lexicon/index.js';
 import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
 import { seedTrustedHouse } from '../../helpers/seed-trusted-house.js';
 import { buildSubcommands, type SubcommandWiring } from '../../../src/commands/wiring.js';
+import { buildCollaborators } from '../../../src/runtime/assembly/onboarding.js';
+import { mcpRuntimePorts } from '../../../src/host/mcp-runtime-ports.js';
 import { runStatusSubcommandForTest } from '../../../src/main.js';
 const opened=vi.hoisted(()=>vi.fn());
 vi.mock('../../../src/runtime/house-lifecycle/resource-set.js',()=>({createHouseStreamFactory:()=>({open:()=>{opened();return {stop:async()=>{}};}})}));
@@ -40,7 +42,7 @@ const GUIDE='---\nworld: Fixture House\nvoice: a test voice\n---\nThe house spea
 const PROFILE={house_follower_count:1,profiles:[],card:{nickname:'fixture-owner'}};
 /** One real, envelope-carrying post — the thing a normal call must come back with. */
 const POST='a post the second host must be able to read';
-async function fixture(){
+async function fixture(summaryEnabled=false){
  const received:Uint8Array[]=[];
  /** Every unauthenticated GET the house actually saw — method, path, and
   * whether the caller carried anything that could identify it. */
@@ -54,7 +56,8 @@ async function fixture(){
    reads.push({method:req.method,url:req.url??'',
     credential:!!(req.headers.authorization??req.headers.cookie??req.headers[INBOX_TOKEN_HEADER.toLowerCase()])});
    if((req.url??'').includes('hold=1')){hold.arrived.resolve();await hold.release.promise;}
-   if((req.url??'').startsWith('/v1/guide.md')){res.writeHead(200,{'content-type':'text/markdown'});res.end(GUIDE);return;}
+   if((req.url??'').startsWith('/v1/guide.md')){res.writeHead(200,{'content-type':'text/markdown'});res.end(summaryEnabled ? GUIDE.replace('voice: a test voice', 'voice: a test voice\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary') : GUIDE);return;}
+   if(summaryEnabled && (req.url??'').startsWith('/v1/world-summary')){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({window_hours:24,generated_at_ms:1,total_posts:17,distinct_authors:3,authors:{},hot_posts:[]}));return;}
    if((req.url??'').startsWith('/v1/profile/')){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(PROFILE));return;}
    res.writeHead(200,{'content-type':'application/x-protobuf'});
    res.end(Buffer.from(popclaw.event.WorldFeedSnapshot.encode({items:[feedItem({textPreview:POST})]}).finish()));return;
@@ -75,7 +78,7 @@ async function fixture(){
  const house = mintHouse({ origin });
  expect((await pinConfiguredHouses({ db: dbs[0]!, recipientPopclawId: 'fixture', origins: [origin],
    pinning: owner.configuredHousePinning, fetch: house.fetch as typeof fetch }))[0]?.outcome).toBe('pinned');
- return {origin,received,reads,hold,dbs,owner:runtimes[0]!,reader:runtimes[1]!};
+ return {dir,origin,received,reads,hold,dbs,owner:runtimes[0]!,reader:runtimes[1]!};
 }
 it('a reader sends exact raw bytes through the resident owner and receives the HTTP receipt',async()=>{
  const s=await fixture();s.owner.start();s.reader.startReader();
@@ -410,4 +413,29 @@ it('the popclaw status CLI subcommand on a second host reads the live house too'
  const code=await runStatusSubcommandForTest({...boot,host,logger:quiet} as never,s.reader);
  expect(code).toBe(0);
  expectLiveHouseStatus(s,printed.join('\n'));
+});
+
+
+it('actual MCP ports and shared collaborators keep same-root non-owner summary reads on the public lane',async()=>{
+ const s=await fixture(true);s.owner.start();s.reader.startReader();
+ expect(s.reader.captureGate(s.origin).isActive()).toBe(false);
+ const paths=new PopclawPaths(s.dir);
+ const ports=mcpRuntimePorts({receiveMode:'public-v1',logger:{info:()=>{},warn:()=>{},error:()=>{}} as never,
+  dataRoot:s.dir,storagePaths:paths,releaseStorage:()=>{},serverBox:{} as never,
+  approvalWindowMs:undefined,consumerId:()=> 'summary-reader-fixture'});
+ const collaborators=buildCollaborators({host:{db:s.dbs[1]!} as unknown as HostAdapter,boot:{loreHouseUrl:s.origin} as never,
+  paths,ports,houses:s.reader,egress:{} as never});
+ const {api,tools}=fakeApi();
+ const wd={guideClient:collaborators.guideClient,summaryClient:collaborators.summaryClient,
+  snapshotClient:new WorldFeedClient({baseUrl:s.origin,fetch:ports.world.snapshotFetch(s.reader,s.origin)}),
+  resolveClient:new ResolveClient({baseUrl:s.origin,fetch:ports.world.clientFetch(s.reader,s.origin)}),webBaseUrl:'https://popclaw.invalid'};
+ registerPopclawTools({api,runtime:(async()=>({})) as never,getWorldDeps:async()=>wd});
+ const result=await s.reader.runCommand(()=>toolText(tools,'popclaw_world_summary'));
+ expect(result).toContain('17');expect(result).toContain('24');
+ expect(s.reads.filter(read=>read.url.startsWith('/v1/world-summary'))).toHaveLength(1);
+ expect(s.reads.every(read=>read.method==='GET'&&!read.credential)).toBe(true);
+ const reads=s.reads.length;
+ s.dbs[0]!.execute("UPDATE house_participation SET desired='disabled',op_seq=op_seq+1 WHERE house_origin=?",[s.origin]);
+ await expect(toolText(tools,'popclaw_world_summary')).rejects.toThrow('HOUSE_DISABLED');
+ expect(s.reads).toHaveLength(reads);expect(s.received).toEqual([]);
 });

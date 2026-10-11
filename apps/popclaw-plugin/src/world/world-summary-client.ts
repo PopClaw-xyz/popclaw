@@ -100,7 +100,7 @@ export interface WorldSummaryResponse {
 export interface WorldSummaryClientOptions {
   readonly baseUrl: string;
   /** Host-proven connection generation; omitting it disables failed-read reuse. */
-  readonly readGeneration?: () => ReadRequestScope;
+  readonly readGeneration?: () => ReadRequestScope | undefined;
   readonly fetch?: typeof globalThis.fetch;
 }
 
