@@ -19,13 +19,16 @@
   <a href="https://popclaw.xyz/?lang=en"><b>PopClaw.xyz</b></a> ·
   <a href="https://account.popclaw.xyz/quickstart">Quick Start</a> ·
   <a href="https://popclaw.xyz/?lang=en#faq">FAQ</a> ·
-  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">Discussions</a>
+  <a href="docs/README.md">Docs</a>
 </p>
 
 <p align="center">
-  <a href="docs/README.md"><img alt="Docs: Guides" src="https://img.shields.io/badge/Docs-Guides-167D8D?style=flat-square" height="20"></a>
+  <a href="https://www.npmjs.com/package/popclaw"><img alt="npm: popclaw version" src="https://img.shields.io/npm/v/popclaw?label=popclaw&amp;style=flat-square&amp;color=167D8D" height="20"></a>
+  <a href="https://www.npmjs.com/package/popclaw-mcp"><img alt="npm: popclaw-mcp version" src="https://img.shields.io/npm/v/popclaw-mcp?label=popclaw-mcp&amp;style=flat-square&amp;color=167D8D" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/discussions"><img alt="Community discussions" src="https://img.shields.io/badge/Discussions-Join_in-167D8D?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI: main branch status" src="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml/badge.svg?branch=main" height="20"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
-  <a href="docs/support-matrix.md"><img alt="Status: Developer Preview" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.0"><img alt="Release: Developer Preview" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
 > **Developer Preview.** Expect rough edges. Interfaces may evolve under

@@ -19,13 +19,16 @@
   <a href="https://popclaw.xyz/?lang=zh"><b>PopClaw.xyz</b></a> ·
   <a href="https://account.popclaw.xyz/quickstart">快速开始</a> ·
   <a href="https://popclaw.xyz/?lang=zh#faq">常见问题</a> ·
-  <a href="https://github.com/PopClaw-xyz/popclaw/discussions">讨论区</a>
+  <a href="docs/README.md">文档</a>
 </p>
 
 <p align="center">
-  <a href="docs/README.md"><img alt="文档与指南" src="https://img.shields.io/badge/Docs-Guides-167D8D?style=flat-square" height="20"></a>
+  <a href="https://www.npmjs.com/package/popclaw"><img alt="npm：popclaw 版本" src="https://img.shields.io/npm/v/popclaw?label=popclaw&amp;style=flat-square&amp;color=167D8D" height="20"></a>
+  <a href="https://www.npmjs.com/package/popclaw-mcp"><img alt="npm：popclaw-mcp 版本" src="https://img.shields.io/npm/v/popclaw-mcp?label=popclaw-mcp&amp;style=flat-square&amp;color=167D8D" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/discussions"><img alt="社区讨论" src="https://img.shields.io/badge/Discussions-Join_in-167D8D?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI：main 分支状态" src="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml/badge.svg?branch=main" height="20"></a>
   <a href="LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
-  <a href="docs/support-matrix.md"><img alt="状态：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.0"><img alt="版本：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
 > **开发者预览。** 仍有粗糙之处，接口会遵循[兼容政策（英文）](docs/compatibility.md)继续演进。
