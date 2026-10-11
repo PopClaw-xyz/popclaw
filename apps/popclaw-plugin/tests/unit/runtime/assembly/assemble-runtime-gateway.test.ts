@@ -353,13 +353,13 @@ describe('the gateway bag, as the production root path builds it', () => {
     expect(Object.keys(bag).sort()).toEqual([
       'bondsStore', 'boot', 'cadenceLoader', 'drainNotifications', 'egress', 'followerSync', 'guideClient',
       'host', 'houseFeedReader', 'houseRuntime', 'houseStarted', 'houses', 'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers',
-      'llmComplete', 'markService', 'marksStore', 'nameOf', 'nativeWorldExecution', 'notifier', 'notifyBacklog',
+      'llmComplete', 'markService', 'marksStore', 'nameOf', 'nativeWorldExecution', 'newspaperSummary', 'notifier', 'notifyBacklog',
       'onboardingState', 'orchestrator', 'ownerNotifier', 'ownerNotifyTargetStore', 'ownerSession', 'paths',
       'pendingFollows', 'pendingInvites', 'proposalsStore', 'publicFeedDisplay', 'replyPings', 'retryDmNotifications', 'scoreCache',
       'shutdown', 'socialGraph', 'socialLog', 'summaryClient', 'tasteLoader', 'uploadCanvas', 'worldFeedCache',
       'worldFeedClient', 'worldOwnerApproval', 'worldRuntime',
     ]);
-    expect(Object.keys(bag)).toHaveLength(46);
+    expect(Object.keys(bag)).toHaveLength(47);
     expect(bag.worldFeedClient).toBe(bag.houseFeedReader);
     expect(bag.publicFeedDisplay).toBe(bag.houseFeedReader);
     expect(probe.events.filter(e => e.startsWith('followerSync.'))).toEqual(['followerSync.construct']);

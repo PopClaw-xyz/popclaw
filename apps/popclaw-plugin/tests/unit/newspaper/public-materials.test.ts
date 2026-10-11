@@ -446,7 +446,7 @@ it('an unavailable public source never falls back to the legacy cache adapter',a
 });
 
 
-it('registered newspaper freezes the complete summary in candidate and selected material without re-reading it', async () => {
+it('registered newspaper freezes the complete summary through reading, selection and publication without re-reading it', async () => {
   const f = await newspaperFixture();
   const snapshot = JSON.parse(readFileSync(new URL('../../fixtures/world-summary-snapshot.json', import.meta.url), 'utf8'));
   const fetchSummary = vi.fn(async () => ({ window_hours: 24, generated_at_ms: snapshot.generated_at_ms,
@@ -465,11 +465,17 @@ it('registered newspaper freezes the complete summary in candidate and selected 
   expect(frozen.text).toContain('Builds tools for public conversation.');
   expect(readNewspaperDocument(candidate.token,{manifestDir:f.paths.newspaperManifestsDir(),
     validateMaterials: issue => publicMaterialSource(f.runtime)!.validate(issue)}).text).toContain(frozen.text);
+  const saved = readNewspaperDocument(candidate.token,{manifestDir:f.paths.newspaperManifestsDir()});
+  const page = await f.tools()('popclaw_newspaper',{page_cursor:`${candidate.token}.${saved.version}.0`});
+  expect(page.text).toContain(snapshot.snapshot_id);
   snapshot.snapshot_id = 'later-summary-does-not-replace-this-edition';
   const material = await pick(f,candidate.token);
   expect((material.issue as unknown as {worldSummary:unknown}).worldSummary).toEqual((candidate.issue as unknown as {worldSummary:unknown}).worldSummary);
   expect(readNewspaperDocument(material.token,{manifestDir:f.paths.newspaperManifestsDir(),
     validateMaterials: issue => publicMaterialSource(f.runtime)!.validate(issue)}).text).toContain(frozen.text);
+  const published = await publish(f,material.token);
+  expect(published.text).toContain('https://canvas.invalid/paper?t=fixture');
+  expect(f.runtime.uploadCanvas).toHaveBeenCalledTimes(1);
   expect(fetchSummary).toHaveBeenCalledTimes(1);
   expect(fetchGuideText).toHaveBeenCalledTimes(1);
   expect(sourceScan).toHaveBeenCalledTimes(1);
