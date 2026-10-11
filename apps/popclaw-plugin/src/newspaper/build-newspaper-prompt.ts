@@ -1,3 +1,4 @@
+import { summaryMaterialText } from './summary-material.js';
 /**
  * The agent-facing brief for one issue (v0.2).
  *
@@ -186,6 +187,8 @@ export function buildNewspaperPrompt(issue: IssueData, opts: BriefOptions): stri
     ``,
     // Anti-panic, placed this high on purpose: when a host does cut this payload it
     // keeps the HEAD, so this line survives every cap tier.
+    summaryMaterialText(issue.worldSummary,lang),
+    ``,
     `[READING CONTINUATIONS] Read the saved document through page_cursor. A single long source can span several pages; join its complete parts before quoting or summarizing. Never replace a continuation with fresh feed data or remembered text.`,
     ``,
     // What this page carries and how it ends, so "is it whole" is a thing the writer

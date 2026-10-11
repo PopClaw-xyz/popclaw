@@ -13,6 +13,8 @@
  *   3. keeping the two concerns separate avoids a bloated class.
  * The fetch + baseUrl injection pattern is identical to WorldFeedClient's constructor.
  */
+import { parseWorldSummary } from './summary-validation.js';
+import type { WorldSummarySnapshot } from './summary-snapshot-types.js';
 import { houseReadFailure, type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
 import { displayPerson } from '../identity/person-resolver.js';
 import { LORE_HOUSE_TIMEOUT_MS } from './http-timeout.js';
@@ -95,6 +97,8 @@ export interface WorldSummaryResponse {
   readonly notable_people?: NotablePerson[];
   /** v2: one-line self-description of the hot-ranking algorithm. */
   readonly summary_note?: string;
+  /** Complete public snapshot. An advertised invalid snapshot is refused. */
+  readonly snapshot?: WorldSummarySnapshot;
 }
 
 export interface WorldSummaryClientOptions {
@@ -138,6 +142,11 @@ function safeRequestId(response: Response): string | undefined {
 
 export class WorldSummaryClient {
   private readonly fetchFn: typeof globalThis.fetch;
+  // This caches a public representation, never a successful request or permission.
+  // Every use revalidates through the normal gated HTTP read. No URL-only pending merge.
+  private readonly responses = new Map<string, {
+    etag: string; body: WorldSummaryResponse; generation?: ReadRequestScope;
+  }>();
 
   constructor(private readonly opts: WorldSummaryClientOptions) {
     this.fetchFn = opts.fetch ?? globalThis.fetch;
@@ -166,25 +175,47 @@ export class WorldSummaryClient {
     const qStr = qs.toString();
     const url = `${this.opts.baseUrl.replace(/\/$/, '')}/v1/world-summary${qStr ? `?${qStr}` : ''}`;
     const deadline = AbortSignal.timeout(LORE_HOUSE_TIMEOUT_MS);
+    let generation: ReadRequestScope | undefined;
+    const current = () => !generation || generation.isCurrent();
+    const stale = (): WorldSummaryResult => {
+      this.responses.delete(url);
+      return {ok:false,failure:{code:'HOUSE_ACTION_STALE',origin:this.opts.baseUrl}};
+    };
     try {
-      const res = await this.fetchFn(url, { signal: deadline });
+      generation = this.captureReadGeneration();
+      if (!current()) return stale();
+      let cached = this.responses.get(url);
+      if (cached && (cached.generation?.token !== generation?.token || !cached.generation?.isCurrent() && cached.generation !== undefined)) {
+        this.responses.delete(url); cached = undefined;
+      }
+      const res = await this.fetchFn(url, { signal: deadline,
+        ...(cached ? {headers:{'If-None-Match':cached.etag}} : {}) });
       const requestId = safeRequestId(res);
+      if (!current()) return stale();
+      if (res.status === 304 && cached) return {ok:true,summary:cached.body,...(requestId ? {requestId} : {})};
+      this.responses.delete(url);
       if (!res.ok) return {ok:false,failure:{code:'HOUSE_REMOTE_HTTP',origin:this.opts.baseUrl,status:res.status,
         diagnostic:{phase:'fetch',cause:'unknown',...(requestId ? {requestId} : {})}}};
       try {
-        const json = (await res.json()) as WorldSummaryResponse;
-        if (!json || typeof json !== 'object' || !Array.isArray(json.hot_posts) || !json.authors
-          || typeof json.authors !== 'object' || typeof json.window_hours !== 'number'
-          || typeof json.total_posts !== 'number' || typeof json.distinct_authors !== 'number')
-          return {ok:false,failure:{code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl,
-            diagnostic:{phase:'body',cause:'unknown',...(requestId ? {requestId} : {})}}};
-        return {ok:true,summary:json,...(requestId ? {requestId} : {})};
+        const json = await res.json();
+        if (!current()) return stale();
+        const body = parseWorldSummary(json);
+        if (!body) return {ok:false,failure:{code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl,
+          diagnostic:{phase:'body',cause:'unknown',...(requestId ? {requestId} : {})}}};
+        const etag = res.headers?.get('ETag');
+        if (etag) {
+          if (this.responses.size >= 8) this.responses.delete(this.responses.keys().next().value!);
+          this.responses.set(url,{etag,body,...(generation ? {generation} : {})});
+        }
+        return {ok:true,summary:body,...(requestId ? {requestId} : {})};
       } catch (error) {
+        this.responses.delete(url);
         const failure = summaryReadFailure(error,this.opts.baseUrl,'body',deadline,requestId);
         return {ok:false,failure:error instanceof SyntaxError && failure.code !== 'HOUSE_REMOTE_TIMEOUT'
           ? {code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl,diagnostic:{phase:'body',cause:'unknown',...(requestId ? {requestId} : {})}} : failure};
       }
     } catch (error) {
+      this.responses.delete(url);
       return {ok:false,failure:summaryReadFailure(error,this.opts.baseUrl,'fetch',deadline)};
     }
   }

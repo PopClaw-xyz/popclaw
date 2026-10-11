@@ -3,6 +3,7 @@
  * owner's own id, and resolving the `person` parameter a tool was given.
  */
 
+import { observedPeople } from '../identity/observed-people.js';
 import {
   resolvePerson,
   personSourcesFrom,
@@ -68,12 +69,13 @@ export async function buildPersonSources(deps: RegisterToolsDeps): Promise<Perso
   } catch {
     /* Both local sources unavailable → empty, only the lore-house is left */
   }
+  const summaryPeople = observedPeople();
   return personSourcesFrom({
     bonds: () => bonds,
     follows: () => follows,
     followers: () => followers,
-    feedAuthors: () => authors,
-    feedNames: () => authorNames,
+    feedAuthors: () => [...authors, ...summaryPeople.map(p => p.popclawId)],
+    feedNames: () => [...authorNames, ...summaryPeople],
     ...(self ? { self: () => self } : {}),
     ...(learn ? { learn } : {}),
     ...(nameOf ? { nameOf } : {}),

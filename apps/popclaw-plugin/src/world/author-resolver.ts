@@ -44,16 +44,25 @@ export function resolveAuthor(
   const prefix: AuthorCandidate[] = [];
   const substring: AuthorCandidate[] = [];
 
+  const names = new Map<string, Set<string>>();
+  for (const source of sources) {
+    if (!source.nickname) continue;
+    const observed = names.get(source.popclawId) ?? new Set<string>();
+    observed.add(normalize(source.nickname));
+    names.set(source.popclawId, observed);
+  }
   for (const a of aggregateNotableAuthors(sources)) {
-    const n = normalize(a.nickname);
+    // Multiple shown names belong to one ID. Keep all of them as search clues;
+    // aggregation still determines the display name and platform list.
+    const observed = [...names.get(a.popclawId) ?? [], normalize(a.nickname)];
     const candidate: AuthorCandidate = {
       popclawId: a.popclawId,
       nickname: a.nickname,
       platforms: a.platforms,
     };
-    if (n === q) exact.push(candidate);
-    else if (n.startsWith(q)) prefix.push(candidate);
-    else if (n.includes(q)) substring.push(candidate);
+    if (observed.includes(q)) exact.push(candidate);
+    else if (observed.some(n => n.startsWith(q))) prefix.push(candidate);
+    else if (observed.some(n => n.includes(q))) substring.push(candidate);
   }
 
   return [...exact, ...prefix, ...substring];

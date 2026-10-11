@@ -149,6 +149,40 @@ export function rememberObservedPostIds(items: readonly ObservedPostItem[]): voi
   }
 }
 
+/** Canonical public snapshot IDs, not external platform identifiers or post bodies. */
+export function rememberObservedSummaryEventIds(ids: readonly string[]): void {
+  const map = observedMap();
+  for (const id of ids) {
+    if (!/^[0-9a-f]{64}$/.test(id)) continue;
+    const short = id.slice(0,10);
+    let fulls = map.get(short);
+    if (!fulls) {
+      if (map.size >= MAX_OBSERVED) {
+        const oldest = map.keys().next().value!;
+        for (const oldId of map.get(oldest) ?? []) observedSources().delete(oldId);
+        map.delete(oldest);
+      }
+      fulls = new Set(); map.set(short,fulls);
+    }
+    fulls.add(id);
+  }
+}
+
+/** Pure display lookup; also consider every ID in the currently rendered snapshot. */
+export function summaryEventRef(id: string, sources: PostRefSources, snapshotIds: readonly string[] = []): string {
+  for (let length = 10; length < 64; length++) {
+    const prefix = id.slice(0,length);
+    if (sources.cacheUnreachable) return id;
+    const cached = lookupCache(sources.cache,prefix);
+    if (cached.kind === 'unreadable') return id;
+    const candidates = new Set(cached.kind === 'answered' ? cached.ids : []);
+    for (const fulls of observedMap().values()) for (const full of fulls) if (full.startsWith(prefix)) candidates.add(full);
+    for (const full of [...snapshotIds,...sources.publicEventIds ?? []]) if (/^[0-9a-f]{64}$/.test(full) && full.startsWith(prefix)) candidates.add(full);
+    if (candidates.size === 1 && candidates.has(id)) return prefix;
+  }
+  return id;
+}
+
 /** The local-cache seam, duck-typed so partial test wiring degrades to "no cache source" instead of throwing. */
 export interface PostRefCache {
   findFullEventId?(prefix: string): { full: string | null; ambiguous: string[] };
@@ -216,20 +250,22 @@ type CacheOutcome =
  *      the caller refuses instead (Codex ruling: explicit failure, no draft).
  */
 function lookupCache(cache: PostRefSources['cache'], prefix: string): CacheOutcome {
-  const fn = cache?.findFullEventId;
-  if (typeof fn !== 'function') return { kind: 'unwired' };
+  const native = cache?.findFullEventId, canonical = cache?.findByEventIdPrefix;
+  if (typeof native !== 'function' && typeof canonical !== 'function') return {kind:'unwired'};
   try {
-    // The cache's own result already folds its ambiguity in: `full` when
-    // unique, `ambiguous` listing the colliding ids otherwise. Both go into
-    // the same candidate pool — unique-across-both-sources is what counts.
-    const r = fn.call(cache, prefix);
     const ids: string[] = [];
-    if (r.full) ids.push(r.full);
-    for (const a of r.ambiguous) ids.push(a);
-    return { kind: 'answered', ids };
-  } catch {
-    return { kind: 'unreadable' };
-  }
+    if (typeof native === 'function') {
+      const result = native.call(cache,prefix);
+      if (result.full) ids.push(result.full);
+      ids.push(...result.ambiguous);
+    }
+    if (typeof canonical === 'function') {
+      const result = canonical.call(cache,prefix);
+      if (result.item?.eventId) ids.push(result.item.eventId);
+      ids.push(...result.ambiguous);
+    }
+    return {kind:'answered',ids};
+  } catch { return {kind:'unreadable'}; }
 }
 
 /** The short-hex leg: validate the shape, then resolve unique-or-refuse. `display` is what error copy names. */

@@ -2,6 +2,7 @@
  * T2: WorldSummaryClient unit tests.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { WorldSummaryClient } from '../../../src/world/world-summary-client.js';
 import type { WorldSummaryResponse } from '../../../src/world/world-summary-client.js';
 import { deriveSigil } from '../../../src/invite/sigil.js';
@@ -223,4 +224,65 @@ it.each(['3d057e5b-63b9-484d-a7f7-2016bf98c7a0','secret-token-invalid'])('only r
   expect(result).toMatchObject({ok:false,failure:{code:'HOUSE_REMOTE_HTTP'}});
   if(requestId==='secret-token-invalid') expect(JSON.stringify(result)).not.toContain(requestId);
   else expect(result).toMatchObject({failure:{diagnostic:{requestId}}});
+});
+
+
+describe('v3 conditional read retains typed failures', () => {
+  const response = () => Object.assign(makeValidResponse(), { snapshot: JSON.parse(readFileSync(new URL('../../fixtures/world-summary-snapshot.json', import.meta.url), 'utf8')) });
+  it('revalidates parsed representation with ETag and accepts only a real 304 for reuse', async () => {
+    const body = response();
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(body), { headers: { ETag: '"snapshot-1"' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 304 }));
+    const client = new WorldSummaryClient({ baseUrl: BASE, fetch });
+    expect(await client.fetchSummary()).toEqual(body);
+    expect(await client.fetchSummary()).toEqual(body);
+    expect(new Headers(fetch.mock.calls[1]![1]?.headers).get('If-None-Match')).toBe('"snapshot-1"');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('rejects an advertised malformed snapshot instead of accepting legacy fields', async () => {
+    const body = response(); body.snapshot.version = 9;
+    const client = new WorldSummaryClient({ baseUrl: BASE, fetch: jsonFetch(200, body) });
+    expect(await client.fetchSummaryResult()).toMatchObject({ ok: false, failure: { code: 'HOUSE_REMOTE_PARSE' } });
+  });
+  it('invalidates cached success after server failure and cannot reuse it on a later orphan 304', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(response()), { headers: { ETag: '"snapshot-1"' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 304 }));
+    const client = new WorldSummaryClient({ baseUrl: BASE, fetch });
+    expect((await client.fetchSummaryResult()).ok).toBe(true);
+    expect(await client.fetchSummaryResult()).toMatchObject({ ok: false, failure: { code: 'HOUSE_REMOTE_HTTP', status: 503 } });
+    expect((await client.fetchSummaryResult()).ok).toBe(false);
+    expect(new Headers(fetch.mock.calls[2]![1]?.headers).has('If-None-Match')).toBe(false);
+  });
+});
+
+
+describe('conditional summary generation guards', () => {
+  it('drops the old representation when the original gate expires with the same token', async () => {
+    const token = {}; let firstLive = true;
+    let scope = {token,isCurrent:()=>firstLive};
+    const transport = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(makeValidResponse()),{headers:{etag:'"first"'}}))
+      .mockResolvedValueOnce(new Response(JSON.stringify(makeValidResponse()),{headers:{etag:'"second"'}}));
+    const client = new WorldSummaryClient({baseUrl:BASE,fetch:transport,readGeneration:()=>scope});
+    expect((await client.fetchSummaryResult()).ok).toBe(true);
+    firstLive = false; scope = {token,isCurrent:()=>true};
+    expect((await client.fetchSummaryResult()).ok).toBe(true);
+    expect(transport.mock.calls[1]?.[1]?.headers).toBeUndefined();
+  });
+  it('refuses a 304 if the captured generation expires while HTTP is pending', async () => {
+    let live = true; const token = {}; let release!: (response: Response) => void;
+    const conditional = new Promise<Response>(resolve => {release = resolve;});
+    const transport = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(makeValidResponse()),{headers:{etag:'"first"'}}))
+      .mockReturnValueOnce(conditional);
+    const client = new WorldSummaryClient({baseUrl:BASE,fetch:transport,readGeneration:()=>({token,isCurrent:()=>live})});
+    await client.fetchSummaryResult();
+    const pending = client.fetchSummaryResult();
+    await vi.waitFor(()=>expect(transport).toHaveBeenCalledTimes(2));
+    live = false; release(new Response(null,{status:304}));
+    expect(await pending).toMatchObject({ok:false,failure:{code:'HOUSE_ACTION_STALE'}});
+  });
 });
