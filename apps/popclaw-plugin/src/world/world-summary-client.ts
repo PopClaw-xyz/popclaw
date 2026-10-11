@@ -13,7 +13,7 @@
  *   3. keeping the two concerns separate avoids a bloated class.
  * The fetch + baseUrl injection pattern is identical to WorldFeedClient's constructor.
  */
-import { houseReadFailure, type HouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
+import { houseReadFailure, type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
 import { displayPerson } from '../identity/person-resolver.js';
 import { LORE_HOUSE_TIMEOUT_MS } from './http-timeout.js';
 import type { NameChain } from '../identity/person-name.js';
@@ -101,7 +101,37 @@ export interface WorldSummaryClientOptions {
   readonly fetch?: typeof globalThis.fetch;
 }
 
-export type WorldSummaryResult = {readonly ok:true;readonly summary:WorldSummaryResponse} | {readonly ok:false;readonly failure:HouseReadFailure};
+export type WorldSummaryResult = {readonly ok:true;readonly summary:WorldSummaryResponse;readonly requestId?:string}
+  | {readonly ok:false;readonly failure:HouseReadFailure;readonly reused?:boolean};
+
+/** Only the summary path adopts richer diagnostics; other read classifications stay unchanged. */
+function summaryReadFailure(error: unknown, origin: string, phase: HouseReadDiagnostic['phase'],
+  deadline: AbortSignal, requestId?: string): HouseReadFailure {
+  const failure = houseReadFailure(error, origin);
+  if (failure.code !== 'HOUSE_REMOTE_NETWORK') return failure; // Never relabel a lifecycle refusal.
+  let cause: HouseReadDiagnostic['cause'] = 'unknown';
+  let value = error;
+  for (let depth = 0; depth < 4 && value instanceof Error; depth += 1) {
+    const code = (value as Error & {code?:unknown}).code;
+    if (value.name === 'TimeoutError' || code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT'
+      || code === 'UND_ERR_BODY_TIMEOUT' || code === 'ETIMEDOUT') { cause = 'timeout'; break; }
+    if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') { cause = 'dns'; break; }
+    if (code === 'CERT_HAS_EXPIRED' || code === 'DEPTH_ZERO_SELF_SIGNED_CERT' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+      || code === 'ERR_TLS_CERT_ALTNAME_INVALID') { cause = 'tls'; break; }
+    if (code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'EHOSTUNREACH' || code === 'ENETUNREACH'
+      || code === 'UND_ERR_SOCKET') { cause = 'connection'; break; }
+    if (value.name === 'AbortError') cause = 'aborted';
+    value = value.cause;
+  }
+  const ownTimeout = deadline.aborted && deadline.reason instanceof Error && deadline.reason.name === 'TimeoutError';
+  if (ownTimeout) cause = 'timeout';
+  return {code:cause === 'timeout' ? 'HOUSE_REMOTE_TIMEOUT' : 'HOUSE_REMOTE_NETWORK',origin,
+    diagnostic:{phase,cause,...(ownTimeout ? {timeoutMs:LORE_HOUSE_TIMEOUT_MS} : {}),...(requestId ? {requestId} : {})}};
+}
+function safeRequestId(response: Response): string | undefined {
+  const value = response.headers?.get('x-request-id');
+  return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : undefined;
+}
 
 export class WorldSummaryClient {
   private readonly fetchFn: typeof globalThis.fetch;
@@ -128,22 +158,27 @@ export class WorldSummaryClient {
     if (windowHours !== undefined) qs.set('window_hours', String(windowHours));
     const qStr = qs.toString();
     const url = `${this.opts.baseUrl.replace(/\/$/, '')}/v1/world-summary${qStr ? `?${qStr}` : ''}`;
+    const deadline = AbortSignal.timeout(LORE_HOUSE_TIMEOUT_MS);
     try {
-      const res = await this.fetchFn(url, { signal: AbortSignal.timeout(LORE_HOUSE_TIMEOUT_MS) });
-      if (!res.ok) return {ok:false,failure:{code:'HOUSE_REMOTE_HTTP',origin:this.opts.baseUrl,status:res.status}};
+      const res = await this.fetchFn(url, { signal: deadline });
+      const requestId = safeRequestId(res);
+      if (!res.ok) return {ok:false,failure:{code:'HOUSE_REMOTE_HTTP',origin:this.opts.baseUrl,status:res.status,
+        diagnostic:{phase:'fetch',cause:'unknown',...(requestId ? {requestId} : {})}}};
       try {
         const json = (await res.json()) as WorldSummaryResponse;
         if (!json || typeof json !== 'object' || !Array.isArray(json.hot_posts) || !json.authors
           || typeof json.authors !== 'object' || typeof json.window_hours !== 'number'
           || typeof json.total_posts !== 'number' || typeof json.distinct_authors !== 'number')
-          return {ok:false,failure:{code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl}};
-        return {ok:true,summary:json};
+          return {ok:false,failure:{code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl,
+            diagnostic:{phase:'body',cause:'unknown',...(requestId ? {requestId} : {})}}};
+        return {ok:true,summary:json,...(requestId ? {requestId} : {})};
       } catch (error) {
-        const failure = houseReadFailure(error,this.opts.baseUrl);
-        return {ok:false,failure:error instanceof SyntaxError ? {code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl} : failure};
+        const failure = summaryReadFailure(error,this.opts.baseUrl,'body',deadline,requestId);
+        return {ok:false,failure:error instanceof SyntaxError && failure.code !== 'HOUSE_REMOTE_TIMEOUT'
+          ? {code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl,diagnostic:{phase:'body',cause:'unknown',...(requestId ? {requestId} : {})}} : failure};
       }
     } catch (error) {
-      return {ok:false,failure:houseReadFailure(error,this.opts.baseUrl)};
+      return {ok:false,failure:summaryReadFailure(error,this.opts.baseUrl,'fetch',deadline)};
     }
   }
 

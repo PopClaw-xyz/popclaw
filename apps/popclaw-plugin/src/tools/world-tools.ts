@@ -23,6 +23,7 @@ import { renderCopy } from '../lexicon/index.js';
 import { parseGuideFrontmatter, summaryDeclaration } from '../world/guide.js';
 import type { GuideTextResult } from '../world/guide-client.js';
 import { houseDisplayName } from '../world/house-handshake.js';
+import { SummaryReadReuse } from '../world/summary-read-reuse.js';
 import { WorldSummaryClient } from '../world/world-summary-client.js';
 import { aggregateNotableAuthors } from '../world/notable-authors.js';
 import { resolveAuthor } from '../world/author-resolver.js';
@@ -133,6 +134,7 @@ function withoutOwner(resolution: FollowResolution, me: string): FollowResolutio
 }
 
 export function registerWorldTools(ctx: ToolsCtx): void {
+  const summaryReads = new SummaryReadReuse();
   const { api, runtime, deps } = ctx;
 
   // === WORLD TOOLS (S4.1-T3: act2 world capabilities on the NL path) ===
@@ -206,7 +208,9 @@ export function registerWorldTools(ctx: ToolsCtx): void {
     api.registerTool({
       name: 'popclaw_world_summary',
       description:
-        'Call when the owner asks "what is trending / what is going on / any interesting people lately". ' +
+        'Call for a broad House overview: "what is new / anything new / what is going on / what is trending / any interesting people lately". ' +
+        'Default to this overview for open-ended news questions; use feed only for a requested recent item list. ' +
+        'Do not automatically retry a failed summary in the same answer. Set retry=true only for an explicit owner-requested fresh attempt. ' +
         'Reads the primary House only, and only if its guide declares a summary stream at /v1/world-summary. ' +
         'An undeclared summary is unsupported; an unreadable guide is unknown, not an empty world. ' +
         'Use popclaw_world_guide or the independent local public feed instead; neither is a substitute summary. ' +
@@ -216,7 +220,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         'follow someone with popclaw_follow, reply/post with the draft tools).',
       parameters: WorldSummaryToolSchema,
       execute: async (_callId: string, params: unknown) => {
-        const p = params as { window_hours?: number };
+        const p = params as { window_hours?: number; retry?: boolean };
         const windowHours =
           typeof p.window_hours === 'number' && Number.isFinite(p.window_hours) && p.window_hours > 0
             ? p.window_hours
@@ -235,20 +239,25 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         const declaration = summaryDeclaration(guide.text);
         if (declaration === 'unsupported') throw new Error(renderCopy(lang, 'world.summary.unsupported'));
         if (declaration === 'unknown') throw new Error(renderCopy(lang, 'world.summary.availabilityUnknown'));
-        const [summaryResult, snapshot] = await Promise.all([
-          (wd.summaryClient.fetchSummaryResult ? wd.summaryClient.fetchSummaryResult(windowHours)
+        const scope = deps.currentGuideReadScope?.();
+        // Start the enrichment only for a fresh summary read. A repeated remote
+        // failure must not spend another snapshot wait or invent a feed fallback.
+        let snapshotRead: Promise<WorldSnapshotItemLike[]> | undefined;
+        const summaryResult = await summaryReads.read(scope,wd.summaryClient,windowHours,p.retry === true, async () => {
+          snapshotRead = wd.snapshotClient.fetchSnapshot({ limit: WORLD_SNAPSHOT_LIMIT })
+            .catch(() => [] as WorldSnapshotItemLike[]);
+          return (wd.summaryClient.fetchSummaryResult ? wd.summaryClient.fetchSummaryResult(windowHours)
             : wd.summaryClient.fetchSummary(windowHours).then((summary): WorldSummaryResult => summary
               ? {ok:true,summary} : {ok:false,failure:{code:'HOUSE_REMOTE_UNKNOWN'}}))
-            .catch((error): WorldSummaryResult => ({ok:false,failure:houseReadFailure(error)})),
-          wd.snapshotClient
-            .fetchSnapshot({ limit: WORLD_SNAPSHOT_LIMIT })
-            .catch(() => [] as WorldSnapshotItemLike[]),
-        ]);
+            .catch((error): WorldSummaryResult => ({ok:false,failure:houseReadFailure(error)}));
+        });
         if (!summaryResult.ok) {
           // Native hosts report the failed call; MCP's normal catch sets
           // isError=true. A failed REST read must not be a successful text tool.
-          throw new Error(formatHouseReadFailure(lang,summaryResult.failure));
+          throw new Error(`${formatHouseReadFailure(lang,summaryResult.failure)} ${renderCopy(lang,'world.summary.noAutomaticRetry')}` +
+            (summaryResult.reused ? ` ${renderCopy(lang,'world.summary.reusedFailure')}` : ''));
         }
+        const snapshot = await (snapshotRead ?? wd.snapshotClient.fetchSnapshot({limit:WORLD_SNAPSHOT_LIMIT}).catch(() => [] as WorldSnapshotItemLike[]));
         const summary = summaryResult.summary;
         // The owner's alias overrides the lore-house-supplied self-reported name (the single name chain).
         const nameOf = await nameChainOf(deps);
@@ -282,7 +291,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         if (summary.world_state !== undefined) {
           titleLines.push(formatWorldStateLine(summary.world_state, lang));
         }
-        const blocks: string[] = [titleLines.join('\n')];
+        const blocks: string[] = [titleLines.join('\n'), renderCopy(lang,'world.summary.coverage',{windowHours:String(summary.window_hours)})];
         const people = (summary.notable_people ?? []).slice(0, NOTABLE_PEOPLE_CAP);
         if (people.length > 0) {
           blocks.push(

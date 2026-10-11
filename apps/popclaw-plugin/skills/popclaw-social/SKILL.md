@@ -133,6 +133,13 @@ separate actions. Ordinary owner confirmation is still required before sending.
   An unreadable/invalid guide is unknown; a declared summary that cannot be read is a
   failure, not a quiet day. An empty successful summary includes each house's last delivery.
   The independent local public feed is not a full world summary, statistics or ranking.
+  For open-ended news or overview questions ("what is new / what is going on"), prefer
+  `popclaw_world_summary` and state its primary-House coverage and time window. Use
+  `popclaw_show_feed` for an explicit recent-item list. After summary failure, report
+  the failure once; do not automatically repeat the same read during that answer.
+  An explicit owner request to retry permits a fresh `retry: true` attempt. A later
+  owner question is a new request. If showing a local feed after failure, disclose
+  its limited recent received scope; never describe that as summary success.
 
 ## If you are on an MCP host
 

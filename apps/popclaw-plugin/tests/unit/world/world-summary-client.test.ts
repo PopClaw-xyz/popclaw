@@ -1,7 +1,7 @@
 /**
  * T2: WorldSummaryClient unit tests.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { WorldSummaryClient } from '../../../src/world/world-summary-client.js';
 import type { WorldSummaryResponse } from '../../../src/world/world-summary-client.js';
 import { deriveSigil } from '../../../src/invite/sigil.js';
@@ -187,4 +187,40 @@ describe('WorldSummaryClient', () => {
     // nicknameFor on known id → nickname
     expect(WorldSummaryClient.nicknameFor(result!, 'AAAA1111')).toBe('mrbeast');
   });
+});
+
+
+describe('world summary safe timeout diagnostics', () => {
+  it('keeps a typed timeout without exposing the transport message', async () => {
+    const client = new WorldSummaryClient({baseUrl: BASE, fetch: (async () => {
+      throw new DOMException('secret token in transport message', 'TimeoutError');
+    }) as typeof fetch});
+    const result = await client.fetchSummaryResult(24);
+    expect(result).toMatchObject({ok:false,failure:{code:'HOUSE_REMOTE_TIMEOUT',diagnostic:{phase:'fetch',cause:'timeout'}}});
+    expect(JSON.stringify(result)).not.toContain('secret');
+  });
+  it('classifies a safe nested DNS cause during response-body reading', async () => {
+    const cause = Object.assign(new Error('private host and token'), {code:'ENOTFOUND'});
+    const client = new WorldSummaryClient({baseUrl:BASE, fetch:(async () => ({ok:true,
+      json:async () => {throw new TypeError('private transport detail', {cause});}})) as unknown as typeof fetch});
+    const result = await client.fetchSummaryResult();
+    expect(result).toMatchObject({ok:false,failure:{code:'HOUSE_REMOTE_NETWORK',diagnostic:{phase:'body',cause:'dns'}}});
+    expect(JSON.stringify(result)).not.toMatch(/private|ENOTFOUND/);
+  });
+  it('recognizes its own aborted deadline even when transport wraps the exception', async () => {
+    const spy=vi.spyOn(AbortSignal,'timeout').mockReturnValue(AbortSignal.abort(new DOMException('deadline','TimeoutError')));
+    try {
+      const client = new WorldSummaryClient({baseUrl:BASE,fetch:(async () => {throw new TypeError('fetch failed');}) as typeof fetch});
+      expect(await client.fetchSummaryResult()).toMatchObject({ok:false,failure:{code:'HOUSE_REMOTE_TIMEOUT',diagnostic:{phase:'fetch',cause:'timeout',timeoutMs:10000}}});
+      expect(spy).toHaveBeenCalledWith(10000);
+    } finally {spy.mockRestore();}
+  });
+});
+
+it.each(['3d057e5b-63b9-484d-a7f7-2016bf98c7a0','secret-token-invalid'])('only retains a UUID response request id: %s',async requestId=>{
+  const client=new WorldSummaryClient({baseUrl:BASE,fetch:(async()=>new Response('bad',{status:503,headers:{'x-request-id':requestId}})) as typeof fetch});
+  const result=await client.fetchSummaryResult();
+  expect(result).toMatchObject({ok:false,failure:{code:'HOUSE_REMOTE_HTTP'}});
+  if(requestId==='secret-token-invalid') expect(JSON.stringify(result)).not.toContain(requestId);
+  else expect(result).toMatchObject({failure:{diagnostic:{requestId}}});
 });
