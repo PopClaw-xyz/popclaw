@@ -53,6 +53,7 @@ export interface WorldSnapshotItemLike {
 export interface WorldToolsDeps {
   guideClient: { fetchGuideText(): Promise<string | null>; fetchGuideResult?(): Promise<GuideTextResult> };
   summaryClient: {
+    captureReadGeneration?(): import('../runtime/read-request-scope.js').ReadRequestScope | undefined;
     fetchSummary(windowHours?: number): Promise<WorldSummaryResponse | null>;
     fetchSummaryResult?(windowHours?: number): Promise<WorldSummaryResult>;
   };

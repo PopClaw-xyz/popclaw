@@ -140,6 +140,7 @@ interface WorldDepsOverrides {
 
 /** Build fake world deps; snapshot fake serves sources (no author) and author queries. */
 function makeWorldDeps(o?: WorldDepsOverrides) {
+  const generation = {token:{},isCurrent:()=>true};
   const fetchGuideText = vi.fn(async () => (o?.guideText !== undefined ? o.guideText : GUIDE_MD));
   const fetchSummary = vi.fn(async (_windowHours?: number) =>
     o?.summary !== undefined ? o.summary : makeSummary(),
@@ -155,7 +156,7 @@ function makeWorldDeps(o?: WorldDepsOverrides) {
   return {
     deps: {
       guideClient: { fetchGuideText },
-      summaryClient: { fetchSummary, ...(o?.summaryFailure ? {fetchSummaryResult:async()=>({ok:false as const,failure:o.summaryFailure!})} : {}) },
+      summaryClient: { captureReadGeneration:()=>generation, fetchSummary, ...(o?.summaryFailure ? {fetchSummaryResult:async()=>({ok:false as const,failure:o.summaryFailure!})} : {}) },
       snapshotClient: { fetchSnapshot },
       resolveClient: { resolve },
       webBaseUrl: o?.webBaseUrl ?? 'http://localhost:3000',
@@ -1938,4 +1939,27 @@ it('feed guidance reserves the recent-item list and points open-ended news to su
   expect(feed.description).not.toContain('"anything new"');
   expect(feed.description).not.toContain('what is on/happening');
   expect(feed.description).toContain('popclaw_world_summary');
+});
+
+
+it('rejects a successful summary when its owner scope expires during snapshot enrichment',async()=>{
+  let live=true;let release!:(items:never[])=>void;
+  const snapshot=new Promise<never[]>(resolve=>{release=resolve;});
+  const registered=buildFakeApi(),world=makeWorldDeps();
+  world.deps.snapshotClient.fetchSnapshot=vi.fn(()=>snapshot);
+  const request={token:{},isCurrent:()=>live,presentGuideKeys:new Set<string>(),recordEmittedGuideKeys:()=>{}};
+  registerPopclawTools({api:registered.api,runtime:vi.fn() as never,getWorldDeps:async()=>world.deps,currentGuideReadScope:()=>request});
+  const pending=findTool(registered.tools,'popclaw_world_summary').execute('snapshot-wait',{});
+  await vi.waitFor(()=>expect(world.fetchSummary).toHaveBeenCalledTimes(1));
+  live=false;release([]);
+  await expect(pending).rejects.toThrow('HOUSE_ACTION_STALE');
+});
+it('rejects a successful summary when its owner scope expires during name resolution',async()=>{
+  let live=true;let release!:(value:unknown)=>void;
+  const names=new Promise(resolve=>{release=resolve;});
+  const {tools}=setup({},()=>names,()=>({token:{},isCurrent:()=>live,presentGuideKeys:new Set<string>(),recordEmittedGuideKeys:()=>{}}));
+  const pending=findTool(tools,'popclaw_world_summary').execute('names-wait',{});
+  await new Promise(resolve=>setImmediate(resolve));
+  live=false;release({nameOf:()=>''});
+  await expect(pending).rejects.toThrow('HOUSE_ACTION_STALE');
 });

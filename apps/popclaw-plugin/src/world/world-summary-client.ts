@@ -16,6 +16,7 @@
 import { houseReadFailure, type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
 import { displayPerson } from '../identity/person-resolver.js';
 import { LORE_HOUSE_TIMEOUT_MS } from './http-timeout.js';
+import type { ReadRequestScope } from '../runtime/read-request-scope.js';
 import type { NameChain } from '../identity/person-name.js';
 
 /** One entry in the `authors` map of WorldSummaryResponse. */
@@ -98,6 +99,8 @@ export interface WorldSummaryResponse {
 
 export interface WorldSummaryClientOptions {
   readonly baseUrl: string;
+  /** Host-proven connection generation; omitting it disables failed-read reuse. */
+  readonly readGeneration?: () => ReadRequestScope;
   readonly fetch?: typeof globalThis.fetch;
 }
 
@@ -138,6 +141,10 @@ export class WorldSummaryClient {
 
   constructor(private readonly opts: WorldSummaryClientOptions) {
     this.fetchFn = opts.fetch ?? globalThis.fetch;
+  }
+
+  captureReadGeneration(): ReadRequestScope | undefined {
+    return this.opts.readGeneration?.();
   }
 
   /**

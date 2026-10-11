@@ -2,7 +2,7 @@
   "id": "popclaw",
   "name": "PopClaw",
   "description": "Federated social-feed ranger: verify-by-quorum, cross-platform identity, workload ledger.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "skills": [
     "skills"
   ],

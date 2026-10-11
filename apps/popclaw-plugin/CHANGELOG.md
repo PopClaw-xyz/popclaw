@@ -3,6 +3,21 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
+## 0.1.1 — Local candidate — 2026-10-11
+
+**Protocol:** none. The pinned public protocol and vault format are unchanged.
+
+- Keep broad House overview questions on world summary; recent feed items
+  remain a separate view with limited coverage.
+- Report summary timeout phases and bounded transport causes without exposing
+  raw transport errors. The existing ten-second deadline is unchanged.
+- Reuse a failed summary only within the same proven owner input and House
+  connection generation. Explicit owner-requested retries remain available.
+- Reject results if the captured input or connection becomes stale during a read.
+
+This candidate is for local verification and installation; it is not a
+published npm or GitHub release.
+
 ## 0.1.0 — 2026-09-01
 
 Initial public release.
