@@ -150,3 +150,32 @@ it.each(['conflicting','unobserved'])('a %s before hook cannot inherit an earlie
     {...(reason==='conflicting'?identity:other),toolName:'popclaw_show_feed',toolCallId:'call-a'});
   expect(await execute(c)).toBeUndefined();expect(old.scope.isCurrent()).toBe(false);
 });
+
+
+it('summary request identity survives model continuations but changes for a new owner input', () => {
+  const c=createNativeReadContext();
+  const messages=[{role:'user',content:'What is new?'}];
+  const first=c.observe(input(messages),identity)!;
+  const second=c.observe(input([...messages,{role:'toolResult',content:'failed summary'}]),identity)!;
+  expect(first.scope.requestToken).toBeDefined();
+  expect(second.scope.requestToken).toBe(first.scope.requestToken);
+  expect(second.scope.token).not.toBe(first.scope.token);
+  expect(first.scope.isCurrent()).toBe(false);
+  const third=c.observe(input([...messages,{role:'toolResult',content:'failed summary'},{role:'user',content:'Retry now'}]),identity)!;
+  expect(third.scope.requestToken).not.toBe(second.scope.requestToken);
+  const other={...identity,runId:'run-next'};
+  const next=c.observe({...input(messages),runId:other.runId},other)!;
+  expect(next.scope.requestToken).not.toBe(first.scope.requestToken);
+});
+
+it('does not infer an owner request from tool-result text or retain it through reset/end', () => {
+  const c=createNativeReadContext();
+  expect(c.observe(input(history()),identity)!.scope.requestToken).toBeUndefined();
+  const messages=[{role:'user',content:'What is new?'}];
+  const before=c.observe(input(messages),identity)!.scope;
+  c.endRun(input(),identity);
+  expect(c.observe(input(messages),identity)!.scope.requestToken).not.toBe(before.requestToken);
+  const reset=c.observe(input(messages),identity)!.scope;
+  c.reset({},identity);
+  expect(c.observe(input(messages),identity)!.scope.requestToken).not.toBe(reset.requestToken);
+});

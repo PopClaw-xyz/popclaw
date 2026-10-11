@@ -210,3 +210,13 @@ describe('renderL2Hit (ADR-0043 §3)', () => {
     expect(text).toContain('tell the owner it failed');
   });
 });
+
+
+it.each(['现在有什么新鲜事','江湖上有什么新鲜事','what is going on','what is new'])('routes open-ended overview %s to summary', prompt => {
+  expect(matchLexicon(prompt).map(hit=>hit.tool)).toContain('popclaw_world_summary');
+  expect(matchLexicon(prompt).map(hit=>hit.tool)).not.toContain('popclaw_show_feed');
+});
+it.each(['列出最近有什么帖子','show recent content'])('keeps explicit recent items %s on feed', prompt => {
+  expect(matchLexicon(prompt).map(hit=>hit.tool)).toContain('popclaw_show_feed');
+  expect(matchLexicon(prompt).map(hit=>hit.tool)).not.toContain('popclaw_world_summary');
+});

@@ -141,7 +141,7 @@ interface WorldDepsOverrides {
 /** Build fake world deps; snapshot fake serves sources (no author) and author queries. */
 function makeWorldDeps(o?: WorldDepsOverrides) {
   const fetchGuideText = vi.fn(async () => (o?.guideText !== undefined ? o.guideText : GUIDE_MD));
-  const fetchSummary = vi.fn(async () =>
+  const fetchSummary = vi.fn(async (_windowHours?: number) =>
     o?.summary !== undefined ? o.summary : makeSummary(),
   );
   const fetchSnapshot = vi.fn(async (q: { limit?: number; author?: string }) => {
@@ -192,13 +192,14 @@ function findTool(tools: ReturnType<typeof buildFakeApi>['tools'], name: string)
   return t;
 }
 
-function setup(o?: WorldDepsOverrides, runtime?: () => Promise<unknown>) {
+function setup(o?: WorldDepsOverrides, runtime?: () => Promise<unknown>, currentGuideReadScope?: Parameters<typeof registerPopclawTools>[0]['currentGuideReadScope']) {
   const { api, tools } = buildFakeApi();
   const world = makeWorldDeps(o);
   registerPopclawTools({
     api,
     runtime: (runtime ?? vi.fn()) as unknown as Parameters<typeof registerPopclawTools>[0]['runtime'],
     getWorldDeps: async () => world.deps,
+    currentGuideReadScope,
   });
   return { tools, ...world };
 }
@@ -1881,4 +1882,60 @@ describe('PC008 summary classification',()=>{
     }
     setOwnerLang('zh-CN','config');
   });
+});
+
+
+describe('summary repeated failure is scoped to the original owner request', () => {
+  const scope=(requestToken:object) => ({token:{},requestToken,isCurrent:()=>true,
+    presentGuideKeys:new Set<string>(),recordEmittedGuideKeys:()=>{}});
+  it('does not spend another wait on the same failed window across model rounds', async () => {
+    const requestToken={}; let current=scope(requestToken);
+    const {tools,fetchSummary,fetchSnapshot}=setup({summary:null},undefined,()=>current);
+    const tool=findTool(tools,'popclaw_world_summary');
+    await expect(tool.execute('first',{})).rejects.toThrow();
+    current=scope(requestToken);
+    await expect(tool.execute('second',{})).rejects.toThrow(/WORLD_SUMMARY_REUSED_FAILURE/);
+    expect(fetchSummary).toHaveBeenCalledTimes(1);
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+    current=scope({});
+    await expect(tool.execute('new-owner-request',{})).rejects.toThrow();
+    expect(fetchSummary).toHaveBeenCalledTimes(2);
+  });
+  it('preserves an explicit retry and a different window', async () => {
+    const request=scope({});
+    const registered=buildFakeApi(); const world=makeWorldDeps({summary:null});
+    registerPopclawTools({api:registered.api,runtime:vi.fn() as never,getWorldDeps:async()=>world.deps,currentGuideReadScope:()=>request});
+    const tool=findTool(registered.tools,'popclaw_world_summary');
+    await expect(tool.execute('first',{})).rejects.toThrow();
+    await expect(tool.execute('explicit-retry',{retry:true})).rejects.toThrow();
+    await expect(tool.execute('other-window',{window_hours:48})).rejects.toThrow();
+    expect(world.fetchSummary).toHaveBeenCalledTimes(3);
+    expect(world.fetchSummary.mock.calls.map(args=>args[0])).toEqual([24,24,48]);
+  });
+  it('keeps fresh successes and does not infer a scope when none is supplied', async () => {
+    const request=scope({}); const good=setup({},undefined,()=>request);
+    const tool=findTool(good.tools,'popclaw_world_summary');
+    await tool.execute('a',{}); await tool.execute('b',{});
+    expect(good.fetchSummary).toHaveBeenCalledTimes(2);
+    const unknown=setup({summary:null}); const failed=findTool(unknown.tools,'popclaw_world_summary');
+    await expect(failed.execute('x',{})).rejects.toThrow(); await expect(failed.execute('y',{})).rejects.toThrow();
+    expect(unknown.fetchSummary).toHaveBeenCalledTimes(2);
+  });
+  it('tells the agent to use summary for an open-ended overview and stops automatic retry', async () => {
+    const {tools}=setup({summaryFailure:{code:'HOUSE_REMOTE_NETWORK',origin:'https://house.invalid'}});
+    const tool=findTool(tools,'popclaw_world_summary');
+    expect(tool.description).toContain('what is new');
+    expect(tool.description).toContain('Do not automatically retry');
+    await expect(tool.execute('failure',{})).rejects.toThrow(/Do not automatically retry|不要自动重试/);
+    expect(Value.Check(WorldSummaryToolSchema,{retry:true})).toBe(true);
+  });
+});
+
+
+it('feed guidance reserves the recent-item list and points open-ended news to summary', () => {
+  const {tools}=setup();
+  const feed=findTool(tools,'popclaw_show_feed');
+  expect(feed.description).not.toContain('"anything new"');
+  expect(feed.description).not.toContain('what is on/happening');
+  expect(feed.description).toContain('popclaw_world_summary');
 });

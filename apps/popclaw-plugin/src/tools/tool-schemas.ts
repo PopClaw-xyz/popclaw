@@ -214,6 +214,7 @@ export const WorldGuideSchema = Type.Object({});
 
 /** popclaw_world_summary: optional time window. */
 export const WorldSummaryToolSchema = Type.Object({
+  retry: Type.Optional(Type.Boolean({ description: 'Fresh retry only when the owner explicitly requests another attempt; never set for an automatic retry.' })),
   window_hours: Type.Optional(
     Type.Number({ description: 'overview time window in hours; defaults to 24', minimum: 1 }),
   ),
