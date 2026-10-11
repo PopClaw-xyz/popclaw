@@ -3,6 +3,23 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
+## 0.1.2-rc.20261011.1 — Integration candidate — 2026-10-11
+
+**Protocol:** additive v3 world-summary JSON; the pinned signed-event protocol
+and vault format are unchanged.
+
+- Display the complete House snapshot and its observed coverage. Revalidate
+  cached representations through the existing HTTP read gate with ETag.
+- Retain current-input and connection checks, typed failures and explicit retry.
+- Keep shown people and canonical post references usable in follow-up reads.
+- Freeze one public summary as an editorial reference for each paper. Candidate
+  continuations and selected material reuse it without fetching another summary.
+- Keep original article, reading and publication checks. Summary text is not
+  signed article material or an additional authority mechanism.
+
+This is an integration candidate, not a published release. No final release
+date is assigned.
+
 ## 0.1.1 — Local candidate — 2026-10-11
 
 **Protocol:** none. The pinned public protocol and vault format are unchanged.

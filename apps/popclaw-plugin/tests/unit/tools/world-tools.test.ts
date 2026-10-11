@@ -15,6 +15,7 @@
  */
 
 import { describe, expect, it, vi, beforeAll, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { Value } from 'typebox/value';
 import { popclaw } from '@popclaw/contracts';
 import { registerPopclawTools } from '../../../src/tools/register-tools.js';
@@ -318,7 +319,7 @@ describe('popclaw_world_guide', () => {
 // ---------------------------------------------------------------------------
 
 describe('popclaw_world_summary', () => {
-  it('renders stats line + numbered hot-post lines + notable authors', async () => {
+  it('renders legacy server material without local mirror aggregation', async () => {
     const { tools } = setup();
     const tool = findTool(tools, 'popclaw_world_summary');
 
@@ -330,7 +331,7 @@ describe('popclaw_world_summary', () => {
     expect(r.text).toContain('3回应');
     expect(r.text).toContain('2. [MrBeast] 埋了一百辆车');
     // MrBeast: youtube (hot) + tiktok (snapshot) → multi-platform stitch
-    expect(r.text).toContain('MrBeast — 活跃于 TikTok/YT（缝合身份）');
+    expect(r.text).not.toContain('MrBeast — 活跃于 TikTok/YT（缝合身份）');
   });
 
   it('forwards window_hours to fetchSummary (default 24)', async () => {
@@ -344,7 +345,7 @@ describe('popclaw_world_summary', () => {
     expect(fetchSummary).toHaveBeenLastCalledWith(6);
   });
 
-  it('caps hot posts at 8 lines', async () => {
+  it('keeps ten server-ranked legacy hot posts', async () => {
     const hot = Array.from({ length: 10 }, (_, i) => ({
       event_id: String(i).repeat(64).slice(0, 64),
       author: 'id_elon',
@@ -360,7 +361,7 @@ describe('popclaw_world_summary', () => {
     const r = await tool.execute('cid', {});
 
     expect(r.text).toContain('8. [Elon Musk] 热帖 8');
-    expect(r.text).not.toContain('热帖 9');
+    expect(r.text).toContain('10. [Elon Musk] 热帖 10');
   });
 
   it('uses honest zero-entry copy when no hot posts', async () => {
@@ -379,7 +380,7 @@ describe('popclaw_world_summary', () => {
     await expect(tool.execute('cid', {})).rejects.toThrow('HOUSE_REMOTE_UNKNOWN');
   });
 
-  it('degrades notable authors to hot-post sources when snapshot throws', async () => {
+  it('keeps server material independent of an unavailable auxiliary feed', async () => {
     const { tools } = setup({ snapshotThrows: true });
     const tool = findTool(tools, 'popclaw_world_summary');
 
@@ -387,21 +388,22 @@ describe('popclaw_world_summary', () => {
 
     // summary itself still renders; notable from hot posts only (single platform each)
     expect(r.text).toContain('近 24h：42 帖 / 7 人发声');
-    expect(r.text).toContain('Elon Musk — 活跃于 X');
+    expect(r.text).toContain('1. [Elon Musk]');
+    expect(r.text).not.toContain('活跃于 X');
     expect(r.text).not.toContain('缝合身份');
   });
 
-  it('mirror-author section is labeled 活跃的镜像号 (renamed from 重要的人)', async () => {
+  it('does not fabricate a locally combined mirror-author section', async () => {
     const { tools } = setup();
     const tool = findTool(tools, 'popclaw_world_summary');
 
     const r = await tool.execute('cid', {});
 
-    expect(r.text).toContain('活跃的镜像号');
+    expect(r.text).not.toContain('活跃的镜像号');
     expect(r.text).not.toContain('重要的人');
   });
 
-  it('caps mirror authors at 3 (S4.2 收窄 5 → 3)', async () => {
+  it('does not mix sampled feed authors into server-ranked material', async () => {
     const { tools } = setup({
       summary: makeSummary({ hot_posts: [], authors: {} }),
       sourcesItems: ['a_one', 'b_two', 'c_three', 'd_four'].map((n, i) => ({
@@ -415,9 +417,9 @@ describe('popclaw_world_summary', () => {
     const r = await tool.execute('cid', {});
 
     // Equal scores (one platform, one post each) sort alphabetically by nickname: a/b/c enter, d is cut.
-    expect(r.text).toContain('a_one');
-    expect(r.text).toContain('b_two');
-    expect(r.text).toContain('c_three');
+    expect(r.text).not.toContain('a_one');
+    expect(r.text).not.toContain('b_two');
+    expect(r.text).not.toContain('c_three');
     expect(r.text).not.toContain('d_four');
   });
 });
@@ -470,7 +472,7 @@ describe('popclaw_world_summary v2 fields', () => {
     expect(state).toBeGreaterThan(-1);
     expect(people).toBeGreaterThan(state);
     expect(hot).toBeGreaterThan(people);
-    expect(mirror).toBeGreaterThan(hot);
+    expect(mirror).toBe(-1);
   });
 
   it('镜像号段不标 ✓认证（绝不混淆）', async () => {
@@ -1182,7 +1184,7 @@ describe('popclaw_world_summary · en lane (S3 lexicon parity)', () => {
     expect(r.text).toContain('most-replied-to');
     expect(r.text).toContain('1. [Elon Musk] 火星基地年底动工');
     expect(r.text).toContain('3replies');
-    expect(r.text).toContain('MrBeast — active on TikTok/YT (cross-platform)');
+    expect(r.text).not.toContain('MrBeast — active on TikTok/YT (cross-platform)');
   });
 
   it('honest zero-entry copy in English when no hot posts', async () => {
@@ -1897,7 +1899,7 @@ describe('summary repeated failure is scoped to the original owner request', () 
     current=scope(requestToken);
     await expect(tool.execute('second',{})).rejects.toThrow(/WORLD_SUMMARY_REUSED_FAILURE/);
     expect(fetchSummary).toHaveBeenCalledTimes(1);
-    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect(fetchSnapshot).not.toHaveBeenCalled();
     current=scope({});
     await expect(tool.execute('new-owner-request',{})).rejects.toThrow();
     expect(fetchSummary).toHaveBeenCalledTimes(2);
@@ -1942,17 +1944,18 @@ it('feed guidance reserves the recent-item list and points open-ended news to su
 });
 
 
-it('rejects a successful summary when its owner scope expires during snapshot enrichment',async()=>{
-  let live=true;let release!:(items:never[])=>void;
-  const snapshot=new Promise<never[]>(resolve=>{release=resolve;});
+it('rejects a successful summary when its owner scope expires during the summary response',async()=>{
+  let live=true;let release!:(value:WorldSummaryResponse)=>void;
+  const body=new Promise<WorldSummaryResponse>(resolve=>{release=resolve;});
   const registered=buildFakeApi(),world=makeWorldDeps();
-  world.deps.snapshotClient.fetchSnapshot=vi.fn(()=>snapshot);
+  world.deps.summaryClient.fetchSummary=vi.fn(()=>body);
   const request={token:{},isCurrent:()=>live,presentGuideKeys:new Set<string>(),recordEmittedGuideKeys:()=>{}};
   registerPopclawTools({api:registered.api,runtime:vi.fn() as never,getWorldDeps:async()=>world.deps,currentGuideReadScope:()=>request});
-  const pending=findTool(registered.tools,'popclaw_world_summary').execute('snapshot-wait',{});
-  await vi.waitFor(()=>expect(world.fetchSummary).toHaveBeenCalledTimes(1));
-  live=false;release([]);
+  const pending=findTool(registered.tools,'popclaw_world_summary').execute('summary-wait',{});
+  await vi.waitFor(()=>expect(world.deps.summaryClient.fetchSummary).toHaveBeenCalledTimes(1));
+  live=false;release(makeSummary());
   await expect(pending).rejects.toThrow('HOUSE_ACTION_STALE');
+  expect(world.fetchSnapshot).not.toHaveBeenCalled();
 });
 it('rejects a successful summary when its owner scope expires during name resolution',async()=>{
   let live=true;let release!:(value:unknown)=>void;
@@ -1962,4 +1965,51 @@ it('rejects a successful summary when its owner scope expires during name resolu
   await new Promise(resolve=>setImmediate(resolve));
   live=false;release({nameOf:()=>''});
   await expect(pending).rejects.toThrow('HOUSE_ACTION_STALE');
+});
+
+
+describe('v3 snapshot through registered summary tool', () => {
+  const snapshotFixture = () => JSON.parse(readFileSync(new URL('../../fixtures/world-summary-snapshot.json', import.meta.url), 'utf8'));
+  it('renders the complete server snapshot without an auxiliary feed or local author aggregation', async () => {
+    setOwnerLang('en', 'config');
+    try {
+      const snapshot = snapshotFixture();
+      const body = Object.assign(makeSummary(), { snapshot });
+      const { tools, fetchSummary, fetchSnapshot } = setup({ summary: body });
+      const result = await findTool(tools, 'popclaw_world_summary').execute('snapshot', {});
+      expect(fetchSummary).toHaveBeenCalledTimes(1);
+      expect(fetchSnapshot).not.toHaveBeenCalled();
+      expect(result.text).toContain('Builds tools for public conversation.');
+      expect(result.text).toContain('pioneer');
+      expect(result.text).toContain('1200');
+      expect(result.text).toContain('unknown');
+      expect(result.text.indexOf('7d')).toBeLessThan(result.text.indexOf('24h'));
+      expect(result.text).toContain('Let us compare the results.');
+      expect(result.text).not.toContain('MrBeast');
+    } finally { setOwnerLang('zh-CN', 'config'); }
+  });
+  it('retains all ten positions in the three person and post lists and the popular replies', async () => {
+    const snapshot = snapshotFixture();
+    const person = Object.values(snapshot.people)[0] as object;
+    const post = snapshot.contents['a'.repeat(64)];
+    snapshot.popular_replies = [];
+    for (const window of snapshot.windows) { window.people_growth = []; window.top_posts = []; }
+    for (let i = 0; i < 10; i++) {
+      const id = (i + 1).toString(16).padStart(64, '0');
+      const personId = `person-${i}`;
+      snapshot.people[personId] = { ...person, popclaw_id: personId, nickname: `Person ${i}`, sigil: deriveSigil(personId) };
+      snapshot.contents[id] = { ...post, event_id: id, author_id: personId, root_event_id: id, latest_reply_id: null, body_preview: '🌊'.repeat(199) + '末' };
+      const replyId = (i + 50).toString(16).padStart(64, '0');
+      snapshot.contents[replyId] = { ...snapshot.contents[id], event_id: replyId, kind: 'reply', parent_event_id: id, root_event_id: id };
+      snapshot.popular_replies.push({ event_id: replyId, new_replies: 7 });
+      for (const window of snapshot.windows) {
+        window.people_growth.push({ person_id: personId, net_followers: i + 1 });
+        window.top_posts.push({ event_id: id, new_replies: i + 1 });
+      }
+    }
+    const { tools } = setup({ summary: Object.assign(makeSummary(), { snapshot }) });
+    const result = await findTool(tools, 'popclaw_world_summary').execute('complete', {});
+    expect(result.text.match(/10\. /g)).toHaveLength(7);
+    expect(result.text).toContain('🌊'.repeat(199) + '末');
+  });
 });

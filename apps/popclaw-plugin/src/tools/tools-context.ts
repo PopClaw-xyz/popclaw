@@ -51,6 +51,8 @@ export interface WorldSnapshotItemLike {
  * pipeline); resolved lazily via getWorldDeps, mirroring getOrchestrator.
  */
 export interface WorldToolsDeps {
+  /** Public material reference lane; distinct from the native owner's foreground summary. */
+  newspaperSummary?: import('../newspaper/summary-material.js').NewspaperSummarySource;
   guideClient: { fetchGuideText(): Promise<string | null>; fetchGuideResult?(): Promise<GuideTextResult> };
   summaryClient: {
     captureReadGeneration?(): import('../runtime/read-request-scope.js').ReadRequestScope | undefined;

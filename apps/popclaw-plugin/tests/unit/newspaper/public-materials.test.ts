@@ -124,16 +124,17 @@ async function newspaperFixture(avatar = false) {
       sign: vi.fn(async (bytes: Uint8Array) => nacl.sign.detached(bytes, displayPair.secretKey)) } as unknown as Signer },
     uploadCanvas: vi.fn(async (options: Parameters<typeof uploadCanvas>[0]) => { options.assertCurrent?.(); return { url: 'https://canvas.invalid/paper?t=fixture' }; }),
     paths: f.paths };
+  let worldDeps: Parameters<typeof registerPopclawTools>[0]['getWorldDeps'];
   let fetchImage: Parameters<typeof registerPopclawTools>[0]['fetchImage'];
   let logger: ((message: string) => void) | undefined;
   function tools(sessionKey = childSessionKey('public-material-fixture')) {
     const registered = new Map<string, (id: string, args: unknown) => Promise<{text: string}>>();
     const api = { logger: { info: (message: string) => logger?.(message) }, registerTool(t: unknown) { const resolved = typeof t === 'function' ? t({ sessionKey }) : t;
       const tool = resolved as {name: string; execute: (id: string,args: unknown) => Promise<{text: string}>}; registered.set(tool.name, tool.execute); } };
-    registerPopclawTools({ api, fetchImage, runtime: async () => runtime } as unknown as Parameters<typeof registerPopclawTools>[0]);
+    registerPopclawTools({ api, fetchImage, getWorldDeps: worldDeps, runtime: async () => runtime } as unknown as Parameters<typeof registerPopclawTools>[0]);
     return (name: string, args: unknown) => registered.get(name)!('fixture-call', args);
   }
-  return { ...f, cache, runtime, tools, eventId, body, journal, generation, raw, setFetchImage: (value: typeof fetchImage) => { fetchImage = value; }, setLogger: (value: typeof logger) => { logger = value; } };
+  return { ...f, cache, runtime, tools, eventId, body, journal, generation, raw, setWorldDeps: (value: typeof worldDeps) => { worldDeps = value; }, setFetchImage: (value: typeof fetchImage) => { fetchImage = value; }, setLogger: (value: typeof logger) => { logger = value; } };
 }
 
 it('actual non-owner child gathers signed protected journal materials while the real old cache is empty', async () => {
@@ -442,4 +443,35 @@ it('an unavailable public source never falls back to the legacy cache adapter',a
   f.db.execute('UPDATE house_participation SET lease_expires_at=1');
   const out=await f.tools()('popclaw_newspaper',{hours:24});
   expect(out.text).toContain('public materials unavailable');expect(read).not.toHaveBeenCalled();
+});
+
+
+it('registered newspaper freezes the complete summary in candidate and selected material without re-reading it', async () => {
+  const f = await newspaperFixture();
+  const snapshot = JSON.parse(readFileSync(new URL('../../fixtures/world-summary-snapshot.json', import.meta.url), 'utf8'));
+  const fetchSummary = vi.fn(async () => ({ window_hours: 24, generated_at_ms: snapshot.generated_at_ms,
+    total_posts: 1, distinct_authors: 2, authors: {}, hot_posts: [], snapshot }));
+  const fetchGuideText = vi.fn(async () => '---\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary\n---\nPublic summary');
+  const clients = { origin: displayOrigin, guideClient: {fetchGuideText}, summaryClient: {fetchSummary} };
+  Object.assign(f.runtime.boot, { popclawId: bs58.encode(displayPair.publicKey), loreHouseUrl: displayOrigin });
+  f.runtime.boot.signer.popclawId = async () => bs58.encode(displayPair.publicKey);
+  f.setWorldDeps(async () => ({ ...clients, newspaperSummary: clients, origin: displayOrigin,
+    snapshotClient: {fetchSnapshot: async () => []}, resolveClient: {resolve: async () => []}, webBaseUrl: f.runtime.boot.webBaseUrl }));
+  const sourceScan = vi.spyOn(f.runtime.houseFeedReader, 'prepare');
+  const candidate = await gather(f);
+  expect(candidate.issue).toMatchObject({worldSummary: {origin: displayOrigin, snapshotId: snapshot.snapshot_id,
+    cutoffAtMs: snapshot.cutoff_at_ms, generatedAtMs: snapshot.generated_at_ms}});
+  const frozen = (candidate.issue as unknown as {worldSummary:{text:string}}).worldSummary;
+  expect(frozen.text).toContain('Builds tools for public conversation.');
+  expect(readNewspaperDocument(candidate.token,{manifestDir:f.paths.newspaperManifestsDir(),
+    validateMaterials: issue => publicMaterialSource(f.runtime)!.validate(issue)}).text).toContain(frozen.text);
+  snapshot.snapshot_id = 'later-summary-does-not-replace-this-edition';
+  const material = await pick(f,candidate.token);
+  expect((material.issue as unknown as {worldSummary:unknown}).worldSummary).toEqual((candidate.issue as unknown as {worldSummary:unknown}).worldSummary);
+  expect(readNewspaperDocument(material.token,{manifestDir:f.paths.newspaperManifestsDir(),
+    validateMaterials: issue => publicMaterialSource(f.runtime)!.validate(issue)}).text).toContain(frozen.text);
+  expect(fetchSummary).toHaveBeenCalledTimes(1);
+  expect(fetchGuideText).toHaveBeenCalledTimes(1);
+  expect(sourceScan).toHaveBeenCalledTimes(1);
+  expect(fetch).not.toHaveBeenCalled();
 });

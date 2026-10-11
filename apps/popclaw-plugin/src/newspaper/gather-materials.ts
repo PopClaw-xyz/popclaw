@@ -1,4 +1,5 @@
 /** Complete local collection → immutable candidate ledger → bounded reading pages. */
+import { summaryMaterialText } from './summary-material.js';
 import { retainPublicMaterialBasis, publicCoverageText } from './public-material-source.js';
 import { buildCandidatePage, candidateOrder } from './build-candidate-page.js';
 import { pageBudgetDecision, pageBudgetLogLine, pageBudgetNow } from './host-budget.js';
@@ -20,6 +21,7 @@ export const PICK_RUNAWAY = Number.POSITIVE_INFINITY;
 export const PER_AUTHOR_MAX = Number.POSITIVE_INFINITY;
 
 export interface GatherDeps extends MaterialSources {
+  worldSummary?: import('./summary-material.js').WorldSummaryMaterial;
   validateMaterials?: (issue: IssueData) => void;
   readContentRules: () => string;
   readStyle?: () => NewspaperStyle;
@@ -37,9 +39,12 @@ export type GatherResult =
 export function gatherNewspaperMaterials(deps: GatherDeps, opts: { hours?: number } = {}): GatherResult {
   const collected = collectNewspaperMaterials(deps, opts);
   const coverage = deps.publicBatch ? publicCoverageText(deps.publicBatch.coverage) : '';
-  if (collected.kind === 'empty') return coverage ? { ...collected, message: coverage } : collected;
+  if (collected.kind === 'empty') {
+    const text = [coverage || collected.message,summaryMaterialText(deps.worldSummary)].filter(Boolean).join('\n\n');
+    return {...collected,message:text};
+  }
   const { candidateToken, lang, draft } = collected;
-  let stored: IssueData = { ...draft, language: deps.language ?? ownerLangTag(), pulse: candidateOrder(draft.pulse, lang) };
+  let stored: IssueData = { ...draft, ...(deps.worldSummary ? {worldSummary:deps.worldSummary} : {}), language: deps.language ?? ownerLangTag(), pulse: candidateOrder(draft.pulse, lang) };
   if (deps.publicBatch) stored = retainPublicMaterialBasis({ ...stored, publicCoverage: deps.publicBatch.coverage }, deps.publicBatch.references);
   const page = buildCandidatePage(stored, {
     tasteText: deps.tasteText ?? '', bondLines: deps.bondLines ?? [], publishToken: candidateToken,

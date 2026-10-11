@@ -1,3 +1,4 @@
+import { prepareSummaryMaterial } from '../newspaper/summary-material.js';
 import { readNewspaperPage } from '../newspaper/reading-page.js';
 import type { HouseRuntime } from '../runtime/house-lifecycle/house-runtime.js';
 import { publicMaterialSource, PublicMaterialRefusal } from '../newspaper/public-material-source.js';
@@ -454,9 +455,13 @@ async function gatherCandidatePage(
   const { api, toolCtx } = call;
   const { bondsStore, houseSlugs, digests, tasteTags, tasteText, bondLines } = paper;
   const materialSource = publicMaterialSource(rt);
+  const worldDeps = call.deps.getWorldDeps ? await call.deps.getWorldDeps().catch(() => undefined) : undefined;
+  const worldSummary = worldDeps?.newspaperSummary
+    ? await prepareSummaryMaterial({...worldDeps.newspaperSummary,nameOf:rt.nameOf}) : undefined;
   const publicBatch = await materialSource?.prepareCollect();
   const r = gatherNewspaperMaterials(
     {
+      ...(worldSummary ? {worldSummary} : {}),
       ...(publicBatch ? { publicBatch, validateMaterials: (issue) => materialSource!.validate(issue) } : {}),
       cache: rt.worldFeedCache,
       inbox: rt.inboxStore,
@@ -599,11 +604,11 @@ export async function runNewspaperCall(call: NewspaperCall, params: unknown): Pr
       if ('dispatched' in dispatch) return dispatch.dispatched;
       modelIgnoredNote = dispatch.modelIgnoredNote;
     }
-    const paper = await readPaperContext(rt);
     // Second call: the writer read the candidate page and named its picks. The candidate
     // set is already on disk, so nothing is gathered again — re-reading the feed here
     // would let the world move underneath the numbers it is answering with.
     if (args.hasPicks && args.picks) return answerPicks(call, rt, args, args.picks);
+    const paper = await readPaperContext(rt);
     return await gatherCandidatePage(call, rt, args.hours, paper, modelIgnoredNote);
   } catch (err) {
     if (err instanceof PublicMaterialRefusal) NewspaperStageStore.collection(call.toolCtx.sessionKey, 'source-refused');

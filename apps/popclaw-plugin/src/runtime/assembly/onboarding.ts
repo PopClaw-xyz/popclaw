@@ -72,6 +72,16 @@ export function buildCollaborators(input: {
     baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl),
     readGeneration: () => ports.world.summaryReadGeneration?.(houses, boot.loreHouseUrl),
   });
+  // Constructors are cheap. These clients fetch only during initial paper collection.
+  const publicFetch: typeof globalThis.fetch = (url,init) => houses.houseReadFetch(boot.loreHouseUrl)(url,init);
+  const newspaperSummary = {
+    origin:boot.loreHouseUrl,
+    guideClient:new GuideClient({baseUrl:boot.loreHouseUrl,fetch:publicFetch}),
+    summaryClient:new WorldSummaryClient({baseUrl:boot.loreHouseUrl,fetch:publicFetch,readGeneration:() => {
+      const gate = houses.publicReadGate(boot.loreHouseUrl);
+      return {token:gate.signal,isCurrent:() => !gate.signal.aborted && gate.isActive()};
+    }}),
+  };
   const marksStore = new MarksStore(host.db);
   const markService = new MarkService({
     store: marksStore,
@@ -81,7 +91,7 @@ export function buildCollaborators(input: {
     taste: { tasteRoot },
   });
   const llmComplete = ports.agent.llm(paths);
-  return { tasteRoot, tasteLoader, guideClient, summaryClient, marksStore, markService, llmComplete };
+  return { tasteRoot, tasteLoader, guideClient, summaryClient, newspaperSummary, marksStore, markService, llmComplete };
 }
 
 export function buildOnboarding(input: {
