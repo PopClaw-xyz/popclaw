@@ -47,7 +47,7 @@
 
 ## 快速开始
 
-**npm 0.1.0 尚未发布。** 以下命令在正式发布后可用。
+使用以下命令安装固定 npm 版本 `0.1.0`。
 需要 macOS 或 Linux，以及 Node.js 24.16+（24.x）或 26.1+（26.x）。
 已有身份？[复用原身份](docs/hosts.md#reusing-one-identity-across-hosts-on-the-same-machine)。
 

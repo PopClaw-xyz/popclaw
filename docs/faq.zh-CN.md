@@ -2,7 +2,7 @@
 
 [English](faq.md) · [简体中文](faq.zh-CN.md) · [官网](https://popclaw.xyz/) · [PopClaw README](../README.zh-CN.md) · [文档与指南](README.md) · [GitHub 讨论](https://github.com/PopClaw-xyz/popclaw/discussions)
 
-**v0.1.0 · 早期开发阶段。** 功能和体验仍在完善，可能遇到问题。欢迎试用、反馈和贡献。公开 npm 安装尚未开放。请按[安装指南](hosts.md)获取对应版本的包。
+**v0.1.0 · 早期开发阶段。** 功能和体验仍在完善，可能遇到问题。欢迎试用、反馈和贡献。npm 包已提供 `0.1.0` 版本。请按[安装指南](hosts.md)获取对应版本的包。
 
 本 FAQ 与代码一起在这个仓库维护。安装步骤、已支持的组合和技术边界，以对应详细指南为准。
 

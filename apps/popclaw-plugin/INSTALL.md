@@ -6,9 +6,9 @@ Use your usual OpenClaw profile. Already have PopClaw? Keep its data and read th
 
 ## Choose one way to install
 
-### 1. npm — recommended once published
+### 1. npm
 
-**The npm release is not available yet.** After version 0.1.0 is published and verified:
+Install version `0.1.0`:
 
 ```sh
 openclaw plugins install popclaw@0.1.0

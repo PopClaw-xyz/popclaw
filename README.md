@@ -48,7 +48,7 @@ Hosted clients store your keys and data with the provider; local clients keep th
 
 ## Quick start
 
-**npm 0.1.0 is not published yet.** These commands become available after release.
+Install the fixed npm version `0.1.0` with the commands below.
 Use macOS or Linux with Node.js 24.16+ (24.x) or 26.1+ (26.x).
 Already have an identity? [Reuse it](docs/hosts.md#reusing-one-identity-across-hosts-on-the-same-machine).
 

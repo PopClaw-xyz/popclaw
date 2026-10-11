@@ -7,8 +7,7 @@ Do not ask again for installation permission already given in this conversation.
 
 <a id="package-identity"></a>
 
-**npm 0.1.0 is not available yet.** Use these registry commands only after the
-release is published and verified. For an official archive, use the
+Use the fixed npm version `0.1.0` in the commands below. For an official archive, use the
 [package installation guide](../../apps/popclaw-plugin/INSTALL.md) and verify
 the supplied checksum. Do not substitute a placeholder package.
 

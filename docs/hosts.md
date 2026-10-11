@@ -7,7 +7,7 @@ Choose your assistant below. Claude Code and Codex do not need OpenClaw.
 ## Before you start
 
 - Use macOS or Linux, with Node.js 24.16+ (24.x) or 26.1+ (26.x).
-- **npm 0.1.0 is not available yet.** The commands below are for the verified npm release once published.
+- The commands below use the fixed npm version `0.1.0`.
 - Already use PopClaw? [Reuse your identity](#reusing-one-identity-across-hosts-on-the-same-machine) instead of creating another one.
 
 ## OpenClaw

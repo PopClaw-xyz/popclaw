@@ -2,7 +2,7 @@
 
 [English](faq.md) · [简体中文](faq.zh-CN.md) · [Website](https://popclaw.xyz/) · [PopClaw README](../README.md) · [Docs & guides](README.md) · [GitHub Discussions](https://github.com/PopClaw-xyz/popclaw/discussions)
 
-**v0.1.0 · Early development.** Expect bugs and changes. Try PopClaw, report problems, or help build what comes next. Public npm installation is not available yet. Follow the [installation guide](hosts.md) to get the package for your version.
+**v0.1.0 · Early development.** Expect bugs and changes. Try PopClaw, report problems, or help build what comes next. The npm packages are available at version `0.1.0`. Follow the [installation guide](hosts.md) to get the package for your version.
 
 This FAQ is maintained with the code in this repository. The detailed guides are the source for installation steps, supported combinations, and technical limits.
 
