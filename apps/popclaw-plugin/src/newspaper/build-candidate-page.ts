@@ -201,7 +201,7 @@ export function buildCandidatePage(issue: IssueData, opts: CandidatePageOptions)
     id: opts.publishToken,
   });
   const out: string[] = [
-    summaryMaterialText(issue.worldSummary, lang),
+    ...(issue.worldSummary ? [summaryMaterialText(issue.worldSummary, lang)] : []),
     issue.language ? languageDirective(lang, issue.language) : languageDirective(),
     ``,
     m('head', {
