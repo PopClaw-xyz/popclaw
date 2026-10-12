@@ -1,30 +1,32 @@
 # Support matrix
 
-This page records historical evidence for the 0.1.0 candidate tested on 2026-10-08.
-It does not yet describe installation of the final public release package.
-The archive checks and host samples below retain their original candidate scope.
-They do not establish acceptance of the newer public-envelope-02 candidate.
-Unrecorded combinations remain unverified.
+## Current verification scope
 
-## Candidate and final release
+0.1.0 is published: [Release and artifacts](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.0).
+Its recorded registry acceptance covered ordinary installation, exact files,
+signature/attestation audit, SQLite, 55 MCP tools and restart. This does not
+establish every host feature or transfer acceptance to a newer package.
 
-- **Historical source label for the measured candidate:** `47214010`
-  (not included in this snapshot’s history).
-- **2026-10-08 local check:** performed with the fixed candidate’s actual archives.
-  Those archives retain the original build label `b3627a9`; the historical review recorded source-tree equivalence after Git author
-  metadata normalization. This snapshot does not reproduce that comparison
-  or relabel those archive bytes.
-- **Historical result:** retains its original build and acceptance scope. A
-  result reused for the earlier local integration build is not a new run or an equivalence claim for
-  `47214010`.
-- **Final release:** its source snapshot, archive hashes, registry-install
-  results and publication provenance are not yet recorded here. Candidate
-  archive checks must not be relabeled as final-release checks.
+For 0.1.2 source `22dae896fe188df4e26241996f4e40902785f274`,
+[CI](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267017008),
+[CodeQL](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267016939) and
+[publication checks](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267017016)
+passed. Three fixed-local-candidate OpenClaw samples produced published papers;
+two delivered in the original batch, and a separate later request on the third
+host delivered after a notification-target adjustment. See the
+[changelog for timings and limits](../CHANGELOG.md#012).
+These observations do not verify final 0.1.2 registry installation, every
+channel, Windows or every supported host. No new blanket support claim is made.
 
-The installation samples used fixed local archives. They do not establish
-that `openclaw plugins install popclaw` or the public-registry `npx` path
-has passed with the final release. The [host guide](hosts.md) documents those
-entry points and their identity, approval and timeout requirements.
+## Historical candidate evidence
+
+The following October 8 checks used local candidate archives, before the 0.1.0
+release. Historical source label `47214010` is not in this snapshot’s history;
+archives retained build label `b3627a9`. The historical review recorded tree
+equivalence after author-metadata normalization; this page does not reproduce
+that comparison or relabel those bytes. Keep these results separate from
+final-release acceptance and the 0.1.2 samples above. Unrecorded combinations
+remain unverified. The [host guide](hosts.md) describes setup requirements.
 
 ## 2026-10-08 archive checks
 

@@ -39,6 +39,19 @@
 
 ---
 
+## What changes in 0.1.2
+
+Less repeated reading, a fuller House overview, and more careful newspaper
+completion handling. The overview's extra sampled-feed read goes from one to
+zero. Summaries reuse authorized caches, prepared guides add no
+network wait after successful actions, and newspaper validation reuses each
+source snapshot while still checking every article.
+
+This is still a Developer Preview. [Changes and evidence](CHANGELOG.md#012)
+explain what improved, what we measured, and what remains unverified. The
+installation commands below remain pinned to the verified 0.1.0 release until
+0.1.2 registry installation is accepted.
+
 ## Start here
 
 | I want to… | Start here |
@@ -108,7 +121,7 @@ Ask for a paper and open the HTML file from its receipt. Sharing and
 scheduling are explained in the guide.
 [Read your first paper →](docs/first-steps.md#read-your-first-newspaper)
 
-Guide and world-summary reads have a shared ten-second execution budget. Cached results show their source, freshness, and recorded times when a refresh fails. Initial newspaper gathering uses the same bounded read segment after workshop dispatch; model work and publication are separate. [Read behavior and cache details](apps/popclaw-plugin/README.md).
+Guide and world-summary reads share a ten-second execution budget. Cached results show freshness and recorded times. Initial newspaper gathering retains individual network timeouts and cancellation checks, while valid local verification may take longer. Model work and publication are separate. [Read behavior and cache details](apps/popclaw-plugin/README.md).
 
 Your agent shows posts and messages before sending; say “send it” to approve.
 Follows are public. Marks are visible to the server carrying them.

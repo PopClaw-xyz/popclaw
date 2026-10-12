@@ -3,22 +3,12 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
-## 0.1.2 — Unreleased
+## 0.1.2 — Developer Preview; publication verification pending
 
-**Protocol:** additive v3 world-summary JSON. The pinned signed-event protocol
-and vault format are unchanged. No publication date is assigned.
-
-- Preserve the integrated login-manager, declared-summary, social-draft and MCP
-  confirmation lifecycle boundaries, including cancellation and currentness checks.
-- Render the complete House snapshot, including zero, negative and unknown
-  growth, and freeze one optional summary reference for a newspaper.
-- Bound guide and summary tool reads to one shared ten-second budget; reuse
-  authorized cached results with explicit fetched, checked and attempted times.
-- Refresh declared House guides through existing streams and deliver prepared
-  guide context without adding network waits after successful tool actions.
-
-This source candidate has not established package installation, deployment,
-registry publication or real-client timing acceptance.
+See the [root changelog](../../CHANGELOG.md#012) for the complete changes,
+fixed-source CI links, read-efficiency mechanisms and scoped real-host samples.
+The signed-event protocol and vault format are unchanged; v3 summary JSON is
+additive. Package publication and registry installation remain separate checks.
 
 ## 0.1.2-rc.20261011.1 — Integration candidate — 2026-10-11
 
