@@ -74,6 +74,21 @@ Cancellation and source-authority checks still apply before a candidate basis is
 saved. A late response cannot authorize a new basis. A summary or digest is
 editorial context, not a substitute for verified article material.
 
+Public-journal validation captures each used source once per synchronous
+validation call. Every reference still checks its frame, signature, material,
+body and current authority. After all references, each source is captured again
+for full partition integrity and schema validation, with the selected DB and
+trust binding compared to the initial capture. This reuse never spans page,
+selection or publication calls; those calls validate afresh. The initial gather
+retains both its pre-persistence validation and its saved-document validation.
+This reduces repeated full partition checks, not the number of signed references.
+
+Synchronous local scans can also consume the aggregate budget. A candidate
+manifest or `candidatePage=true` can precede the final budget check, so neither
+proves that the candidate text reached the writer. This is distinct from a run
+that never built a candidate; preserve those stages separately. These checks do
+not provide an inode-level guarantee for same-path physical file replacement.
+
 When collection raises a structured House read failure, the writer and the
 OpenClaw parent receive its safe code and available diagnostic fields. The
 workshop dispatch record retains those fields under `stage.collectionFailure`,
