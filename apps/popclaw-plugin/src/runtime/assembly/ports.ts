@@ -117,6 +117,8 @@ export interface WorldPort<S extends object> {
   snapshotFetch(houses: HouseRuntime, origin: string): typeof globalThis.fetch;
   /** …and the guide / summary clients on the home house. */
   clientFetch(houses: HouseRuntime, origin: string): typeof globalThis.fetch;
+  /** The same host read lane, with a shared bound House guide cache. */
+  guideRead?(houses: HouseRuntime, origin: string): ReturnType<HouseRuntime['readHouseGuide']>;
   /** Optional reuse identity for this host's own read lane, never a permission grant.
    * Hosts without a proven connection identity retain fresh, normally gated reads. */
   summaryReadGeneration?(houses: HouseRuntime, origin: string): ReadRequestScope;

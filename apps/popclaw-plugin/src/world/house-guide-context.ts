@@ -1,4 +1,5 @@
 /** Source-bound House business knowledge; reading or emitting it grants no action. */
+import { houseReadFailure, RemoteHouseReadError, type HouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
 import type { SessionManifest } from '../runtime/house-lifecycle/control-client.js';
 import type { HostDb } from '../host/host-db.js';
 import { entryDigest } from '../runtime/house-lifecycle/participation-journal.js';
@@ -10,38 +11,125 @@ export interface HouseGuideContext {
   readonly guideUrl: string; readonly guideDigest: string; readonly guide: string;
   readonly entry?: unknown; readonly delivered: boolean;
 }
-export type HouseGuideResult = HouseGuideContext | {readonly status:'unavailable';readonly code:string;readonly origin:string};
+export type HouseGuideResult = HouseGuideContext | {readonly status:'unavailable';readonly code:string;readonly origin:string;readonly failure?:HouseReadFailure};
 interface Row {origin:string;binding_digest:string;op_seq:number;guide_url:string;manifest_digest:string;guide_digest:string|null;guide_body:string|null;delivered_digest:string|null}
 export function guideBindingDigest(db:HostDb,origin:string): string {
   const b = pinnedBinding(db,origin);
   return entryDigest(b ? {origin:b.origin,houseKey:b.houseKey,incarnation:b.incarnation,revision:b.revision,blockedReason:b.blockedReason} : null);
 }
+export const GUIDE_REVALIDATE_MS = 6 * 60 * 60 * 1000;
+const GUIDE_MAX_BYTES = 256 * 1024;
+type RefreshState = { identity: string; checkedAt: number; dirty: boolean; revision: number; hint?: string; attemptedAt?: number; failure?: HouseReadFailure; pending?: Promise<void> };
+const refreshStates = new WeakMap<HostDb, Map<string, RefreshState>>();
+function refreshState(db: HostDb, row: Row): RefreshState {
+  let states = refreshStates.get(db);
+  if (!states) { states = new Map(); refreshStates.set(db, states); }
+  const identity = JSON.stringify([row.binding_digest,row.op_seq,row.guide_url,row.manifest_digest]);
+  let state = states.get(row.origin);
+  if (!state || state.identity !== identity) {
+    state = {identity,checkedAt:0,dirty:true,revision:0}; states.set(row.origin,state);
+  }
+  return state;
+}
+/** A digest is only an invalidation hint. It cannot change a URL, trust or authority. */
+export function invalidateHouseGuide(db: HostDb, origin: string, digest?: string): void {
+  if (digest !== undefined && !/^[a-f0-9]{64}$/.test(digest)) return;
+  const row = db.queryOne<Row>('SELECT * FROM house_guide_context WHERE origin=?',[origin]);
+  if (!row) return;
+  const state = refreshState(db,row);
+  if (digest !== undefined && (digest === row.guide_digest || digest === state.hint)) return;
+  state.hint = digest;
+  state.dirty = true; state.revision++;
+}
+function currentGuideRow(db: HostDb, origin: string, active: () => boolean): Row | null {
+  if (!active()) return null;
+  const row = db.queryOne<Row>('SELECT * FROM house_guide_context WHERE origin=?',[origin]);
+  const participation = readParticipation(db,origin);
+  return row && participation?.desired === 'enabled' && participation.phase === 'connected'
+    && participation.op_seq === row.op_seq && guideBindingDigest(db,origin) === row.binding_digest ? row : null;
+}
+/** Local-only lookup for model-input hooks. Never fetches or changes receipts. */
+export function cachedHouseGuide(db: HostDb, origin: string, active: () => boolean): HouseGuideResult {
+  const row = currentGuideRow(db,origin,active);
+  if (!row) return {status:'unavailable',origin,code:'HOUSE_GUIDE_CONTEXT_STALE'};
+  if (!row.guide_url || !row.guide_body || !row.guide_digest || entryDigest(row.guide_body) !== row.guide_digest)
+    return {status:'unavailable',origin,code:'HOUSE_GUIDE_NOT_CACHED'};
+  return Object.freeze({status:'available',origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,guideUrl:row.guide_url,
+    guideDigest:row.guide_digest,guide:row.guide_body,entry:parseGuideFrontmatter(row.guide_body).frontmatter?.entry,
+    delivered:row.delivered_digest === row.guide_digest});
+}
+/** Read a bounded complete UTF-8 body. Digest strings use raw UTF-8 SHA-256,
+ * matching the House ETag; object entryDigest callers serialize JSON instead. */
+export async function readBoundedGuide(response: Response): Promise<string> {
+  if (!response.body) throw new Error('HOUSE_GUIDE_EMPTY');
+  const reader = response.body.getReader(), decoder = new TextDecoder('utf-8',{fatal:true});
+  let bytes = 0, body = '';
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > GUIDE_MAX_BYTES) throw new Error('HOUSE_GUIDE_TOO_LARGE');
+      body += decoder.decode(chunk.value,{stream:true});
+    }
+    body += decoder.decode();
+    if (!body.trim()) throw new Error('HOUSE_GUIDE_EMPTY');
+    return body;
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+}
 export async function readHouseGuideContext(db: HostDb, origin: string, fetchDocument: typeof globalThis.fetch,
   active: () => boolean): Promise<HouseGuideResult> {
-  const unavailable = (code:string):HouseGuideResult => ({status:'unavailable',origin,code});
-  const row = db.queryOne<Row>('SELECT * FROM house_guide_context WHERE origin=?',[origin]);
-  const current = () => active() && row !== null && readParticipation(db,origin)?.op_seq === row.op_seq && guideBindingDigest(db,origin) === row.binding_digest;
-  if (!row || !current()) return unavailable('HOUSE_GUIDE_CONTEXT_STALE');
-  if (!row.guide_url) return unavailable('HOUSE_GUIDE_NOT_DECLARED');
-  let body = row.guide_body, digest = row.guide_digest;
-  if (!body || !digest) {
-    try {
-      const response = await fetchDocument(row.guide_url,{method:'GET',redirect:'error',signal:AbortSignal.timeout(15_000)});
-      if (!response.ok) return unavailable('HOUSE_GUIDE_FETCH_FAILED');
-      const text = await response.text();
-      if (text.length > 256*1024) return unavailable('HOUSE_GUIDE_TOO_LARGE');
-      if (!text.trim() || !current()) return unavailable('HOUSE_GUIDE_CONTEXT_STALE');
-      body = text; digest = entryDigest(body);
-      db.transaction(tx => {
-        if (!current()) throw new Error('HOUSE_GUIDE_CONTEXT_STALE');
-        tx.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=? WHERE origin=? AND op_seq=? AND binding_digest=?',
-          [body,digest,origin,row.op_seq,row.binding_digest]);
-      });
-    } catch { return unavailable('HOUSE_GUIDE_FETCH_FAILED'); }
+  const row = currentGuideRow(db,origin,active);
+  if (!row) return {status:'unavailable',origin,code:'HOUSE_GUIDE_CONTEXT_STALE'};
+  if (!row.guide_url) return {status:'unavailable',origin,code:'HOUSE_GUIDE_NOT_DECLARED'};
+  const state = refreshState(db,row);
+  const current = () => {
+    const latest = currentGuideRow(db,origin,active);
+    return latest !== null && refreshState(db,latest) === state;
+  };
+  if (!state.pending && (state.dirty || Date.now()-state.checkedAt >= GUIDE_REVALIDATE_MS || !row.guide_body)) {
+    const revision = state.revision; state.attemptedAt = Date.now();
+    state.pending = (async () => {
+      try {
+        const cached = row.guide_body && row.guide_digest === entryDigest(row.guide_body);
+        const request = (conditional: boolean) => fetchDocument(row.guide_url,{method:'GET',redirect:'error',
+          signal:AbortSignal.timeout(15_000),headers:conditional ? {'If-None-Match':`"${row.guide_digest}"`} : {}});
+        let response = await request(!!cached);
+        if (response.status === 304 && !cached) response = await request(false);
+        if (response.status === 304 && cached) {
+          if (!current()) return;
+        } else {
+          if (!response.ok) { await response.body?.cancel(); throw new RemoteHouseReadError({code:'HOUSE_REMOTE_HTTP',origin,status:response.status}); }
+          const body = await readBoundedGuide(response), digest = entryDigest(body);
+          if (!current()) return;
+          db.transaction(tx => {
+            if (!current()) throw new Error('HOUSE_GUIDE_CONTEXT_STALE');
+            tx.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=? WHERE origin=? AND op_seq=? AND binding_digest=?',
+              [body,digest,origin,row.op_seq,row.binding_digest]);
+          });
+        }
+        const latestDigest = db.queryOne<Row>('SELECT * FROM house_guide_context WHERE origin=?',[origin])?.guide_digest;
+        state.checkedAt = Date.now(); state.failure = undefined;
+        state.dirty = state.revision !== revision && state.hint !== latestDigest;
+      } catch (error) {
+        state.dirty = true; state.failure = houseReadFailure(error,origin);
+        // Preserve the last complete body and pending invalidation.
+      }
+    })().finally(() => { state.pending = undefined; });
   }
-  if (!current()) return unavailable('HOUSE_GUIDE_CONTEXT_STALE');
-  return Object.freeze({status:'available',origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,guideUrl:row.guide_url,guideDigest:digest,
-    guide:body,entry:parseGuideFrontmatter(body).frontmatter?.entry,delivered:row.delivered_digest === digest});
+  if (state.pending) await state.pending;
+  const result = cachedHouseGuide(db,origin,active);
+  return result.status === 'unavailable' && result.code === 'HOUSE_GUIDE_NOT_CACHED' && state.failure
+    ? {...result,code:'HOUSE_GUIDE_FETCH_FAILED',failure:state.failure} : result;
+}
+/** Existing resident cadence only revalidates initialized caches. Historical
+ * pointer backfill remains a foreground read; failures cannot become 1s polling. */
+export function houseGuideBackgroundDue(db: HostDb, origin: string): boolean {
+  const row = db.queryOne<Row>('SELECT * FROM house_guide_context WHERE origin=?',[origin]);
+  if (!row?.guide_body || !row.guide_digest) return false;
+  const state = refreshState(db,row);
+  if (state.pending || state.failure && state.attemptedAt !== undefined && Date.now()-state.attemptedAt < 60_000) return false;
+  return state.dirty || Date.now()-state.checkedAt >= GUIDE_REVALIDATE_MS;
 }
 /** Call only after the host actually emitted this exact bound context. */
 export function markHouseGuideDelivered(db:HostDb, context:HouseGuideContext): boolean {
@@ -95,14 +183,18 @@ export async function readJoinedHouseGuide(db: HostDb, origin: string, ports: Ho
     if (row && binding) try {
       const manifest = await ports.fetchManifest();
       const prepared = await ports.prepareBinding(manifest);
-      db.transaction(tx => {
+      const concurrent = db.transaction(tx => {
         if (!gate.isActive() || JSON.stringify(readParticipation(tx,origin)) !== JSON.stringify(row)) throw new Error('HOUSE_GUIDE_CONTEXT_STALE');
         const refusal = prepared.commit(tx);
         if (refusal) return;
         const guideUrl = declaredGuideUrl(origin, manifest.rawBytes);
-        tx.execute(`INSERT INTO house_guide_context(origin,binding_digest,op_seq,guide_url,manifest_digest) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`,
-          [origin,guideBindingDigest(tx,origin),row.op_seq,guideUrl,entryDigest(Buffer.from(manifest.rawBytes).toString('base64'))]);
+        return tx.execute(`INSERT INTO house_guide_context(origin,binding_digest,op_seq,guide_url,manifest_digest) VALUES(?,?,?,?,?) ON CONFLICT DO NOTHING`,
+          [origin,guideBindingDigest(tx,origin),row.op_seq,guideUrl,entryDigest(Buffer.from(manifest.rawBytes).toString('base64'))]).changes === 0;
       });
+      if (concurrent) {
+        const cached = cachedHouseGuide(db,origin,ports.active);
+        if (cached.status === 'available') return cached;
+      }
     } catch { /* Joined status remains separate from guide availability. */ }
   }
   return readHouseGuideContext(db,origin,ports.documentFetch(),ports.active);
@@ -149,9 +241,8 @@ export function observedHouseGuideKeys(serialized: unknown): ReadonlySet<string>
 export async function pendingHouseGuides(db: HostDb, readGuide: (origin: string) => Promise<HouseGuideResult>,
   present?: ReadonlySet<string>): Promise<HouseGuideContext[]> {
   const result: HouseGuideContext[] = [];
-  const query = present === undefined
-    ? 'SELECT origin FROM house_guide_context WHERE delivered_digest IS NULL OR delivered_digest!=guide_digest'
-    : 'SELECT origin FROM house_guide_context';
+  // Even an acknowledged version can become stale while no resident stream runs.
+  const query = 'SELECT origin FROM house_guide_context';
   for (const {origin} of db.queryAll<{origin:string}>(query)) {
     const context = await readGuide(origin);
     if (context.status === 'available' && (present === undefined ? !context.delivered : !present.has(houseGuideContextKey(context)))) result.push(context);

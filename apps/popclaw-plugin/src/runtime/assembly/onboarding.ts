@@ -67,7 +67,7 @@ export function buildCollaborators(input: {
   const { host, boot, paths, ports, houses, egress } = input;
   const tasteRoot = paths.tasteDir();
   const tasteLoader = new TasteLoader({ tasteDir: tasteRoot, logger: { warn: ports.log.warn } });
-  const guideClient = new GuideClient({ baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl) });
+  const guideClient = new GuideClient({ baseUrl: boot.loreHouseUrl, readGuide: ports.world.guideRead ? () => ports.world.guideRead!(houses,boot.loreHouseUrl) : undefined, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl) });
   const summaryClient = new WorldSummaryClient({
     baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl),
     readGeneration: () => ports.world.summaryReadGeneration?.(houses, boot.loreHouseUrl),
@@ -76,7 +76,7 @@ export function buildCollaborators(input: {
   const publicFetch: typeof globalThis.fetch = (url,init) => houses.houseReadFetch(boot.loreHouseUrl)(url,init);
   const newspaperSummary = {
     origin:boot.loreHouseUrl,
-    guideClient:new GuideClient({baseUrl:boot.loreHouseUrl,fetch:publicFetch}),
+    guideClient:new GuideClient({baseUrl:boot.loreHouseUrl,readGuide:() => houses.readHouseGuide(boot.loreHouseUrl,houses.publicReadGate(boot.loreHouseUrl)),fetch:publicFetch}),
     summaryClient:new WorldSummaryClient({baseUrl:boot.loreHouseUrl,fetch:publicFetch,readGeneration:() => {
       const gate = houses.publicReadGate(boot.loreHouseUrl);
       return {token:gate.signal,isCurrent:() => !gate.signal.aborted && gate.isActive()};

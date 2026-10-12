@@ -52,6 +52,7 @@ import type { AnyEventSource } from './world-feed-stream-client.js';
 const CONTENT_KINDS = new Set(['post', 'reply']);
 
 export interface PublicWorldStreamOptions {
+  readonly onStreamOpen?: () => void;
   readonly baseUrl: string;
   readonly gate?: Pick<HouseGate, 'isActive' | 'signal'>;
   readonly isOfficialActor?: (actorId: string) => boolean;
@@ -204,6 +205,7 @@ export class PublicWorldStreamClient implements EventIngress {
       if (this.es !== es) return;
       if (!this.active()) { this.reconnect(es); return; }
       this.receiving = true;
+      this.opts.onStreamOpen?.();
       void this.retryPending().catch(() => {});
       for (const cb of this.connectedCallbacks) {
         try {
@@ -487,6 +489,8 @@ export function rebuildPublicWorldProjection(
 }
 
 export interface PublicV1ReceiverOptions {
+  readonly onGuideDigest?: (digest: string) => void;
+  readonly onStreamOpen?: () => void;
   readonly capability: VerifiedPublicStreamCapability;
   readonly gate: PublicReceiveGate;
   readonly executionDb: HostDb;
@@ -640,6 +644,9 @@ export class PublicV1Receiver implements EventIngress {
         if (!response.ok || response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'text/event-stream') {
           throw new Error('PUBLIC_STREAM_UNAVAILABLE');
         }
+        this.invoke(() => this.options.onStreamOpen?.());
+        const guideDigest = response.headers.get('x-popclaw-guide-digest');
+        if (guideDigest && /^[a-f0-9]{64}$/.test(guideDigest)) this.invoke(() => this.options.onGuideDigest?.(guideDigest));
         await consumePublicSse(response, signal, event => {
           this.requireActive();
           const raw = scopedBase64(event.data);
@@ -669,7 +676,7 @@ export class PublicV1Receiver implements EventIngress {
             this.notify();
           }
           this.requireActive();
-        }, progress);
+        }, progress, digest => { this.requireActive(); this.invoke(() => this.options.onGuideDigest?.(digest)); });
         this.requireActive();
       } catch (error) {
         errorCode = gap ? 'PUBLIC_STREAM_GAP' : idle ? 'PUBLIC_STREAM_IDLE' : error instanceof Error && /^[A-Z][A-Z0-9_]{0,79}$/.test(error.message)

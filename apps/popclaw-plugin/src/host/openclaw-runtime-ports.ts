@@ -191,6 +191,7 @@ export function gatewayRuntimePorts(input: {
       // Row 23: the gateway reads the world over the owner lane.
       snapshotFetch: (houses, origin) => houses.houseFetch(origin),
       clientFetch: (houses) => houses.fetchHouse,
+      guideRead: (houses, origin) => houses.readHouseGuide(origin,houses.captureGate(origin)),
       summaryReadGeneration: (houses, origin) => {
         const gate = houses.captureGate(origin);
         return { token: gate.signal, isCurrent: () => !gate.signal.aborted && gate.isActive() };

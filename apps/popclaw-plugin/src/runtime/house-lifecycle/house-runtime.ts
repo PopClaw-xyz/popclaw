@@ -17,7 +17,7 @@ import type { InboxReadCredential } from '../../messaging/inbox-stream-client.js
 import type { ReadAuthority, ReadCredentialOutcome } from '../../identity/read-authority.js';
 import type { ConfiguredHousePinningStrategy } from './configured-first-pin.js';
 import { cancelInitialSetup } from './participation-journal.js';
-import { readJoinedHouseGuide, pendingHouseGuides, markGuidesInAgentInput, markHouseGuideDelivered, type HouseGuideContext } from '../../world/house-guide-context.js';
+import { houseGuideBackgroundDue, invalidateHouseGuide, readJoinedHouseGuide, pendingHouseGuides, markGuidesInAgentInput, markHouseGuideDelivered, type HouseGuideContext } from '../../world/house-guide-context.js';
 import { findParticipationReceipt } from './participation-journal.js';
 import type { HouseParticipationReceiptQuery, HouseParticipationReceiptResult } from './participation-admission.js';
 import { HouseLifecycleManager, type HouseGate, type ManagerOptions } from './manager.js';
@@ -269,7 +269,8 @@ export class HouseRuntime {
       },
       streams: { open: gate => {
         if (!this.resources) throw new Error('House resources have not been configured');
-        return createHouseStreamFactory({ ...this.resources, publicV1Mode: opts.publicV1Mode === true, signer: opts.signer,
+        return createHouseStreamFactory({ ...this.resources,
+          onGuideCheck: (origin,reconnect) => this.refreshHouseGuide(origin,reconnect ? undefined : null), publicV1Mode: opts.publicV1Mode === true, signer: opts.signer,
           storeFor: origin => this.storeFor(origin), readToken: captured => this.readToken(captured) }).open(gate);
       } } });
     this.resident.configureOrigins(opts.origins);
@@ -277,6 +278,7 @@ export class HouseRuntime {
       const catalog = opts.executionStores;
       if (catalog.options.db !== opts.db) throw new Error('PUBLIC_CATALOG_DATABASE_MISMATCH');
       this.publicResources = new PublicReadResources({ db: opts.db, catalog,
+        onGuideCheck: (origin,hint) => this.refreshHouseGuide(origin,hint),
         authority: this.resident.authority, selected: () => !this.stopped && opts.publicV1Mode === true,
         pinFor: origin => this.publicPinFor(origin),
         consumersAllowed: () => storageDatabasePathAllowed(opts.db, 'consumers', catalog.options.paths), storeFor: origin => this.storeFor(origin),
@@ -369,12 +371,25 @@ export class HouseRuntime {
     this.bindOrigin(origin);
     return this.bus.loginHouse(origin,{requestId:source.originalOperationRef,participationSource:source});
   }
-  readHouseGuide(input: string) {
+  /** Called only by captured resident resources; a hint is never authority. */
+  private refreshHouseGuide(origin: string, hint: string | undefined | null): void {
+    try {
+      if (this.stopped || !this.publicReadGate(origin).isActive()) return;
+      if (hint !== null) invalidateHouseGuide(this.opts.db,origin,hint);
+      if (!houseGuideBackgroundDue(this.opts.db,origin)) return;
+      void this.readHouseGuide(origin).catch(error => this.opts.log?.(`guide refresh (${origin}): ${String(error)}`));
+    } catch { /* A revoked resource cannot refresh a guide. */ }
+  }
+  readHouseGuide(input: string, readGate?: ActionGate) {
     // Return the domain promise directly, while capture errors still reject
     // as they did in the original async method.
     try {
-      const origin = normalizeHouseOrigin(input), gate = this.publicReadGate(origin);
-      return readJoinedHouseGuide(this.opts.db, origin, {
+      const origin = normalizeHouseOrigin(input), joined = this.publicReadGate(origin);
+      if (readGate) assertActionActive(readGate);
+      assertHouseActionActive(origin);
+      const gate = { ...joined, signal: readGate ? AbortSignal.any([joined.signal,readGate.signal]) : joined.signal,
+        isActive: () => joined.isActive() && (!readGate || readGate.isActive()) };
+      const read = readJoinedHouseGuide(this.opts.db, origin, {
         gate,
         fetchManifest: () => fetchSessionManifest(origin, this.opts.fetch ?? globalThis.fetch, gate.signal),
         prepareBinding: manifest => makeRelationBindingPreparer({db: this.opts.db,
@@ -385,6 +400,10 @@ export class HouseRuntime {
           generation: readParticipation(this.opts.db, origin)?.op_seq ?? 0}),
         active: () => !this.stopped && gate.isActive(),
       });
+      return readGate ? read.then(result => {
+        assertHouseActionActive(origin); assertActionActive(readGate);
+        return result;
+      }) : read;
     } catch (error) { return Promise.reject(error); }
   }
   pendingHouseGuides(present?: ReadonlySet<string>): Promise<HouseGuideContext[]> {
