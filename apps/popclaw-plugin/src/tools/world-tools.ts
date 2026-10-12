@@ -6,8 +6,7 @@
  * Split out of register-tools.ts (2026-08-25).
  */
 
-import { formatHouseReadFailure, houseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
-import type { WorldSummaryResult } from '../world/world-summary-client.js';
+import { formatHouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
 import {
   WorldGuideSchema,
   WorldSummaryToolSchema,
@@ -20,8 +19,8 @@ import { pairBrowser } from '../canvas/pair-claim.js';
 import type { Signer } from '../identity/signer.js';
 import { ownerLang, failureText } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
-import { parseGuideFrontmatter, summaryDeclaration } from '../world/guide.js';
-import type { GuideTextResult } from '../world/guide-client.js';
+import { parseGuideFrontmatter } from '../world/guide.js';
+import { prepareDeclaredSummaryRead } from '../world/declared-summary-read.js';
 import { houseDisplayName } from '../world/house-handshake.js';
 import { WorldSummaryClient } from '../world/world-summary-client.js';
 import { aggregateNotableAuthors } from '../world/notable-authors.js';
@@ -223,23 +222,14 @@ export function registerWorldTools(ctx: ToolsCtx): void {
             : WORLD_SUMMARY_WINDOW_HOURS;
         const wd = await getWorldDeps();
         const lang = ownerLang();
-        let guide: GuideTextResult;
-        try {
-          if (wd.guideClient.fetchGuideResult) guide = await wd.guideClient.fetchGuideResult();
-          else {
-            const text = await wd.guideClient.fetchGuideText();
-            guide = text === null ? { ok: false, failure: { code: 'HOUSE_REMOTE_UNKNOWN' } } : { ok: true, text };
-          }
-        } catch (error) { guide = { ok: false, failure: houseReadFailure(error) }; }
-        if (!guide.ok) throw new Error(`${renderCopy(lang, 'world.summary.availabilityUnknown')} ${formatHouseReadFailure(lang, guide.failure)}`);
-        const declaration = summaryDeclaration(guide.text);
-        if (declaration === 'unsupported') throw new Error(renderCopy(lang, 'world.summary.unsupported'));
-        if (declaration === 'unknown') throw new Error(renderCopy(lang, 'world.summary.availabilityUnknown'));
+        const prepared = await prepareDeclaredSummaryRead(wd.guideClient, wd.summaryClient);
+        if (prepared.status === 'unknown') {
+          const reason = prepared.failure ? ` ${formatHouseReadFailure(lang, prepared.failure)}` : '';
+          throw new Error(renderCopy(lang, 'world.summary.availabilityUnknown') + reason);
+        }
+        if (prepared.status === 'unsupported') throw new Error(renderCopy(lang, 'world.summary.unsupported'));
         const [summaryResult, snapshot] = await Promise.all([
-          (wd.summaryClient.fetchSummaryResult ? wd.summaryClient.fetchSummaryResult(windowHours)
-            : wd.summaryClient.fetchSummary(windowHours).then((summary): WorldSummaryResult => summary
-              ? {ok:true,summary} : {ok:false,failure:{code:'HOUSE_REMOTE_UNKNOWN'}}))
-            .catch((error): WorldSummaryResult => ({ok:false,failure:houseReadFailure(error)})),
+          prepared.read(windowHours),
           wd.snapshotClient
             .fetchSnapshot({ limit: WORLD_SNAPSHOT_LIMIT })
             .catch(() => [] as WorldSnapshotItemLike[]),
