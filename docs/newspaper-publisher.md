@@ -62,6 +62,27 @@ service does not disable house traffic, model calls or all resources that
 a browser may fetch when opening a paper. See the
 [threat model](threat-model.md#services-your-client-contacts).
 
+## Workshop observation and final delivery
+
+A rejected OpenClaw `waitForRun` observation does not establish that its child
+run failed or stopped. The dispatcher preserves the exact child's hand-off and
+original deadline. A later completed publication wakes that wait once; an
+unfinished or refused writing batch cannot settle it. A host-returned terminal
+status still follows the existing success/failure receipt path.
+
+This fallback is process-local. It neither restarts the workshop nor retries
+an expired request-scoped SDK call. If the observer was lost, local hand-off and
+duplicate-prevention state is cleared at settlement, but the host session is
+retained: publication or deadline expiry cannot authorize deleting a possibly
+active run. Host termination and physical session cleanup remain unknown.
+
+A publication receipt and a successful notification are separate facts. Final
+channel delivery still requires the existing authorized owner route and a
+successful notifier send. No routable target, caller-authority loss or process
+restart is repaired by the outcome fallback, and none should be described as a
+delivered newspaper. This mechanism does not persist a recovery task or change
+identity, channel permission or the 40-second inline/12-minute workshop budgets.
+
 ## Reading failures before publication
 
 Initial material collection uses one shared 10-second read budget. Declared
