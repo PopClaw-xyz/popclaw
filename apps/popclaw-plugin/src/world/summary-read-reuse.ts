@@ -37,7 +37,7 @@ export class SummaryReadReuse {
     if (previous && !retry && previous.generation.isCurrent()) {
       const result = await waitForRead(previous.result);
       if (!current() || !previous.generation.isCurrent()) return stale();
-      if (result.ok && result.freshness?.status === 'refresh_failed') return client.validateCachedResult?.(result) ?? stale();
+      if (result.ok) return client.validateCachedResult?.(result) ?? stale();
       return result.ok ? result : { ...result, reused: true };
     }
     const pending = Promise.resolve().then(work);

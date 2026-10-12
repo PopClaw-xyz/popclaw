@@ -544,7 +544,7 @@ it.each(['unchanged','equivalent-empty','replaced','unreadable','changed-in-comm
   expect(row).toMatchObject({session_id:'',ack_key_hex:'',house_revision:0,lease_expires_at:0,inbox_read_token:''});
   if(kind==='unchanged' || kind==='equivalent-empty') {
     expect(outcome.legacyAvailable).toBe(true);
-    await expect(f.rt.runCommand(()=>f.summary.fetchSummaryResult())).resolves.toEqual({ok:true,summary:PUBLIC_BODY});
+    await expect(f.rt.runCommand(()=>f.summary.fetchSummaryResult())).resolves.toEqual({ok:true,summary:PUBLIC_BODY,freshness:expect.objectContaining({status:'fresh'})});
     await expect(f.rt.runCommand(()=>f.snapshot.fetchSnapshot({limit:20}))).resolves.toEqual([]);
   } else {
     expect(outcome.legacyAvailable).not.toBe(true);
@@ -555,7 +555,7 @@ it.each(['unchanged','equivalent-empty','replaced','unreadable','changed-in-comm
     // with fresh manifest/proof; the old operation was never recaptured.
     pin='';unreadable=false;suspended=false;
     await expect(f.rt.commands.loginHouse(ORIGIN)).resolves.toMatchObject({legacyAvailable:true});
-    await expect(f.rt.runCommand(()=>f.summary.fetchSummaryResult())).resolves.toEqual({ok:true,summary:PUBLIC_BODY});
+    await expect(f.rt.runCommand(()=>f.summary.fetchSummaryResult())).resolves.toEqual({ok:true,summary:PUBLIC_BODY,freshness:expect.objectContaining({status:'fresh'})});
   }
 });
 

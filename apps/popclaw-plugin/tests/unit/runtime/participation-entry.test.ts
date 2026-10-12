@@ -321,18 +321,15 @@ it('invalid historical guide URL is caught without changing joined participation
   expect(f.db.queryOne('SELECT origin FROM house_binding_pin WHERE origin=?', [ME])).not.toBeNull();
 });
 
-it('pending guide reads remain sequential in durable row order', async () => {
+it('pending guide contexts retain durable row order without remote reads', async () => {
   const f = await fixture(); await f.rt.activateInitialMe(); await f.rt.commands.loginHouse(WORLD);
-  const calls: string[] = [], started = deferred(), held = deferred();
-  f.transport.mockImplementation(async input => {
-    const url = new URL(String(input)); calls.push(url.origin);
-    if (url.origin === ME) { started.release(); await held.wait; }
-    return new Response(url.origin + ' guide');
-  });
-  const pending = f.rt.pendingHouseGuides(); await started.wait;
-  expect(calls).toEqual([ME]); held.release();
-  expect((await pending).map(context => context.origin)).toEqual([ME, WORLD]);
-  expect(calls).toEqual([ME, WORLD]);
+  await f.rt.readHouseGuide(ME); await f.rt.readHouseGuide(WORLD);
+  f.transport.mockClear();
+  expect((await f.rt.pendingHouseGuides()).map(context => context.origin)).toEqual([ME, WORLD]);
+  expect(f.transport).not.toHaveBeenCalled();
+  f.db.execute('UPDATE house_guide_context SET guide_body=NULL,guide_digest=NULL');
+  expect(await f.rt.pendingHouseGuides()).toEqual([]);
+  expect(f.transport).not.toHaveBeenCalled();
 });
 
 

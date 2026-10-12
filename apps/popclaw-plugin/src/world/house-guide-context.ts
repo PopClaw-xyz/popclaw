@@ -2,7 +2,7 @@ import { assertReadCallActive, budgetedFetch, waitForRead, withReadCallBudget, c
 import type { ReadFreshness } from './read-freshness.js';
 /** Source-bound House business knowledge; reading or emitting it grants no action. */
 import { RemoteHouseReadError, type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
-import { currentActionSignal } from '../runtime/house-lifecycle/action-context.js';
+import { currentActionSignal, captureActionContext, assertActionActive } from '../runtime/house-lifecycle/action-context.js';
 import { remoteReadFailure } from './house-read-diagnostic.js';
 import type { SessionManifest } from '../runtime/house-lifecycle/control-client.js';
 import type { HostDb } from '../host/host-db.js';
@@ -23,7 +23,7 @@ export function guideBindingDigest(db:HostDb,origin:string): string {
 }
 export const GUIDE_REVALIDATE_MS = 6 * 60 * 60 * 1000;
 const GUIDE_MAX_BYTES = 256 * 1024;
-type RefreshState = { identity: string; checkedAt: number; fetchedAt?:number; dirty: boolean; revision: number; hint?: string; attemptedAt?: number; failure?: HouseReadFailure; pending?: Promise<void>; waiters:Set<() => boolean>; abort?:AbortController };
+type RefreshState = { identity: string; checkedAt: number; fetchedAt?:number; dirty: boolean; revision: number; hint?: string; attemptedAt?: number; failure?: HouseReadFailure; pending?: Promise<void>; waiters:Set<() => boolean>; abort?:AbortController; producer?:{owner:()=>boolean;sourceActive:()=>boolean} };
 const refreshStates = new WeakMap<HostDb, Map<string, RefreshState>>();
 function refreshState(db: HostDb, row: Row): RefreshState {
   let states = refreshStates.get(db);
@@ -59,7 +59,7 @@ export function cachedHouseGuide(db: HostDb, origin: string, active: () => boole
   if (!row.guide_url || !row.guide_body || !row.guide_digest || entryDigest(row.guide_body) !== row.guide_digest)
     return {status:'unavailable',origin,code:'HOUSE_GUIDE_NOT_CACHED'};
   const state = refreshState(db,row);
-  const freshness: ReadFreshness = {status:state.failure ? 'refresh_failed' : state.dirty || Date.now()-state.checkedAt >= GUIDE_REVALIDATE_MS ? 'stale' : 'fresh',origin,
+  const freshness: ReadFreshness = {status:state.failure ? 'refresh_failed' : state.dirty || Date.now()-state.checkedAt >= GUIDE_REVALIDATE_MS ? 'stale' : 'fresh',origin,sourceBinding:entryDigest(state.identity),
     fetchedAtMs:state.fetchedAt ?? null,checkedAtMs:state.checkedAt || null,attemptedAtMs:state.attemptedAt ?? null,...(state.failure ? {failure:state.failure} : {})};
   return Object.freeze({freshness,status:'available',origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,guideUrl:row.guide_url,
     guideDigest:row.guide_digest,guide:row.guide_body,entry:parseGuideFrontmatter(row.guide_body).frontmatter?.entry,
@@ -86,7 +86,13 @@ export async function readBoundedGuide(response: Response): Promise<string> {
 }
 export async function readHouseGuideContext(db: HostDb, origin: string, fetchDocument: typeof globalThis.fetch,
   active: () => boolean): Promise<HouseGuideResult> {
+  assertReadCallActive();
   const cached=cachedHouseGuide(db,origin,active);
+  if (cached.status === 'available' && cached.freshness?.status === 'fresh') {
+    // Preserve the established async completion boundary and recheck its source.
+    await Promise.resolve(); assertReadCallActive();
+    return cachedHouseGuide(db,origin,active);
+  }
   const remaining=currentReadCallBudget()?.remainingMs() ?? 10_000;
   try {
     return await withReadCallBudget({timeoutMs:cached.status === 'available' ? Math.min(1500,Math.max(0,remaining-50)) : Math.max(0,remaining-50)},
@@ -100,7 +106,7 @@ export async function readHouseGuideContext(db: HostDb, origin: string, fetchDoc
   }
 }
 async function refreshHouseGuideContext(db: HostDb, origin: string, fetchDocument: typeof globalThis.fetch,
-  active: () => boolean): Promise<HouseGuideResult> {
+  active: () => boolean, replaceRevokedProducer = true): Promise<HouseGuideResult> {
   const row = currentGuideRow(db,origin,active);
   if (!row) return {status:'unavailable',origin,code:'HOUSE_GUIDE_CONTEXT_STALE'};
   if (!row.guide_url) return {status:'unavailable',origin,code:'HOUSE_GUIDE_NOT_DECLARED'};
@@ -122,6 +128,8 @@ async function refreshHouseGuideContext(db: HostDb, origin: string, fetchDocumen
     const startedAt = performance.now(), actionSignal = currentActionSignal();
     let phase: HouseReadDiagnostic['phase'] = 'before-fetch';
     let deadline: AbortSignal | undefined;
+    const assertSourceAction=captureActionContext(() => assertActionActive());
+    state.producer={owner:waiter,sourceActive:() => {try {assertSourceAction();return active();}catch{return false;}}};
     const abort=new AbortController(); state.abort=abort;
     const failed=(error:unknown) => { state.dirty=true; state.failure=remoteReadFailure(error,origin,{phase,deadline,timeoutMs:10_000,startedAt,actionSignal}); };
     state.pending = withSharedReadProducer(abort.signal,async () => {
@@ -155,10 +163,15 @@ async function refreshHouseGuideContext(db: HostDb, origin: string, fetchDocumen
         failed(error);
         // Preserve the last complete body and pending invalidation.
       }
-    }).catch(failed).finally(() => { state.pending = undefined; state.abort=undefined; });
+    }).catch(failed).finally(() => { state.pending = undefined; state.abort=undefined; state.producer=undefined; });
   }
+  const producer=state.producer;
   try {
   if (state.pending) await waitForRead(state.pending);
+  // This waiter has not issued its own request. A different caller's revoked
+  // transport cannot authorize it; acquire once using this caller's own gate.
+  if (replaceRevokedProducer && producer && producer.owner !== waiter && !producer.sourceActive() && waiter())
+    return await refreshHouseGuideContext(db,origin,fetchDocument,active,false);
   const result = cachedHouseGuide(db,origin,active);
   return result.status === 'unavailable' && result.code === 'HOUSE_GUIDE_NOT_CACHED' && state.failure
     ? {...result,code:'HOUSE_GUIDE_FETCH_FAILED',failure:state.failure} : result;
