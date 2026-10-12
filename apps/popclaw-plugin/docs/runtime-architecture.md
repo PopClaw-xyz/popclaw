@@ -43,6 +43,46 @@ boundaries. Sessionless queued actions retain their versioned capture envelope;
 same-root mixed-version upgrade/downgrade constraints are not removed by this
 ownership map.
 
+## House login execution
+
+`runtime/house-lifecycle/login-execution.ts` owns complete login operations:
+connected-manifest refresh, discovery and intent capture, legacy restoration,
+sessionless admission, and session ENTER/receipt application. Synchronous
+history capture, pin rejection and receipt application keep their separate
+checks; the IO awaits remain in their original sequence.
+
+`HouseLifecycleManager` owns authority, logout fences, gates, renewal, leave
+workers and shutdown. Login execution owns the current login flights and offers
+synchronous cancellation. A flight only identifies the current cancellable
+operation; it is not the set of work that shutdown must drain. The manager
+tracks every unfinished login result alongside renewal and leave work, including
+superseded operations. Old flight cleanup removes only its own identity.
+
+The owner epoch is captured for each login. Stop/pause signals are read at the
+original transport stages, so ownership reacquisition can use the new pause
+signal without granting old work a new epoch. Fence release still checks the
+captured fence identity and current authority. Login execution receives these
+manager capabilities, not the manager or its mutable maps.
+
+Sessionless binding, participation, Guide pointer and receipt commit in one
+SQLite transaction. After commit, fence release and gate publication happen
+synchronously, before settlement is awaited. The final availability result reads
+the current gate after settlement. Ordinary relation refusal preserves any
+security block written by its commit; sessionless refusal rolls back the join.
+These policies remain separate.
+
+Explicit owner login can also refresh a selected sessionless manifest without
+changing its durable participation tuple. Its existing transaction rechecks the
+captured participation, trust, configured pin, storage generation and path
+permissions before committing the prepared binding. Background confirmation
+only reuses that selection.
+
+Persisted command results still participate in the strict sessionless retry
+proof in `legacy-history.ts`. A new result field or error classification is not
+merely a presentation change: review command persistence and history validation
+together. Keep public-entry tests through the manager, runtime and command bus;
+do not replace them with tests of private login stages.
+
 ## House Guide lifecycle
 
 `world/house-guide-context.ts` owns declared Guide pointers, historical joined
@@ -51,7 +91,7 @@ agent input. Reading or emitting a Guide grants no join or action authority.
 `HouseRuntime` captures the public-read gate once and supplies transport at the
 original read stages; its Guide methods remain compatible host facades.
 
-The lifecycle manager records a joined Guide synchronously inside the existing
+Login execution records a joined Guide synchronously inside the existing
 binding/participation/receipt transaction. Join replaces the pointer and clears
 old body/delivery state; historical backfill only inserts a missing pointer.
 Invalid JSON or URL parsing keeps the original transaction rollback and read
