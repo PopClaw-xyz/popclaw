@@ -1,6 +1,6 @@
 import type {HostDb} from '../host/host-db.js';
 import {decodeSocialDraft, encodeSocialDraft} from '../host/social-draft-codec.js';
-import {draftContentIsCurrent, draftDigest, forgetDraft, makeDraftToken, peekDraftSnapshot, type DraftKind, type DraftSnapshot} from './draft-store.js';
+import {draftDigest, makeDraftToken, type DraftKind, type DraftSnapshot} from './draft-store.js';
 import type {RegisterToolsDeps} from './tools-context.js';
 import {renderCopy} from '../lexicon/index.js';
 import {ownerLang} from '../lexicon/owner-language.js';
@@ -19,7 +19,7 @@ export class DurableSocialDrafts {
     });
   }
   save(id: string, snapshot: DraftSnapshot): void {
-    if (!snapshot.binding || !snapshot.sendPlan) throw new Error('SOCIAL_DRAFT_CONTEXT_REQUIRED');
+    if (!snapshot.binding || !snapshot.sendPlan || typeof snapshot.sendPlan.nickname !== 'string') throw new Error('SOCIAL_DRAFT_CONTEXT_REQUIRED');
     const payload = encodeSocialDraft({version: 1, snapshot});
     this.db.execute('INSERT INTO social_chat_drafts (actor_id,draft_id,payload,digest,created_at) VALUES (?,?,?,?,?)',
       [this.actor, id, payload, draftDigest(payload), Date.now()]);
@@ -30,7 +30,7 @@ export class DurableSocialDrafts {
     if (!row?.payload) return null;
     if (draftDigest(row.payload) !== row.digest) throw new Error('SOCIAL_DRAFT_MATERIAL_CHANGED');
     const stored = decodeSocialDraft<{version: number; snapshot: DraftSnapshot}>(row.payload);
-    if (stored.version !== 1 || !stored.snapshot.binding || !stored.snapshot.sendPlan) throw new Error('SOCIAL_DRAFT_MATERIAL_CHANGED');
+    if (stored.version !== 1 || !stored.snapshot.binding || !stored.snapshot.sendPlan || typeof stored.snapshot.sendPlan.nickname !== 'string') throw new Error('SOCIAL_DRAFT_MATERIAL_CHANGED');
     return stored.snapshot;
   }
   /** Single SQLite CAS, also across processes. An uncertain send is spent. */
@@ -49,14 +49,4 @@ export async function socialDraftToken(deps: RegisterToolsDeps, kind: DraftKind)
   if (!deps.durableSocialDrafts) return makeDraftToken(kind);
   try { return (await socialDraftStore(deps)).mint(kind); }
   catch (error) { throw new Error(renderCopy(ownerLang(), 'socialSend.saveFailed'), {cause: error}); }
-}
-/** Persist only after the complete preview/review output is recorded. The
- * closure cache is then discarded without deleting the durable review copy. */
-export async function retainSocialDraft(deps: RegisterToolsDeps, id: string): Promise<void> {
-  if (!deps.durableSocialDrafts) return;
-  const snapshot = peekDraftSnapshot(id);
-  if (!snapshot || !draftContentIsCurrent(id)) throw new Error(renderCopy(ownerLang(), 'socialSend.saveFailed'));
-  try { (await socialDraftStore(deps)).save(id, snapshot); }
-  catch (error) { throw new Error(renderCopy(ownerLang(), 'socialSend.saveFailed'), {cause: error}); }
-  forgetDraft(id);
 }

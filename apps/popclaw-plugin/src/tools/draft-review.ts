@@ -11,7 +11,7 @@ import { renderCopy, type Lang } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import {
   draftDigest, noteDraftReview, peekDraftSnapshot, setDraftReviewFiles,
-  type DraftReviewFiles, type DraftSnapshot,
+  type DraftReviewFiles, type DraftSnapshot, type DraftReviewSnapshot,
 } from './draft-store.js';
 /** A convenience review copy for long manuscripts; unrelated to approval
  * dialog budgets. The complete original-chat tool result remains available. */
@@ -112,27 +112,28 @@ export type DraftReviewFilesSource = DraftReviewFiles | (() => DraftReviewFiles 
  * inherits another root's directory.
  */
 export function withDraftReview(token: string, text: string, source: DraftReviewFilesSource): string {
-  const files = (typeof source === 'function' ? source() : source) ?? null;
+  const files = resolveDraftReviewFiles(source);
   setDraftReviewFiles(files);
-  if (!files) return text;
-  // A review directory whose path cannot be shown honestly (a character that
-  // paints nothing: an ideographic or no-break space, a zero-width joiner in
-  // an emoji folder name) or that breaks the link's angle-bracket form (`<`,
-  // `>`) is treated exactly like one that could not be created: no copy, no
-  // decision recorded, and the draft keeps its complete tool result. The reason
-  // goes to the log, never to the owner as a refusal.
-  if (hasInvisibleCharacter(files.dir) || /[<>]/.test(files.dir)) {
-    files.note?.(REVIEW_PATH_NOT_SHOWABLE);
-    return text;
-  }
   const snapshot = peekDraftSnapshot(token);
   if (!snapshot) return text;
-  const lang = ownerLang();
-  const needed = needsReviewCopy(snapshot);
-  if (!needed) {
-    noteDraftReview(token, { needed: false, lang, file: null });
-    return text;
+  const result = reviewSnapshot(token, snapshot, text, files);
+  if (result.review) noteDraftReview(token, result.review);
+  return result.text;
+}
+
+export function resolveDraftReviewFiles(source: DraftReviewFilesSource): DraftReviewFiles | null {
+  return (typeof source === 'function' ? source() : source) ?? null;
+}
+
+/** Prepare the same optional copy for either storage lane. No table ownership. */
+export function reviewSnapshot(token: string, snapshot: DraftSnapshot, text: string, files: DraftReviewFiles | null): {text: string; review?: DraftReviewSnapshot} {
+  if (!files) return {text};
+  if (hasInvisibleCharacter(files.dir) || /[<>]/.test(files.dir)) {
+    files.note?.(REVIEW_PATH_NOT_SHOWABLE);
+    return {text};
   }
+  const lang = ownerLang();
+  if (!needsReviewCopy(snapshot)) return {text, review: {needed: false, lang, file: null}};
   const nonce = [...nacl.randomBytes(4)].map((b) => b.toString(16).padStart(2, '0')).join('');
   const name = `${token}-${nonce}.md`;
   let file: { path: string; name: string; sha256: string } | null = null;
@@ -140,7 +141,8 @@ export function withDraftReview(token: string, text: string, source: DraftReview
     const written = files.write(name, renderReviewCopy(snapshot, token, lang));
     file = { path: written.path, name, sha256: written.sha256 };
   } catch { file = null; }
-  noteDraftReview(token, file ? { needed: true, lang, file } : { needed: true, lang, file: null, failed: 'write' });
-  if (!file) return `${text}\n\n${renderCopy(lang, 'draft.review.writeFailed')}`;
-  return `${text}\n\n${renderCopy(lang, 'draft.review.entry', { link: reviewLink(token, file.path, lang) })}`;
+  const review: DraftReviewSnapshot = file ? {needed: true, lang, file} : {needed: true, lang, file: null, failed: 'write'};
+  return {review, text: file
+    ? `${text}\n\n${renderCopy(lang, 'draft.review.entry', {link: reviewLink(token, file.path, lang)})}`
+    : `${text}\n\n${renderCopy(lang, 'draft.review.writeFailed')}`};
 }
