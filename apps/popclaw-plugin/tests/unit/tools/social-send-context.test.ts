@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
+import {registerFeedbackCadenceTools} from '../../../src/tools/feedback-cadence-tools.js';
 import { registerWriteTools } from '../../../src/tools/write-tools.js';
 import { _draftsForTest, peekDraftSnapshot, putDraft, DRAFT_TTL_MS } from '../../../src/tools/draft-store.js';
 import { ownerApprovalBeforeToolCall, resetOwnerApprovals, setOwnerApprovalSurface } from '../../../src/host/owner-approval.js';
@@ -16,6 +17,7 @@ import { withDraftReview } from '../../../src/tools/draft-review.js';
 import { socialDraftBinding, socialToolFactory } from '../../../src/host/social-send-context.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { popclaw } from '@popclaw/contracts';
+import {DurableSocialDrafts} from '../../../src/tools/durable-social-drafts.js';
 import {LocalHostDb} from '../../../src/host/local-host-db.js';
 import {runMigrations} from '../../../src/host/migrations.js';
 
@@ -308,6 +310,56 @@ describe('material and root scope boundaries', () => {
     current = {scope: 'opaque-identity-connection', purpose: 'chat-send', assertCurrent: vi.fn()};
     await send.execute('confirmed', {draft_id: id}); expect(fx.pushed).toHaveLength(1);
     expect(current.assertCurrent).toHaveBeenCalled();
+  });
+  it.each(['message', 'reply', 'post', 'feedback'] as const)('captures Hosted %s binding after token mint completes', async kind => {
+    const fx = fixture('native', true), collector = makeToolCollector();
+    let current = {scope: 'before-mint', purpose: 'prepare' as 'prepare' | 'chat-send', assertCurrent: vi.fn()};
+    const runtime = async () => {
+      const rt = await fx.runtime();
+      return {...rt, boot: {...rt.boot, loreHouseUrl: 'https://home.fixture.invalid', loreHouseUrls: ['https://home.fixture.invalid']},
+        inboxStore: {...rt.inboxStore, houseOf: () => undefined},
+        guideClient: {fetchGuideText: async () => `---\nfeedback:\n  popclaw_id: ${fx.recipient.id}\n  contact: Alice\n---\nGuide`}};
+    };
+    const context = {api: collector.api, runtime, deps: {api: collector.api, runtime,
+      durableSocialDrafts: true, socialSendHost: 'hosted', getHostedSocialInvocation: () => current}, total: 4} as unknown as ToolsCtx;
+    registerWriteTools(context); registerFeedbackCadenceTools(context);
+    const mint = DurableSocialDrafts.prototype.mint;
+    vi.spyOn(DurableSocialDrafts.prototype, 'mint').mockImplementation(function (this: DurableSocialDrafts, tokenKind) {
+      const id = mint.call(this, tokenKind);
+      current = {...current, scope: 'after-mint'};
+      return id;
+    });
+    const draft = collector.tools.find(t => t.name === (kind === 'feedback' ? 'popclaw_feedback' : `popclaw_draft_${kind}`))!;
+    const params = kind === 'message' ? {recipient: 'Alice', body: 'Reviewed manuscript'}
+      : kind === 'reply' ? {platform: 'x', post_id: 'p1', body: 'Reviewed manuscript'}
+      : kind === 'feedback' ? {kind: 'need', body: 'Reviewed manuscript'} : {body: 'Reviewed manuscript'};
+    const id = tokenOf(await draft.execute('draft', params) as {text: string});
+    const rt = await fx.runtime();
+    expect(new DurableSocialDrafts(rt.host!.db, fx.owner.id).load(id)!.binding).toEqual({host: 'hosted', scope: 'after-mint'});
+    current = {...current, purpose: 'chat-send'};
+    await collector.tools.find(t => t.name === 'popclaw_send_draft')!.execute('send', {draft_id: id});
+    expect(fx.pushed).toHaveLength(1); rt.host!.db.close();
+  });
+  it.each([1, 2])('rechecks Hosted scope after send-time runtime await %s before consuming', async boundary => {
+    const fx = fixture('native', true), collector = makeToolCollector();
+    let current = {scope: 'reviewed-connection', purpose: 'prepare' as 'prepare' | 'chat-send', assertCurrent: vi.fn()};
+    let sending = false, calls = 0;
+    const runtime = async () => {
+      const rt = await fx.runtime();
+      if (sending && ++calls === boundary) current = {...current, scope: 'another-connection'};
+      return rt;
+    };
+    registerWriteTools({api: collector.api, runtime, deps: {api: collector.api, runtime,
+      durableSocialDrafts: true, socialSendHost: 'hosted', getHostedSocialInvocation: () => current}, total: 4} as unknown as ToolsCtx);
+    const draft = collector.tools.find(t => t.name === 'popclaw_draft_message')!;
+    const send = collector.tools.find(t => t.name === 'popclaw_send_draft')!;
+    const id = tokenOf(await draft.execute('draft', {recipient: 'Alice', body: 'Reviewed hosted manuscript'}) as {text: string});
+    current = {...current, purpose: 'chat-send'}; sending = true;
+    expect((await send.execute('send', {draft_id: id}) as {text: string}).text).toContain('different conversation');
+    expect(fx.pushed).toHaveLength(0);
+    const rt = await fx.runtime();
+    expect(new DurableSocialDrafts(rt.host!.db, fx.owner.id).load(id)).not.toBeNull();
+    rt.host!.db.close();
   });
   it('uses no native context fabrication for a Hosted factory without its trusted getter', () => {
     const create = vi.fn(); const factory = socialToolFactory('hosted', create) as (ctx: unknown) => void;

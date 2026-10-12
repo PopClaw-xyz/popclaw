@@ -1,6 +1,6 @@
 /**
- * Onboarding Canvas 模板页单测（spec 2026-07-29 Plan C §3、§8）。
- * 硬规则先测：viewport / 零外链 / ≤2MB / 朱红只属护照 / 用户内容转义。
+ * Onboarding Canvas template-page tests (spec 2026-07-29 Plan C §3, §8).
+ * Test hard rules first: viewport, no external links, ≤2MB, vermilion only on passports, user-content escaping.
  */
 import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
 import {
@@ -245,7 +245,7 @@ describe('renderLanternPage', () => {
   it('坊卡节已删（搬去护照页「你能去哪」，R1 spec §2）', () => {
     expect(PAGES.lantern).not.toContain('有你的名帖 ✓');
     expect(PAGES.lantern).not.toContain('class="house"');
-    // 一句话点透还在：它讲的是江湖有多大，不是某座坊的介绍。
+    // The concise explanation remains: it describes the world's scale, not one house.
     expect(PAGES.lantern).toContain('一座灯坊是一盏灯，不是整个江湖。');
   });
 

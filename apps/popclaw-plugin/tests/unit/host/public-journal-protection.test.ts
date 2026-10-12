@@ -37,7 +37,7 @@ async function observed() {
   const configuredPin = Buffer.from(pair.publicKey).toString('hex');
   async function observe(log = 'log_1') {
   const rawBytes = new TextEncoder().encode(JSON.stringify({ official_ids: [], world_interaction: { version: 1,
-    public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: log, envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: [] } } }));
+    public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: log, envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: [] } } }));
   const core = { house: { origin: f.origin, houseKey: bs58.encode(pair.publicKey), incarnation: 'house_1' }, manifestDigest: cidFromCanonical(rawBytes), signedAt: 1 };
   const bytes = popclaw.world.ManifestProof.encode(core).finish(), prefix = new TextEncoder().encode('POPCLAW_WORLD_MANIFEST_PROOF_V1');
   const signing = new Uint8Array(prefix.length + bytes.length); signing.set(prefix); signing.set(bytes, prefix.length);

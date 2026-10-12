@@ -8,10 +8,9 @@ import { DutyLease } from '../../../src/runtime/duty-lease.js';
 const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../migrations');
 
 /**
- * 值班牌的合同：一个 data root 下同时活着的多个 popclaw 进程里，恰好一个去干
- * 后台活。这里用共享一个库的多个 DutyLease 实例扮演多个进程。
- *
- * 刻意跑真迁移而不是手写 DDL —— 顺带证明 020-duty-lease.sql 本身能落地。
+ * DutyLease contract: exactly one of the concurrent popclaw processes sharing a data root performs
+ * background work. Multiple DutyLease instances sharing a database model those processes. Run real
+ * migrations, not handwritten DDL, also proving 020-duty-lease.sql applies successfully.
  */
 function freshDb(): InMemoryHostDb {
   const db = new InMemoryHostDb();

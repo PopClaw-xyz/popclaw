@@ -44,8 +44,8 @@ describe('renderPassport', () => {
     expect(joined).toContain('🐙 GitHub');
   });
 
-  // 认证的价值在于"你能自己去核"。ranger 说了不算，
-  // 那条公开的回帖才算，所以它的链接必须摆出来（ADR-0034 proof_url）。
+  // Verification is valuable because the owner can check the evidence independently. The ranger's word alone
+  // is insufficient; expose the public reply link (ADR-0034 proof_url).
   it('shows the proof link so anyone can go check the post themselves', () => {
     const lines = renderPassport({
       popclawId: 'somelongbase58id',
@@ -62,14 +62,14 @@ describe('renderPassport', () => {
       ],
     }).join('\n');
     expect(lines).toContain('https://x.com/rayfeld/status/1234567890');
-    expect(lines).toContain('https://x.com/rayfeld'); // 账号链接还在，proof 是**另加**一行
-    // 链接永远显示、从不探活，所以这一行在"帖还在"和
-    // "帖已被作者删掉"两种世界里都必须为真 —— 删帖是允许的，✓ 不跟着掉。
+    expect(lines).toContain('https://x.com/rayfeld'); // The account link remains; the proof adds a separate line.
+    // The link is always displayed without a liveness probe, so this assertion holds whether the post remains
+    // or its author has deleted it. Deletion is allowed and does not remove the verification checkmark.
     expect(lines).toContain('删帖不撤销认证');
   });
 
-  // 021 之前的老认证、以及让 ranger 自己去搜帖的申请人，proof_url 是空串。
-  // 诚实降级：宁可不说，也绝不拿 (platform, handle) 拼一个指向账号的假 proof。
+  // Pre-021 verifications, and applicants who let the ranger find their post, have an empty proof_url.
+  // Degrade honestly: omit the proof rather than fabricate an account URL from (platform, handle).
   it('says nothing about proof when none is on file', () => {
     const lines = renderPassport({
       popclawId: 'somelongbase58id',
@@ -206,9 +206,9 @@ describe('renderPassport', () => {
       ],
     });
     const joined = lines.join('\n');
-    expect(joined).toContain('认证时粉丝数：约1.3m');
+    expect(joined).toContain('认证时的 X 粉丝数：约1.3m');
     expect(joined).toContain('verified 2026-04-12');
-    expect(joined.indexOf('认证时粉丝数：约1.3m')).toBeLessThan(joined.indexOf('verified 2026-04-12'));
+    expect(joined.indexOf('认证时的 X 粉丝数：约1.3m')).toBeLessThan(joined.indexOf('verified 2026-04-12'));
   });
 
   it('shows the follower snapshot without inventing a verified date when it is null', () => {
@@ -217,9 +217,9 @@ describe('renderPassport', () => {
       profiles: [{ platform: 'x', handle: 'h', verified_at: null, profile_url: '', follower_count: 67_000 }],
     });
     const joined = lines.join('\n');
-    expect(joined).toContain('认证时粉丝数：约67k');
+    expect(joined).toContain('认证时的 X 粉丝数：约67k');
     expect(joined).not.toContain('verified');
-    expect(joined).not.toContain('·');
+    expect(joined).toContain('X @h · 认证时的 X 粉丝数：约67k');
   });
 
   it('labels a historical zero follower snapshot as unconfirmed', () => {
@@ -230,7 +230,7 @@ describe('renderPassport', () => {
     const joined = lines.join('\n');
     expect(joined).toContain('verified 2026-04-12');
     expect(joined).not.toContain('👥');
-    expect(joined).toContain('认证时粉丝数：未确认');
+    expect(joined).toContain('认证时的 X 粉丝数：未确认');
   });
 
   it('renders the card block (nickname · role / intro / tags) between header and 已认证', () => {
@@ -357,7 +357,7 @@ describe('renderPassport', () => {
     // Local count rendered explicitly, on its own line.
     expect(joined).toContain('👥 本灯坊 12 人关注');
     // External snapshot remains distinct from the local House count.
-    expect(joined).toContain('认证时粉丝数：约3.4m');
+    expect(joined).toContain('认证时的 X 粉丝数：约3.4m');
     // Never concatenated/summed into a single combined number.
     expect(joined).not.toContain('3400012');
     expect(joined).not.toContain('12 · 3.4m');

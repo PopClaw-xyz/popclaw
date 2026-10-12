@@ -1,7 +1,7 @@
 /**
- * T3: aggregateNotableAuthors 单元测试
+ * T3: aggregateNotableAuthors unit tests.
  *
- * 核心展示逻辑：多平台缝合身份浮到最上。
+ * Core display logic: identities joined across platforms rise to the top.
  */
 import { describe, it, expect } from 'vitest';
 import { aggregateNotableAuthors } from '../../../src/world/notable-authors.js';
@@ -91,8 +91,8 @@ describe('aggregateNotableAuthors', () => {
     expect(aggregateNotableAuthors(inputs, undefined)).toHaveLength(3);
   });
 
-  // 这个 nickname 会原样排进主人看的世界速览 → 名号查无时报**印信**，
-  // 不是 id 前缀（ADR-0032）。
+  // This nickname appears verbatim in the owner's world preview; if name resolution fails, use the sigil,
+  // not an ID prefix (ADR-0032).
   it('missing nickname falls back to the sigil', () => {
     const inputs: AuthorSource[] = [
       src('ABCDEFGHIJKLMNOP', 'x', undefined, 5),

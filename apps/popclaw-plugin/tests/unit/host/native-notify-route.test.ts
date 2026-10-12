@@ -86,7 +86,8 @@ it.each([
   { assertInvocationCurrent: () => { throw new Error('synthetic expired turn'); } }, { assertInvocationCurrent: undefined },
 ])('does not capture an untrusted or unroutable tool context %j', async overrides => {
   const s = await setup(overrides);
-  await s.execute();
+  if (typeof overrides.assertInvocationCurrent === 'function') await expect(s.execute()).rejects.toThrow('synthetic expired turn');
+  else await s.execute();
   expect(await s.store.get()).toBeNull();
   expect(s.ownerSession.get()).toBeUndefined();
 });
@@ -118,7 +119,7 @@ it('does not publish a route when the SDK invocation expires during the stored-t
   const call = s.execute();
   await entered.promise;
   active = false; release.resolve();
-  await call; spy.mockRestore();
+  await expect(call).rejects.toThrow('synthetic expired turn'); spy.mockRestore();
   expect(await s.store.get()).toBeNull();
   expect(s.ownerSession.get()).toBeUndefined();
   expect(s.warnings.some(line => line.includes('synthetic expired turn'))).toBe(true);
@@ -183,7 +184,7 @@ it('rechecks SDK currentness at file publication after asynchronous storage prep
     return write(...args);
   });
   const call = s.execute(); await entered.promise;
-  active = false; release.resolve(); await call; spy.mockRestore();
+  active = false; release.resolve(); await expect(call).rejects.toThrow('synthetic expired during storage'); spy.mockRestore();
   expect(await s.store.get()).toBeNull();
   expect(existsSync(join(s.root, 'config/notify-target.json'))).toBe(false);
 });

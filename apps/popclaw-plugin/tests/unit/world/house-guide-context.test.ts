@@ -7,7 +7,8 @@ import { LocalHostDb } from '../../../src/host/local-host-db.js';
 import { runMigrations } from '../../../src/host/migrations.js';
 import { ensureHouseLifecycleSchema } from '../../../src/runtime/house-lifecycle/participation-store.js';
 import { establishTrustInTx } from '../../../src/world/house-binding-pin.js';
-import { guideBindingDigest, markGuidesInAgentInput, recordJoinedGuide } from '../../../src/world/house-guide-context.js';
+import { guideBindingDigest, markGuidesInAgentInput, recordJoinedGuide, pendingHouseGuides, readHouseGuideContext, houseGuideContextKey, observedHouseGuideKeys } from '../../../src/world/house-guide-context.js';
+import { entryDigest } from '../../../src/runtime/house-lifecycle/participation-journal.js';
 import { mintHouse } from '../../helpers/signed-manifest.js';
 
 const ORIGIN = 'https://guide.invalid';
@@ -79,4 +80,42 @@ it('observer preserves the depth-eight limit and permits a shallower positive co
   };
   markGuidesInAgentInput(f.db, nested(8)); expect(f.row()?.delivered_digest).toBeNull();
   markGuidesInAgentInput(f.db, nested(7)); expect(f.row()?.delivered_digest).toBe('body-digest');
+});
+
+it('a fresh native input receives its guide even after another conversation acknowledged it', async () => {
+  const f = fixture();
+  const body = 'Complete source-bound House guide';
+  const digest = entryDigest(body);
+  f.db.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?,delivered_digest=?', [body, digest, digest]);
+  const read = (origin: string) => readHouseGuideContext(f.db, origin,
+    async () => { throw new Error('cached guide must not fetch'); }, () => true);
+  expect(await pendingHouseGuides(f.db, read)).toEqual([]);
+  // The explicitly observed input is empty. Global historical delivery cannot
+  // mean this new conversation (or a compacted input) still contains the guide.
+  const pending = await pendingHouseGuides(f.db, read, new Set<string>());
+  expect(pending).toHaveLength(1);
+  expect(pending[0]?.guide).toBe(body);
+});
+
+it('suppresses only the complete current bound guide present in this input', async () => {
+  const f = fixture(), body = 'Full guide\nwith source instructions', digest = entryDigest(body);
+  f.db.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?', [body, digest]);
+  const read = (origin: string) => readHouseGuideContext(f.db, origin,
+    async () => { throw new Error('cached guide must not fetch'); }, () => true);
+  const context = await read(ORIGIN);
+  if (context.status !== 'available') throw new Error('fixture guide unavailable');
+  const wrapped = (value: unknown) => JSON.stringify([{role: 'toolResult', content: [{type: 'text', text: JSON.stringify({house_guide_contexts: [value]})}]}]);
+  const present = observedHouseGuideKeys(wrapped(context));
+  expect([...present]).toEqual([houseGuideContextKey(context)]);
+  expect(await pendingHouseGuides(f.db, read, present)).toEqual([]);
+  for (const invalid of [{...context, guide: body.slice(0, 4)}, {...context, guideDigest: 'forged'},
+    {...context, bindingDigest: 'stale'}, {...context, opSeq: 2}, {...context, origin: 'https://another.invalid'}]) {
+    expect(await pendingHouseGuides(f.db, read, observedHouseGuideKeys(wrapped(invalid)))).toHaveLength(1);
+  }
+  expect(await pendingHouseGuides(f.db, read, observedHouseGuideKeys('compacted history'))).toHaveLength(1);
+  f.db.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?', ['revised guide', entryDigest('revised guide')]);
+  expect(await pendingHouseGuides(f.db, read, present)).toHaveLength(1);
+  f.db.execute("UPDATE house_participation SET desired='disabled',phase='disconnected'");
+  const inactiveRead = (origin: string) => readHouseGuideContext(f.db, origin, globalThis.fetch, () => false);
+  expect(await pendingHouseGuides(f.db, inactiveRead, new Set())).toEqual([]);
 });

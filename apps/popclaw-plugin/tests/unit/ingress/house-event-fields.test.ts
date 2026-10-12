@@ -1,13 +1,14 @@
 /**
- * 切片 F · F1 —— 拆坊事件的信封。
+ * Slice F, F1: unpack house-event envelopes.
  *
- * HouseEvent 的 body 是坊自己按告示牌上那份 JSON Schema 编的字节。今天报纸拿到的
- * 只有 `house:world.trip` 五个字（`text_preview` 在灯坊那侧恒为空），地点、场景、
- * 同框者、小屋门牌全躺在信封里没人拆。
+ * HouseEvent.body contains bytes encoded by each house according to its manifest JSON Schema. The
+ * newspaper previously saw only `house:world.trip` (the house always returned an empty
+ * text_preview), leaving places, scenes, companions and home links unopened in the envelope.
  *
- * 夹具里的字段名逐字取自 2026-07-31 实拉的 `https://house.popclaw.world/v1/manifest`
- * （`world.trip` → figure/phase/trip_ref/place_name/tier；`world.encounter` →
- * place_name/occurred_at/present[]/scene；`world.embodiment` → figure/home_url/…）。
+ * Fixture field names come verbatim from the manifest fetched on 2026-07-31 at
+ * `https://house.popclaw.world/v1/manifest`: world.trip uses figure/phase/trip_ref/place_name/tier;
+ * world.encounter uses place_name/occurred_at/present[]/scene; world.embodiment uses
+ * figure/home_url/...
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { popclaw } from '@popclaw/contracts';
@@ -87,7 +88,7 @@ describe('houseBodyFields — 只搬运，不解释', () => {
     const many = Object.fromEntries([...Array(30)].map((_, i) => [`k${i}`, `v${i}`]));
     expect(Object.keys(houseBodyFields(bodyOf(many), 'zh-CN')!)).toHaveLength(12);
     const long = houseBodyFields(bodyOf({ scene: 'x'.repeat(300) }), 'zh-CN')!['scene']!;
-    expect(long).toHaveLength(121); // 120 + 省略号
+    expect(long).toHaveLength(121); // 120 characters plus an ellipsis.
   });
 });
 

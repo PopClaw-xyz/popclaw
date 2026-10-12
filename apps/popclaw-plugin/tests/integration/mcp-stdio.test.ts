@@ -129,7 +129,7 @@ async function seedDataRoot(house: string): Promise<string> {
   // and a declared read scheme, the inbox stream refuses to open and the
   // consumer-stream assertions below would be measuring the refusal.
   await seedTrustedHouse(dir, house, {world_interaction: {version: 1, public_stream: {endpoint: '/v1/world-stream',
-    mode: 'public-v1', log_incarnation: 'log_stdio', envelope_baseline: 'public-envelope-01', initial_public_scopes: []}}});
+    mode: 'public-v1', log_incarnation: 'log_stdio', envelope_baseline: 'public-envelope-02', initial_public_scopes: []}}});
   return dir;
 }
 
@@ -391,19 +391,17 @@ describe('MCP unread piggyback + notifications tool', () => {
     const list = await mcp.request('tools/list');
     const names = (list.result?.['tools'] as Array<{ name: string }>).map((t) => t.name);
     expect(names).toContain('popclaw_notifications');
-    // §3.5 L2 开席注入: the host agent is told to pull + relay at session start.
+    // Section 3.5 L2 session-start injection: the host agent is told to pull + relay at session start.
     expect(mcp.initResult?.['instructions']).toContain('popclaw_notifications');
   }, 30_000);
 });
 
 /**
- * 主人 2026-07-28 裁定：MCP 会话默认**只做消费者**，绝不冒充游侠。
- *
- * Observed at the wire, not in a log: a stub lore-house records every path the
- * server touches. A citizen session may subscribe to the consumer streams
- * (world-feed / inbox) and must NEVER open the ranger's `/v1/discovery` quest
- * stream or POST to `/v1/push`. Both directions are asserted, because a test
- * that only proves "off" would still pass if the flag were dead code.
+ * Owner ruling, 2026-07-28: MCP sessions are consumers by default and must never impersonate rangers.
+ * Observed at the wire, not in a log: a stub lore-house records every path the server touches. A
+ * citizen session may subscribe to the consumer streams (world-feed / inbox) and must NEVER open the
+ * ranger's `/v1/discovery` quest stream or POST to `/v1/push`. Both directions are asserted, because a
+ * test that only proves "off" would still pass if the flag were dead code.
  */
 describe('MCP citizen mode does not advertise as a ranger', () => {
   let house: Server;

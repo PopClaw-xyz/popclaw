@@ -122,6 +122,22 @@ describe('an approval that arrives after the window closed', () => {
     } finally { await h.close(); }
   });
 
+  it('ending the approval backend drains an open SDK dialog without waiting for its window', async () => {
+    const h = await connected(500, 2_000);
+    try {
+      const pending = h.call('mcp_end');
+      await settle(20);
+      h.approvals.stop();
+      const result = await Promise.race([pending, settle(100).then(() => 'still waiting')]);
+      expect(result).toEqual({ decision: 'unavailable', reason: 'OWNER_CONFIRMATION_INACTIVE' });
+      expect(h.sends()).toBe(0);
+      await settle(20);
+      expect(h.cancelled).toHaveLength(1);
+      await settle(500);
+      expect(h.sends()).toBe(0);
+    } finally { await h.close(); }
+  });
+
   it('within the window, accept with confirm === true sends exactly once', async () => {
     const h = await connected(5, 2_000);
     try {

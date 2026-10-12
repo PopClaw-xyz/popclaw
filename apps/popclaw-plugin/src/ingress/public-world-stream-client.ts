@@ -498,6 +498,9 @@ export interface PublicV1ReceiverOptions {
   readonly onStatus?: (status: PublicReceiveStatus) => void;
   readonly onError?: (error: unknown) => void;
   readonly fetch?: typeof globalThis.fetch;
+  /** Internal transport liveness budget; any received bytes, including SSE
+   * heartbeat comments, keep the connection alive. It does not expire reads. */
+  readonly idleTimeoutMs?: number;
 }
 
 /** One anonymous transport. Only synchronous journal transactions participate
@@ -519,9 +522,12 @@ export class PublicV1Receiver implements EventIngress {
   private readonly abortListener = () => { void this.stop(); };
 
   constructor(options: PublicV1ReceiverOptions) {
+    const idleTimeoutMs = options.idleTimeoutMs ?? 60_000;
+    if (!Number.isSafeInteger(idleTimeoutMs) || idleTimeoutMs <= 0 || idleTimeoutMs > 2_147_483_647)
+      throw new Error('PUBLIC_STREAM_IDLE_TIMEOUT_INVALID');
     // Capture declarations and verified observation, while retaining the actual
     // gate/DB and concrete adapter functions supplied by the resource owner.
-    this.options = { ...options,
+    this.options = { ...options, idleTimeoutMs,
       capability: structuredClone(options.capability),
       selection: structuredClone(options.selection),
       producerPolicy: structuredClone(options.producerPolicy),
@@ -609,6 +615,13 @@ export class PublicV1Receiver implements EventIngress {
       let generation: string | null = null, response: Response | undefined;
       let errorCode = 'PUBLIC_STREAM_EOF';
       let gap = false;
+      const connection = new AbortController();
+      let idle = false, idleTimer: ReturnType<typeof setTimeout> | undefined;
+      const progress = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        if (connection.signal.aborted) return;
+        idleTimer = setTimeout(() => { idle = true; connection.abort(); }, this.options.idleTimeoutMs!);
+      };
       try {
         this.requireActive();
         const request = this.journal.request();
@@ -616,8 +629,9 @@ export class PublicV1Receiver implements EventIngress {
         if (request.publicAfter !== undefined) params.set('public_after', request.publicAfter);
         params.set('cursors', request.cursors.map(cursor => `${cursor.scopeId}:${cursor.afterSeq}`).join(','));
         params.set('limit', '256');
-        const signal = AbortSignal.any([this.lifetime.signal, this.options.gate.signal]);
+        const signal = AbortSignal.any([this.lifetime.signal, this.options.gate.signal, connection.signal]);
         this.requireActive();
+        progress();
         response = await (this.options.fetch ?? globalThis.fetch)(
           this.options.capability.house.origin + this.options.capability.publicStream.endpoint + '?' + params.toString(),
           { signal, credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', headers: { accept: 'text/event-stream' } },
@@ -655,13 +669,14 @@ export class PublicV1Receiver implements EventIngress {
             this.notify();
           }
           this.requireActive();
-        });
+        }, progress);
         this.requireActive();
       } catch (error) {
-        errorCode = gap ? 'PUBLIC_STREAM_GAP' : error instanceof Error && /^[A-Z][A-Z0-9_]{0,79}$/.test(error.message)
+        errorCode = gap ? 'PUBLIC_STREAM_GAP' : idle ? 'PUBLIC_STREAM_IDLE' : error instanceof Error && /^[A-Z][A-Z0-9_]{0,79}$/.test(error.message)
           ? error.message : 'PUBLIC_STREAM_UNAVAILABLE';
-        if (this.active() && !gap) this.report(error);
+        if (this.active() && !gap) this.report(idle ? new Error(errorCode) : error);
       } finally {
+        if (idleTimer) clearTimeout(idleTimer);
         // Also cancel a fetch which resolved after stop, before parser entry.
         if (response?.body && !response.body.locked) await response.body.cancel().catch(() => {});
         this.receiving = false;

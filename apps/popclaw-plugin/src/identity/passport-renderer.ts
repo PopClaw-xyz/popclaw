@@ -96,7 +96,14 @@ export function renderPassport(input: PassportInput): string[] {
   const displayed = mapVerifiedProfiles(input.profiles).filter(p => p.platform !== 'popclaw');
   if (displayed.length) {
     lines.push(MIDDLE, renderCopy(lang, 'passport.verifiedHeader', {count: String(displayed.length)}));
-    for (const p of displayed) lines.push(...renderVerifiedProfileSummary(p, lang).map(line => `  ${line}`));
+    for (const p of displayed) {
+      const [account, followers, ...bio] = renderVerifiedProfileSummary(p, lang);
+      // Keep the snapshot attached to its account when a host shortens the card.
+      lines.push(`  ${account} · ${followers}`);
+      const verified = formatVerifiedDate(p.verified_at);
+      if (verified) lines.push(`  ${verified}`);
+      lines.push(...bio.map(line => `  ${line}`));
+    }
   }
   if (input.houseFollowerCount !== undefined && input.houseFollowerCount !== null) {
     lines.push(renderCopy(lang, 'passport.houseFollowerCount', {count: String(input.houseFollowerCount)}));

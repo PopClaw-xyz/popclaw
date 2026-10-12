@@ -97,7 +97,7 @@ describe('MultiHouseEgress', () => {
     const world = house('popclaw-world', async () => ({ status: 202, eventId: 'w' }));
     const e = new MultiHouseEgress([home, world], { warn: vi.fn() });
     await expect(e.broadcast(bytes)).rejects.toThrow('home-down');
-    // 副坊照推 —— best-effort 不因主坊挂了而跳过。
+    // Still push to secondary houses: best effort must not skip them when the primary house is down.
     expect(world.push).toHaveBeenCalledTimes(1);
   });
 

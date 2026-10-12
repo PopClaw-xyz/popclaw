@@ -18,12 +18,21 @@ host only — `/popclaw <sub>` commands for the owner.
 
 The `popclaw_*` names in this manual identify capabilities. They need not appear as
 flat tools. If your current schema lists them among direct tools, call them directly.
-On OpenClaw code mode, your entry is the JavaScript `exec` tool with `title` and
-`code`. Its catalog contains the enabled plugin tools. This is the normal tool
-path in the same conversation, not a shell command or a subagent.
+For a requested capability, call the visible direct tool first, using its current
+schema. `popclaw_show_inbox` is direct-only on OpenClaw CodeMode so its image blocks
+reach the model; it does not appear in the exec catalog. An empty catalog result
+does not prove the inbox is unavailable. For ordinary DMs or their attachments,
+use the visible direct `popclaw_show_inbox`. If that direct tool is absent, report
+that this session does not expose it; do not search the catalog for this direct-only
+tool or guess a missing flat call.
 
-For a current-identity request, call `exec` with a short purpose in `title` and this
-JavaScript in `code`:
+For capabilities not exposed as direct tools, OpenClaw code mode provides the
+JavaScript `exec` tool with `title` and `code`. Its catalog contains catalog-enabled
+tools, not every enabled plugin tool. This is a tool path in the same conversation,
+not a shell command or a subagent.
+
+For a current-identity request when `popclaw_check_status` is not exposed directly,
+call `exec` with a short purpose in `title` and this JavaScript in `code`:
 
 ```javascript
 const matches = await catalog.search("popclaw_check_status", {limit: 5});
@@ -32,7 +41,16 @@ if (!tool) throw new Error("PopClaw status is unavailable in this session");
 return await tool({});
 ```
 
-For another capability, search its name and select that exact `toolName`; use the
+When you already know the parameters, discover and call the exact tool in the
+same `exec`. Do not add a separate model turn just to return its name. Describe
+unfamiliar schemas before calling them. Independent reads with known inputs can
+share one `exec` with `Promise.all`; keep dependent steps ordered, and do not
+batch sends or other mutations this way. A status report already includes the
+owner's identity and verified profiles: fetch a namecard only if the owner asks
+for it or the needed details are missing.
+
+For another catalog-enabled capability not exposed directly, search its name and
+select that exact `toolName`; use the
 callable handle's `await tool.describe()` result for unfamiliar parameters. Follow the current
 `exec` result and `wait` schema if the outer execution is still waiting. Do not
 submit another send while one is running. If your host instead provides
@@ -266,15 +284,30 @@ never write HTML and never write a URL.
 Both halves, every time — material with no hand-in is an unfinished job. If either step
 fails, say which one failed. Never reconstruct a paper, or a link, from memory.
 
-**Prove an outside account is the owner's (X, Instagram, …).**
-Have the owner publish the proof post first, use a browser to find that post's link, then
-submit once with `proof_url` — a new or low-follower account's search index is often blind
-to it. `popclaw_invite` is two calls: the first returns a preview of exactly what would be
-submitted plus a `confirm_token` and sends nothing; read the preview back in the owner's
-language, and only once they say go, call it again with `confirm_token` alone. That second
-call puts rangers to work on someone else's machine, so never make it on your own
-initiative. Once submitted, the result is pushed to the owner on its own — don't poll,
-don't keep checking status.
+**Prove the owner's X account.**
+First ask for the owner's actual X handle; never derive it from a PopClaw nickname.
+Call `popclaw_invite` with platform and handle to prepare editable copy locally.
+Show `display_text`: posting instructions, editable wording, a separate copyable
+text block, then the short return instruction. Preserve the invitation link.
+Nothing has been submitted or queried. A successful preparation for B replaces A
+as THIS chat's target even when both share the same link; a failed preparation
+does not change the target. Never use a global last-account value across chats.
+
+When the owner naturally acknowledges posting ("done", "posted", "发好了", or an
+ordinary equivalent in their language), that requests verification of this chat's
+most recently prepared account. Call `popclaw_invite` with `posted:true`, using that
+preparation's `after_posting`. On Native this uses the current trusted owner
+invocation and submits once without asking for another ordinary confirmation.
+The preparation and next-call suggestion never authorize submission by themselves.
+A proof URL is optional; do not demand one by default, and do not claim rangers
+will periodically scan before submission. No wait flow is added here.
+
+Sync/mirroring, replacement and nickname changes still return a preview. Other
+hosts also keep preview/confirmation. Read the full preview to the owner and call
+with `confirm_token` alone only after explicit approval. Do not add sensitive flags
+to an ordinary posting acknowledgement. After submission, relay the actual receipt;
+results arrive through the existing notification path. Do not poll or claim a
+friend's account is verified until the result actually confirms it.
 
 **What comes back from a publish.** The issue is written to a local HTML file on the
 owner's machine first — that file is the master copy and always exists. A short link is
@@ -341,8 +374,11 @@ guess a subcommand name.
 ## When things look wrong
 
 **Symptom A — the current tool entry finds no PopClaw capability.**
-First check the normal catalog or tool-search entry above. Code-mode tools can be
-enabled without any flat `popclaw_*` name in your top-level list.
+First check the visible direct tools, then use the catalog or tool-search entry
+above for capabilities that use discovery. Direct-only `popclaw_show_inbox` is
+checked in the direct tool surface; its absence from the catalog is expected.
+Other code-mode tools can be enabled without any flat `popclaw_*` name in your
+top-level list.
 Do not go looking for PopClaw on disk. Do not read its code, its config, or its
 database: that path produces confident wrong answers and can damage the owner's
 identity. Tell the owner in one short message that you cannot see PopClaw's tools this
@@ -366,8 +402,9 @@ session, and hand them the check that fits their host:
   popclaw, not the problem.)
 
 **Symptom B — a correctly discovered callable produces no result.**
-A missing flat call is an entry error: use the current catalog or tool-search entry
-above. Do not repeat that failed flat call. Once the actual callable was invoked,
+Do not repeat a missing flat call. Check the visible direct tools first; for a
+catalog-enabled capability, use the catalog or tool-search entry above. If the
+direct-only inbox is not exposed directly, report that limitation. Once the actual callable was invoked,
 you announce a call and no result comes back; you find yourself repeating it, or handing
 it to a helper. That is this host's tool-calling path, not PopClaw. Stop retrying, and
 tell the owner plainly: tool calls are not going through on this setup, and it is not

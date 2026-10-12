@@ -1,6 +1,6 @@
 /**
- * S4-T4 规格 4: 梯度冷启动排序 — 单 matrix prompt（cost 纪律），
- * LLM 失败/坏输出 → 原热度序，绝不抛。
+ * S4-T4 spec 4: graduated cold-start ranking uses one matrix prompt to control cost. LLM failure or
+ * malformed output preserves the original popularity order and never throws.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { rankBySummaryTaste, buildSummaryRankPrompt } from '../../../src/world/summary-ranker.js';

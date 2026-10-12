@@ -9,8 +9,8 @@ describe('runPopclawTasteCommand', () => {
   });
 });
 
-// 这段指令是这一刀的承重件：挖法错了拿不到东西，纪律松了会编出一份假口味，
-// 而假口味比空口味更糟 —— 空的会被 status 提醒补上，编的会一直骗下去。
+// This instruction is essential: a poor retrieval method finds nothing, while loose constraints fabricate a taste profile.
+// A fabricated profile is worse than an empty one: status flags the empty profile, but fabricated preferences keep misleading the system.
 describe('TASTE_HARVEST_PROMPT', () => {
   it('指明三条挖法，且强调跨全部会话（只看当前会话是最容易犯的错）', () => {
     for (const t of ['memory_search', 'lcm_grep', 'memory_get', 'every session']) {

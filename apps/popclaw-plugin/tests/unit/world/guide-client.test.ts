@@ -1,5 +1,6 @@
 /**
- * S4-T4: GuideClient 单元测试 — GET /v1/guide.md 全文，失败容错为 null。
+ * S4-T4: GuideClient unit tests fetch the complete GET /v1/guide.md body and tolerate failure by
+ * returning null.
  */
 import { describe, it, expect } from 'vitest';
 import { GuideClient } from '../../../src/world/guide-client.js';

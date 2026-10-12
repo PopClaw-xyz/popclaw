@@ -1,9 +1,11 @@
 /**
- * 台账里的「走到哪一步」是**工具入口自己记的**(2026-09-13)。
+ * Progress stages in the dispatch ledger are recorded by the tool entry points themselves
+ * (2026-09-13).
  *
- * `dedicated-session.test.ts` 测的是这张表怎么被消费;这里测的是它怎么被填 —— 每一格
- * 都由真正做了那件事的那个工具入口在做完的当下打上,既不读子会话的记录,也不把模型
- * 对自己失败的解释当成系统诊断(那正是「宿主把我截了」会变成事实的路径)。
+ * `dedicated-session.test.ts` tests consumption of this table; this file tests how it is populated.
+ * Each stage is marked by the tool that actually completed the work, at completion, without reading
+ * child-session logs or treating the model's explanation of its failure as a system diagnosis.
+ * Otherwise, a model's claim that the host truncated it becomes recorded fact.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';

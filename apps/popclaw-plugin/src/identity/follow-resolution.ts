@@ -39,13 +39,25 @@ export async function verifyPopclawId(
   resolve: (q: { sigil?: string; name?: string }) => Promise<ResolveCandidate[] | null>,
   sigilOf: (id: string) => string = deriveSigil,
 ): Promise<IdVerification> {
+  const result = await resolveIdCandidate(popclawId, resolve, sigilOf);
+  return result.status === 'verified'
+    ? { status: 'verified', nickname: result.candidate.nickname, sigil: result.sigil }
+    : result;
+}
+
+/** Keep verification and candidate material from the same lookup. */
+async function resolveIdCandidate(
+  popclawId: string,
+  resolve: (q: { sigil?: string; name?: string }) => Promise<ResolveCandidate[] | null>,
+  sigilOf: (id: string) => string = deriveSigil,
+) {
   const sigil = sigilOf(popclawId);
   const cands = await resolve({ sigil });
-  if (cands === null) return { status: 'offline', sigil };
+  if (cands === null) return { status: 'offline' as const, sigil };
   const match = cands.find((c) => c.popclawId === popclawId);
   return match
-    ? { status: 'verified', nickname: match.nickname, sigil }
-    : { status: 'unknown', sigil };
+    ? { status: 'verified' as const, candidate: match, sigil }
+    : { status: 'unknown' as const, sigil };
 }
 
 export type ParsedTarget =
@@ -122,10 +134,9 @@ export async function resolveFollowTarget(
   const p = parseFollowTarget(input);
 
   if (p.kind === 'popclawId') {
-    const v = await verifyPopclawId(p.popclawId, resolve);
+    const v = await resolveIdCandidate(p.popclawId, resolve);
     if (v.status === 'verified') {
-      const cand = (await resolve({ sigil: v.sigil }))?.find((c) => c.popclawId === p.popclawId);
-      return { kind: 'follow', popclawId: p.popclawId, candidate: cand ?? undefined };
+      return { kind: 'follow', popclawId: p.popclawId, candidate: v.candidate };
     }
     return { kind: 'follow', popclawId: p.popclawId, unverified: v.status, sigil: v.sigil };
   }

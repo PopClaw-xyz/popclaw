@@ -85,9 +85,9 @@ export function bundleInputPaths(pkgRoot: string): string[] {
     join(contractsRoot, 'protocol/retained/private-message.schema.json'),
     join(contractsRoot, 'protocol/retained/schema-profile.schema.json'),
     join(contractsRoot, 'protocol/retained/participation.schema.json'),
-    join(contractsRoot, 'protocol/public-envelope-01/board.schema.json'),
-    join(contractsRoot, 'protocol/public-envelope-01/action-kind.schema.json'),
-    join(contractsRoot, 'protocol/public-envelope-01/interpreted-event-kind.schema.json'),
+    join(contractsRoot, 'protocol/public-envelope-02/board.schema.json'),
+    join(contractsRoot, 'protocol/public-envelope-02/action-kind.schema.json'),
+    join(contractsRoot, 'protocol/public-envelope-02/interpreted-event-kind.schema.json'),
   ];
 }
 

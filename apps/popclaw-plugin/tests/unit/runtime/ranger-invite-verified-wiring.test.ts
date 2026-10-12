@@ -1,9 +1,8 @@
 /**
- * ADR-0040 幕二接线 —— 走 ranger.ts 的真实挂载代码，不是直调 routeInviteVerified。
- *
- * 这一层单测存在的理由：`invite_verified` 到货本来就被静默丢弃（分类器早认得它，
- * 缺的只是 `dispatcher.on` 那一挂）。挂丢了、或者挂错了 payload，纯 route 单测
- * 一个都测不出来 —— 所以这里从 ingress 灌一条真信封进去。
+ * ADR-0040 act 2 wiring: exercise ranger.ts's actual registration, not routeInviteVerified directly.
+ * invite_verified used to be silently discarded: classification already recognized it, but
+ * dispatcher.on was missing. Pure routing tests cannot detect an absent hook or wrong payload, so
+ * inject a real envelope through ingress here.
  */
 import { describe, it, expect, vi } from 'vitest';
 import bs58 from 'bs58';
@@ -60,7 +59,7 @@ async function startRanger(): Promise<{
     nickname: 'Tester',
     egress,
     ingress,
-    // Holder 形态：生产里 Ranger 先于通知接线构造，引用晚填（index.ts）。
+    // Holder shape: production creates Ranger before notification wiring, filling the reference later (index.ts).
     inviteNotify: { current: inviteNotify },
   });
   await ranger.start();

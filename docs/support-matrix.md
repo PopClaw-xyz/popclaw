@@ -1,17 +1,19 @@
 # Support matrix
 
-This page records evidence for the fixed 0.1.0 candidate, as of 2026-10-08.
+This page records historical evidence for the 0.1.0 candidate tested on 2026-10-08.
 It does not yet describe installation of the final public release package.
-Current local checks and historical host samples are recorded separately.
+The archive checks and host samples below retain their original candidate scope.
+They do not establish acceptance of the newer public-envelope-02 candidate.
 Unrecorded combinations remain unverified.
 
 ## Candidate and final release
 
-- **Public source tree corresponding to the measured candidate:** [`47214010`](https://github.com/PopClaw-xyz/popclaw/tree/472140101db14ae9dcc7976bc198d65b5102029a).
-- **Current local check:** performed with the fixed candidate’s actual archives.
-  Those archives retain the original build label `b3627a9`; the linked public
-  commit has the identical source tree after Git author metadata normalization,
-  not rebuilt or relabeled archive bytes.
+- **Historical source label for the measured candidate:** `47214010`
+  (not included in this snapshot’s history).
+- **2026-10-08 local check:** performed with the fixed candidate’s actual archives.
+  Those archives retain the original build label `b3627a9`; the historical review recorded source-tree equivalence after Git author
+  metadata normalization. This snapshot does not reproduce that comparison
+  or relabel those archive bytes.
 - **Historical result:** retains its original build and acceptance scope. A
   result reused for the earlier local integration build is not a new run or an equivalence claim for
   `47214010`.
@@ -24,7 +26,7 @@ that `openclaw plugins install popclaw` or the public-registry `npx` path
 has passed with the final release. The [host guide](hosts.md) documents those
 entry points and their identity, approval and timeout requirements.
 
-## Current local checks
+## 2026-10-08 archive checks
 
 The normal-build plugin and MCP alias archives passed local artifact review
 and independent review. CLI/MCP startup, 54 MCP tools and the official

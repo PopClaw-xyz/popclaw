@@ -16,7 +16,7 @@ export type PublicMaterialReference = {origin:string;slug:string;authority:strin
   {kind:'ordinary';evidence:OrdinaryFeedEvidence;envelopeDigest:string;observedAt:number}
 );
 export interface PublicMaterialBasis { version: 1; references: readonly PublicMaterialReference[] }
-export interface PublicMaterialCoverage { origin: string; slug: string; incomplete: boolean; unavailable: boolean; truncated: boolean; observedAt: number | null; code?: string }
+export interface PublicMaterialCoverage { origin: string; slug: string; incomplete: boolean; unavailable: boolean; truncated: boolean; observedAt: number | null; history?: boolean; checkpointHighWater?: string | null; code?: string }
 export interface PublicMaterialBatch {
   items: ReadableFeedItem[];
   references: PublicMaterialReference[];
@@ -138,10 +138,41 @@ export class NewspaperPublicMaterialSource {
 class HouseNewspaperMaterialSource extends NewspaperPublicMaterialSource {
   constructor(private readonly houses:HouseRuntime,private readonly reader:HouseFeedReader){super(houses);}
   override async prepareCollect():Promise<PublicMaterialBatch>{
-    const prepared=await this.reader.prepare(),ordinary=prepared.ordinarySources;
+    const prepared=await this.reader.prepare({completeWindow:true,ownProjection:true}),ordinary=prepared.ordinarySources;
     const origins=new Set(ordinary.map(s=>s.store.baseUrl));
-    const typed=new NewspaperPublicMaterialSource({publicMaterialSources:()=>this.houses.publicMaterialSources().filter(s=>!origins.has(s.origin))}).collect();
-    const items=[...typed.items],references=[...typed.references],coverage=[...typed.coverage],seen=new Set(items.map(i=>i.eventId));
+    const retained=prepared.publicSources;
+    const items:ReadableFeedItem[]=[],references:PublicMaterialReference[]=[],coverage:PublicMaterialCoverage[]=[],seen=new Set<string>();
+    const captured:Array<{capture:PublicMaterialCapture;check:()=>void;status:PublicMaterialCoverage;items:ReadableFeedItem[];refs:PublicMaterialReference[]}>=[];
+    for(const source of this.houses.publicMaterialSources().filter(s=>!origins.has(s.origin))){
+      const fixed=retained.find(s=>s.origin===source.origin&&s.slug===source.slug);
+      try{
+        if(!fixed)throw new PublicMaterialRefusal(prepared.read().sources.find(s=>s.origin===source.origin)?.code??'NEWSPAPER_PUBLIC_SOURCE_MISSING');
+        fixed.assertCurrent();
+        if(fixed.status.unavailable)throw new PublicMaterialRefusal(fixed.status.code??'NEWSPAPER_PUBLIC_UNAVAILABLE');
+        const capture=source.capture();capture.assertCurrent();
+        const c=capture.capability,p=capture.producerPolicy;
+        if(c.house.origin!==source.origin||p.house.origin!==source.origin||p.house.houseKey!==c.house.houseKey
+          ||p.house.incarnation!==c.house.incarnation||p.capabilityRevision!==c.capabilityRevision
+          ||fixed.status.capabilityRevision!==c.capabilityRevision||fixed.status.logIncarnation!==c.publicStream.log_incarnation)
+          throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_CAPTURE_MISMATCH');
+        const status:PublicMaterialCoverage={...fixed.status},converted:ReadableFeedItem[]=[],refs:PublicMaterialReference[]=[];
+        for(const hit of fixed.items){
+          const item=readable(hit);
+          if(!item){status.incomplete=true;status.code='NEWSPAPER_PUBLIC_BODY_UNAVAILABLE';continue;}
+          if(!hit.source.frameDigest)throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_REFERENCE_MISSING');
+          converted.push(item);refs.push({origin:source.origin,slug:source.slug,authority:capture.authority,eventId:item.eventId,
+            sequence:hit.source.sequence,frameDigest:hit.source.frameDigest,materialDigest:''});
+        }
+        captured.push({capture,check:()=>fixed.assertCurrent(),status,items:converted,refs});
+      }catch(error){coverage.push({...fixed?.status,origin:source.origin,slug:source.slug,incomplete:true,unavailable:true,truncated:false,
+        observedAt:fixed?.status.observedAt??null,code:error instanceof Error?error.message:'NEWSPAPER_PUBLIC_UNAVAILABLE'});}
+    }
+    for(const source of captured){
+      try{source.check();source.capture.assertCurrent();}
+      catch{coverage.push({...source.status,unavailable:true,incomplete:true,code:'NEWSPAPER_PUBLIC_SOURCE_UPDATED'});continue;}
+      coverage.push(source.status);
+      source.items.forEach((item,i)=>{if(!seen.has(item.eventId)){seen.add(item.eventId);items.push(item);references.push(source.refs[i]!);}});
+    }
     for(const source of ordinary){
       try{
         source.assertCurrent();

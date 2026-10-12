@@ -1870,3 +1870,46 @@ describe('local failed-logout fence compatibility', () => {
     manager.stopHost(); await manager.waitForQuiet(); db.close();
   });
 });
+
+describe('complete login operation ownership', () => {
+  it.each(['old-first', 'new-first'] as const)('superseded preparation stays in the drain and cannot erase the current flight (%s)', async order => {
+    const ff = fakeFetch();
+    ff.respond(call => call.url.endsWith('/v1/manifest') ? manifestResponse() : enterAckFor(decodeRequest(call.body!), 'flight-session', 5));
+    const held: { signal: AbortSignal; release: () => void }[] = [];
+    const entered: (() => void)[] = [];
+    const starts = [0, 1].map(i => new Promise<void>(resolve => { entered[i] = resolve; }));
+    const manager = new HouseLifecycleManager({ db, signer, installationId: 'install-test', fetch: ff.fetch,
+      clock: () => CLOCK_MS, prepareTrustedManifest: input => new Promise(resolve => {
+        const index = held.length;
+        held.push({ signal: input.signal, release: () => resolve({ commit: () => undefined }) });
+        entered[index]!();
+      }) });
+    const a = manager.loginHouse(ORIGIN);
+    await starts[0];
+    const b = manager.loginHouse(ORIGIN);
+    await starts[1];
+    try {
+      expect(held[0]!.signal.aborted).toBe(true);
+      expect(held[1]!.signal.aborted).toBe(false);
+      if (order === 'old-first') {
+        held[0]!.release(); await a;
+        expect(held[1]!.signal.aborted).toBe(false);
+      }
+      await manager.logoutHouse(ORIGIN);
+      expect(held[1]!.signal.aborted, 'logout must still reach the current flight after old cleanup').toBe(true);
+      manager.stopHost(); // Stop the unrelated leave retry while the login preparations remain held.
+      if (order === 'new-first') { held[1]!.release(); await b; }
+      let quiet = false;
+      const drain = manager.waitForQuiet().then(() => { quiet = true; });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(quiet, 'the full operation still waiting in preparation must remain in the shared drain').toBe(false);
+      held[0]!.release(); held[1]!.release();
+      await Promise.all([a, b, drain]);
+      expect(readParticipation(db, ORIGIN)?.desired).toBe('disabled');
+      expect(manager.gateFor(ORIGIN).isActive()).toBe(false);
+    } finally {
+      held.forEach(item => item.release());
+      manager.stopHost(); await Promise.all([a, b, manager.waitForQuiet()]);
+    }
+  });
+});

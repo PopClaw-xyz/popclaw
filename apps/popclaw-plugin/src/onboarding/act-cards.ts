@@ -169,10 +169,7 @@ export function buildExpandedCard(args: ExpandedCardArgs): MessagePresentation {
  * pushed=false → kept locally, with a hint that it can be retried.
  */
 export function markSavedText(n: number, pushed = true): string {
-  return (
-    t('onboarding.mark.saved', { n: String(n) }) +
-    (pushed ? '' : t('onboarding.mark.saved.retryHint'))
-  );
+  return t(pushed ? 'onboarding.mark.saved' : 'onboarding.mark.saved.local', { n: String(n) });
 }
 
 /** Mark failed: report the error honestly, never falsely claim it was saved. */

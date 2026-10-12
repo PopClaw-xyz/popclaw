@@ -25,7 +25,7 @@ const ledger = 'world_public_log_profiles_v1';
 function database() { const db = new InMemoryHostDb(); dbs.push(db); return db; }
 function options(db: HostDb, log = 'log_A', revision = log): PublicJournalPreparation {
   const capability: VerifiedPublicStreamCapability = { house, capabilityRevision: revision,
-    publicStream: { endpoint: '/v1/world-stream', mode: 'public-v1', envelope_baseline: 'public-envelope-01', log_incarnation: log, initial_public_scopes: [] } };
+    publicStream: { endpoint: '/v1/world-stream', mode: 'public-v1', envelope_baseline: 'public-envelope-02', log_incarnation: log, initial_public_scopes: [] } };
   return { executionDb: db, capability, producerPolicy: { house, capabilityRevision: revision, officialActorIds: [] },
     selection: { fullPublic: true, scopes: [] }, consumerContracts: [], approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST };
 }

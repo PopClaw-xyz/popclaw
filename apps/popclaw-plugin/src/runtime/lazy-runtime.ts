@@ -19,6 +19,14 @@ export function createLazyRuntime<T extends { shutdown(): Promise<void> }>(build
       pending = { task, construction };
       return task;
     },
+    async peek(): Promise<T | null> {
+      const current = pending;
+      if (!current || closing.signal.aborted) return null;
+      try {
+        const runtime = await current.task;
+        return !closing.signal.aborted && pending === current ? runtime : null;
+      } catch { return null; }
+    },
     stop(): Promise<void> {
       if (stopping) return stopping;
       closing.abort();

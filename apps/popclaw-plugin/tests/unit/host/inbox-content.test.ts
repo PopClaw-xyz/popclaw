@@ -8,12 +8,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mkdtempSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, realpathSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
 import { runMigrations } from '../../../src/host/migrations.js';
 import { InboxStore, type InboxItem } from '../../../src/messaging/inbox-store.js';
 import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
+import { stageMediaForSend, dmMediaStagingDir } from '../../../src/notifier/media-staging.js';
 import { readInboxMessage } from '../../../src/host/inbox-content.js';
 
 const MIGRATIONS = resolve(dirname(fileURLToPath(import.meta.url)), '../../../migrations');
@@ -74,6 +75,43 @@ describe('readInboxMessage — attachment shape', () => {
     expect(result.images).toHaveLength(1);
     expect(result.images[0]!.mimeType).toBe('image/png');
     expect(result.images[0]!.data).toBe(Buffer.from([1, 2, 3, 4]).toString('base64'));
+  });
+
+  it('native reading stages the verified image under the host media root and retains original bytes', () => {
+    const original = join(mediaDir, 'received.jpg');
+    const bytes = Buffer.from([255, 216, 255, 224, 1, 2]);
+    writeFileSync(original, bytes);
+    store.record(item({ mediaPath: original }));
+    const id = store.recent(1)[0]!.id;
+    const dir = dmMediaStagingDir(join(root, 'openclaw-state'));
+    const result = readInboxMessage(store, paths, id, undefined, p => stageMediaForSend(p, dir));
+    const parsed = JSON.parse(result.text);
+    expect(parsed.attachment.path).toBe(join(dir, 'received.jpg'));
+    expect(readFileSync(parsed.attachment.path)).toEqual(bytes);
+    expect(readFileSync(original)).toEqual(bytes);
+    expect(store.get(id)!.mediaPath).toBe(original);
+    expect(result.images[0]!.data).toBe(bytes.toString('base64'));
+  });
+
+  it('a staging failure retains image content but exposes no unusable outbound path', () => {
+    const original = join(mediaDir, 'received.jpg');
+    writeFileSync(original, Buffer.from([255, 216, 255]));
+    store.record(item({ mediaPath: original }));
+    const result = readInboxMessage(store, paths, store.recent(1)[0]!.id, undefined, () => null);
+    const parsed = JSON.parse(result.text);
+    expect(parsed.attachment.path).toBeUndefined();
+    expect(parsed.attachment.delivery_status).toBe('unavailable');
+    expect(result.images).toHaveLength(1);
+  });
+
+  it('never stages a file outside the inbox even when the host supports media', () => {
+    const outside = join(root, 'outside.jpg');
+    writeFileSync(outside, Buffer.from([255, 216, 255]));
+    store.record(item({ mediaPath: outside }));
+    let calls = 0;
+    const result = readInboxMessage(store, paths, store.recent(1)[0]!.id, undefined, p => { calls++; return p; });
+    expect(calls).toBe(0);
+    expect(JSON.parse(result.text).attachment.status).toBe('unavailable');
   });
 
   it('a received document is unchanged: local_file status + path, no image content', () => {

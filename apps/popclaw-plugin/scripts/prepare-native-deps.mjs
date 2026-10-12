@@ -22,14 +22,14 @@
  * `prebuild-install` and scripts are build-only and excluded. Its original
  * manifest and exact derivation are retained in POPCLAW-RUNTIME-MANIFEST.json.
  *
- * `POPCLAW_NATIVE_DEPS_MINIMAL=1` vendors only, skipping the 15-combo prebuild
+ * `POPCLAW_NATIVE_DEPS_MINIMAL=1` vendors only, skipping the 10-combo prebuild
  * matrix (node-gyp cross-builds + GitHub release downloads). The matrix is PACK
- * work and assumes a darwin packer; CI only needs a bundle that loads under the
- * runner's own Node (see tests/unit/register-real-host-load.test.ts). Never set
+ * work and requires a darwin packer; development smoke checks can use a bundle
+ * that loads under the runner's own Node (register-real-host-load.test.ts). Never set
  * it when producing a tarball — `just pack-plugin` must ship the full matrix.
  */
 import { cpSync, rmSync, existsSync, readdirSync, statSync, mkdirSync, readFileSync } from 'node:fs';
-import { execSync, spawnSync } from 'node:child_process';
+import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 import { deriveNativeRuntimeManifest } from './native-runtime-manifest.mjs';
@@ -78,11 +78,11 @@ function vendorOne(name) {
 }
 
 function nestTransitiveDepsForStandardResolution() {
-  // S4.1-T5: OpenClaw 2026.6 实测 — bundle.mjs banner 的 require hook 只覆盖
-  // bundle 第一层 require；better-sqlite3 内部 require('bindings') /
-  // require('file-uri-to-path') 走 Node 标准解析，必须能在
-  // native-deps/better-sqlite3/node_modules/ 命中。顶层 vendor 槽保留
-  // （banner hook 仍然消费），这里再嵌一份作标准解析兜底。
+  // S4.1-T5: verified on OpenClaw 2026.6: the bundle.mjs banner require hook
+  // only covers the bundle's first-level requires. better-sqlite3's internal
+  // require('bindings') / require('file-uri-to-path') use standard Node resolution
+  // and must resolve under native-deps/better-sqlite3/node_modules/. Keep the
+  // top-level vendor slots for the banner hook and add nested copies as a fallback.
   const nmDir = join(outDir, 'better-sqlite3', 'node_modules');
   mkdirSync(nmDir, { recursive: true });
   for (const dep of ['bindings', 'file-uri-to-path']) {
@@ -205,7 +205,7 @@ function buildAbiPrebuilds() {
 // name them `better_sqlite3-<platform>-<arch>-node<major>.node`, which the host
 // loader (local-host-db.ts resolveNativeBinding) prefers. THIS is what makes a
 // clean linux/arm64 install load instantly with ZERO host-side node-gyp — the
-// darwin builds above are useless on a Linux host (bug report host-c 派发链 ①).
+// darwin builds above are useless on a Linux host (bug report host-c, dispatch chain 1).
 // Node major → NODE_MODULE_VERSION *that the pinned better-sqlite3 actually
 // publishes release assets for* (verified against the v12.11.1 asset list:
 // node-v127/137/141/147 for every platform we ship, so 147 covers exactly the
@@ -227,7 +227,7 @@ function coverageMatrix() {
   const rows = [];
   for (const arch of LOCAL_BUILD_ARCHES) {
     for (const t of NODE_ABI_TARGETS) {
-      rows.push({ platform: process.platform, arch, major: t.major, via: 'node-gyp' });
+      rows.push({ platform: 'darwin', arch, major: t.major, abi: BS3_RELEASE_ABI[t.major], via: 'node-gyp' });
     }
   }
   for (const { platform, arch } of HOST_DOWNLOAD_TARGETS) {
@@ -237,6 +237,58 @@ function coverageMatrix() {
     }
   }
   return rows.map((r) => ({ ...r, file: bindingName(r.platform, r.arch, r.major) }));
+}
+
+/** Check the actual binary header and Node's ABI initializer, not its name alone. */
+function assertNativeBinary(bytes, row) {
+  const { platform, arch, abi, file } = row;
+  if (bytes.length < 500_000) throw new Error(`${file} is absent or truncated (${bytes.length} bytes)`);
+  let target;
+  if (bytes.readUInt32LE(0) === 0xfeedfacf) {
+    const cpu = bytes.readUInt32LE(4);
+    if (cpu === 0x100000c) target = 'darwin-arm64';
+    if (cpu === 0x1000007) target = 'darwin-x64';
+  } else if (bytes.subarray(0, 6).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1]))) {
+    const machine = bytes.readUInt16LE(18);
+    if (machine === 183) target = 'linux-arm64';
+    if (machine === 62) target = 'linux-x64';
+  } else if (bytes.toString('ascii', 0, 2) === 'MZ') {
+    const pe = bytes.readUInt32LE(0x3c);
+    if (pe + 6 <= bytes.length && bytes.toString('ascii', pe, pe + 4) === 'PE\0\0' &&
+        bytes.readUInt16LE(pe + 4) === 0x8664) target = 'win32-x64';
+  }
+  if (target !== `${platform}-${arch}`) {
+    throw new Error(`${file}: expected ${platform}-${arch}, binary header is ${target || 'unsupported'}`);
+  }
+  if (!abi || !bytes.includes(Buffer.from(`node_register_module_v${abi}\0`))) {
+    throw new Error(`${file}: missing Node ABI ${abi} initializer`);
+  }
+}
+
+/** Verify the final archive independently of the files present before pnpm pack. */
+function verifyPackedMatrix(tgz) {
+  const prefix = 'package/dist/native-deps/better-sqlite3/build/Release/';
+  const entries = execFileSync('tar', ['-tzf', tgz], { encoding: 'utf8' }).trim().split('\n');
+  const rows = coverageMatrix();
+  const binaries = new Map();
+  const read = (file) => {
+    const entry = prefix + file;
+    if (entries.filter(name => name === entry).length !== 1) {
+      throw new Error(`${file}: expected exactly one archive entry`);
+    }
+    return execFileSync('tar', ['-xzOf', tgz, entry], { maxBuffer: 32 * 1024 * 1024 });
+  };
+  for (const row of rows) {
+    const bytes = read(row.file);
+    assertNativeBinary(bytes, row);
+    binaries.set(row.file, bytes);
+    console.log(`  ✓ ${row.platform}-${row.arch} node${row.major} ABI ${row.abi} (${bytes.length} bytes)`);
+  }
+  const fallback = read('better_sqlite3.node');
+  if (!rows.some(row => row.platform === 'darwin' && fallback.equals(binaries.get(row.file)))) {
+    throw new Error('better_sqlite3.node: fallback must equal one of the declared Darwin bindings');
+  }
+  console.log(`verified ${rows.length} native matrix cells and the packer fallback in ${tgz}`);
 }
 
 function downloadHostPrebuilds() {
@@ -287,7 +339,10 @@ function assertMatrixComplete() {
     const path = join(relDir, file);
     const size = existsSync(path) ? statSync(path).size : 0;
     if (size < 500_000) missing.push(`${label} → ${file}${size ? ` (only ${size} bytes)` : ' (absent)'}`);
-    else console.log(`  ✓ ${label} → ${file} (${size} bytes, ${via})`);
+    else {
+      assertNativeBinary(readFileSync(path), { platform, arch, abi: BS3_RELEASE_ABI[major], file });
+      console.log(`  ✓ ${label} → ${file} (${size} bytes, ${via})`);
+    }
   }
   if (missing.length > 0) {
     throw new Error(`native prebuild matrix incomplete:\n  - ${missing.join('\n  - ')}`);
@@ -328,6 +383,17 @@ function pruneBuildTree() {
       rmSync(join(relDir, entry), { recursive: true, force: true });
     }
   }
+}
+
+if (process.argv[2] === '--verify-tarball') {
+  if (process.argv.length !== 4) throw new Error('usage: prepare-native-deps.mjs --verify-tarball <tgz>');
+  verifyPackedMatrix(process.argv[3]);
+  process.exit(0);
+}
+
+// Fail before touching dist: a Linux packer cannot build the promised Mac cells.
+if (process.env.POPCLAW_NATIVE_DEPS_MINIMAL !== '1' && process.platform !== 'darwin') {
+  throw new Error('full native packing requires a Darwin packer; use the GitHub-hosted macos-15 release runner');
 }
 
 rmSync(outDir, { recursive: true, force: true });

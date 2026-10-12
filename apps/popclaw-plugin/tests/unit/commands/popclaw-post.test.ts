@@ -52,8 +52,8 @@ function makeMockDeps(opts: {
         if (unique.length === 1) return { full: unique[0]!, ambiguous: [] };
         return { full: null, ambiguous: unique.slice(0, 3) };
       },
-      // 社交日志给 --reply/--quote 记 in_reply_to 原文时会查这一手（自足硬要求）。
-      // 这些桩里没有对应条目 → 记录只落 event_id，与"取不到就省略"一致。
+      // The social log looks here for original in_reply_to text for --reply/--quote (the self-contained-record requirement).
+      // These stubs contain no matching items, so only event_id is recorded, consistent with omitting unavailable text.
       findByEventIdPrefix: () => ({ item: null, ambiguous: [] }),
     } as unknown as WorldFeedCache,
   };

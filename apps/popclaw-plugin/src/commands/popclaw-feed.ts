@@ -327,19 +327,19 @@ function pad(s: string, n: number): string {
 export function formatPublicDisplay(result: PublicDisplayResult, query?: string): string {
   const lang = ownerLang();
   const ordinary=result.sources.some(s=>s.protocol==='ordinary-snapshot');
-  const lines = [ordinary ? (lang==='zh-CN' ? `已验签的灯坊内容（${result.items.length}条）` : `Verified House content (${result.items.length} items)`)
+  const lines = [ordinary ? renderCopy(lang, 'feed.ordinary.title', { count: String(result.items.length) })
     : renderCopy(lang, 'feed.public.title', { count: String(result.items.length) })];
   if (query) lines.push(renderCopy(lang, 'feed.public.query', { query }));
   if (!result.sources.length) lines.push(renderCopy(lang, 'feed.public.unavailable'));
   for (const source of result.sources) {
     const state = source.unavailable ? 'unavailable' : source.history ? 'history' : 'local';
     lines.push(`${source.origin} — ${source.protocol === 'ordinary-snapshot'
-      ? (source.unavailable ? (lang==='zh-CN' ? '无法读取已选择的灯坊快照。' : 'Selected House snapshot unavailable.')
-        : (lang==='zh-CN' ? '已验签的有界快照；不代表完整历史。' : 'Verified bounded snapshot; not complete source history.'))
+      ? (source.unavailable ? renderCopy(lang, 'feed.ordinary.unavailable')
+        : renderCopy(lang, 'feed.ordinary.bounded'))
       : renderCopy(lang, `feed.public.${state}`)}`);
     if (source.incomplete && !source.unavailable && source.protocol!=='ordinary-snapshot') lines.push(renderCopy(lang, 'feed.public.incomplete'));
   }
-  if (!result.items.length) lines.push(ordinary ? (lang==='zh-CN' ? '本次有界快照没有匹配内容；这不代表来源的全部内容。' : 'No matching items in this bounded snapshot; this does not describe everything on the source.') : renderCopy(lang, 'feed.public.empty'));
+  if (!result.items.length) lines.push(ordinary ? renderCopy(lang, 'feed.ordinary.empty') : renderCopy(lang, 'feed.public.empty'));
   if (result.truncated) lines.push(renderCopy(lang, 'feed.public.truncated'));
   rememberObservedPostIds(result.items.map(hit => ({...hit.item,houseSlug:hit.source.slug})));
   for (const hit of result.items) {

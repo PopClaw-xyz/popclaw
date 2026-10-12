@@ -261,8 +261,8 @@ export const OWNER_CONFIRMATION_FAILED = 'OWNER_CONFIRMATION_FAILED';
  *  loses a confirmation the owner already gave. Nothing is granted either way;
  *  what this code buys is that the person is told which of the three it was. */
 export const OWNER_CONFIRMATION_ANSWER_INVALID = 'OWNER_CONFIRMATION_ANSWER_INVALID';
-/** The call itself ended while the dialog was open: the host aborted the tool
- *  call, or the root shut down. Not our window closing, and not consent. */
+/** The MCP call ended before its answer could authorize the body: the host
+ *  aborted the call, or the root shut down. Not our window closing, and not consent. */
 export const OWNER_CONFIRMATION_INACTIVE = 'OWNER_CONFIRMATION_INACTIVE';
 export const OWNER_APPROVAL_DIALOG_FAILURES = [
   OWNER_CONFIRMATION_CANCELLED, OWNER_CONFIRMATION_FAILED, OWNER_CONFIRMATION_ANSWER_INVALID,
@@ -452,11 +452,11 @@ export interface OwnerApprovalRequest {
  * `tool_timeout_sec` is derived there from the same numbers.
  */
 export const OWNER_APPROVAL_WINDOW_MS = OWNER_APPROVAL_WINDOW_SECONDS * 1000;
-/** An answer nobody came back for must not sit in memory for the life of the
- *  Gateway. Well past the host's own approval ceiling. */
+/** Unleased/native records nobody came back for expire well past the host's
+ * approval ceiling. Live MCP calls end explicitly in their wrapper's finally. */
 const RECORD_TTL_MS = 900_000;
-/** A long-lived Gateway sees an unbounded number of calls, so the store is
- *  bounded: a diagnostic must never become a leak. */
+/** Finished/unleased history is bounded. Live MCP records track actual running
+ * promises, not a new owner-facing concurrency limit, and are released finally. */
 const MAX_RECORDS = 64;
 
 interface ApprovalRecord {
@@ -517,9 +517,13 @@ const callLedger = getOrCreatePerProcess('owner-approval-call-ledger-v1', () => 
   records: new Map<string, ApprovalRecord>(),
   consumed: new Map<string, symbol>(),
   originRefusals: new Map<string, { readonly reason: OwnerApprovalOriginRefusal; readonly at: number; readonly owner: symbol }>(),
+  mcpLiveCalls: new Map<string, { readonly owner: symbol; readonly token: symbol; readonly isCurrent?: () => boolean }>(),
 }));
 const moduleOwner = Symbol('owner-approval-module');
 const records = callLedger.records;
+// A lease is liveness, not consent. Only the MCP wrapper has a guaranteed
+// finally spanning preparation, the dialog and the entire tool body.
+const mcpLiveCalls = callLedger.mcpLiveCalls ??= new Map();
 /** Keys whose answer has already authorized their call. Kept so a second
  *  consume is told it is a REPLAY rather than being handed the same sentence
  *  as a call nobody ever approved. */
@@ -573,15 +577,55 @@ export function resetOwnerApprovals(options?: { now?(): number }): void {
   for (const [key, record] of records) if (record.owner === moduleOwner) records.delete(key);
   for (const [key, owner] of consumed) if (owner === moduleOwner) consumed.delete(key);
   for (const [key, noted] of originRefusals) if (noted.owner === moduleOwner) originRefusals.delete(key);
+  for (const [key, lease] of mcpLiveCalls) if (lease.owner === moduleOwner) mcpLiveCalls.delete(key);
   clock = options?.now ?? (() => Date.now());
 }
 
 function sweep(now: number): void {
-  for (const [key, record] of records) if (now - record.at > RECORD_TTL_MS) records.delete(key);
-  while (records.size >= MAX_RECORDS) records.delete(records.keys().next().value!);
-  while (consumed.size >= MAX_RECORDS) consumed.delete(consumed.keys().next().value!);
-  for (const [key, noted] of originRefusals) if (now - noted.at > RECORD_TTL_MS) originRefusals.delete(key);
-  while (originRefusals.size >= MAX_RECORDS) originRefusals.delete(originRefusals.keys().next().value!);
+  for (const [key, record] of records) if (!mcpLiveCalls.has(key) && now - record.at > RECORD_TTL_MS) records.delete(key);
+  trimInactive(records, MAX_RECORDS - 1);
+  trimInactive(consumed, MAX_RECORDS - 1);
+  for (const [key, noted] of originRefusals) if (!mcpLiveCalls.has(key) && now - noted.at > RECORD_TTL_MS) originRefusals.delete(key);
+  trimInactive(originRefusals, MAX_RECORDS - 1);
+}
+
+/** Keep the native pre-insert limit, but never count or evict live MCP calls. */
+function trimInactive<T>(entries: Map<string, T>, limit: number): void {
+  const inactive = [...entries.keys()].filter(key => !mcpLiveCalls.has(key));
+  for (let i = 0; i < inactive.length - limit; i++) entries.delete(inactive[i]!);
+}
+
+/** Pin one MCP invocation until its wrapper's finally. Ending grants nothing;
+ * it drops full records in every state and retains only bounded replay history.
+ * A reset invalidates the token, so an old finally cannot touch a new call. */
+export function beginMcpOwnerApprovalCall(toolName: string, callRef: string, isCurrent?: () => boolean): () => boolean {
+  const key = recordKey(toolName, callRef);
+  const lease = { owner: moduleOwner, token: Symbol('mcp-owner-approval-call'), isCurrent };
+  mcpLiveCalls.set(key, lease);
+  return () => {
+    if (mcpLiveCalls.get(key)?.token !== lease.token) return false;
+    const record = records.get(key);
+    const unconsumedGrant = discardUnconsumedOwnerApproval(toolName, callRef);
+    // An unanswered or denied dialog was still asked, so preserve replay
+    // attribution without keeping its subject, prompt or grant after completion.
+    if (record?.refused === null) consumed.set(key, record.owner);
+    records.delete(key);
+    originRefusals.delete(key);
+    mcpLiveCalls.delete(key);
+    // Completion must bound history even when no later preparation occurs.
+    trimInactive(records, MAX_RECORDS);
+    trimInactive(consumed, MAX_RECORDS);
+    trimInactive(originRefusals, MAX_RECORDS);
+    return unconsumedGrant;
+  };
+}
+/** Native records have no MCP lease. A live MCP wrapper binds consumption to
+ * its request, including cancellation after the answer but before the body
+ * consumes it. A broken liveness callback cannot become consent. */
+function mcpCallIsCurrent(key: string): boolean {
+  const current = mcpLiveCalls.get(key)?.isCurrent;
+  try { return current ? current() === true : true; }
+  catch { return false; }
 }
 /** Leave a refused call the name of what refused it, for the tool body that is
  *  about to ask. Silently does nothing without a call identity: there would be
@@ -1063,13 +1107,15 @@ async function prepare(toolName: string, params: unknown, callRef: string,
   const { budget } = profile;
   const call = callIdentity(callRef);
   if (call === null) return null;
+  const lease = mcpLiveCalls.get(recordKey(toolName, call));
   const subject = canonicalizeSafely(descriptor, params);
   if (subject === null) return null;
   let described: ApprovalSubjectResult;
   try { described = await descriptor.describe(params, profile); }
   catch { described = { kind: 'refuse', reason: refusalOf() }; }
   // Never resurrect records after reset/shutdown while describe was pending.
-  if (!surfacePresent || subjects.get(toolName) !== descriptor) return null;
+  if (!surfacePresent || subjects.get(toolName) !== descriptor
+    || mcpLiveCalls.get(recordKey(toolName, call)) !== lease) return null;
   // Over-budget or unpresentable is a refusal like any other, and it is the
   // descriptor's own `refuse` reason the tool body will read back.
   const refused = described.kind === 'refuse' ? described.reason
@@ -1187,7 +1233,8 @@ export function consumeOwnerApproval(toolName: string, params: unknown, callRef:
   // An MCP dialog that ended without an answer, for a named reason other than
   // our window closing. Spent like any other ending, and never consent.
   if (record.failed !== null) return { decision: 'unavailable', reason: record.failed };
-  if (record.decision === 'allow-once') return { decision: 'approved' };
+  if (record.decision === 'allow-once') return mcpCallIsCurrent(key)
+    ? { decision: 'approved' } : { decision: 'unavailable', reason: OWNER_CONFIRMATION_INACTIVE };
   // Answered, but not with consent. `allow-always` lands here deliberately: an
   // answer was given and it was not the one that authorizes, which is a deny.
   if (record.decision === 'deny' || record.decision === 'allow-always') return { decision: 'denied' };
@@ -1372,5 +1419,5 @@ export function ownerApprovalGranted(toolName: string, callRef: string): boolean
   // The same one-value table `consumeOwnerApproval` uses. A reader that called
   // an `allow-always` record "granted" would disagree with the consumer that
   // denies it, and a lane chosen on a disagreement is the worst kind.
-  return record.decision === 'allow-once';
+  return record.decision === 'allow-once' && mcpCallIsCurrent(recordKey(toolName, call));
 }

@@ -71,9 +71,9 @@ describe('formatRoutingTrace', () => {
   });
 
   it('privacy: `ownerTextSample` is the ONE free-text field, and only the switch can fill it', () => {
-    // 类型是铁律的执行者——这里断言的是"能进日志的只有这些键"。加字段先过这一条。
-    // 唯一允许的自由文本字段是 ownerTextSample，且必须由 sampleOwnerText 产出
-    //（=受 POPCLAW_TRACE_TEXT 管）。再加第二个自由文本字段，这条就红。
+    // Types enforce the invariant: only these keys may enter the log. Any new field must satisfy this assertion.
+    // The only permitted free-text field is ownerTextSample, produced by sampleOwnerText
+    // and therefore governed by POPCLAW_TRACE_TEXT. A second free-text field makes this fail.
     const structural = ['attachments', 'fire', 'house', 'l1', 'l2', 'lang'];
     const withSample: RoutingTraceFacts = {
       ...facts(),

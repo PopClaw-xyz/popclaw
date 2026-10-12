@@ -1,6 +1,6 @@
 /**
- * ADR-0041: 告示牌客户端单元测试 —— 条件 GET + 极宽松解析。
- * 容错口径照 GuideClient：任何错误都返回 unavailable，绝不抛。
+ * ADR-0041: manifest-client unit tests, conditional GET and permissive parsing. Match GuideClient's
+ * fault tolerance: every error returns unavailable, never throws.
  */
 import { describe, it, expect } from 'vitest';
 import { conditionalGet, fetchHouseManifest } from '../../../src/world/manifest-client.js';

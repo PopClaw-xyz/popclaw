@@ -204,7 +204,9 @@ const SKILL_POINTER =
 /** Capability names are not necessarily flat tools on the current host. */
 export const NATIVE_TOOL_ENTRY = [
   'Use the current tool surface before calling any popclaw_* capability named below. If it is listed among direct tools, call it directly.',
-  'On OpenClaw code mode, use the JavaScript exec tool (title and code), not a shell command or a flat popclaw_* call. Discover a callable with catalog.search; await tool.describe() for unfamiliar parameters. Example for the current identity:',
+  'popclaw_show_inbox is direct-only on OpenClaw CodeMode so its image blocks reach the model; it does not appear in the exec catalog. For ordinary DMs and attachments, call the visible direct tool first. An empty catalog result does not prove the inbox is unavailable. If the direct inbox tool is absent, report that this session does not expose it; do not search the catalog for it or guess a missing flat call.',
+  'For capabilities not exposed as direct tools, use the JavaScript exec tool (title and code) on OpenClaw code mode, not a shell command. Discover a catalog-enabled callable with catalog.search; await tool.describe() for unfamiliar parameters. Example for the current identity when popclaw_check_status is not exposed directly:',
+  'When the parameters are already known, discover and call the exact tool in the same exec. Use describe only for unfamiliar schemas. Independent reads with known inputs can share one exec with Promise.all; keep dependent steps ordered and do not include sends or other mutations in that batch.',
   '```javascript',
   'const matches = await catalog.search("popclaw_check_status", {limit: 5});',
   'const tool = matches.find(t => t.toolName === "popclaw_check_status");',

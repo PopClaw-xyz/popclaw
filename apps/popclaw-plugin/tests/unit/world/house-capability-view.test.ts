@@ -15,7 +15,7 @@ const stores: InMemoryHostDb[] = [];
 const db = () => { const store = new InMemoryHostDb(); stores.push(store); return store; };
 afterEach(() => stores.splice(0).forEach(store => store.close()));
 function candidate(edit: (doc: any) => void = () => {}, signedAt = '1', serialize: (doc: any) => string = JSON.stringify) {
-  const doc: any = { world_interaction: { version: 1, public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_1', initial_public_scopes: [], envelope_baseline: 'public-envelope-01' } } };
+  const doc: any = { world_interaction: { version: 1, public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_1', initial_public_scopes: [], envelope_baseline: 'public-envelope-02' } } };
   edit(doc);
   const rawBytes = encode(serialize(doc));
   const core = { house: { origin, houseKey: bs58.encode(key.publicKey), incarnation: 'house_1' }, manifestDigest: cidFromCanonical(rawBytes), ...(signedAt === '0' ? {} : { signedAt }) };
@@ -45,6 +45,32 @@ describe('first-release independent capability observations', () => {
   it('keeps public facts valid when an optional action block is malformed', async () => {
     const store = db(); store.transaction((await prepare(candidate(d => { d.world_interaction.actions = {}; }))).commit);
     expect(readHouseCapabilityView(store, origin)).toMatchObject({ publicStream: { validation: 'valid' }, actions: { validation: 'invalid' } });
+  });
+  it('accepts the signed public-envelope-02 baseline while still rejecting an unknown future baseline', async () => {
+    const v2 = db();
+    const input = candidate(d => { d.world_interaction.public_stream.envelope_baseline = 'public-envelope-02'; });
+    v2.transaction((await prepare(input)).commit);
+    const supported = readHouseCapabilityView(v2, origin)!;
+    expect(supported.publicStream).toMatchObject({ validation: 'valid' });
+    expect(supported.publicStreamCapability?.publicStream.envelope_baseline).toBe('public-envelope-02');
+    expect(supported.verified.manifestBytes).toEqual(input.rawBytes);
+
+    const future = db();
+    const unknown = candidate(d => { d.world_interaction.public_stream.envelope_baseline = 'public-envelope-99'; });
+    future.transaction((await prepare(unknown)).commit);
+    const unsupported = readHouseCapabilityView(future, origin)!;
+    expect(unsupported.publicStream).toMatchObject({ validation: 'invalid' });
+    expect(unsupported.publicStreamCapability).toBeUndefined();
+    expect(unsupported.verified.manifestBytes).toEqual(unknown.rawBytes);
+  });
+  it('does not upgrade a signed public-envelope-01 declaration into a current 02 capability', async () => {
+    const store = db();
+    const input = candidate(d => { d.world_interaction.public_stream.envelope_baseline = 'public-envelope-01'; });
+    store.transaction((await prepare(input)).commit);
+    const unsupported = readHouseCapabilityView(store, origin)!;
+    expect(unsupported.publicStream).toMatchObject({ validation: 'invalid' });
+    expect(unsupported.publicStreamCapability).toBeUndefined();
+    expect(unsupported.verified.manifestBytes).toEqual(input.rawBytes);
   });
   it('accepts a non-game action with no attachments while remaining locally unsupported', async () => {
     const store = db(); store.transaction((await prepare(candidate(actions))).commit);

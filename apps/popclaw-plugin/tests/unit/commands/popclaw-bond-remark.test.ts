@@ -1,5 +1,6 @@
 /**
- * `/popclaw bond remark` —— 主人给人起备注名的入口（唯一名字链的第一级）。
+ * `/popclaw bond remark`: the owner's entry point for assigning a remark name (first level of the
+ * canonical name chain).
  */
 import { describe, expect, it, beforeAll } from 'vitest';
 import { dirname, resolve } from 'node:path';
@@ -19,7 +20,9 @@ import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 beforeAll(() => setOwnerLang('zh-CN', 'config'));
 
 const MIGRATIONS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../migrations');
-/** 一个真的 32-byte base58 popclaw_id（`parseFollowTarget` 认它，不走认人）。 */
+/**
+ * A real 32-byte base58 popclaw_id: `parseFollowTarget` recognizes it without identity resolution.
+ */
 const ID = 'BFhFRcpqjFT8cQKmyLprxrgTAG14ttEkxCqCYcbBZWzB';
 
 function deps() {

@@ -1,3 +1,4 @@
+import { deferred } from '../../helpers/deferred.js';
 /** Normal tool registration with real read clients and synthetic transports only. */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
@@ -69,6 +70,31 @@ describe('summary declaration at the real registered first-use tool', () => {
       expect(new Headers(r.init?.headers).has('authorization')).toBe(false);
       expect(new Headers(r.init?.headers).has('cookie')).toBe(false);
     }
+  });
+
+  it('waits for the guide, starts summary before snapshot without waiting, and tolerates snapshot rejection', async () => {
+    setOwnerLang('en', 'config');
+    const guide = deferred<Response>();
+    const summaryReply = deferred<Response>();
+    const snapshotReply = deferred<never[]>();
+    const trace: string[] = [];
+    const h = setup(socialGuide, () => { trace.push('summary'); return summaryReply.promise; }, () => guide.promise);
+    h.snapshot.mockImplementation(() => { trace.push('snapshot'); return snapshotReply.promise; });
+    const call = h.tool.execute('concurrent', { window_hours: 1 });
+    await vi.waitFor(() => expect(h.requests).toHaveLength(1));
+    expect(trace).toEqual([]);
+    guide.resolve(new Response(socialGuide));
+    await vi.waitFor(() => expect(trace).toEqual(['summary', 'snapshot']));
+    snapshotReply.reject(new Error('snapshot unavailable'));
+    summaryReply.resolve(Response.json(summary));
+    expect(await call).toMatchInlineSnapshot(`
+      {
+        "text": "📜 World digest (last 1h: 17 posts / 4 people posting)
+
+      Nobody's replied to anything in this window yet — the world just woke up, or the lore-house just opened.",
+        "type": "text",
+      }
+    `);
   });
 
   it.each(['http', 'network', 'parse', 'local'] as const)('declared summary keeps %s failure, never an empty-world success', async kind => {

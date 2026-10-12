@@ -17,7 +17,7 @@
  * a stripped `dependencies` list plus a self-contained bundle is the only
  * path that cannot break on a user's machine.
  *
- * `openclaw.extensions` stays a single dist-only array (裁决 A, final doc
+ * `openclaw.extensions` stays a single dist-only array (decision A, final doc
  * 2026-08-11). 7.1's hard failure mode is a DECLARED runtime artifact that is
  * missing; declaring nothing extra means there is nothing to miss. The
  * source/runtime pairing (`extensions: [src] + runtimeExtensions: [dist]`)

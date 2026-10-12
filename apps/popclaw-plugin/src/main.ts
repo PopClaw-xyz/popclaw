@@ -53,6 +53,7 @@ import { InboxStore } from './messaging/inbox-store.js';
 import { makeInboxOnMessage } from './runtime/inbox-consumer.js';
 import { extractPostId } from './quest/verify-invite-handler.js';
 import { canonicalPlatform } from './scraper/platform-scraper.js';
+import { inviteAccountError, normalizeInviteHandle } from './invite/prepare-invite-share.js';
 import { renderCopy } from './lexicon/index.js';
 import { ownerLang } from './lexicon/owner-language.js';
 
@@ -333,8 +334,8 @@ async function runInviteSubcommand(
 ): Promise<number> {
   // Canonicalize before signing: "X"/"Twitter" must not become distinct
   // platforms server-side (already-verified checks are keyed by platform).
-  const platform = args.positional[0] ? canonicalPlatform(args.positional[0]) : args.positional[0];
-  const handle = args.positional[1];
+  const platform = args.positional[0] ? canonicalPlatform(args.positional[0].trim()) : args.positional[0];
+  const handle = args.positional[1] ? normalizeInviteHandle(args.positional[1]) : args.positional[1];
   if (!platform || !handle) {
     console.error('usage: popclaw invite <platform> <handle> [--nickname=X] [--proof=<post url>]');
     return 1;
@@ -516,6 +517,14 @@ async function main() {
       console.error(`usage: popclaw ${args.subcommand} <host>`);
       process.exitCode = 2;
       return;
+    }
+  }
+
+  if (args.subcommand === 'invite') {
+    const [platform, handle] = args.positional;
+    const error = !platform || !handle ? renderCopy(ownerLang(), 'invite.usage') : inviteAccountError(platform, handle);
+    if (error) {
+      console.error(error); process.exitCode = 2; return;
     }
   }
 

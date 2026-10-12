@@ -13611,6 +13611,12 @@ var popclaw = $root.popclaw = (() => {
   }();
   popclaw2.invite = function() {
     const invite = {};
+    invite.InviteVerificationMode = function() {
+      const valuesById = {}, values = Object.create(valuesById);
+      values[valuesById[0] = "INVITE_VERIFICATION_MODE_LOOKUP_ONCE"] = 0;
+      values[valuesById[1] = "INVITE_VERIFICATION_MODE_WAIT_NEW_POST"] = 1;
+      return values;
+    }();
     invite.InviteRequest = function() {
       function InviteRequest(properties) {
         if (properties) {
@@ -13626,6 +13632,8 @@ var popclaw = $root.popclaw = (() => {
       InviteRequest.prototype.replace = false;
       InviteRequest.prototype.proofUrl = "";
       InviteRequest.prototype.mirrorOptin = false;
+      InviteRequest.prototype.verificationMode = 0;
+      InviteRequest.prototype.cancelTaskId = "";
       InviteRequest.create = function create(properties) {
         return new InviteRequest(properties);
       };
@@ -13671,6 +13679,16 @@ var popclaw = $root.popclaw = (() => {
             /* id 7, wireType 0 =*/
             56
           ).bool(message.mirrorOptin);
+        if (message.verificationMode != null && Object.hasOwnProperty.call(message, "verificationMode"))
+          writer.uint32(
+            /* id 8, wireType 0 =*/
+            64
+          ).int32(message.verificationMode);
+        if (message.cancelTaskId != null && Object.hasOwnProperty.call(message, "cancelTaskId"))
+          writer.uint32(
+            /* id 9, wireType 2 =*/
+            74
+          ).string(message.cancelTaskId);
         return writer;
       };
       InviteRequest.decode = function decode(reader, length, error, long) {
@@ -13724,6 +13742,14 @@ var popclaw = $root.popclaw = (() => {
               message.mirrorOptin = reader.bool();
               break;
             }
+            case 8: {
+              message.verificationMode = reader.int32();
+              break;
+            }
+            case 9: {
+              message.cancelTaskId = reader.string();
+              break;
+            }
             default:
               reader.skipType(tag & 7, long);
               break;
@@ -13760,6 +13786,24 @@ var popclaw = $root.popclaw = (() => {
           message.proofUrl = String(object.proofUrl);
         if (object.mirrorOptin != null)
           message.mirrorOptin = Boolean(object.mirrorOptin);
+        switch (object.verificationMode) {
+          default:
+            if (typeof object.verificationMode === "number") {
+              message.verificationMode = object.verificationMode;
+              break;
+            }
+            break;
+          case "INVITE_VERIFICATION_MODE_LOOKUP_ONCE":
+          case 0:
+            message.verificationMode = 0;
+            break;
+          case "INVITE_VERIFICATION_MODE_WAIT_NEW_POST":
+          case 1:
+            message.verificationMode = 1;
+            break;
+        }
+        if (object.cancelTaskId != null)
+          message.cancelTaskId = String(object.cancelTaskId);
         return message;
       };
       InviteRequest.toObject = function toObject(message, options, q) {
@@ -13778,6 +13822,8 @@ var popclaw = $root.popclaw = (() => {
           object.replace = false;
           object.proofUrl = "";
           object.mirrorOptin = false;
+          object.verificationMode = options.enums === String ? "INVITE_VERIFICATION_MODE_LOOKUP_ONCE" : 0;
+          object.cancelTaskId = "";
         }
         if (message.platform != null && Object.hasOwnProperty.call(message, "platform"))
           object.platform = message.platform;
@@ -13793,6 +13839,10 @@ var popclaw = $root.popclaw = (() => {
           object.proofUrl = message.proofUrl;
         if (message.mirrorOptin != null && Object.hasOwnProperty.call(message, "mirrorOptin"))
           object.mirrorOptin = message.mirrorOptin;
+        if (message.verificationMode != null && Object.hasOwnProperty.call(message, "verificationMode"))
+          object.verificationMode = options.enums === String ? $root.popclaw.invite.InviteVerificationMode[message.verificationMode] === void 0 ? message.verificationMode : $root.popclaw.invite.InviteVerificationMode[message.verificationMode] : message.verificationMode;
+        if (message.cancelTaskId != null && Object.hasOwnProperty.call(message, "cancelTaskId"))
+          object.cancelTaskId = message.cancelTaskId;
         return object;
       };
       InviteRequest.prototype.toJSON = function toJSON() {
@@ -14062,6 +14112,14 @@ var popclaw = $root.popclaw = (() => {
       values[valuesById[3] = "QUEST_OUTCOME_ABSTAIN"] = 3;
       return values;
     }();
+    quest.InviteVerificationProgress = function() {
+      const valuesById = {}, values = Object.create(valuesById);
+      values[valuesById[0] = "INVITE_VERIFICATION_PROGRESS_UNSPECIFIED"] = 0;
+      values[valuesById[1] = "INVITE_VERIFICATION_PROGRESS_PREPARING"] = 1;
+      values[valuesById[2] = "INVITE_VERIFICATION_PROGRESS_READY"] = 2;
+      values[valuesById[3] = "INVITE_VERIFICATION_PROGRESS_RECOVERING"] = 3;
+      return values;
+    }();
     quest.VerifyInvitePayload = function() {
       function VerifyInvitePayload(properties) {
         if (properties) {
@@ -14075,6 +14133,7 @@ var popclaw = $root.popclaw = (() => {
       VerifyInvitePayload.prototype.applicantPopclawId = $util.newBuffer([]);
       VerifyInvitePayload.prototype.expectedSigil = "";
       VerifyInvitePayload.prototype.proofUrl = "";
+      VerifyInvitePayload.prototype.verificationMode = 0;
       VerifyInvitePayload.create = function create(properties) {
         return new VerifyInvitePayload(properties);
       };
@@ -14110,6 +14169,11 @@ var popclaw = $root.popclaw = (() => {
             /* id 5, wireType 2 =*/
             42
           ).string(message.proofUrl);
+        if (message.verificationMode != null && Object.hasOwnProperty.call(message, "verificationMode"))
+          writer.uint32(
+            /* id 6, wireType 0 =*/
+            48
+          ).int32(message.verificationMode);
         return writer;
       };
       VerifyInvitePayload.decode = function decode(reader, length, error, long) {
@@ -14155,6 +14219,10 @@ var popclaw = $root.popclaw = (() => {
               message.proofUrl = reader.string();
               break;
             }
+            case 6: {
+              message.verificationMode = reader.int32();
+              break;
+            }
             default:
               reader.skipType(tag & 7, long);
               break;
@@ -14191,6 +14259,22 @@ var popclaw = $root.popclaw = (() => {
           message.expectedSigil = String(object.expectedSigil);
         if (object.proofUrl != null)
           message.proofUrl = String(object.proofUrl);
+        switch (object.verificationMode) {
+          default:
+            if (typeof object.verificationMode === "number") {
+              message.verificationMode = object.verificationMode;
+              break;
+            }
+            break;
+          case "INVITE_VERIFICATION_MODE_LOOKUP_ONCE":
+          case 0:
+            message.verificationMode = 0;
+            break;
+          case "INVITE_VERIFICATION_MODE_WAIT_NEW_POST":
+          case 1:
+            message.verificationMode = 1;
+            break;
+        }
         return message;
       };
       VerifyInvitePayload.toObject = function toObject(message, options, q) {
@@ -14213,6 +14297,7 @@ var popclaw = $root.popclaw = (() => {
           }
           object.expectedSigil = "";
           object.proofUrl = "";
+          object.verificationMode = options.enums === String ? "INVITE_VERIFICATION_MODE_LOOKUP_ONCE" : 0;
         }
         if (message.platform != null && Object.hasOwnProperty.call(message, "platform"))
           object.platform = message.platform;
@@ -14224,6 +14309,8 @@ var popclaw = $root.popclaw = (() => {
           object.expectedSigil = message.expectedSigil;
         if (message.proofUrl != null && Object.hasOwnProperty.call(message, "proofUrl"))
           object.proofUrl = message.proofUrl;
+        if (message.verificationMode != null && Object.hasOwnProperty.call(message, "verificationMode"))
+          object.verificationMode = options.enums === String ? $root.popclaw.invite.InviteVerificationMode[message.verificationMode] === void 0 ? message.verificationMode : $root.popclaw.invite.InviteVerificationMode[message.verificationMode] : message.verificationMode;
         return object;
       };
       VerifyInvitePayload.prototype.toJSON = function toJSON() {
@@ -14636,6 +14723,8 @@ var popclaw = $root.popclaw = (() => {
       QuestResult.prototype.followerCount = $util.Long ? $util.Long.fromBits(0, 0, false) : 0;
       QuestResult.prototype.avatarUrl = "";
       QuestResult.prototype.bio = "";
+      QuestResult.prototype.verificationProgress = 0;
+      QuestResult.prototype.progressRevision = $util.Long ? $util.Long.fromBits(0, 0, true) : 0;
       QuestResult.create = function create(properties) {
         return new QuestResult(properties);
       };
@@ -14691,6 +14780,16 @@ var popclaw = $root.popclaw = (() => {
             /* id 9, wireType 2 =*/
             74
           ).string(message.bio);
+        if (message.verificationProgress != null && Object.hasOwnProperty.call(message, "verificationProgress"))
+          writer.uint32(
+            /* id 10, wireType 0 =*/
+            80
+          ).int32(message.verificationProgress);
+        if (message.progressRevision != null && Object.hasOwnProperty.call(message, "progressRevision"))
+          writer.uint32(
+            /* id 11, wireType 0 =*/
+            88
+          ).uint64(message.progressRevision);
         return writer;
       };
       QuestResult.decode = function decode(reader, length, error, long) {
@@ -14750,6 +14849,14 @@ var popclaw = $root.popclaw = (() => {
             }
             case 9: {
               message.bio = reader.string();
+              break;
+            }
+            case 10: {
+              message.verificationProgress = reader.int32();
+              break;
+            }
+            case 11: {
+              message.progressRevision = reader.uint64();
               break;
             }
             default:
@@ -14830,6 +14937,40 @@ var popclaw = $root.popclaw = (() => {
           message.avatarUrl = String(object.avatarUrl);
         if (object.bio != null)
           message.bio = String(object.bio);
+        switch (object.verificationProgress) {
+          default:
+            if (typeof object.verificationProgress === "number") {
+              message.verificationProgress = object.verificationProgress;
+              break;
+            }
+            break;
+          case "INVITE_VERIFICATION_PROGRESS_UNSPECIFIED":
+          case 0:
+            message.verificationProgress = 0;
+            break;
+          case "INVITE_VERIFICATION_PROGRESS_PREPARING":
+          case 1:
+            message.verificationProgress = 1;
+            break;
+          case "INVITE_VERIFICATION_PROGRESS_READY":
+          case 2:
+            message.verificationProgress = 2;
+            break;
+          case "INVITE_VERIFICATION_PROGRESS_RECOVERING":
+          case 3:
+            message.verificationProgress = 3;
+            break;
+        }
+        if (object.progressRevision != null) {
+          if ($util.Long)
+            message.progressRevision = $util.Long.fromValue(object.progressRevision, true);
+          else if (typeof object.progressRevision === "string")
+            message.progressRevision = parseInt(object.progressRevision, 10);
+          else if (typeof object.progressRevision === "number")
+            message.progressRevision = object.progressRevision;
+          else if (typeof object.progressRevision === "object")
+            message.progressRevision = new $util.LongBits(object.progressRevision.low >>> 0, object.progressRevision.high >>> 0).toNumber(true);
+        }
         return message;
       };
       QuestResult.toObject = function toObject(message, options, q) {
@@ -14866,6 +15007,12 @@ var popclaw = $root.popclaw = (() => {
             object.followerCount = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
           object.avatarUrl = "";
           object.bio = "";
+          object.verificationProgress = options.enums === String ? "INVITE_VERIFICATION_PROGRESS_UNSPECIFIED" : 0;
+          if ($util.Long) {
+            let long = new $util.Long(0, 0, true);
+            object.progressRevision = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : typeof BigInt !== "undefined" && options.longs === BigInt ? long.toBigInt() : long;
+          } else
+            object.progressRevision = options.longs === String ? "0" : typeof BigInt !== "undefined" && options.longs === BigInt ? BigInt("0") : 0;
         }
         if (message.taskId != null && Object.hasOwnProperty.call(message, "taskId"))
           object.taskId = message.taskId;
@@ -14890,6 +15037,15 @@ var popclaw = $root.popclaw = (() => {
           object.avatarUrl = message.avatarUrl;
         if (message.bio != null && Object.hasOwnProperty.call(message, "bio"))
           object.bio = message.bio;
+        if (message.verificationProgress != null && Object.hasOwnProperty.call(message, "verificationProgress"))
+          object.verificationProgress = options.enums === String ? $root.popclaw.quest.InviteVerificationProgress[message.verificationProgress] === void 0 ? message.verificationProgress : $root.popclaw.quest.InviteVerificationProgress[message.verificationProgress] : message.verificationProgress;
+        if (message.progressRevision != null && Object.hasOwnProperty.call(message, "progressRevision"))
+          if (typeof BigInt !== "undefined" && options.longs === BigInt)
+            object.progressRevision = typeof message.progressRevision === "number" ? BigInt(message.progressRevision) : $util.Long.fromBits(message.progressRevision.low >>> 0, message.progressRevision.high >>> 0, true).toBigInt();
+          else if (typeof message.progressRevision === "number")
+            object.progressRevision = options.longs === String ? String(message.progressRevision) : message.progressRevision;
+          else
+            object.progressRevision = options.longs === String ? $util.Long.prototype.toString.call(message.progressRevision) : options.longs === Number ? new $util.LongBits(message.progressRevision.low >>> 0, message.progressRevision.high >>> 0).toNumber(true) : message.progressRevision;
         return object;
       };
       QuestResult.prototype.toJSON = function toJSON() {
@@ -27775,6 +27931,12 @@ var descriptor_default = {
         },
         "invite": {
           "nested": {
+            "InviteVerificationMode": {
+              "values": {
+                "INVITE_VERIFICATION_MODE_LOOKUP_ONCE": 0,
+                "INVITE_VERIFICATION_MODE_WAIT_NEW_POST": 1
+              }
+            },
             "InviteRequest": {
               "fields": {
                 "platform": {
@@ -27804,6 +27966,14 @@ var descriptor_default = {
                 "mirrorOptin": {
                   "type": "bool",
                   "id": 7
+                },
+                "verificationMode": {
+                  "type": "InviteVerificationMode",
+                  "id": 8
+                },
+                "cancelTaskId": {
+                  "type": "string",
+                  "id": 9
                 }
               }
             },
@@ -27862,6 +28032,14 @@ var descriptor_default = {
                 "QUEST_OUTCOME_ABSTAIN": 3
               }
             },
+            "InviteVerificationProgress": {
+              "values": {
+                "INVITE_VERIFICATION_PROGRESS_UNSPECIFIED": 0,
+                "INVITE_VERIFICATION_PROGRESS_PREPARING": 1,
+                "INVITE_VERIFICATION_PROGRESS_READY": 2,
+                "INVITE_VERIFICATION_PROGRESS_RECOVERING": 3
+              }
+            },
             "VerifyInvitePayload": {
               "fields": {
                 "platform": {
@@ -27883,6 +28061,10 @@ var descriptor_default = {
                 "proofUrl": {
                   "type": "string",
                   "id": 5
+                },
+                "verificationMode": {
+                  "type": "popclaw.invite.InviteVerificationMode",
+                  "id": 6
                 }
               }
             },
@@ -27975,6 +28157,14 @@ var descriptor_default = {
                 "bio": {
                   "type": "string",
                   "id": 9
+                },
+                "verificationProgress": {
+                  "type": "InviteVerificationProgress",
+                  "id": 10
+                },
+                "progressRevision": {
+                  "type": "uint64",
+                  "id": 11
                 }
               }
             }
@@ -29796,7 +29986,7 @@ function sigil(popclawId, len = SIGIL_LEN) {
 
 // ../../protocol/packages/contracts/ts/algorithms/src/public-baseline.ts
 var import_protobufjs2 = __toESM(require_protobufjs(), 1);
-var ENVELOPE_BASELINE = "public-envelope-01";
+var ENVELOPE_BASELINE = "public-envelope-02";
 var schema2 = import_protobufjs2.default.Root.fromJSON(descriptor_default).resolveAll();
 var utf8 = new TextDecoder("utf-8", { fatal: true });
 var varints = /* @__PURE__ */ new Set(["int32", "uint32", "sint32", "int64", "uint64", "sint64", "bool"]);
@@ -29873,6 +30063,10 @@ function checkPublicEnvelopeStructure(raw) {
     if ((env.target.scope ?? 0) === 0 && (env.target.targetIds?.length ?? 0) > 0) throw new Error("INVALID_TARGET");
     if (env.target.scope === 2 && !env.target.targetIds?.length) throw new Error("INVALID_TARGET");
   }
+  const typedEnv = env;
+  if (typedEnv.inviteRequest && ![0, 1].includes(typedEnv.inviteRequest.verificationMode ?? 0)) throw new Error("INVALID_ENUM");
+  if (typedEnv.questDispatch?.verifyInvite && ![0, 1].includes(typedEnv.questDispatch.verifyInvite.verificationMode ?? 0)) throw new Error("INVALID_ENUM");
+  if (typedEnv.questResult && ![0, 1, 2, 3].includes(typedEnv.questResult.verificationProgress ?? 0)) throw new Error("INVALID_ENUM");
   if (env.houseEvent) {
     const { kind, publicScopes = [] } = env.houseEvent;
     if (kind.length > 128 || !/^[a-z0-9-]+\.[a-z0-9_]+$/.test(kind)) throw new Error("INVALID_KIND");

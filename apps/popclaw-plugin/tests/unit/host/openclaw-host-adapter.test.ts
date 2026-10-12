@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createOpenClawHostAdapter } from '../../../src/host/openclaw-host-adapter.js';
 
-// 适配器只声明它真正读的那一格（见 openclaw-host-adapter.ts 的 StateDirHost），
-// 所以假货也只造那一格 —— 全量 `OpenClawPluginApi` 造一遍纯属白干。
+// The adapter declares only the field it actually reads (StateDirHost in openclaw-host-adapter.ts),
+// so the fake supplies only that field; constructing the complete OpenClawPluginApi would add no value.
 function fakeApi(stateDir: string) {
   return { runtime: { state: { resolveStateDir: () => stateDir } } };
 }

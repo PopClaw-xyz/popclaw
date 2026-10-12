@@ -17,8 +17,8 @@ function ok(body: unknown) {
 }
 
 describe('runProfileCommand', () => {
-  // 走 MCP 的宿主（Claude Code / Codex）根本没有斜杠命令，只有工具；
-  // 工具认人认出来的是 popclaw_id，不是 handle#印信。所以按 id 取名帖必须走得通。
+  // MCP hosts (Claude Code / Codex) have tools but no slash commands.
+  // Identity tools resolve popclaw_id, not handle plus sigil, so profile lookup by ID must work.
   it('takes a bare popclaw_id and asks the by-id endpoint', async () => {
     const id = 'Fo1Potk3v4qL45UmEDmnkRj2K5QEMctPKVAPjN9j1VS2';
     const fetch = ok({ popclaw_id: id, sigil: '5a57bf', profiles: [], card: null });
@@ -80,18 +80,18 @@ describe('runProfileCommand', () => {
       { loreHouseUrl: 'http://lh.example', fetch: fetch as any },
     );
     expect(out.text).toContain('popclaw  @elonmusk#5a57bf');
-    // 本坊本地关注数 与 X 认证快照 并排出现、不混用（spec 2026-07-26）。
+    // Local house follower counts and the X verification snapshot appear side by side without conflation (spec 2026-07-26).
     expect(out.text).toContain(renderCopy(ownerLang(), 'passport.houseFollowerCount', { count: '12' }));
     // role_persona label is intentionally hardcoded zh-CN in passport-renderer.ts
     // (out of this slice's scope — see ROLE_LABEL there), unlike the two lines above.
-    // 角色标签现在跟主人语言走（ownerLang()）；这套用例没设语言 → 默认 en 那一档。
+    // Role labels now follow ownerLang(); these tests set no language and therefore use the default English lane.
     expect(out.text).toContain(`Elon · ${lexiconFor('en').terms.roles.pioneer}`);
     expect(out.text).toContain('to mars');
     expect(out.text).toContain(renderCopy(ownerLang(), 'passport.verifiedHeader', { count: '1' }));
     expect(out.text).toContain('🐦 X');
     expect(out.text).toContain('https://x.com/elonmusk');
     expect(out.text).toContain(renderCopy(ownerLang(), 'passport.snapshotFollowers', {
-      count: renderCopy(ownerLang(), 'passport.snapshotApprox', { count: '1.3m' }),
+      platform: 'X', count: renderCopy(ownerLang(), 'passport.snapshotApprox', { count: '1.3m' }),
     }));
     expect(out.details?.profiles[0]?.follower_count).toBe(1_300_000);
     expect(fetch).toHaveBeenCalledWith(
