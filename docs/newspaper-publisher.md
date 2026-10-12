@@ -107,6 +107,13 @@ selection or publication calls; those calls validate afresh. The initial gather
 retains both its pre-persistence validation and its saved-document validation.
 This reduces repeated full partition checks, not the number of signed references.
 
+Ingress signature verification does not authorize blindly trusting later disk
+reads. A future optimization may reuse a mathematical verification result only
+for identical canonical bytes, signature and public key; stored-byte consistency,
+current source and authority still need separate checks. A different verifier
+backend requires acceptance/rejection compatibility tests for signatures and
+keys. Neither optimization is implemented by the aggregate-deadline correction.
+
 A candidate manifest or `candidatePage=true` records local progress, not proof
 that candidate text reached the writer. Cancellation or a changed source can
 still prevent return after that stage; preserve this distinction from a run
