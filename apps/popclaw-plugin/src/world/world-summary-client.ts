@@ -195,7 +195,7 @@ export class WorldSummaryClient {
         return {ok:false,failure};
       };
       try {
-        return await withReadCallBudget({timeoutMs:Math.max(0,(currentReadCallBudget()?.remainingMs() ?? LORE_HOUSE_TIMEOUT_MS)-50)}, async () => {
+        return await withReadCallBudget({timeoutMs:Math.max(0,Math.min(LORE_HOUSE_TIMEOUT_MS,currentReadCallBudget()?.remainingMs() ?? LORE_HOUSE_TIMEOUT_MS)-50)}, async () => {
         const res = await budgetedFetch(this.fetchFn)(url,{signal:deadline,...(cached?.etag ? {headers:{'If-None-Match':cached.etag}} : {})});
         requestId = safeRequestId(res);
         if (!current()) return stale();

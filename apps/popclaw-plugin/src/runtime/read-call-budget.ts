@@ -23,10 +23,17 @@ export function waitForRead<T>(work: Promise<T>, budget = currentReadCallBudget(
     if (budget.signal.aborted) fail();
   });
 }
-export async function withReadCallBudget<T>(options: ReadCallBudgetOptions, work: () => Promise<T>): Promise<T> {
+export function withReadCallBudget<T>(options: ReadCallBudgetOptions, work: () => Promise<T>): Promise<T> {
+  return withReadScope(options, options.timeoutMs ?? 10_000, work);
+}
+/** Cancellation and abandonment fence, without a new aggregate deadline.
+ * Any explicit parent deadline and all action/source checks remain in force. */
+export function withReadCallScope<T>(options: Pick<ReadCallBudgetOptions, 'signal'>, work: () => Promise<T>): Promise<T> {
+  return withReadScope(options, Infinity, work);
+}
+async function withReadScope<T>(options: ReadCallBudgetOptions, timeoutMs: number, work: () => Promise<T>): Promise<T> {
   const parent = currentReadCallBudget(), started = Date.now(), actionSignal = currentActionSignal();
   const assertCapturedAction=captureActionContext(() => assertActionActive());
-  const timeoutMs = options.timeoutMs ?? 10_000;
   const deadlineAtMs = Math.min(started + timeoutMs, options.deadlineAtMs ?? Infinity, parent?.deadlineAtMs ?? Infinity);
   const controller = new AbortController();
   const signals = [controller.signal, parent?.signal, options.signal, actionSignal].filter((s): s is AbortSignal => !!s);
@@ -43,7 +50,8 @@ export async function withReadCallBudget<T>(options: ReadCallBudgetOptions, work
       if (ended) throw new ActionInactiveError();
     },
   };
-  const timer = setTimeout(() => controller.abort(), Math.max(0, deadlineAtMs-started));
+  const timer = Number.isFinite(deadlineAtMs)
+    ? setTimeout(() => controller.abort(), Math.max(0, deadlineAtMs-started)) : undefined;
   try { return await budgets.run(budget, () => { budget.assertActive(); return waitForRead(Promise.resolve().then(work), budget); }); }
   finally { clearTimeout(timer); ended = true; controller.abort(); }
 }

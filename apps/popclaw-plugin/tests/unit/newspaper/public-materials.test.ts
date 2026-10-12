@@ -584,7 +584,22 @@ it('revalidates signed material acquired before optional context changes the act
   expect(existsSync(f.paths.newspaperManifestsDir())).toBe(false);
 });
 
-it.each(['deadline', 'cancel', 'sibling-error'] as const)('parallel collection retains the %s fence for a late source ignoring abort', async mode => {
+it('allows valid signed collection to finish after ten seconds without a whole-gather deadline', async () => {
+  const f = await newspaperFixture();
+  const acquire = f.runtime.houseFeedReader.prepare.bind(f.runtime.houseFeedReader);
+  vi.spyOn(f.runtime.houseFeedReader, 'prepare').mockImplementation(async query => {
+    await new Promise(resolve => setTimeout(resolve, 11000));
+    return acquire(query);
+  });
+  const call = syntheticClockContext(f);
+  const result = call('popclaw_newspaper', { hours: 24 });
+  await vi.advanceTimersByTimeAsync(11001);
+  expect((await result).text).toContain('candidate_basis');
+  expect(fetch).not.toHaveBeenCalled();
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+});
+
+it.each(['cancel', 'sibling-error'] as const)('parallel collection retains the %s fence for a late source ignoring abort', async mode => {
   const f = await newspaperFixture();
   const acquire = f.runtime.houseFeedReader.prepare.bind(f.runtime.houseFeedReader);
   vi.spyOn(f.runtime.houseFeedReader, 'prepare').mockImplementation(async query => {
@@ -607,7 +622,6 @@ it.each(['deadline', 'cancel', 'sibling-error'] as const)('parallel collection r
   if (mode === 'cancel') setTimeout(() => controller.abort(), 100);
   await vi.advanceTimersByTimeAsync(10001);
   const text = await result;
-  if (mode === 'deadline') { expect(text).toContain('budget=read-call'); expect(text).toContain('HOUSE_REMOTE_TIMEOUT'); }
   if (mode === 'cancel') { expect(text).toContain('ActionInactiveError'); expect(text).not.toContain('HOUSE_REMOTE_TIMEOUT'); }
   if (mode === 'sibling-error') expect(text).toContain('synthetic-context-failure');
   await vi.advanceTimersByTimeAsync(2000);
@@ -666,13 +680,13 @@ it.each([8, 16])('keeps full partition verification constant for %i signed local
   expect(profile.integrity).toBe(12);
 }, 30_000);
 
-it('returns local signed candidates within budget when integrity checks have modeled synchronous cost', async () => {
+it('returns valid signed candidates after more than ten seconds of modeled synchronous local verification', async () => {
   const f = await costFixture(8), query = f.partition.db.queryOne.bind(f.partition.db);
   const baseline = Date.now(); let modeledMs = 0, integrityChecks = 0;
   vi.spyOn(Date, 'now').mockImplementation(() => baseline+modeledMs);
   vi.spyOn(f.partition.db, 'queryOne').mockImplementation((...args) => {
     const result = query(...args);
-    if (args[0] === 'PRAGMA integrity_check') { integrityChecks++; modeledMs += 350; }
+    if (args[0] === 'PRAGMA integrity_check') { integrityChecks++; modeledMs += 1000; }
     return result;
   });
   const session = childSessionKey('local-cost-regression');
@@ -681,6 +695,8 @@ it('returns local signed candidates within budget when integrity checks have mod
   console.log('MODELED_LOCAL_CPU', JSON.stringify({ modeledMs, integrityChecks, manifests: manifests.length,
     stage: NewspaperStageStore.peek(session), candidateReturned: result.text.includes('candidate_basis') }));
   expect(fetch).not.toHaveBeenCalled();
+  expect(modeledMs).toBeGreaterThan(10000);
+  expect(integrityChecks).toBe(12);
   expect(result.text).toContain('candidate_basis');
 }, 30_000);
 
