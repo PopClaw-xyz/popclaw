@@ -1,3 +1,4 @@
+import { deferred } from '../../helpers/deferred.js';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -327,6 +328,36 @@ describe('optional summary at the normal onboarding orchestrator', () => {
       summaryClient: new WorldSummaryClient({ baseUrl: origin, fetch: transport }) });
     return { ...h, requests };
   }
+
+  it('waits for the guide, reads summary and snapshot in parallel, and keeps the card when snapshot fails', async () => {
+    const guideReply = deferred<Response>();
+    const summaryReply = deferred<Response>();
+    const snapshotReply = deferred<never[]>();
+    const requests: string[] = [];
+    const transport = vi.fn((url: RequestInfo | URL) => {
+      requests.push(String(url));
+      return String(url).endsWith('/v1/guide.md') ? guideReply.promise : summaryReply.promise;
+    });
+    const h = await setup({ guideClient: new GuideClient({ baseUrl: origin, fetch: transport }),
+      summaryClient: new WorldSummaryClient({ baseUrl: origin, fetch: transport }) });
+    h.deps.snapshotClient.fetchSnapshot = query => { h.record('snapshot', query); return snapshotReply.promise; };
+    const call = h.orch.handleStartCommand();
+    await vi.waitFor(() => expect(requests).toEqual([`${origin}/v1/guide.md`]));
+    expect(h.trace).toEqual([]);
+    guideReply.resolve(new Response('---\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary\n---\nLive guide paragraph'));
+    await vi.waitFor(() => {
+      expect(requests).toEqual([`${origin}/v1/guide.md`, `${origin}/v1/world-summary?window_hours=24`]);
+      expect(h.trace).toEqual([['snapshot', { limit: 100 }]]);
+    });
+    snapshotReply.reject(new Error('snapshot unavailable'));
+    summaryReply.resolve(Response.json({ window_hours: 24, generated_at_ms: 0, total_posts: 0,
+      distinct_authors: 0, authors: {}, hot_posts: [] }));
+    const card = await h.capture('parallel-summary', () => call);
+    expect(card).toHaveProperty('text');
+    expect(h.sm.drafts(PID).lantern).toEqual({ entries: [] });
+    expect(h.trace.map(e => e[0])).toEqual(['snapshot', 'sources', 'index', 'houses', 'houses', 'canvas', 'drafts', 'present', 'result']);
+    evidence.parallelSummary = h.trace;
+  });
 
   it.each(['next', 'skip'] as const)('REF without summary presents its guide, then %s proceeds without retrying', async action => {
     const h = await reads('unsupported');
