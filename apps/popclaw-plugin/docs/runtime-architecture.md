@@ -128,3 +128,46 @@ before the logout, even when the new login leaves the durable tuple unchanged.
 Unbound managers retain their direct-login compatibility.
 
 For domain owners and focused commands, start with [Contributing](../../../CONTRIBUTING.md).
+
+## Ordinary social drafts
+
+`tools/social-draft-lifecycle.ts` owns ordinary DM, external reply, native post
+and feedback manuscripts: freezing, preview/output records, optional review
+copies, retention, loading, checks, one-use consumption and submission. Tool
+entries resolve their source and recipient, render the existing preview, then
+complete the manuscript through one handle. `draft-send-plan.ts` builds the
+ordinary send command once from that frozen material. Chat confirmation remains
+with the agent in the original conversation; an ID conveys no authorization.
+
+Installed local roots use `DurableSocialDrafts` in the private host database.
+These manuscripts have no expiry or capacity eviction and never enter the
+volatile callback table, including during a refused send. Persist only after
+recording the final tool output. The conversation binding is captured after
+awaiting ID allocation, and re-read after both send-time runtime awaits; this
+preserves the existing Hosted scope boundaries. Loading verifies stored material; sending checks
+the current conversation/invocation and the saved review copy directly. The
+SQLite compare-and-set consumes before transport and removes the review copy
+only for the winner. Unknown outcomes remain spent. A refusal before consumption
+retains the manuscript and its review copy. The durable send uses the current
+process signer, frozen nickname/route, and pinned House origin plus durable
+operation/session/installation tuple.
+
+Compatibility contexts keep the existing in-memory expiry, capacity, captured
+House/action authority and egress. Entries capture the egress at the original
+source-read boundary, before attachment validation or other awaits. Ordinary
+compatibility sends resolve the current runtime and nickname later. Creating a
+compatibility manuscript does not read boot data or invent a stored nickname;
+durable save/load requires the pinned nickname to be present. Feedback
+alone retains the callback from its command: that legacy primary-contact path
+reads the contact's latest inbox relay at send time, whereas durable feedback
+pins the declared House. This adapter preserves established behavior without
+changing the DM command kernel. Invitation and House-entry confirmation remain
+separate protocols in `draft-store.ts`.
+
+Encapsulating only durable send would leave duplicate command builders and the
+creation-time volatile bridge in place. A new root-injected store port would add
+assembly changes without a new host capability. The lifecycle instead uses the
+existing runtime/database and review-file dependencies; no root wiring changes
+are required. Focused evidence includes the registered tool tests, real SQLite
+restart/CAS/unknown-outcome tests and real stdio MCP draft/send tests. These do
+not prove packaged installation or live-host delivery.
