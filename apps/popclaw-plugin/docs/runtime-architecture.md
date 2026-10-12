@@ -83,13 +83,50 @@ merely a presentation change: review command persistence and history validation
 together. Keep public-entry tests through the manager, runtime and command bus;
 do not replace them with tests of private login stages.
 
+## House HTTP transport
+
+`runtime/house-lifecycle/house-http-transport.ts` owns three complete HTTP
+policies behind the existing `HouseRuntime` facades. `houseReadFetch` permits
+same-origin public GET/HEAD requests under a fresh public-read gate for each
+request. `houseFetch` permits same-origin House requests, including caller
+credentials, under the supplied captured gate or a fresh House gate per request.
+`documentFetch` uses that same captured-or-fresh choice for caller-selected public
+http(s) GET/HEAD documents, including another origin. The public and document
+lanes refuse authorization, cookie and inbox-token headers from both Request
+and init, and force omitted credentials. All three lanes refuse user-info and
+force redirect errors. A public House's document lane also refuses private
+address literals and localhost names; private development Houses retain their
+existing exemption. The transport does not resolve DNS or prevent DNS rebinding.
+
+Transport construction reads no gate and performs no IO. Fetch-factory creation
+normalizes the House origin synchronously; document factories also classify the
+House address there. Each actual request checks its enclosing command, selects
+and checks its gate, then applies its HTTP policy. Only then does `currentFetch`
+resolve the injected fetch or the current global fetch for dispatch. Captured
+gates are retained rather than replaced by newer authority.
+
+`HouseRuntime` retains participation, permission, trust/pin, session, storage and
+lifecycle decisions. Callers verify declarations and select document URLs; the
+transport does not prove that a document was declared. `actionFetch` retains
+cancellation, request/response checks and its existing deferred `json`, `text`,
+`arrayBuffer`, `blob` and `formData` checks. Decoder wrappers capture action
+context when the method is first read; raw body streams and clones gain no new
+protection. The signed status query for a locally known request remains the
+runtime's separate disabled-House capability, with its own validation, timeout
+and shutdown drain.
+
+Keep the public-entry characterizations alongside the transport dependency
+tests. Existing real SQLite/HTTP, two-host, leave, pin and handshake tests protect
+the authority wiring that substituted transport dependencies cannot establish.
+
 ## House Guide lifecycle
 
 `world/house-guide-context.ts` owns declared Guide pointers, historical joined
 backfill, body caching, pending contexts and recognition of actual complete
 agent input. Reading or emitting a Guide grants no join or action authority.
 `HouseRuntime` captures the public-read gate once and supplies transport at the
-original read stages; its Guide methods remain compatible host facades.
+original read stages through the HTTP transport; its Guide methods remain
+compatible host facades.
 
 Login execution records a joined Guide synchronously inside the existing
 binding/participation/receipt transaction. Join replaces the pointer and clears

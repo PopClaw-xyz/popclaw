@@ -29,7 +29,7 @@ import { readParticipation, type ParticipationRow, type RemoteStatus } from './p
 import { renderCopy } from '../../lexicon/index.js';
 import { ownerLang } from '../../lexicon/owner-language.js';
 import { createHouseStreamFactory, type HouseResourceOptions } from './resource-set.js';
-import { actionFetch, assertActionActive, assertHouseActionActive, withHouseActions, type ActionGate } from './action-context.js';
+import { assertActionActive, assertHouseActionActive, withHouseActions, type ActionGate } from './action-context.js';
 import { createHostAsyncScope } from '../../host/local-host-adapter.js';
 import { captureHousePushEffect, type HousePushEffectReference, type HousePushEffectResolver } from './push-effect.js';
 import { makeWorldManifestPreparer, revokeHouseCapabilityView } from '../../world/world-capabilities.js';
@@ -38,7 +38,8 @@ import { makeRelationBindingPreparer } from '../../social-graph/relation-binding
 import { declarationFingerprint, readVerifiedDeclaration, sessionReadSelected } from '../../world/house-read-declaration.js';
 import { pinnedBinding } from '../../world/house-binding-pin.js';
 import { isLoopbackOrigin } from '../../social-graph/relation-host.js';
-import { isPrivateAddressHost, isPrivateAddressOrigin } from './private-address.js';
+import { isPrivateAddressOrigin } from './private-address.js';
+import { createHouseHttpTransport } from './house-http-transport.js';
 import type { PublicMaterialCapture } from '../../ingress/public-journal-reader.js';
 import type { PublicDisplayCapture } from '../../ingress/public-feed-display.js';
 import type { ExecutionCatalogRow } from '../../host/execution-store.js';
@@ -72,15 +73,6 @@ function sessionUnavailableError(origin: string, remoteStatus: RemoteStatus | un
   if (remoteStatus !== 'unsupported') return new Error(code);
   return new Error(`${code}: ${renderCopy(ownerLang(), 'house.session.unsupported', { origin })}`);
 }
-
-/**
- * Headers the PUBLIC read lane (`HouseRuntime.houseReadFetch`) refuses to
- * send. That lane exists BECAUSE the request identifies nobody; a caller that
- * attaches one of these has left the lane it asked for, and is told so rather
- * than quietly having the header stripped. `Headers.has` is case-insensitive,
- * so the wire casing of `INBOX_TOKEN_HEADER` does not matter here.
- */
-const PUBLIC_READ_FORBIDDEN_HEADERS: readonly string[] = ['authorization', 'cookie', INBOX_TOKEN_HEADER];
 
 /** An absent or refused receipt must never look like a successful send to
  * legacy callers that only await egress and then record their social log. */
@@ -196,7 +188,14 @@ export class HouseRuntime {
   private readonly actionReadGates = new WeakMap<KnownActionReadGate, {origin: string; requestId: string}>();
   private publicResources: PublicReadResources | null = null;
 
+  private readonly httpTransport: ReturnType<typeof createHouseHttpTransport>;
+
   constructor(private readonly opts: HouseRuntimeOptions) {
+    this.httpTransport = createHouseHttpTransport({
+      getPublicReadGate: origin => this.publicReadGate(origin),
+      getHouseGate: origin => this.captureGate(origin),
+      currentFetch: () => this.opts.fetch ?? globalThis.fetch,
+    });
     const prepareWorld = opts.prepareTrustedManifest ?? makeWorldManifestPreparer({fetch:opts.fetch});
     const prepareRelation = opts.prepareRelationBinding ?? makeRelationBindingPreparer({
         db: opts.db,
@@ -1039,27 +1038,7 @@ export class HouseRuntime {
   }
 
   houseReadFetch(input: string): typeof globalThis.fetch {
-    const origin = normalizeHouseOrigin(input);
-    return async (url, init) => {
-      assertHouseActionActive(origin);
-      const request = url instanceof Request ? url : null;
-      const gate = this.publicReadGate(origin);
-      assertActionActive(gate);
-      const target = new URL(request ? request.url : String(url));
-      if (target.origin !== origin || target.username || target.password) throw new Error('HOUSE_AUDIENCE_MISMATCH');
-      const method = String(init?.method ?? request?.method ?? 'GET').toUpperCase();
-      if (method !== 'GET' && method !== 'HEAD') throw new Error('HOUSE_READ_METHOD_NOT_ALLOWED');
-      // BOTH header lists, not `init ?? request`: a Request object carrying a
-      // credential alongside a non-nullish `init.headers` would otherwise be
-      // accepted here and silently stripped by the platform. Stripping is not
-      // refusing, and a caller that asked to send one must be told it cannot.
-      for (const source of [request?.headers, init?.headers]) {
-        if (source === undefined || source === null) continue;
-        const headers = new Headers(source);
-        for (const name of PUBLIC_READ_FORBIDDEN_HEADERS) if (headers.has(name)) throw new Error('HOUSE_READ_CREDENTIAL_REFUSED');
-      }
-      return actionFetch(gate, this.opts.fetch ?? globalThis.fetch)(url, {...init, method, redirect: 'error', credentials: 'omit'});
-    };
+    return this.httpTransport.houseReadFetch(input);
   }
 
   /** Joined here AND not in pin conflict — see `houseReadFetch` above. The
@@ -1080,62 +1059,12 @@ export class HouseRuntime {
 
   /** House HTTP never follows a redirect or sends a credential to another origin. */
   houseFetch(input: string, captured?: HouseGate): typeof globalThis.fetch {
-    const origin = normalizeHouseOrigin(input);
-    return async (url, init) => {
-      assertHouseActionActive(origin);
-      const gate = captured ?? this.captureGate(origin);
-      assertActionActive(gate);
-      const target = new URL(url instanceof Request ? url.url : String(url));
-      if (target.origin !== origin || target.username || target.password) throw new Error('HOUSE_AUDIENCE_MISMATCH');
-      return actionFetch(gate, this.opts.fetch ?? globalThis.fetch)(url, {...init, redirect: 'error'});
-    };
+    return this.httpTransport.houseFetch(input, captured);
   }
 
-  /**
-   * A public document the house DECLARED, wherever it lives (ADR-0041: a
-   * declared `guide_url` is relative or absolute http(s), so the world house
-   * at one origin may publish its guide on another). `houseFetch` refuses any
-   * other origin, which is right for house HTTP and wrong for this one read.
-   *
-   * Everything else `houseFetch` protects is kept: the enclosing command's
-   * participation and the captured gate (a paused or left house fetches
-   * nothing), no user-info, `redirect: 'error'`, the same `actionFetch`.
-   * On top of that, because the target is not the house: http(s) only, GET or
-   * HEAD only, no `authorization` / `cookie` / inbox token in either header
-   * list, and `credentials: 'omit'`. It is a plain GET of a public document;
-   * nothing derived from the house rides along.
-   *
-   * And no private address: a literal loopback / private / link-local / CGNAT
-   * / unspecified host (IPv4, IPv6, IPv4-mapped) or a `localhost` name is
-   * refused (`HOUSE_DOCUMENT_ADDRESS_REFUSED`), unless the house itself is on
-   * such an address (dev and test houses). DNS names that resolve to a
-   * private address, and DNS rebinding, are NOT covered: nothing is resolved.
-   */
+  /** Read a caller-selected public document under the house's captured authority. */
   documentFetch(input: string, captured?: HouseGate): typeof globalThis.fetch {
-    const origin = normalizeHouseOrigin(input);
-    const privateHouse = isPrivateAddressOrigin(origin);
-    return async (url, init) => {
-      assertHouseActionActive(origin);
-      const gate = captured ?? this.captureGate(origin);
-      assertActionActive(gate);
-      const request = url instanceof Request ? url : null;
-      const target = new URL(request ? request.url : String(url));
-      if ((target.protocol !== 'https:' && target.protocol !== 'http:') || target.username || target.password) {
-        throw new Error('HOUSE_DOCUMENT_URL_REFUSED');
-      }
-      // Origin equality used to keep a hostile declaration off this machine and
-      // its LAN; this lane must refuse that explicitly. A house that is itself
-      // on a private address (a dev or test house) is exempt.
-      if (!privateHouse && isPrivateAddressHost(target.hostname)) throw new Error('HOUSE_DOCUMENT_ADDRESS_REFUSED');
-      const method = String(init?.method ?? request?.method ?? 'GET').toUpperCase();
-      if (method !== 'GET' && method !== 'HEAD') throw new Error('HOUSE_READ_METHOD_NOT_ALLOWED');
-      for (const source of [request?.headers, init?.headers]) {
-        if (source === undefined || source === null) continue;
-        const headers = new Headers(source);
-        for (const name of PUBLIC_READ_FORBIDDEN_HEADERS) if (headers.has(name)) throw new Error('HOUSE_READ_CREDENTIAL_REFUSED');
-      }
-      return actionFetch(gate, this.opts.fetch ?? globalThis.fetch)(url, {...init, method, redirect: 'error', credentials: 'omit'});
-    };
+    return this.httpTransport.documentFetch(input, captured);
   }
 
   readonly fetchHouse: typeof globalThis.fetch = (input, init) => {
