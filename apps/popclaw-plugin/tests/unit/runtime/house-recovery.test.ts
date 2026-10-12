@@ -19,14 +19,17 @@ import {createOpenClawWorldExecution} from '../../../src/host/openclaw-world-exe
 import {HouseCommandBus} from '../../../src/runtime/house-lifecycle/command-bus.js';
 import {scriptOwnerApproval} from '../../helpers/owner-approval-script.js';
 import {HouseRuntime} from '../../../src/runtime/house-lifecycle/house-runtime.js';
-import {WorldRuntime} from '../../../src/runtime/world-runtime.js';
+import {WorldRuntime, ownerConfirmedWorldInvoke, worldDuplicateLookup} from '../../../src/runtime/world-runtime.js';
 import {WorldFeedCache} from '../../../src/ingress/world-feed-cache.js';
 import {hostDbSlug} from '../../../src/ingress/host-slug.js';
 import {readParticipation} from '../../../src/runtime/house-lifecycle/participation-store.js';
 import {pinnedBinding} from '../../../src/world/house-binding-pin.js';
 import {readHouseCapabilityView} from '../../../src/world/world-capabilities.js';
 import {houseRecoveryHeld} from '../../../src/world/house-recovery-fence.js';
-import {makeToolCollector} from '../../../src/tools/mcp-adapter.js';
+import {makeToolCollector, dispatchMcpCall} from '../../../src/tools/mcp-adapter.js';
+import {registerWorldInteractionTools} from '../../../src/tools/world-interaction-tools.js';
+import {createMcpOwnerAuthorization} from '../../../src/host/mcp-owner-authorization.js';
+import {ErrorCode, McpError, type ElicitResult} from '@modelcontextprotocol/sdk/types.js';
 import {registerHouseTools} from '../../../src/tools/house-tools.js';
 import {createMcpOwnerApproval} from '../../../src/host/mcp-owner-approval.js';
 import {resetOwnerApprovals} from '../../../src/host/owner-approval.js';
@@ -46,7 +49,7 @@ const housePair = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(84));
 const key = bs58.encode(housePair.publicKey), hex = Buffer.from(housePair.publicKey).toString('hex');
 const guide = new TextEncoder().encode('Record a synthetic note.');
 
-async function fixture(native=false) {
+async function fixture(native=false, mcp=false) {
   resetOwnerApprovals();
   const root = mkdtempSync(join(tmpdir(),'pc-recovery-synthetic-')), paths = new PopclawPaths(root);
   cleanup.push(() => rmSync(root,{recursive:true,force:true}));
@@ -115,24 +118,36 @@ async function fixture(native=false) {
   const hostConfig={plugins:{entries:{popclaw:{enabled:true,config:{worldExecution:{policies:[{
     agentId:'main',actorId,house:origin,houseKey:key,kinds:['test.note'],authorizedAt:new Date(Date.now()-5000).toISOString().replace(/\.\d{3}Z$/,'Z'),expiresAt:new Date(Date.now()+600_000).toISOString().replace(/\.\d{3}Z$/,'Z')} ]}}}}}};
   const nativeAdapter=native ? createOpenClawWorldExecution({actorId,readActiveConfig:()=>hostConfig}) : undefined;
-  const worlds=new WorldRuntime({...(nativeAdapter ? {nativeAuthorization:nativeAdapter}:{}),mode:'commands',houses:rt,signer,actorId,readCapabilities:o=>readHouseCapabilityView(db,o),
+  let accept=true, answer: ElicitResult | Error | undefined;
+  const prompts: string[]=[];
+  const approvalServer={current:{getClientCapabilities:()=>({elicitation:{form:{}}}),elicitInput:async (input:{message:string})=>{
+    prompts.push(input.message);
+    if (answer instanceof Error) throw answer;
+    return answer ?? {action:accept?'accept':'decline',content:{confirm:accept}};
+  }}} as never;
+  const ownerAuthorization=mcp ? createMcpOwnerAuthorization({actorId,server:approvalServer,
+    duplicates:{unresolved:query=>worldDuplicateLookup(worlds).unresolved(query)}}) : undefined;
+  cleanup.push(()=>ownerAuthorization?.stop());
+  const worlds: WorldRuntime=new WorldRuntime({...(ownerAuthorization ? {ownerAuthorization}:{}),...(nativeAdapter ? {nativeAuthorization:nativeAdapter}:{}),mode:'commands',houses:rt,signer,actorId,readCapabilities:o=>readHouseCapabilityView(db,o),
     fixtureOwnerAuthorization:{authorize:async()=>({jobId:`synthetic_${newRequest++}`,expiresAt:Math.floor(Date.now()/1000)+200,assertCurrent(){}})}});
   cleanup.push(async()=>{worlds.stop();await worlds.whenIdle();});
   let newRequest=1;
   const c=makeToolCollector();
   registerHouseTools({api:c.api,deps:{getHouseCommandContext:async()=>({coordinator:()=>rt.commands,recovery:rt.recovery})}} as never);
-  let accept=true;const prompts: string[]=[];
-  const approvals=createMcpOwnerApproval({server:{current:{getClientCapabilities:()=>({elicitation:{form:{}}}),elicitInput:async (input:{message:string})=>{
-    prompts.push(input.message);return {action:accept?'accept':'decline',content:{confirm:accept}};}}} as never});
+  const approvals=createMcpOwnerApproval({server:approvalServer});
   cleanup.push(()=>approvals.stop());
+  if (ownerAuthorization) registerWorldInteractionTools({api:c.api,deps:{
+    getWorldCommandContext:async()=>({}),
+    bindMcpWorldInvoke:()=>ownerConfirmedWorldInvoke(ownerAuthorization,worlds),
+  }} as never);
   let call=0;
   async function invoke(name:string,params:unknown,ask=true) {
     const tool=c.tools.find(t=>t.name===name)!, ref=`mcp_recovery_${++call}`;
-    const result=ask ? await approvals.aroundDispatch(name,params,ref,undefined,()=>tool.execute(ref,params)) : await tool.execute(ref,params);
-    return JSON.parse((result as {text:string}).text);
+    const result=ask ? await approvals.aroundDispatch(name,params,ref,undefined,()=>dispatchMcpCall(tool,params,{},ref)) : await dispatchMcpCall(tool,params,{},ref);
+    return JSON.parse('text' in (result as object) ? (result as {text:string}).text : (result as {content:Array<{text:string}>}).content[0]!.text);
   }
   return {root,db,cacheDb,catalog,rt,worlds,store,resources,partition,origin,signer,c,calls,prompts,invoke,manifest,nativeAdapter,hostConfig,
-    approve:(value:boolean)=>{accept=value;},
+    approve:(value:boolean)=>{accept=value;},respond:(value:ElicitResult|Error)=>{answer=value;},
     restore:(sameBody=false)=>{incarnation='server_new';if(!sameBody) log='log_new';},
     setIncarnation:(value:string)=>{incarnation=value;},
     setManifestVersion:()=>{version='g2';},setKey:()=>{signingPair=nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(85));},
@@ -453,4 +468,38 @@ it('takeover diagnoses an approved held decision even when caller exit prevented
   await vi.waitFor(()=>expect(s.db.queryOne('SELECT state,detail FROM house_recovery_decisions_v1 WHERE decision_id=?',[d.decision_id])).toEqual({state:'failed',detail:'HOUSE_RECOVERY_INTERRUPTED'}));
   expect(houseRecoveryHeld(s.db,s.origin)).toBe(true);expect((await restarted.commands.getHouseStatus(s.origin)).recovery).toMatchObject({state:'failed',detail:'HOUSE_RECOVERY_INTERRUPTED'});
   expect(pinnedBinding(s.db,s.origin)?.incarnation).toBe('server_old');
+});
+
+it('registered MCP World dispatch asks once per action and displays an unresolved exact duplicate before approval',async()=>{
+  const s=await fixture(false,true);await oldLogin(s);
+  const input={house:s.origin,kind:'test.note',params:{text:'registered one-dialog action'},
+    expected_capability_revision:readHouseCapabilityView(s.db,s.origin)!.verified.capabilityRevision};
+  const first=await s.invoke('popclaw_world_invoke',input);
+  expect(first.request_id).toBeTypeOf('string');expect(s.prompts).toHaveLength(1);
+  expect(s.prompts[0]).toContain('> text: registered one-dialog action');
+  expect(s.prompts[0]).not.toContain('DUPLICATE:');
+  const second=await s.invoke('popclaw_world_invoke',input);
+  expect(second.request_id).not.toBe(first.request_id);expect(s.prompts).toHaveLength(2);
+  expect(s.prompts[1]).toMatch(/^DUPLICATE: /);expect(s.prompts[1]).toContain(first.request_id);
+  expect(s.partition.db.queryAll('SELECT * FROM world_action_client_requests')).toHaveLength(2);
+  expect(s.partition.db.queryAll('SELECT * FROM world_owner_action_reservations')).toHaveLength(2);
+  expect(s.calls.filter(c=>c.path==='/v1/push')).toHaveLength(2);
+});
+
+it.each([
+  [{action:'accept',content:{confirm:false}},'OWNER_CONFIRMATION_DECLINED'],
+  [{action:'accept',content:{confirm:'true'}},'OWNER_CONFIRMATION_DECLINED'],
+  [{action:'decline'},'OWNER_CONFIRMATION_DECLINED'],
+  [{action:'cancel'},'OWNER_CONFIRMATION_CANCELLED'],
+  [new McpError(ErrorCode.RequestTimeout,'fixture timeout'),'OWNER_CONFIRMATION_TIMEOUT'],
+  [new McpError(ErrorCode.InvalidParams,'fixture malformed form'),'OWNER_CONFIRMATION_ANSWER_INVALID'],
+] as const)('registered MCP World refusal %j creates no reservation, request or push',async(answer,code)=>{
+  const s=await fixture(false,true);await oldLogin(s);s.respond(answer as ElicitResult|Error);
+  const input={house:s.origin,kind:'test.note',params:{text:'must not write'},
+    expected_capability_revision:readHouseCapabilityView(s.db,s.origin)!.verified.capabilityRevision};
+  await expect(s.invoke('popclaw_world_invoke',input)).rejects.toThrow(code);
+  expect(s.prompts).toHaveLength(1);
+  expect(s.partition.db.queryAll('SELECT * FROM world_action_client_requests')).toHaveLength(0);
+  expect(s.partition.db.queryAll('SELECT * FROM world_owner_action_reservations')).toHaveLength(0);
+  expect(s.calls.filter(c=>c.path==='/v1/push')).toHaveLength(0);
 });

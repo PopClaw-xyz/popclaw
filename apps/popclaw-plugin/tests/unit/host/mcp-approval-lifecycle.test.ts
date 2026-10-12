@@ -130,11 +130,12 @@ describe('MCP live-call leases', () => {
     'releases and bounds finished records on %s', async ending => {
       if (ending === 'refused') registerOwnerApprovalSubject(TOOL, { ...descriptor,
         describe: () => ({ kind: 'refuse' as const, reason: 'SYNTHETIC_REFUSAL' }) });
-      const approvals = backend(async () => {
+      const approvals = ending === 'before-throw' ? createMcpOwnerApproval({ server: { current: {
+        getClientCapabilities: () => { throw new Error('synthetic'); },
+      } as never } }) : backend(async () => {
         if (ending === 'ask-error') throw new Error('synthetic ask failed');
         return ending === 'deny' ? { action: 'decline' } : accept;
       });
-      if (ending === 'before-throw') vi.spyOn(approvals, 'beforeDispatch').mockRejectedValue(new Error('synthetic'));
       for (let i = 0; i < 75; i++) {
         const ref = `${ending}-${i}`;
         const tool = ending === 'unregistered' ? 'unregistered_fixture' : TOOL;
