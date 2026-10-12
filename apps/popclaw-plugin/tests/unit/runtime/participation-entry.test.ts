@@ -33,8 +33,10 @@ async function fixture(input: {publicV1?:boolean;override?: (port:HouseParticipa
   const houses=new Map([ME,WORLD].map((origin,i)=>[origin,mintHouse({origin,seed:90+i,manifest:{relations:{ordered:1},read_auth:{schemes:['popclaw-identity-read-v2']},guide_url:'/guide.md'}})]));
   let guideFails=false;
   let beforeManifest:(()=>Promise<void>)|undefined;
+  let beforeGuide:(()=>Promise<void>)|undefined;
   const transport=vi.fn(async(input:RequestInfo|URL)=>{
     const url=input instanceof Request?input.url:String(input);
+    if(new URL(url).pathname==='/guide.md')await beforeGuide?.();
     if(new URL(url).pathname==='/guide.md')return new Response(guideFails?'':`${new URL(url).origin} existing business`,{status:guideFails?503:200});
     if(new URL(url).pathname==='/v1/manifest')await beforeManifest?.();
     return houses.get(new URL(url).origin)!.fetch(url);
@@ -50,6 +52,7 @@ async function fixture(input: {publicV1?:boolean;override?: (port:HouseParticipa
   rt.start();
   closes.push(async()=>{await rt.stop();release();db.close();rmSync(root,{recursive:true,force:true});});
   return {db,rt,boot,transport,houses,guideFails:()=>guideFails=true,noEvidence:()=>evidence=false,
+    holdGuide:(work?:()=>Promise<void>)=>{beforeGuide=work;},
     holdManifest:(work?:()=>Promise<void>)=>{beforeManifest=work;}};
 }
 it('normal installation joins only me with a receipt; guide availability and delivery are separate',async()=>{
@@ -124,6 +127,54 @@ it('logout during repeated manifest discovery cannot commit a fresh public selec
 it('without install source reads and initialization mint no participation or setup authority',async()=>{
   const f=await fixture();f.noEvidence();await f.rt.commands.getHouseStatus(ME);await f.rt.readHouseGuide(ME);expect(await f.rt.activateInitialMe()).toBeUndefined();
   expect(readParticipation(f.db,ME)).toBeNull();expect(f.db.queryOne<{n:number}>('SELECT COUNT(*) AS n FROM house_initial_setup')?.n).toBe(0);
+});
+it.each([ME,WORLD])('explicit login to %s returns its guide under the host command boundary',async origin=>{
+  const f=await fixture();f.noEvidence();
+  const text=await f.rt.runControlCommand(()=>runHouseLoginCommand({coordinator:()=>f.rt.commands,
+    readHouseGuide:target=>f.rt.readHouseGuide(target)},origin));
+  expect(text).toContain('existing business');
+  const repeated=await f.rt.runControlCommand(()=>runHouseLoginCommand({coordinator:()=>f.rt.commands,
+    readHouseGuide:target=>f.rt.readHouseGuide(target)},origin));
+  expect(repeated).toContain('existing business');
+  expect(readParticipation(f.db,origin)).toMatchObject({desired:'enabled',phase:'connected'});
+});
+it('logout during login guide retrieval never delivers the old guide',async()=>{
+  const f=await fixture();f.noEvidence();
+  let reached!:()=>void,resume!:()=>void;
+  const started=new Promise<void>(r=>{reached=r;});
+  const held=new Promise<void>(r=>{resume=r;});
+  f.holdGuide(async()=>{reached();await held;});
+  const login=f.rt.runControlCommand(()=>runHouseLoginCommand({coordinator:()=>f.rt.commands,
+    readHouseGuide:origin=>f.rt.readHouseGuide(origin)},ME));
+  const outcome=login.then(text=>({text,error:null}),error=>({text:'',error}));
+  await started;await f.rt.commands.logoutHouse(ME);resume();
+  const result=await outcome;
+  expect(result.text).not.toContain('existing business');
+  expect(readParticipation(f.db,ME)?.desired).toBe('disabled');
+});
+it('stop drains a control command with a pending guide and prevents stale delivery',async()=>{
+  const f=await fixture();f.noEvidence();
+  let reached!:()=>void,resume!:()=>void;
+  const started=new Promise<void>(r=>{reached=r;});
+  const held=new Promise<void>(r=>{resume=r;});
+  f.holdGuide(async()=>{reached();await held;});
+  const login=f.rt.runControlCommand(()=>runHouseLoginCommand({coordinator:()=>f.rt.commands,
+    readHouseGuide:origin=>f.rt.readHouseGuide(origin)},ME));
+  const outcome=login.then(text=>text,()=> '');
+  await started;const stopped=f.rt.stop();resume();
+  expect(await outcome).not.toContain('existing business');await stopped;
+});
+it('control dispatch preserves an enclosing stale business action after logout and rejoin',async()=>{
+  const f=await fixture();await f.rt.activateInitialMe();
+  await expect(f.rt.runCommand(async()=>{
+    await f.rt.commands.logoutHouse(ME);await f.rt.commands.loginHouse(ME);
+    return f.rt.runControlCommand(()=>f.rt.readHouseGuide(ME));
+  })).rejects.toThrow('House action is no longer active');
+});
+it('stopped runtime refuses a control command before executing its body',async()=>{
+  const f=await fixture();await f.rt.stop();const work=vi.fn(async()=>undefined);
+  await expect(f.rt.runControlCommand(work)).rejects.toThrow('HOUSE_RUNTIME_STOPPED');
+  expect(work).not.toHaveBeenCalled();
 });
 it('world owner choice uses normal join and returns that House business guide',async()=>{
   const f=await fixture();await f.rt.activateInitialMe();expect(readParticipation(f.db,WORLD)).toBeNull();

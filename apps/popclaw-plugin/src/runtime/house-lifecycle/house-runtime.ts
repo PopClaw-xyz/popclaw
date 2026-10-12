@@ -934,9 +934,17 @@ export class HouseRuntime {
     for (const {origin} of this.opts.db.queryAll<{origin: string}>('SELECT origin FROM house_origin_bindings')) {
       gates.set(origin, this.participationGate(origin));
     }
+    return this.runControlCommand(() => withHouseActions(gates, work));
+  }
+
+  /** Login/logout change participation themselves. Track their lifetime without
+   * capturing the pre-change generation; subsequent reads capture fresh gates.
+   * Any enclosing action context is retained, never cleared or renewed. */
+  runControlCommand<T>(work: () => Promise<T>): Promise<T> {
+    if (this.stopped) return Promise.reject(new Error('HOUSE_RUNTIME_STOPPED'));
     const task = Promise.resolve().then(() => {
       if (this.stopped) throw new Error('HOUSE_RUNTIME_STOPPED');
-      return withHouseActions(gates, work);
+      return work();
     });
     this.commandTasks.add(task);
     void task.then(() => this.commandTasks.delete(task), () => this.commandTasks.delete(task));
