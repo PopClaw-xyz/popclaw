@@ -62,6 +62,33 @@ service does not disable house traffic, model calls or all resources that
 a browser may fetch when opening a paper. See the
 [threat model](threat-model.md#services-your-client-contacts).
 
+## Reading failures before publication
+
+Initial material collection uses one shared 10-second read budget. Declared
+House digests, the optional summary reference (at most 1.5 seconds), and signed
+material acquisition start independently in that scope. They do not get separate
+10-second windows. Writing, owner approval and publisher upload are outside this
+collection budget; host setup and tool wrappers can add to the visible call time.
+
+Cancellation and source-authority checks still apply before a candidate basis is
+saved. A late response cannot authorize a new basis. A summary or digest is
+editorial context, not a substitute for verified article material.
+
+When collection raises a structured House read failure, the writer and the
+OpenClaw parent receive its safe code and available diagnostic fields. The
+workshop dispatch record retains those fields under `stage.collectionFailure`,
+without origin URLs, headers, private content or raw error text. `budget=read-call`
+identifies the aggregate deadline; `HOUSE_REMOTE_TIMEOUT` alone does not identify
+an individual House or network phase. Missing fields mean unknown.
+
+A workshop finishing without a publication receipt does not prove that upload
+was attempted. Check `candidatePage`, `materialPage`, `publishCalled` and
+`publishAccepted` separately. A tool wrapper reporting success also does not
+establish that a newspaper was published: require the actual final receipt.
+These source guarantees do not establish deployment or successful operation on
+a particular host. Preserve the failed step and diagnostic fields when reporting
+a failure; do not repeatedly request new editions to investigate it.
+
 ## Client endpoints and signature coverage
 
 The client makes five types of request. A signature authenticates the
