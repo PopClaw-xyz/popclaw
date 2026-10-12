@@ -17,6 +17,7 @@ import { cidFromCanonical } from '@popclaw/algorithms';
 import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
 import { WorldFeedCache } from '../../../src/ingress/world-feed-cache.js';
 import { WorldFeedCatalog } from '../../../src/ingress/world-feed-catalog.js';
+import { refusingReadAuthorityFor } from '../../helpers/read-authority.js';
 
 const ID = 'abcdef1234' + 'a'.repeat(54), ROOT = 'b'.repeat(64);
 const WEB = 'https://fixture.invalid';
@@ -25,9 +26,13 @@ function signer(byte: number) {
   return new MasterKeySigner({seed, ...key, popclawId: bs58.encode(key.publicKey)});
 }
 const servers: Server[] = [];
+const houseRuntimes: Array<{runtime: HouseRuntime; db: InMemoryHostDb}> = [];
 beforeEach(() => {_draftsForTest.clear(); _observedPostIdsForTest.clear(); setOwnerLang('en', 'config');});
 afterEach(async () => {
   _draftsForTest.clear(); _observedPostIdsForTest.clear(); setOwnerLang(undefined); vi.restoreAllMocks();
+  await Promise.all(houseRuntimes.splice(0).map(async ({runtime, db}) => {
+    try { await runtime.stop(); } finally { db.close(); }
+  }));
   await Promise.all(servers.splice(0).map(server => new Promise<void>(done => {server.closeAllConnections(); server.close(() => done());})));
 });
 async function fixture() {
@@ -50,11 +55,14 @@ async function fixture() {
   const origin = `http://127.0.0.1:${(server.address() as {port: number}).port}`;
   // Real public-read method/audience/credential restrictions and actionFetch;
   // the lifecycle gate and configured HTTP peer are synthetic test fixtures.
-  const houseRuntime = Object.assign(Object.create(HouseRuntime.prototype) as HouseRuntime, {
-    opts: {fetch: globalThis.fetch},
+  const db = new InMemoryHostDb();
+  const houseRuntime = Object.assign(new HouseRuntime({
+    db, signer: owner, origins: [origin], readAuthorityFor: refusingReadAuthorityFor, fetch: globalThis.fetch,
+  }), {
     capturePublicReadTargets: () => plan.targets,
     publicReadGate: (input: string) => ({origin: input, signal: new AbortController().signal, isActive: () => active}),
   });
+  houseRuntimes.push({runtime: houseRuntime, db});
   const pushed: Array<{house: string | undefined; bytes: Uint8Array}> = [];
   const pushTo = async (house: string | undefined, bytes: Uint8Array) => {pushed.push({house, bytes}); return {status: 200};};
   const cache: Required<PostRefCache> = {findFullEventId: () => ({full: null, ambiguous: [] as string[]}),
