@@ -85,11 +85,14 @@ identity, channel permission or the 40-second inline/12-minute workshop budgets.
 
 ## Reading failures before publication
 
-Initial material collection uses one shared 10-second read budget. Declared
+Initial material collection has no fixed aggregate 10-second deadline. Declared
 House digests, the optional summary reference (at most 1.5 seconds), and signed
-material acquisition start independently in that scope. They do not get separate
-10-second windows. Writing, owner approval and publisher upload are outside this
-collection budget; host setup and tool wrappers can add to the visible call time.
+material acquisition start independently. Normal synchronous local verification
+can finish after ten seconds. Individual network requests retain their transport
+timeouts; a cancellation-only scope preserves action cancellation, explicit
+trusted parent deadlines and abandonment checks. It starts no infinite timer
+and grants no House authority. Writing and publisher upload keep their existing
+policies; host setup and tool wrappers can add to visible call time.
 
 Cancellation and source-authority checks still apply before a candidate basis is
 saved. A late response cannot authorize a new basis. A summary or digest is
@@ -104,11 +107,14 @@ selection or publication calls; those calls validate afresh. The initial gather
 retains both its pre-persistence validation and its saved-document validation.
 This reduces repeated full partition checks, not the number of signed references.
 
-Synchronous local scans can also consume the aggregate budget. A candidate
-manifest or `candidatePage=true` can precede the final budget check, so neither
-proves that the candidate text reached the writer. This is distinct from a run
-that never built a candidate; preserve those stages separately. These checks do
-not provide an inode-level guarantee for same-path physical file replacement.
+A candidate manifest or `candidatePage=true` records local progress, not proof
+that candidate text reached the writer. Cancellation or a changed source can
+still prevent return after that stage; preserve this distinction from a run
+that never built a candidate. In older builds the aggregate ten-second deadline
+could also reject otherwise valid local verification at this point. The current
+scope removes that failure without skipping signatures or source checks. These
+checks do not provide an inode-level guarantee for same-path physical file
+replacement.
 
 When collection raises a structured House read failure, the writer and the
 OpenClaw parent receive its safe code and available diagnostic fields. The
