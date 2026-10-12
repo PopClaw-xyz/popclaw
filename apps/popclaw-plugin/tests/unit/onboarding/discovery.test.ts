@@ -44,6 +44,29 @@ beforeEach(() => { vi.resetAllMocks(); setOwnerLang('en', 'config'); });
 afterEach(() => { setOwnerLang(undefined); });
 
 describe('OnboardingDiscovery interface', () => {
+  it('preserves a synchronous summary throw before snapshot, drafts or presentation', async () => {
+    const h = setup();
+    vi.mocked(h.ports.summaryClient.fetchSummary).mockImplementation(() => { throw new Error('synchronous summary failure'); });
+    await expect(h.discovery.presentLantern()).rejects.toThrow('synchronous summary failure');
+    expect(h.ports.snapshotClient.fetchSnapshot).not.toHaveBeenCalled();
+    expect(h.effects).toEqual([]);
+  });
+
+  it('retains the prior card after an unreadable guide and never starts dependent reads', async () => {
+    const h = setup();
+    await h.discovery.presentLantern();
+    const old = h.discovery.currentCardText('lantern');
+    vi.clearAllMocks();
+    vi.mocked(h.ports.guideClient.fetchGuideText).mockResolvedValueOnce(null);
+    const reply = await h.discovery.presentLantern();
+    expect(reply.text).toContain('WORLD_SUMMARY_AVAILABILITY_UNKNOWN');
+    expect(reply.text).toContain('HOUSE_REMOTE_UNKNOWN');
+    expect(h.discovery.currentCardText('lantern')).toBe(old);
+    expect(h.persisted()).toEqual({ lantern: 'degraded' });
+    expect(h.ports.summaryClient.fetchSummary).not.toHaveBeenCalled();
+    expect(h.ports.snapshotClient.fetchSnapshot).not.toHaveBeenCalled();
+  });
+
   it('owns preparation and answers without a lifecycle or state-machine dependency', async () => {
     const h = setup();
     await h.discovery.presentLantern();
