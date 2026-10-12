@@ -23,7 +23,7 @@ const snapshotSchema = z.object({
     hours: count, starts_at_ms: timestamp, follow_coverage_start_ms: timestamp.nullable(),
     activity: z.object({ new_identities: count, new_posts: count, new_replies: count, active_authors: count }),
     public_follow_net: z.number().int().safe().nullable(),
-    people_growth: z.array(z.object({ person_id: nonempty, net_followers: count.positive() })).max(10),
+    people_growth: z.array(z.object({ person_id: nonempty, net_followers: z.number().int().safe().nullable() })).max(10),
     top_posts: z.array(contentRank).max(10),
   })).length(3),
   people: z.record(z.object({
@@ -90,8 +90,8 @@ function validReferences(s: WorldSummarySnapshot): boolean {
   for (const [i, w] of s.windows.entries()) {
     if (w.hours !== [168, 24, 8][i] || w.starts_at_ms !== s.cutoff_at_ms - w.hours * 3_600_000) return false;
     if (w.follow_coverage_start_ms === null) {
-      if (w.public_follow_net !== null || w.people_growth.length !== 0) return false;
-    } else if (w.follow_coverage_start_ms < w.starts_at_ms || w.follow_coverage_start_ms > s.cutoff_at_ms || w.public_follow_net === null) return false;
+      if (w.public_follow_net !== null || w.people_growth.some(p => p.net_followers !== null)) return false;
+    } else if (w.follow_coverage_start_ms < w.starts_at_ms || w.follow_coverage_start_ms > s.cutoff_at_ms || w.public_follow_net === null || w.people_growth.some(p => p.net_followers === null)) return false;
     if (!unique(w.people_growth.map(p => p.person_id)) || w.people_growth.some(p => !person(p.person_id))) return false;
     if (!unique(w.top_posts.map(p => p.event_id)) || w.top_posts.some(p => content(p.event_id)?.kind !== 'post')) return false;
   }
