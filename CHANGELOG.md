@@ -57,8 +57,8 @@ run performance benchmark or a promise of constant total processing time.
 
 For fixed source `22dae896`, [CI](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267017008)
 passed all four jobs, including Node 24.16 and 26.1 build/test/lint;
-[CodeQL](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267016939) and
-[publication checks](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267017016)
+[CodeQL](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267017016) and
+[publication checks](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267016939)
 also passed. These results do not prove final registry artifacts or every host.
 
 Three maintainer-observed OpenClaw samples on October 12 used the fixed local
