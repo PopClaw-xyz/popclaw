@@ -1,4 +1,5 @@
 import { assertReadCallActive, waitForRead, withReadCallBudget } from '../runtime/read-call-budget.js';
+import { RemoteHouseReadError } from '../runtime/house-lifecycle/read-failure.js';
 import { prepareSummaryMaterial } from '../newspaper/summary-material.js';
 import { readNewspaperPage } from '../newspaper/reading-page.js';
 import type { HouseRuntime } from '../runtime/house-lifecycle/house-runtime.js';
@@ -28,6 +29,7 @@ import type { BondTier } from '../bonds/bond-tier.js';
 import { gatherNewspaperMaterials, type GatherDeps, type NewspaperBond } from '../newspaper/gather-materials.js';
 import {
   NewspaperStageStore,
+  formatNewspaperCollectionFailure,
   defaultIssueHint,
   isDedicatedSession,
   isModelOverrideRefusal,
@@ -339,8 +341,6 @@ async function readPaperContext(rt: NewspaperRuntime) {
   return { bondsStore, houseSlugs, digests, tasteTags, tasteText, bondLines };
 }
 
-type PaperContext = Awaited<ReturnType<typeof readPaperContext>>;
-
 /** Second call: bind the picks to the candidate page they were read against, then build the material page. */
 function answerPicks(call: NewspaperCall, rt: NewspaperRuntime, args: NewspaperArgs, picks: Picks): TextResult {
   const { api, toolCtx } = call;
@@ -450,16 +450,23 @@ async function gatherCandidatePage(
   call: NewspaperCall,
   rt: NewspaperRuntime,
   hours: number | undefined,
-  paper: PaperContext,
   modelIgnoredNote: string | undefined,
 ): Promise<TextResult> {
   const { api, toolCtx } = call;
-  const { bondsStore, houseSlugs, digests, tasteTags, tasteText, bondLines } = paper;
   const materialSource = publicMaterialSource(rt);
-  const worldDeps = call.deps.getWorldDeps ? await call.deps.getWorldDeps().catch(() => undefined) : undefined;
-  const worldSummary = worldDeps?.newspaperSummary
-    ? await prepareSummaryMaterial({...worldDeps.newspaperSummary,nameOf:rt.nameOf}) : undefined;
-  const publicBatch = await waitForRead(Promise.resolve(materialSource?.prepareCollect()));
+  // These reads do not depend on each other. Start them in the same bounded
+  // scope so optional editorial context cannot spend the signed feed's budget
+  // before that feed even starts. Their existing authority and write fences remain.
+  const [paper, worldSummary, publicBatch] = await Promise.all([
+    waitForRead(readPaperContext(rt)),
+    (async () => {
+      const worldDeps = call.deps.getWorldDeps ? await call.deps.getWorldDeps().catch(() => undefined) : undefined;
+      return worldDeps?.newspaperSummary
+        ? prepareSummaryMaterial({ ...worldDeps.newspaperSummary, nameOf: rt.nameOf }) : undefined;
+    })(),
+    waitForRead(Promise.resolve(materialSource?.prepareCollect())),
+  ]);
+  const { bondsStore, houseSlugs, digests, tasteTags, tasteText, bondLines } = paper;
   assertReadCallActive();
   const r = gatherNewspaperMaterials(
     {
@@ -565,6 +572,7 @@ async function gatherCandidatePage(
 
 /** popclaw_newspaper's execute. */
 export async function runNewspaperCall(call: NewspaperCall, params: unknown): Promise<TextResult> {
+  let collecting = false;
   try {
     const constraints = params as Record<string, unknown>;
     if (constraints && (constraints.draft_only === true || constraints.no_upload === true || constraints.public_only === true
@@ -610,12 +618,13 @@ export async function runNewspaperCall(call: NewspaperCall, params: unknown): Pr
     // set is already on disk, so nothing is gathered again — re-reading the feed here
     // would let the world move underneath the numbers it is answering with.
     if (args.hasPicks && args.picks) return answerPicks(call, rt, args, args.picks);
-    return await withReadCallBudget({},async () => {
-      const paper = await waitForRead(readPaperContext(rt));
-      assertReadCallActive();
-      return gatherCandidatePage(call, rt, args.hours, paper, modelIgnoredNote);
-    });
+    collecting = true;
+    return await withReadCallBudget({}, () => gatherCandidatePage(call, rt, args.hours, modelIgnoredNote));
   } catch (err) {
+    if (collecting && err instanceof RemoteHouseReadError) {
+      const failure = NewspaperStageStore.collectionFailed(call.toolCtx.sessionKey, err.failure);
+      return { type: 'text', text: formatNewspaperCollectionFailure(ownerLang(), failure) };
+    }
     if (err instanceof PublicMaterialRefusal) NewspaperStageStore.collection(call.toolCtx.sessionKey, 'source-refused');
     return { type: 'text' as const, text: err instanceof PublicMaterialRefusal ? renderCopy(ownerLang(), 'newspaper.source.refused', { reason: err.code }) : failureText('popclaw_newspaper', err) };
   }

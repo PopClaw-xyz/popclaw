@@ -727,6 +727,7 @@ export const ZH_CN: Lexicon = {
     'newspaper.dispatch.reason.queued': '车间一直没排上队，到超时也没轮到开工（宿主可能正忙）',
     'newspaper.dispatch.reason.empty': '本次时间窗没有收集到可用的报纸素材',
     'newspaper.dispatch.reason.partial-no-material': '公共内容覆盖不完整，且未收集到可用的报纸素材',
+    'newspaper.dispatch.reason.read-failed': '素材读取失败：{reason}（budget={budget}）',
     'newspaper.dispatch.reason.source-refused': '已用公共素材来源变化或无法核验，请重新获取候选页',
     'newspaper.dispatch.reason.noReceipt': '车间这一轮跑完了，但这一期没能发布（没有拿到发布回执）',
     // Lightweight-model completion requirement (evening decision, 2026-09-03): a model in the deepseek-v4-flash

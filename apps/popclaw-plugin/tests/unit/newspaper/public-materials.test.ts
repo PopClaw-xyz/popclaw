@@ -24,6 +24,11 @@ import type { Signer } from '../../../src/identity/signer.js';
 import { commitLocalLogout, ensureHouseLifecycleSchema } from '../../../src/runtime/house-lifecycle/participation-store.js';
 import { makeWorldManifestPreparer } from '../../../src/world/world-capabilities.js';
 import type { HouseStore } from '../../../src/ingress/world-feed-store.js';
+import * as learnedWriter from '../../../src/taste/learned-writer.js';
+import * as digestClient from '../../../src/world/digest-client.js';
+import * as summaryMaterial from '../../../src/newspaper/summary-material.js';
+import { withReadCallBudget } from '../../../src/runtime/read-call-budget.js';
+import { RemoteHouseReadError } from '../../../src/runtime/house-lifecycle/read-failure.js';
 import { refusingReadAuthorityFor } from '../../helpers/read-authority.js';
 
 import { PublicFeedDisplay } from '../../../src/ingress/public-feed-display.js';
@@ -41,6 +46,7 @@ beforeEach(() => { _resetIssuesForTest(); _resetBudgetForTest(); NewspaperOutcom
 beforeEach(() => vi.stubGlobal('fetch', vi.fn(() => { throw new Error('unexpected network'); })));
 afterEach(async () => {
   await Promise.all(instances.splice(0).map(instance => instance.stop()));
+  vi.useRealTimers();
   vi.restoreAllMocks();
   for (const close of displayCleanup.splice(0).reverse()) close();
   vi.unstubAllGlobals();
@@ -401,11 +407,13 @@ it.each([true,false])('historical child collection with checkpoint=%s reports in
 });
 it('later candidate collection clears an earlier empty stage and real publication receipt wins',async()=>{
   const key=childSessionKey('precedence');
+  NewspaperStageStore.collectionFailed(key, { code: 'HOUSE_REMOTE_TIMEOUT' });
   NewspaperStageStore.collection(key,'partial-no-material');
   NewspaperStageStore.note(key,'candidatePage');
   expect(NewspaperStageStore.peek(key)?.collection).toBeUndefined();
+  expect(NewspaperStageStore.peek(key)?.collectionFailure).toBeUndefined();
   const result=await runDedicatedNewspaper({makeIssueHint:()=> 'precedence',subagent:{
-    run:async({sessionKey})=>{NewspaperStageStore.collection(sessionKey,'source-refused');NewspaperOutcomeStore.set(sessionKey,{ok:true,receiptText:'Actual saved and delivered receipt'});return {runId:'no-model'};},
+    run:async({sessionKey})=>{NewspaperStageStore.collectionFailed(sessionKey,{code:'HOUSE_REMOTE_TIMEOUT'});NewspaperOutcomeStore.set(sessionKey,{ok:true,receiptText:'Actual saved and delivered receipt'});return {runId:'no-model'};},
     waitForRun:async()=>({status:'ok'}),deleteSession:async()=>{}}});
   expect(result).toContain('Actual saved and delivered receipt');
   expect(result).not.toContain('could not be verified');
@@ -480,4 +488,141 @@ it('registered newspaper freezes the complete summary through reading, selection
   expect(fetchGuideText).toHaveBeenCalledTimes(1);
   expect(sourceScan).toHaveBeenCalledTimes(1);
   expect(fetch).not.toHaveBeenCalled();
+});
+
+
+it('independent optional context does not steal the signed material read budget', async () => {
+  const f = await newspaperFixture();
+  let startedAt = 0;
+  const starts: Record<string, number> = {};
+  Object.assign(f.runtime.boot, { loreHouseUrls: [displayOrigin] });
+  vi.spyOn(digestClient, 'readHouseDigestUrl').mockReturnValue(`${displayOrigin}/declared-digest`);
+  vi.spyOn(digestClient, 'refreshHouseDigest').mockImplementation(async () => {
+    starts.digest = Date.now() - startedAt;
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    return undefined;
+  });
+  f.setWorldDeps(async () => ({ newspaperSummary: {} }) as never);
+  vi.spyOn(summaryMaterial, 'prepareSummaryMaterial').mockImplementation(async () => {
+    starts.summary = Date.now() - startedAt;
+    await new Promise(resolve => setTimeout(resolve, 1490));
+    return undefined;
+  });
+  const acquire = f.runtime.houseFeedReader.prepare.bind(f.runtime.houseFeedReader);
+  vi.spyOn(f.runtime.houseFeedReader, 'prepare').mockImplementation(async query => {
+    starts.material = Date.now() - startedAt;
+    await new Promise(resolve => setTimeout(resolve, 8000));
+    return acquire(query);
+  });
+  // Real filesystem promises must not race a synthetic clock jump.
+  vi.spyOn(learnedWriter, 'readLearnedTaste').mockResolvedValue({ tags: [], mute: [], summary: '' });
+  vi.spyOn(learnedWriter, 'readTasteProfile').mockResolvedValue('');
+  vi.useFakeTimers();
+  startedAt = Date.now();
+  try {
+    let finishedAt = 0;
+    const result = f.tools()('popclaw_newspaper', { hours: 24 }).then(out => { finishedAt = Date.now() - startedAt; return out; });
+    await vi.advanceTimersByTimeAsync(10001);
+    const out = await result;
+    expect(out.text).toContain('candidate_basis');
+    expect(out.text).toContain(f.body);
+    expect(starts).toEqual({ digest: 0, summary: 0, material: 0 });
+    expect(finishedAt).toBe(8000);
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    await vi.advanceTimersByTimeAsync(20000);
+  }
+});
+
+it('a failed collection carries its actual read diagnosis through the child and parent receipt', async () => {
+  const f = await newspaperFixture();
+  const failure = { code: 'HOUSE_REMOTE_TIMEOUT' as const, diagnostic: {
+    budget: 'read-call' as const, phase: 'before-fetch' as const, cause: 'timeout' as const,
+    timeoutMs: 10000, elapsedMs: 10001, cancellation: 'deadline' as const,
+  } };
+  vi.spyOn(f.runtime.houseFeedReader, 'prepare').mockRejectedValue(new RemoteHouseReadError(failure));
+  const records: NewspaperDispatchRecord[] = [];
+  let childText = '';
+  const parent = await runDedicatedNewspaper({ makeIssueHint: () => 'read-failure-test', recordDispatch: r => records.push(r),
+    subagent: { run: async ({ sessionKey }) => {
+      childText = (await f.tools(sessionKey)('popclaw_newspaper', { hours: 24 })).text;
+      return { runId: 'synthetic-read-failure' };
+    }, waitForRun: async () => ({ status: 'ok' }), deleteSession: async () => {} } });
+  expect(childText).toContain('phase=before-fetch');
+  expect(childText).toContain('elapsed_ms=10001');
+  expect(parent).toContain('HOUSE_REMOTE_TIMEOUT');
+  expect(parent).toContain('phase=before-fetch');
+  expect(parent).not.toContain('without publishing a receipt');
+  expect(records[0]?.stage).toMatchObject({ collectionFailure: failure,
+    candidatePage: false, materialPage: false, publishCalled: false, publishAccepted: false });
+  expect(JSON.stringify(records)).not.toContain(f.body);
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+});
+
+
+function syntheticClockContext(f: Awaited<ReturnType<typeof newspaperFixture>>) {
+  vi.spyOn(learnedWriter, 'readLearnedTaste').mockResolvedValue({ tags: [], mute: [], summary: '' });
+  vi.spyOn(learnedWriter, 'readTasteProfile').mockResolvedValue('');
+  vi.useFakeTimers();
+  return f.tools();
+}
+
+it('revalidates signed material acquired before optional context changes the actual House authority', async () => {
+  const f = await newspaperFixture();
+  Object.assign(f.runtime.boot, { loreHouseUrls: [displayOrigin] });
+  vi.spyOn(digestClient, 'readHouseDigestUrl').mockReturnValue(`${displayOrigin}/declared-digest`);
+  vi.spyOn(digestClient, 'refreshHouseDigest').mockImplementation(async () => {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    f.db.execute('UPDATE house_participation SET lease_expires_at=1');
+    return undefined;
+  });
+  const call = syntheticClockContext(f);
+  const result = call('popclaw_newspaper', { hours: 24 });
+  await vi.advanceTimersByTimeAsync(1100);
+  expect((await result).text).toContain('Gather a fresh candidate page');
+  expect(existsSync(f.paths.newspaperManifestsDir())).toBe(false);
+});
+
+it.each(['deadline', 'cancel', 'sibling-error'] as const)('parallel collection retains the %s fence for a late source ignoring abort', async mode => {
+  const f = await newspaperFixture();
+  const acquire = f.runtime.houseFeedReader.prepare.bind(f.runtime.houseFeedReader);
+  vi.spyOn(f.runtime.houseFeedReader, 'prepare').mockImplementation(async query => {
+    await new Promise(resolve => setTimeout(resolve, 11000));
+    return acquire(query);
+  });
+  if (mode === 'sibling-error') {
+    Object.assign(f.runtime.boot, { loreHouseUrls: [displayOrigin] });
+    vi.spyOn(digestClient, 'readHouseDigestUrl').mockReturnValue(`${displayOrigin}/declared-digest`);
+    vi.spyOn(digestClient, 'refreshHouseDigest').mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      throw new Error('synthetic-context-failure');
+    });
+  }
+  const call = syntheticClockContext(f), controller = new AbortController();
+  const result = mode === 'cancel'
+    ? withReadCallBudget({ signal: controller.signal }, () => call('popclaw_newspaper', { hours: 24 }))
+      .then(() => 'unexpected-success', error => String(error))
+    : call('popclaw_newspaper', { hours: 24 }).then(out => out.text);
+  if (mode === 'cancel') setTimeout(() => controller.abort(), 100);
+  await vi.advanceTimersByTimeAsync(10001);
+  const text = await result;
+  if (mode === 'deadline') { expect(text).toContain('budget=read-call'); expect(text).toContain('HOUSE_REMOTE_TIMEOUT'); }
+  if (mode === 'cancel') { expect(text).toContain('ActionInactiveError'); expect(text).not.toContain('HOUSE_REMOTE_TIMEOUT'); }
+  if (mode === 'sibling-error') expect(text).toContain('synthetic-context-failure');
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(existsSync(f.paths.newspaperManifestsDir())).toBe(false);
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+});
+
+it('records only bounded read diagnostic fields and clears them after a successful candidate', () => {
+  const key = childSessionKey('safe-diagnosis');
+  const failure = NewspaperStageStore.collectionFailed(key, { code: 'HOUSE_REMOTE_TIMEOUT',
+    origin: 'https://example.invalid/private?credential=never-store', diagnostic: {
+      phase: 'fetch', cause: 'timeout', elapsedMs: Infinity, timeoutMs: 10000,
+      requestId: 'https://example.invalid/private?secret=never-store',
+    } });
+  expect(failure).toEqual({ code: 'HOUSE_REMOTE_TIMEOUT', diagnostic: { phase: 'fetch', cause: 'timeout', timeoutMs: 10000 } });
+  expect(JSON.stringify(NewspaperStageStore.peek(key))).not.toContain('never-store');
+  NewspaperStageStore.note(key, 'candidatePage');
+  expect(NewspaperStageStore.peek(key)?.collectionFailure).toBeUndefined();
 });

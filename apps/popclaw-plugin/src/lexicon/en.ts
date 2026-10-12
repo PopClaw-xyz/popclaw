@@ -897,6 +897,7 @@ export const EN: Lexicon = {
       'the workshop never got its turn — still queued when the wait ran out (the host may be busy)',
     'newspaper.dispatch.reason.empty': 'no usable newspaper materials were collected in this window',
     'newspaper.dispatch.reason.partial-no-material': 'public coverage was incomplete and no usable newspaper materials were collected',
+    'newspaper.dispatch.reason.read-failed': 'material collection failed: {reason} (budget={budget})',
     'newspaper.dispatch.reason.source-refused': 'a used public material source changed or could not be verified; gather a fresh page',
     'newspaper.dispatch.reason.noReceipt':
       "the workshop finished its run but the edition could not be published (no publish receipt came back)",
