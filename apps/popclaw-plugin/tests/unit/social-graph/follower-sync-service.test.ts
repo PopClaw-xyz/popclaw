@@ -56,7 +56,7 @@ function root() {
   const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
     const header = ((init?.headers ?? {}) as Record<string, string>)[INBOX_TOKEN_HEADER] ?? '';
     const [version, id, ts, sig] = header.split('.');
-    let ok = false;
+    let ok: boolean;
     try {
       ok = header.split('.').length === 4 && version === 'v2' && id === ME
         && nacl.sign.detached.verify(

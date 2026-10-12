@@ -396,7 +396,7 @@ export class HouseLoginExecution {
       } else if (flight.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
         return { scope: 'local_installation', origin, status: 'connecting', sessionId: '' };
       } else {
-        throw new Error(`INVALID_HOUSE: ${String(err)}`);
+        throw new Error(`INVALID_HOUSE: ${String(err)}`, { cause: err });
       }
     }
     if (flight.signal.aborted || !authorized() || !intentUnchanged()

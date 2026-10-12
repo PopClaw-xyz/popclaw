@@ -70,7 +70,7 @@ export function claimRoot(root: string, popclawId: string, initialRuntimeDigest:
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     const winner = inspectRoot(root).credential;
-    if (!winner || winner.popclawId !== popclawId) throw new Error('Root credential changed concurrently');
+    if (!winner || winner.popclawId !== popclawId) throw new Error('Root credential changed concurrently', { cause: error });
     return winner;
   }
   return credential;

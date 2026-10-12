@@ -639,19 +639,16 @@ export class HouseLifecycleManager {
     // window) -> unknown, an empty-key outbox row is written and classified
     // on retry — "no ack yet" is never treated as "no control plane".
     const knownLegacy = configuredWithoutSession || (!pinnedKey && row?.remote_status === 'unsupported');
-    let committed = false;
     try {
       commitLocalLogout(this.db, origin, this.installationId, requestId, this.nowSecs(), pinnedKey);
-      committed = true;
     } catch (err) {
       // PERSISTENCE_FAILED: the memory gate STILL closes (the proto requires
       // it even when cross-restart persistence cannot be guaranteed), and the
       // caller gets an explicit PERSISTENCE_FAILED — never a fake success.
-      throw new Error(`PERSISTENCE_FAILED: local logout transaction failed: ${String(err)}`);
+      throw new Error(`PERSISTENCE_FAILED: local logout transaction failed: ${String(err)}`, { cause: err });
     } finally {
       this.closeGate(origin);
     }
-    void committed;
     if (configuredPin && !row?.ack_key_hex && !configuredWithoutSession) {
       // Backfill AFTER the commit: on a first-ever logout the row did not
       // exist when the pin was read. The operator's pin fills an empty

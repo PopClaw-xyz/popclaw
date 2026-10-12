@@ -111,7 +111,7 @@ export async function openHouseStores(
     try {
       out.push(await openWorldFeedStore(url, paths, opts.debug, opts.executionStores));
     } catch (err) {
-      if (i === 0) throw new Error(`home lore-house ${url} unavailable — ${String(err)}`);
+      if (i === 0) throw new Error(`home lore-house ${url} unavailable — ${String(err)}`, { cause: err });
       opts.onError?.(url, err);
     }
   }

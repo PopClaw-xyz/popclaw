@@ -100,6 +100,7 @@ function rebuildNativeBinding(cause: Error): string {
         `(gcc/clang, make, python3) and rebuild manually:\n  ` +
         `cd ~/.openclaw/extensions/popclaw/dist/native-deps/better-sqlite3 && npx --yes node-gyp rebuild --release\n  ` +
         `(load error: ${cause.message}; rebuild error: ${buildErr instanceof Error ? buildErr.message : String(buildErr)})`,
+      { cause: buildErr },
     );
   }
   const built = join(pkgRoot, 'build', 'Release', 'better_sqlite3.node');

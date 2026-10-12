@@ -29,6 +29,7 @@ export function loadLLMConfig(llmConfigPath: string): LLMConfig | null {
   } catch (e) {
     throw new Error(
       `popclaw llm.json: malformed JSON — ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
     );
   }
   if (!parsed || typeof parsed !== 'object') {

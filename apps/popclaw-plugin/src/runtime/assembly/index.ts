@@ -280,7 +280,7 @@ export async function assembleRuntime<S extends object, P extends object = Recor
       host.db.close();
     } catch (cleanupError) {
       // Retain participation when a failed drain cannot prove the root quiescent.
-      throw new AggregateError([error, cleanupError], 'STORAGE_BOOT_CLEANUP_FAILED');
+      throw new AggregateError([error, cleanupError], 'STORAGE_BOOT_CLEANUP_FAILED', { cause: cleanupError });
     }
     throw error;
   }

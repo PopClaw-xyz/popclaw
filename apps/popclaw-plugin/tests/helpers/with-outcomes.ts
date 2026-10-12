@@ -15,7 +15,6 @@
  */
 import type { RelationOutcome } from '../../src/social-graph/relation-producer.js';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 type LegacyShaped = {
   // Permissive on purpose: these are hand-written fakes with every return
   // shape a test has ever needed, and tightening this here would only make

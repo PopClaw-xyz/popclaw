@@ -401,7 +401,7 @@ function normalizeFrame(
   // fall back to the frame field when the id: is missing).
   const seq = Number(frame.seq ?? 0) || Number(lastEventId ?? 0) || 0;
   if (seq <= 0) return null;
-  let eventId = '';
+  let eventId: string;
   const kind = frame.kind && frame.kind.length > 0 ? frame.kind : 'unknown';
   try {
     const env = decodeEnvelope(envBytes);

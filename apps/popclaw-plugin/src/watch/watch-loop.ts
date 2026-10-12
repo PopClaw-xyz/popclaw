@@ -107,7 +107,7 @@ export class WatchLoop {
     }
 
     const since = new Date((entry.state.lastSeenCreatedAt || 0) * 1000);
-    let posts: ScrapedPost[] = [];
+    let posts: ScrapedPost[];
     try {
       // pass the verified handle, NOT the base58 popclaw_id —
       // the scraper calls platform APIs that expect a native username.

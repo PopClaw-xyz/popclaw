@@ -210,7 +210,7 @@ class LocalStorage implements HostStorage {
   }
   async list(ns: Namespace, prefix?: string): Promise<string[]> {
     const base = this.nsDir(ns);
-    let names: string[] = [];
+    let names: string[];
     try {
       names = await fsp.readdir(base);
     } catch (err) {

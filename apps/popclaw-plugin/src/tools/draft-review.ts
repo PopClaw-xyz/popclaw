@@ -136,7 +136,7 @@ export function reviewSnapshot(token: string, snapshot: DraftSnapshot, text: str
   if (!needsReviewCopy(snapshot)) return {text, review: {needed: false, lang, file: null}};
   const nonce = [...nacl.randomBytes(4)].map((b) => b.toString(16).padStart(2, '0')).join('');
   const name = `${token}-${nonce}.md`;
-  let file: { path: string; name: string; sha256: string } | null = null;
+  let file: { path: string; name: string; sha256: string } | null;
   try {
     const written = files.write(name, renderReviewCopy(snapshot, token, lang));
     file = { path: written.path, name, sha256: written.sha256 };

@@ -36,11 +36,11 @@ describe('openWorldFeedStore', () => {
  * PopclawPaths that throws only for one house's database path, simulating a house that cannot be
  * opened.
  */
-function pathsFailingOn(root: string, badSlug: string): PopclawPaths {
+function pathsFailingOn(root: string, badSlug: string, failure = new Error('disk on fire')): PopclawPaths {
   const paths = new PopclawPaths(root);
   const real = paths.lorehouseDb.bind(paths);
   paths.lorehouseDb = (slug: string) => {
-    if (slug === badSlug) throw new Error('disk on fire');
+    if (slug === badSlug) throw failure;
     return real(slug);
   };
   return paths;
@@ -76,9 +76,10 @@ describe('openHouseStores — 主坊是硬依赖，副坊可降级', () => {
 
   it('主坊打不开直接抛 —— 绝不让副坊顶替成 [0]（home() 漂移 = 写侧发错坊）', async () => {
     const root = mkdtempSync(join(tmpdir(), 'wfs-'));
+    const failure = new Error('disk on fire');
     await expect(
-      openHouseStores([HOME, WORLD], pathsFailingOn(root, 'house-popclaw-me')),
-    ).rejects.toThrow(/home lore-house/);
+      openHouseStores([HOME, WORLD], pathsFailingOn(root, 'house-popclaw-me', failure)),
+    ).rejects.toMatchObject({ message: expect.stringMatching(/home lore-house/), cause: failure });
   });
 
   it('空数组直接拒绝', async () => {

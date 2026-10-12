@@ -277,7 +277,7 @@ export async function verifyActionReceipt(raw: Uint8Array, request: StoredAction
         }
       }
     } catch (error) {
-      if (signal?.aborted) throw new Error('ACTION_ABORTED');
+      if (signal?.aborted) throw new Error('ACTION_ABORTED', { cause: error });
       item.reason = error instanceof Error ? error.message.slice(0,256) : 'ATTACHMENT_INVALID';
       item.validation = item.reason === 'ATTACHMENT_VALIDATOR_UNSUPPORTED' ? 'unsupported' : 'invalid'; item.install = 'blocked';
     }
