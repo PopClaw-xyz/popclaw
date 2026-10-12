@@ -356,7 +356,10 @@ async function main(): Promise<void> {
         const response = toMcpToolResult(result);
         return decorateToolNotice(tool.name, response, () => offerToolNotice(runtimeToolNoticeContext(rt, notificationConsumerId(), extra.signal)));
       };
-      return await rt.houseRuntime.runCommand(dispatch);
+      // Match native/CLI control dispatch: login changes the generation whose
+      // guide it then reads. Ordinary tools retain their entry-time authority.
+      return await (tool.name === 'popclaw_house_login' || tool.name === 'popclaw_house_logout'
+        ? rt.houseRuntime.runControlCommand(dispatch) : rt.houseRuntime.runCommand(dispatch));
     } catch (err) {
       // A throwing tool becomes an MCP tool error — never a dead server.
       logger.warn({ tool: tool.name }, `popclaw: tool failed — ${String(err)}`);
