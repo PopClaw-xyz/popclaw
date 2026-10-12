@@ -43,7 +43,8 @@
  */
 import { getOrCreatePerProcess } from '../runtime/once.js';
 import { pageBudgetDecision, type PageBudgetSource } from './host-budget.js';
-import { renderCopy } from '../lexicon/index.js';
+import { formatHouseReadFailure, type HouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
+import { renderCopy, type Lang } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 
 /**
@@ -153,6 +154,8 @@ export interface NewspaperDispatchRecord {
  */
 export interface NewspaperDispatchStage {
   collection?: 'empty' | 'partial-no-material' | 'source-refused';
+  /** Safe read diagnosis observed by the collection tool, never model narration. */
+  collectionFailure?: Pick<HouseReadFailure, 'code' | 'diagnostic'>;
   /** A candidate page was built and returned to the child. */
   candidatePage: boolean;
   /** The child came back with picks and a material page was built and returned. */
@@ -191,16 +194,38 @@ const stages = (): Map<string, NewspaperDispatchStage> =>
 
 export const NewspaperStageStore = {
   /** Record that this session reached `step`. A no-op outside a workshop session. */
-  note(sessionKey: string | undefined, step: Exclude<keyof NewspaperDispatchStage, 'collection'>): void {
+  note(sessionKey: string | undefined, step: Exclude<keyof NewspaperDispatchStage, 'collection' | 'collectionFailure'>): void {
     if (!isDedicatedSession(sessionKey)) return;
     const key = sessionKey!;
     const next = { ...(stages().get(key) ?? noStage()), [step]: true };
-    if (step === 'candidatePage') delete next.collection;
+    if (step === 'candidatePage') { delete next.collection; delete next.collectionFailure; }
     stages().set(key, next);
   },
   collection(sessionKey: string | undefined, outcome: NonNullable<NewspaperDispatchStage['collection']>): void {
     if (!isDedicatedSession(sessionKey)) return;
-    stages().set(sessionKey!, { ...(stages().get(sessionKey!) ?? noStage()), collection: outcome });
+    const next = { ...(stages().get(sessionKey!) ?? noStage()), collection: outcome };
+    delete next.collectionFailure;
+    stages().set(sessionKey!, next);
+  },
+  collectionFailed(sessionKey: string | undefined, failure: HouseReadFailure): HouseReadFailure {
+    // Copy only the diagnostic contract: never persist origin URLs, unknown
+    // error text, headers, body, or an unbounded remote request identifier.
+    const d = failure.diagnostic;
+    const finite = (n: number | undefined) => n !== undefined && Number.isFinite(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER ? n : undefined;
+    const safe: HouseReadFailure = { code: failure.code, ...(d ? { diagnostic: {
+      phase: d.phase, cause: d.cause,
+      ...(d.budget ? { budget: d.budget } : {}),
+      ...(d.cancellation ? { cancellation: d.cancellation } : {}),
+      ...(finite(d.timeoutMs) !== undefined ? { timeoutMs: d.timeoutMs } : {}),
+      ...(finite(d.elapsedMs) !== undefined ? { elapsedMs: d.elapsedMs } : {}),
+      ...(d.requestId && /^[A-Za-z0-9._:-]{1,128}$/.test(d.requestId) ? { requestId: d.requestId } : {}),
+    } } : {}) };
+    if (isDedicatedSession(sessionKey)) {
+      const next = { ...(stages().get(sessionKey!) ?? noStage()), collectionFailure: safe };
+      delete next.collection;
+      stages().set(sessionKey!, next);
+    }
+    return safe;
   },
   peek(sessionKey: string): NewspaperDispatchStage | undefined { return stages().get(sessionKey); },
   /** Read and consume this run's stages — one dispatch, one ledger line. */
@@ -215,6 +240,13 @@ export const NewspaperStageStore = {
     else stages().delete(sessionKey);
   },
 };
+
+/** The same safe diagnosis is returned to the writer and relayed to the owner. */
+export function formatNewspaperCollectionFailure(lang: Lang, failure: HouseReadFailure): string {
+  return renderCopy(lang, 'newspaper.dispatch.reason.read-failed', {
+    reason: formatHouseReadFailure(lang, failure), budget: failure.diagnostic?.budget ?? '-',
+  });
+}
 
 /** What the child session left behind: the published receipt, or why there is none. */
 export type NewspaperOutcome =
@@ -729,6 +761,8 @@ export async function runDedicatedNewspaper(deps: DedicatedDispatchDeps): Promis
       reason = renderCopy(lang, 'newspaper.dispatch.reason.timeout', { minutes });
     } else if (wait.status === 'pending') {
       reason = renderCopy(lang, 'newspaper.dispatch.reason.queued');
+    } else if (NewspaperStageStore.peek(childKey)?.collectionFailure) {
+      reason = formatNewspaperCollectionFailure(lang, NewspaperStageStore.peek(childKey)!.collectionFailure!);
     } else if (NewspaperStageStore.peek(childKey)?.collection) {
       const collection = NewspaperStageStore.peek(childKey)!.collection!;
       reason = renderCopy(lang, `newspaper.dispatch.reason.${collection}`);
