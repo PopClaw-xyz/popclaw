@@ -1,13 +1,14 @@
 import {afterEach, describe, expect, it} from 'vitest';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {popclaw} from '@popclaw/contracts';
 import {durableFixture, fixtureContext, fixtureKey} from '../helpers/durable-social-process.js';
 import {draftToken} from '../helpers/draft-token.js';
 import {decryptDmBody, decryptDmMedia} from '../../src/messaging/dm-crypto.js';
+import {_draftsForTest, makeDraftToken, putDraft, DRAFT_TTL_MS} from '../../src/tools/draft-store.js';
 import {DurableSocialDrafts} from '../../src/tools/durable-social-drafts.js';
 const roots: string[] = [];
 const root = () => {const path = mkdtempSync(join(tmpdir(), 'popclaw-durable-test-')); roots.push(path); return path;};
@@ -105,6 +106,31 @@ describe('ordinary social draft persistence across real Node processes and SQLit
     const fresh = durableFixture(dir, {mode: 'local-stdio', scope: 'client-a'});
     expect((await fresh.call('popclaw_send_draft', {draft_id: id})).text).toContain('review copy changed');
     expect(fresh.effects()).toHaveLength(0); expect(new DurableSocialDrafts(fresh.db, fresh.owner.id).load(id)).not.toBeNull(); fresh.db.close();
+  });
+  it('retains a refused durable review across volatile cleanup and deletes it only when consumed', async () => {
+    const fx = durableFixture(root(), {mode: 'local-stdio', scope: 'client-a'});
+    const body = 'Reviewed manuscript '.repeat(80);
+    const id = idOf((await fx.call('popclaw_draft_message', {recipient: fx.recipient.id, body})).text);
+    const store = new DurableSocialDrafts(fx.db, fx.owner.id), saved = store.load(id)!;
+    const path = saved.review!.file!.path, original = readFileSync(path);
+    writeFileSync(path, 'Changed convenience copy');
+    expect((await fx.call('popclaw_send_draft', {draft_id: id})).text).toContain('review copy changed');
+    // A refused durable manuscript must never acquire volatile eviction ownership.
+    for (let n = 0; n < 20; n++) putDraft(makeDraftToken('message'), async () => ({text: 'unused'}));
+    const now = Date.now;
+    try {
+      Date.now = () => now() + DRAFT_TTL_MS + 1;
+      makeDraftToken('message');
+    } finally { Date.now = now; }
+    expect(existsSync(path)).toBe(true);
+    expect(store.load(id)).not.toBeNull();
+    expect(fx.effects()).toHaveLength(0);
+    writeFileSync(path, original);
+    expect(eventIdOf((await fx.call('popclaw_send_draft', {draft_id: id})).text)).toMatch(/^[a-f0-9]{64}$/);
+    expect(existsSync(path)).toBe(false);
+    expect(store.load(id)).toBeNull();
+    expect(fx.effects()).toHaveLength(1);
+    fx.db.close(); _draftsForTest.clear();
   });
   it('rechecks the new invocation after async signing, spends once on revocation and never revives it', async () => {
     const dir = root(), draft = await child({root: dir, name: 'popclaw_draft_message', params: {recipient: fixtureKey(5).id, body: 'Current invocation only'}});

@@ -21,28 +21,13 @@ import { loadDmAttachment } from '../messaging/dm-media.js';
 import { checkDirectMessageFits } from '../messaging/sign-message.js';
 import type { Signer } from '../identity/signer.js';
 import { runPopclawReplyCommand } from '../commands/popclaw-reply.js';
-import { runPopclawMessageCommand } from '../commands/popclaw-message.js';
-import { runPopclawPostCommand } from '../commands/popclaw-post.js';
-import {
-  draftDigest,
-  draftContentIsCurrent,
-  expiredDraftText,
-  forgetDraft,
-  noteDraftPreview,
-  noteDraftToolOutput,
-  putDraft,
-  takeDraft,
-  verifyDraftReview,
-  type DraftAttachmentSnapshot,
-  type DraftSnapshot,
-} from './draft-store.js';
+import {draftDigest, type DraftAttachmentSnapshot, type DraftSnapshot} from './draft-store.js';
 import { resolvePostRefWithSource, type PostRefSources, type PostRefWithSource } from '../world/post-ref.js';
 import { lookupThreadPost, type NativePostSource } from '../world/thread-post-source.js';
 import { type RegisterToolsDeps, type ToolsCtx } from './tools-context.js';
 import { ownerPopclawId, resolvePersonRef } from './person-sources.js';
 import { confirmDiscipline, sendResultDiscipline, deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
-import { sameSocialDraftBinding, socialDraftBinding, socialSendAssertion, socialToolFactory, withSocialSendInvocation } from '../host/social-send-context.js';
-import { peekDraftSnapshot } from './draft-store.js';
+import { socialDraftBinding, socialSendAssertion, socialToolFactory } from '../host/social-send-context.js';
 const SEND_DRAFT_TOOL = 'popclaw_send_draft';
 /** Source context is a preview; the outbound manuscript remains complete. */
 function sourceExcerpt(value: string): string {
@@ -50,10 +35,7 @@ function sourceExcerpt(value: string): string {
   return points.slice(0, 200).join('') + (points.length > 200 ? '…' : '');
 }
 
-import { withDraftReview } from './draft-review.js';
-import {retainSocialDraft, socialDraftStore, socialDraftToken} from './durable-social-drafts.js';
-import {pinSocialSendPlan, sendSocialDraft} from './draft-send-plan.js';
-import {setDraftReviewFiles} from './draft-store.js';
+import {beginSocialDraft, captureSocialDraftRoute, sendOrdinarySocialDraft} from './social-draft-lifecycle.js';
 
 /**
  * The warning line shown in the draft preview when the lore-house can't verify
@@ -123,14 +105,13 @@ async function presendRelationshipAdvice(
 /** WRITE-CLASS registrations, in their original order. */
 export function registerWriteTools(ctx: ToolsCtx): void {
   const { api, runtime, deps } = ctx;
+  const draftDeps = {...deps, runtime};
   // The root decides whether long drafts get a review copy: only a root that
   // injected a review directory (the MCP root) does. Applied at each mint
   // (withDraftReview), never here: registration must stay cheap (ADR-0035).
 
   // === WRITE-CLASS (draft + confirm) ===
 
-  /** What popclaw_send_draft is allowed to execute — see the note above its registration. */
-  const SEND_DRAFT_KINDS = ['reply', 'message', 'post'] as const;
   /** Body ownership: the owner's own words are the owner's own; the agent may never speak on his behalf. */
   const BODY_OWNERSHIP =
     "body may only be the owner's own words, or content the owner explicitly asked you to draft; " +
@@ -162,7 +143,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       // cache row. Freeze the row now so confirmation cannot follow a newer
       // feed entry to another author or house.
       const draftRuntime = await runtime();
-      const pinnedEgress = draftRuntime.egress?.capturePlan?.().egress ?? draftRuntime.egress;
+      const route = captureSocialDraftRoute(draftRuntime);
       const item = (draftRuntime.worldFeedCache as Parameters<typeof runPopclawReplyCommand>[1]['cache']).lookup(p.platform, p.post_id);
       const replyItem = item ? {
         ...item,
@@ -171,12 +152,10 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       } : null;
       const replyName = replyItem
         ? displayNickname(draftRuntime.nameOf?.(replyItem.authorPopclawId ?? '')) || displayNickname(replyItem.handle) : '';
-      const token = await socialDraftToken(deps, 'reply');
       // The snapshot, not `p`: the model still holds the parameters object it
       // passed in, and everything the closure reads off it at send time is
       // something it could rewrite after the owner has read the draft.
       const snapshot: DraftSnapshot = {
-        ...(deps.durableSocialDrafts ? {sendPlan: {...pinSocialSendPlan(draftRuntime, replyItem?.houseSlug), replySource: replyItem}} : {}),
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'reply',
         ...(replyItem?.authorPopclawId ? { recipientId: replyItem.authorPopclawId } : {}),
@@ -188,19 +167,8 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         preview: null,
         output: null,
       };
-      putDraft(token, async () => {
-        const rt = (await runtime()) as { boot: { signer: unknown; nickname: string }; egress: unknown; socialLog?: unknown };
-        return runPopclawReplyCommand(
-          { positional: [snapshot.target!, snapshot.body], flags: {} } as Parameters<typeof runPopclawReplyCommand>[0],
-          {
-            signer: rt.boot.signer,
-            egress: pinnedEgress ?? rt.egress,
-            cache: { lookup: () => replyItem },
-            nickname: rt.boot.nickname,
-            socialLog: rt.socialLog,
-          } as Parameters<typeof runPopclawReplyCommand>[1],
-        );
-      }, snapshot);
+      const draft = await beginSocialDraft(draftDeps, snapshot, draftRuntime, {replySource: replyItem}, route);
+      const token = draft.id;
       const preview =
         `📝 Draft reply to ${snapshot.target}\n` +
         (snapshot.recipientLabel || snapshot.recipientId
@@ -210,13 +178,10 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         `   "${snapshot.body}"\n\n` +
         `draft_id: ${token}`;
       const outcome = await deliverDraftPreview(toolCtx, preview);
-      noteDraftPreview(token, preview, outcome.status);
       // Record the complete manuscript emitted for original-chat review.
       // A long draft's review copy and its link, on a root that writes them
       // (draft-review.ts); unchanged everywhere else.
-      const text = withDraftReview(token, draftResultText(preview, outcome), deps.draftReviewFiles);
-      noteDraftToolOutput(token, text);
-      await retainSocialDraft(deps, token);
+      const text = await draft.complete(preview, outcome.status, draftResultText(preview, outcome));
       return { type: 'text' as const, text };
     },
     }), deps.getHostedSocialInvocation, deps.getLocalSocialScope),
@@ -296,7 +261,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         // generation, which is also checked again on the eventual push.
         assertHouseActionActive(target.origin ?? target.slug);
       }
-      const pinnedEgress = rt.egress?.capturePlan?.().egress ?? rt.egress;
+      const route = captureSocialDraftRoute(rt);
       const replyToEventId = replySource?.eventId;
       // Read once and check the complete sealed-envelope capacity before
       // showing a draft. Never transform bytes to make them fit.
@@ -318,7 +283,6 @@ export function registerWriteTools(ctx: ToolsCtx): void {
           throw err;
         }
       }
-      const token = await socialDraftToken(deps, 'message');
       // The person resolved above is the person this letter is bound to. A
       // frozen copy, because the object itself is handed back to the closure.
       const pinned = Object.freeze({
@@ -328,7 +292,6 @@ export function registerWriteTools(ctx: ToolsCtx): void {
           : person.nickname,
       });
       const snapshot: DraftSnapshot = {
-        ...(deps.durableSocialDrafts ? {sendPlan: {...pinSocialSendPlan(rt, houseSlug), person: pinned}} : {}),
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'dm',
         recipientId: pinned.popclawId,
@@ -340,42 +303,8 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         preview: null,
         output: null,
       };
-      putDraft(token, async () => {
-        const rt = (await runtime()) as {
-          boot: { signer: unknown; nickname: string };
-          egress: unknown;
-          socialLog?: unknown;
-        };
-        return runPopclawMessageCommand(
-          {
-            positional: snapshot.body ? [recipient, snapshot.body] : [recipient],
-            // No `--image` path here, unlike the slash lane: the bytes ride in
-            // `deps.media` below. The path was re-read at send time, which is
-            // how a file swapped after the owner approved it still went out.
-            flags: {},
-          } as Parameters<typeof runPopclawMessageCommand>[0],
-          {
-            signer: rt.boot.signer,
-            egress: pinnedEgress ?? rt.egress,
-            nickname: rt.boot.nickname,
-            // The exact route approved in the snapshot, never recomputed at send time.
-            houseOfRecipient: () => houseSlug,
-            replyToEventId,
-            // The person resolved at draft time is the same person the message is sent to: no
-            // re-resolution (no drift between draft and send), so the send receipt matches the
-            // draft's name#sigil (full id) exactly.
-            resolveRecipient: async () => pinned,
-            // …and a full id skips the resolver, so hand over the same person for the receipt's name.
-            approvedRecipient: pinned,
-            // Exactly the bytes the owner was shown the name and size of, and
-            // exactly the bytes retained by the frozen manuscript.
-            ...(snapshot.attachments[0]
-              ? { media: { bytes: snapshot.attachments[0].bytes, mime: snapshot.attachments[0].mime, name: snapshot.attachments[0].name } }
-              : {}),
-            socialLog: rt.socialLog,
-          } as Parameters<typeof runPopclawMessageCommand>[1],
-        );
-      }, snapshot);
+      const draft = await beginSocialDraft(draftDeps, snapshot, rt, {person: pinned}, {...route, recipientRef: recipient});
+      const token = draft.id;
       // What the owner confirms must be the **complete content** — if there's an image, the
       // preview identifies the attachment and size. An attachment-only letter has no empty body section.
       const draftLang = ownerLang();
@@ -390,15 +319,11 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         '', renderCopy(draftLang, 'dm.presentation.confirm'),
       ].join('\n');
       const outcome = await deliverDraftPreview(toolCtx, preview);
-      noteDraftPreview(token, preview, outcome.status);
-      const ownerText = withDraftReview(token, preview, deps.draftReviewFiles);
-      const text = JSON.stringify({
+      const text = await draft.complete(preview, outcome.status, preview, ownerText => JSON.stringify({
         owner_text: ownerText, draft_id: token, recipient_popclaw_id: pinned.popclawId,
         ...(image ? {attachment: {name: image.name, mime: image.mime, size_bytes: image.bytes.length}} : {}),
         instruction: DM_DISPLAY_INSTRUCTION + ' ' + confirmDiscipline(draftLang),
-      });
-      noteDraftToolOutput(token, text);
-      await retainSocialDraft(deps, token);
+      }));
       return { type: 'text' as const, text };
     },
     }), deps.getHostedSocialInvocation, deps.getLocalSocialScope),
@@ -457,11 +382,9 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const draftRuntime = await runtime();
       const targetId = replyTo ?? quoteOf;
       const source = resolvedSource ? {...resolvedSource} : null;
-      const pinnedEgress = draftRuntime?.egress?.capturePlan?.().egress ?? draftRuntime?.egress;
+      const route = captureSocialDraftRoute(draftRuntime);
       const house = source?.houseSlug ?? draftRuntime?.egress?.home?.slug;
-      const token = await socialDraftToken(deps, 'post');
       const snapshot: DraftSnapshot = {
-        ...(deps.durableSocialDrafts ? {sendPlan: {...pinSocialSendPlan(draftRuntime, house), postSource: source, replyTo, quoteOf}} : {}),
         binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'post',
         ...(house ? {house} : {}),
@@ -471,26 +394,8 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         preview: null,
         output: null,
       };
-      putDraft(token, async () => {
-        const rt = (await runtime()) as { boot: { signer: unknown; nickname: string; webBaseUrl: string }; egress: unknown; worldFeedCache: unknown; socialLog?: unknown };
-        return runPopclawPostCommand(
-          {
-            positional: [snapshot.body],
-            flags: {
-              ...(replyTo ? { reply: replyTo } : {}),
-              ...(quoteOf ? { quote: quoteOf } : {}),
-            },
-          },
-          {
-            signer: rt.boot.signer,
-            egress: pinnedEgress ?? rt.egress,
-            nickname: rt.boot.nickname,
-            cache: {findByEventIdPrefix: () => ({item: source, ambiguous: []})},
-            webBaseUrl: rt.boot.webBaseUrl,
-            socialLog: rt.socialLog,
-          } as unknown as Parameters<typeof runPopclawPostCommand>[1],
-        );
-      }, snapshot);
+      const draft = await beginSocialDraft(draftDeps, snapshot, draftRuntime, {postSource: source, replyTo, quoteOf}, route);
+      const token = draft.id;
       // When both reply_to_event_id and quote_of_event_id are supplied (which is
       // disallowed), the ternary resolves to 'reply' here for the preview text.
       // The actual mutual-exclusion error surfaces at send time from
@@ -517,13 +422,10 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         `   draft_id: ${token}`,
       ].join('\n');
       const outcome = await deliverDraftPreview(toolCtx, preview);
-      noteDraftPreview(token, preview, outcome.status);
       // Record the complete manuscript emitted for original-chat review.
       // A long draft's review copy and its link, on a root that writes them
       // (draft-review.ts); unchanged everywhere else.
-      const text = withDraftReview(token, draftResultText(preview, outcome), deps.draftReviewFiles);
-      noteDraftToolOutput(token, text);
-      await retainSocialDraft(deps, token);
+      const text = await draft.complete(preview, outcome.status, draftResultText(preview, outcome));
       return { type: 'text' as const, text };
     },
     }), deps.getHostedSocialInvocation, deps.getLocalSocialScope),
@@ -549,56 +451,12 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const { draft_id } = params as { draft_id: string };
       const assertCurrent = socialSendAssertion(deps.socialSendHost, toolCtx, signal);
       if (!assertCurrent) return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.invocationRequired')};
-      assertCurrent();
-      const unavailable = () => ({type: 'text' as const, text: deps.durableSocialDrafts
-        ? renderCopy(ownerLang(), 'socialSend.draftUnavailable') : expiredDraftText(draft_id)});
-      let durable: Awaited<ReturnType<typeof socialDraftStore>> | null = null;
-      try {
-      if (deps.durableSocialDrafts) {
-        if (!SEND_DRAFT_KINDS.some(kind => draft_id.startsWith(`${kind}-`))) return unavailable();
-        durable = await socialDraftStore(deps);
-        assertCurrent();
-        let saved: DraftSnapshot | null;
-        try { saved = durable.load(draft_id); }
-        catch (error) {
-          if (error instanceof Error && error.message === 'SOCIAL_DRAFT_MATERIAL_CHANGED') {
-            return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.materialChanged')};
-          }
-          throw error;
-        }
-        if (!saved) return unavailable();
-        if (!sameSocialDraftBinding(saved.binding, socialDraftBinding(deps.socialSendHost, toolCtx))) {
-          return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.conversationChanged')};
-        }
-        const rt = await runtime();
-        assertCurrent();
-        putDraft(draft_id, () => sendSocialDraft(saved, rt), saved);
-        const files = typeof deps.draftReviewFiles === 'function' ? deps.draftReviewFiles() : deps.draftReviewFiles;
-        setDraftReviewFiles(files ?? null);
-      }
-      const snapshot = peekDraftSnapshot(draft_id);
-      if (!snapshot) return unavailable();
-      if (!sameSocialDraftBinding(snapshot.binding, socialDraftBinding(deps.socialSendHost, toolCtx))) {
-        return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.conversationChanged')};
-      }
-      if (!draftContentIsCurrent(draft_id)) return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.materialChanged')};
-      if (verifyDraftReview(draft_id) === 'changed') {
-        return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.reviewChanged')};
-      }
-      // Spend once before awaiting a transport: an unknown outcome is not retried.
-      assertCurrent();
-      if (durable && !durable.consume(draft_id)) return unavailable();
-      const sender = takeDraft(draft_id, SEND_DRAFT_KINDS);
-      if (!sender) return unavailable();
-      const reply = await withSocialSendInvocation(assertCurrent, sender);
+      const result = await sendOrdinarySocialDraft(draftDeps, draft_id, socialDraftBinding(deps.socialSendHost, toolCtx), assertCurrent);
+      if (result.status === 'refused') return {type: 'text' as const, text: result.text};
+      const {snapshot, reply} = result;
       return {type: 'text' as const, ...('isError' in reply && reply.isError === true ? {isError: true} : {}), text: snapshot.kind === 'dm'
         ? JSON.stringify({owner_text: reply.text, ...('eventId' in reply && reply.eventId ? {event_id: reply.eventId} : {}), instruction: DM_DISPLAY_INSTRUCTION + ' ' + sendResultDiscipline('en')})
         : reply.text};
-      } finally {
-        // A refused send must not leave a volatile cache entry whose later
-        // TTL/cap eviction could erase the durable manuscript's review copy.
-        if (durable) forgetDraft(draft_id);
-      }
     },
   }), deps.getHostedSocialInvocation, deps.getLocalSocialScope), {name: SEND_DRAFT_TOOL});
 }
