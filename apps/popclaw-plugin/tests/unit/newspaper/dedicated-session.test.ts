@@ -685,6 +685,117 @@ describe('runDedicatedNewspaper — inline wait, then background (#575)', () => 
     await vi.waitFor(() => expect(fx.deleted).toEqual([childSessionKey('test-issue')]));
   });
 
+  it('an observation cancellation does not tear down a still-running workshop or release its duplicate guard', async () => {
+    const fx = makeSurface({});
+    let cancelObservation!: (error: Error) => void;
+    let waitCount = 0;
+    fx.surface.waitForRun = async () => {
+      if (++waitCount === 1) return { status: 'timeout' };
+      return new Promise((_resolve, reject) => { cancelObservation = reject; });
+    };
+    const parent = 'agent:main:telegram:observer-cancel';
+    const records: NewspaperDispatchRecord[] = [];
+    const { deps, delivered } = makeDeps(fx.surface, {
+      inlineWaitMs: 5, parentSessionKey: parent, recordDispatch: record => records.push(record),
+    });
+    const first = await runDedicatedNewspaper(deps);
+    cancelObservation(new Error('GatewayClientRequestError: agent.wait observation cancelled'));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+
+    expect(fx.deleted).toEqual([]);
+    expect(records).toEqual([]);
+    expect(delivered).toHaveLength(1);
+    expect(NewspaperDispatchRegistry.inFlight(parent)?.runId).toBe('run-1');
+    expect(await runDedicatedNewspaper(deps)).toBe(first);
+    expect(fx.runs).toHaveLength(1);
+    NewspaperOutcomeStore.set(fx.runs[0]!.sessionKey, { ok: true, receiptText: RECEIPT });
+    await vi.waitFor(() => expect(delivered.at(-1)).toBe(withModelNote(RECEIPT)), { timeout: 100 });
+  });
+
+  it('a publication arriving after observation cancellation is delivered once and then cleaned up', async () => {
+    const fx = makeSurface({});
+    let cancelObservation!: (error: Error) => void;
+    let waitCount = 0;
+    fx.surface.waitForRun = async () => {
+      if (++waitCount === 1) return { status: 'timeout' };
+      return new Promise((_resolve, reject) => { cancelObservation = reject; });
+    };
+    const records: NewspaperDispatchRecord[] = [];
+    const { deps, delivered } = makeDeps(fx.surface, {
+      inlineWaitMs: 5, parentSessionKey: 'agent:main:telegram:late-publish',
+      recordDispatch: record => records.push(record),
+    });
+    await runDedicatedNewspaper(deps);
+    cancelObservation(new Error('GatewayClientRequestError: agent.wait observation cancelled'));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    const child = fx.runs[0]!.sessionKey;
+    NewspaperOutcomeStore.set(child, { ok: true, receiptText: RECEIPT });
+
+    await vi.waitFor(() => expect(delivered.at(-1)).toBe(withModelNote(RECEIPT)), { timeout: 100 });
+    await vi.waitFor(() => expect(NewspaperDispatchRegistry.inFlight('agent:main:telegram:late-publish')).toBeUndefined(), { timeout: 100 });
+    expect(NewspaperOutcomeStore.get(child)).toBeUndefined();
+    NewspaperOutcomeStore.set(child, { ok: true, receiptText: RECEIPT });
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(delivered.filter(text => text === withModelNote(RECEIPT))).toHaveLength(1);
+    expect(records.map(record => record.outcome)).toEqual(['published']);
+    expect(fx.deleted).toEqual([]); // Publication cannot authorize deleting a still-active run.
+    expect(NewspaperDispatchRegistry.inFlight('agent:main:telegram:late-publish')).toBeUndefined();
+  });
+
+  it('an unfinished hand-in after observer loss cannot beat the later complete publication', async () => {
+    const fx = makeSurface({});
+    let cancel!: (error: Error) => void;
+    let calls = 0;
+    fx.surface.waitForRun = async () => ++calls === 1 ? { status: 'timeout' }
+      : new Promise((_resolve, reject) => { cancel = reject; });
+    const records: NewspaperDispatchRecord[] = [];
+    const { deps, delivered } = makeDeps(fx.surface, { inlineWaitMs: 5, recordDispatch: row => records.push(row) });
+    await runDedicatedNewspaper(deps);
+    cancel(new Error('agent.wait observation cancelled'));
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    const child = fx.runs[0]!.sessionKey;
+    NewspaperOutcomeStore.set(child, { ok: false, reason: 'batch saved, more items unwritten' });
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(records).toEqual([]);
+    expect(fx.deleted).toEqual([]);
+    expect(delivered).toHaveLength(1);
+    NewspaperOutcomeStore.set(child, { ok: true, receiptText: RECEIPT });
+    await vi.waitFor(() => expect(delivered.at(-1)).toBe(withModelNote(RECEIPT)), { timeout: 100 });
+    expect(records.map(row => row.outcome)).toEqual(['published']);
+  });
+
+  it('observer-loss fallback keeps the original deadline and ignores another child publication', async () => {
+    vi.useFakeTimers();
+    try {
+      const fx = makeSurface({});
+      let calls = 0;
+      fx.surface.waitForRun = async () => {
+        if (++calls === 1) return { status: 'timeout' };
+        throw new Error('agent.wait observation cancelled');
+      };
+      const records: NewspaperDispatchRecord[] = [];
+      const parent = 'agent:main:telegram:bounded-observer';
+      const { deps, delivered } = makeDeps(fx.surface, { inlineWaitMs: 5, timeoutMs: 100,
+        parentSessionKey: parent, recordDispatch: row => records.push(row) });
+      await runDedicatedNewspaper(deps);
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+      NewspaperOutcomeStore.set(childSessionKey('other-workshop'), { ok: true, receiptText: 'wrong child' });
+      await vi.advanceTimersByTimeAsync(99);
+      expect(records).toEqual([]);
+      expect(delivered).toHaveLength(1);
+      expect(fx.deleted).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(records.map(row => row.outcome)).toEqual(['no-receipt']);
+      expect(fx.deleted).toEqual([]); // An expired observer has no cleanup authority.
+      expect(NewspaperDispatchRegistry.inFlight(parent)).toBeUndefined();
+      expect(calls).toBe(2); // No replacement observation or workshop.
+      const settledDeliveries = delivered.length;
+      NewspaperOutcomeStore.set(fx.runs[0]!.sessionKey, { ok: true, receiptText: RECEIPT });
+      await vi.advanceTimersByTimeAsync(1);
+      expect(delivered).toHaveLength(settledDeliveries);
+    } finally { vi.useRealTimers(); }
+  });
+
   it('a background run that fails still says so out loud — the failure receipt is pushed', async () => {
     const fx = makeSurface({ waitSteps: [{ status: 'timeout' }, { status: 'error', error: 'provider 429' }] });
     const { deps, delivered } = makeDeps(fx.surface, { inlineWaitMs: 5 });

@@ -26,9 +26,9 @@
  *      zero output and nobody knew. When the wait goes to the background the
  *      notifier IS the delivery, so a root with no notifier keeps waiting
  *      inline: there would be nowhere else for the paper to come out.
- *   2. The child session is always torn down (deleteSession), success or
- *      failure alike — and never before the run it belongs to has settled,
- *      which is why teardown follows the BACKGROUND wait when there is one.
+ *   2. A host-observed terminal run gets best-effort session cleanup. Losing
+ *      the observer does not prove termination or retain caller authority:
+ *      that path clears local hand-off state but preserves the host session.
  *   3. Degradation is honest. If the subagent surface is missing or refuses
  *      the dispatch (e.g. OPENCLAW_SUBAGENT_RUNTIME_REQUEST_SCOPE outside a
  *      request scope), the error propagates and the CALLER falls back to the
@@ -274,13 +274,35 @@ export type NewspaperOutcome =
 const outcomes = (): Map<string, NewspaperOutcome> =>
   getOrCreatePerProcess('newspaper-outcomes', () => new Map<string, NewspaperOutcome>());
 
+const outcomeWaiters = (): Map<string, Set<(outcome: NewspaperOutcome | undefined) => void>> =>
+  getOrCreatePerProcess('newspaper-outcome-waiters', () => new Map());
+
 /** The tiny hand-off table between the two sessions of one dispatch. */
 export const NewspaperOutcomeStore = {
   set(sessionKey: string, outcome: NewspaperOutcome): void {
     outcomes().set(sessionKey, outcome);
+    // An unfinished/refused hand-in may still be corrected by this same run.
+    if (outcome.ok) for (const finish of [...(outcomeWaiters().get(sessionKey) ?? [])]) finish(outcome);
   },
   get(sessionKey: string): NewspaperOutcome | undefined {
     return outcomes().get(sessionKey);
+  },
+  /** Await only this existing child's publication, without another host request. */
+  waitFor(sessionKey: string, timeoutMs: number): Promise<NewspaperOutcome | undefined> {
+    const current = outcomes().get(sessionKey);
+    if (current?.ok) return Promise.resolve(current);
+    return new Promise(resolve => {
+      const listeners = outcomeWaiters().get(sessionKey) ?? new Set();
+      outcomeWaiters().set(sessionKey, listeners);
+      const finish = (outcome: NewspaperOutcome | undefined) => {
+        clearTimeout(timer);
+        listeners.delete(finish);
+        if (!listeners.size) outcomeWaiters().delete(sessionKey);
+        resolve(outcome);
+      };
+      const timer = setTimeout(() => finish(undefined), Math.max(0, timeoutMs));
+      listeners.add(finish);
+    });
   },
   /** Clear one entry (a consumed dispatch) or the whole table (tests). */
   clear(sessionKey?: string): void {
@@ -650,12 +672,19 @@ export async function runDedicatedNewspaper(deps: DedicatedDispatchDeps): Promis
   // Set when the wait moves to the background: teardown and the guard then belong
   // to THAT wait, not to the tool call that is about to return.
   let handedOff = false;
+  let observationUnavailable = false;
 
   const teardown = async (): Promise<void> => {
-    try {
-      await deps.subagent.deleteSession({ sessionKey: childKey });
-    } catch (err) {
-      log(`popclaw: newspaper child session cleanup failed (non-fatal) — ${String(err)}`);
+    if (observationUnavailable) {
+      // Publication proves the artifact, not host-run termination or authority.
+      // Do not delete a possibly active child through an expired caller scope.
+      log('popclaw: newspaper child session retained after observation loss — host termination was not established');
+    } else {
+      try {
+        await deps.subagent.deleteSession({ sessionKey: childKey });
+      } catch (err) {
+        log(`popclaw: newspaper child session cleanup failed (non-fatal) — ${String(err)}`);
+      }
     }
     // Already consumed by `record()` on every path that has a ledger to write to; this is
     // for the ones that do not (old assemblies, test rigs), so an untaken entry cannot
@@ -684,13 +713,22 @@ export async function runDedicatedNewspaper(deps: DedicatedDispatchDeps): Promis
     let notedQueued = false;
     for (;;) {
       const remaining = deadlineAt - Date.now();
+      if (observationUnavailable) {
+        const outcome = await NewspaperOutcomeStore.waitFor(childKey, remaining);
+        return { status: outcome ? 'ok' : 'timeout' };
+      }
       if (remaining <= 0) return { status: 'pending' };
       const callStartedAt = Date.now();
       let wait: WaitResult;
       try {
         wait = await deps.subagent.waitForRun({ runId: id, timeoutMs: remaining });
       } catch (err) {
-        return { status: 'error', error: String(err) };
+        // A failed passive observation does not terminate the host-owned run.
+        // Keep its exact-child outcome hand-off and original deadline; retrying
+        // the same request-scoped surface cannot transfer its authority.
+        observationUnavailable = true;
+        log(`popclaw: newspaper run observation unavailable — awaiting its publication outcome (${String(err)})`);
+        continue;
       }
       if (wait.status !== 'pending') return wait;
       if (!notedQueued) {
