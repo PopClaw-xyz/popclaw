@@ -9,8 +9,8 @@ establish every host feature or transfer acceptance to a newer package.
 
 For 0.1.2 source `22dae896fe188df4e26241996f4e40902785f274`,
 [CI](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267017008),
-[CodeQL](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267016939) and
-[publication checks](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267017016)
+[CodeQL](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267017016) and
+[publication checks](https://github.com/PopClaw-xyz/popclaw/actions/runs/38267016939)
 passed. Three fixed-local-candidate OpenClaw samples produced published papers;
 two delivered in the original batch, and a separate later request on the third
 host delivered after a notification-target adjustment. See the
