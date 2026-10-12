@@ -329,3 +329,14 @@ describe('ordinary House snapshot request reuse', () => {
     expect(f.fetchMock).toHaveBeenCalledTimes(2);
   });
 });
+
+it('does not write an ordinary snapshot cache after the owning read deadline', async () => {
+  const { withReadCallBudget } = await import('../../../src/runtime/read-call-budget.js');
+  const f=await fixture([row(signed({post:{blocks:[{content:'late article'}]}},100))]);
+  const original=f.fetchMock.getMockImplementation()!;
+  f.fetchMock.mockImplementation(async input=>{if(!String(input).endsWith('/v1/manifest'))await new Promise(r=>setTimeout(r,80));return original(input);});
+  const record=vi.spyOn(f.cache,'record');
+  await expect(withReadCallBudget({timeoutMs:30},()=>f.reader.prepare({completeWindow:true}))).rejects.toMatchObject({failure:{code:'HOUSE_REMOTE_TIMEOUT'}});
+  await new Promise(r=>setTimeout(r,100));
+  expect(record).not.toHaveBeenCalled();
+});

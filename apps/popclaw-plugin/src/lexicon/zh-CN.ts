@@ -467,6 +467,11 @@ export const ZH_CN: Lexicon = {
     // Rollout slice 1 — popclaw_world_guide (register-tools.ts). zh
     // byte-for-byte from the pre-lexicon source.
     // -------------------------------------------------------------------
+    'world.read.freshness': '读取状态：{status}；来源：{origin}；正文取得：{fetched}；验证：{checked}；最近尝试：{attempted}。缓存内容不是实时观测。',
+    'world.read.fresh': '已验证有效',
+    'world.read.stale': '缓存，尚未重新验证',
+    'world.read.refresh_failed': '缓存，刷新失败',
+    'world.read.unknown': '未记录',
     'world.guide.unreachable': '世界自述暂时拉不到——{lantern}',
     'world.guide.defaultVoice': '一个新世界',
     'world.guide.streamsLine': '流：{names}（{count} 路）',

@@ -1,3 +1,5 @@
+import { assertReadCallActive, budgetedFetch, waitForRead, withReadCallBudget, currentReadCallBudget, withSharedReadProducer } from '../runtime/read-call-budget.js';
+import type { ReadFreshness } from './read-freshness.js';
 /** Source-bound House business knowledge; reading or emitting it grants no action. */
 import { RemoteHouseReadError, type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
 import { currentActionSignal } from '../runtime/house-lifecycle/action-context.js';
@@ -11,7 +13,7 @@ import { parseGuideFrontmatter } from './guide.js';
 export interface HouseGuideContext {
   readonly status: 'available'; readonly origin: string; readonly bindingDigest: string; readonly opSeq: number;
   readonly guideUrl: string; readonly guideDigest: string; readonly guide: string;
-  readonly entry?: unknown; readonly delivered: boolean;
+  readonly entry?: unknown; readonly delivered: boolean; readonly freshness?: ReadFreshness;
 }
 export type HouseGuideResult = HouseGuideContext | {readonly status:'unavailable';readonly code:string;readonly origin:string;readonly failure?:HouseReadFailure};
 interface Row {origin:string;binding_digest:string;op_seq:number;guide_url:string;manifest_digest:string;guide_digest:string|null;guide_body:string|null;delivered_digest:string|null}
@@ -21,7 +23,7 @@ export function guideBindingDigest(db:HostDb,origin:string): string {
 }
 export const GUIDE_REVALIDATE_MS = 6 * 60 * 60 * 1000;
 const GUIDE_MAX_BYTES = 256 * 1024;
-type RefreshState = { identity: string; checkedAt: number; dirty: boolean; revision: number; hint?: string; attemptedAt?: number; failure?: HouseReadFailure; pending?: Promise<void> };
+type RefreshState = { identity: string; checkedAt: number; fetchedAt?:number; dirty: boolean; revision: number; hint?: string; attemptedAt?: number; failure?: HouseReadFailure; pending?: Promise<void>; waiters:Set<() => boolean>; abort?:AbortController };
 const refreshStates = new WeakMap<HostDb, Map<string, RefreshState>>();
 function refreshState(db: HostDb, row: Row): RefreshState {
   let states = refreshStates.get(db);
@@ -29,7 +31,7 @@ function refreshState(db: HostDb, row: Row): RefreshState {
   const identity = JSON.stringify([row.binding_digest,row.op_seq,row.guide_url,row.manifest_digest]);
   let state = states.get(row.origin);
   if (!state || state.identity !== identity) {
-    state = {identity,checkedAt:0,dirty:true,revision:0}; states.set(row.origin,state);
+    state = {identity,checkedAt:0,dirty:true,revision:0,waiters:new Set()}; states.set(row.origin,state);
   }
   return state;
 }
@@ -56,7 +58,10 @@ export function cachedHouseGuide(db: HostDb, origin: string, active: () => boole
   if (!row) return {status:'unavailable',origin,code:'HOUSE_GUIDE_CONTEXT_STALE'};
   if (!row.guide_url || !row.guide_body || !row.guide_digest || entryDigest(row.guide_body) !== row.guide_digest)
     return {status:'unavailable',origin,code:'HOUSE_GUIDE_NOT_CACHED'};
-  return Object.freeze({status:'available',origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,guideUrl:row.guide_url,
+  const state = refreshState(db,row);
+  const freshness: ReadFreshness = {status:state.failure ? 'refresh_failed' : state.dirty || Date.now()-state.checkedAt >= GUIDE_REVALIDATE_MS ? 'stale' : 'fresh',origin,
+    fetchedAtMs:state.fetchedAt ?? null,checkedAtMs:state.checkedAt || null,attemptedAtMs:state.attemptedAt ?? null,...(state.failure ? {failure:state.failure} : {})};
+  return Object.freeze({freshness,status:'available',origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,guideUrl:row.guide_url,
     guideDigest:row.guide_digest,guide:row.guide_body,entry:parseGuideFrontmatter(row.guide_body).frontmatter?.entry,
     delivered:row.delivered_digest === row.guide_digest});
 }
@@ -68,7 +73,7 @@ export async function readBoundedGuide(response: Response): Promise<string> {
   let bytes = 0, body = '';
   try {
     while (true) {
-      const chunk = await reader.read();
+      const chunk = await waitForRead(reader.read());
       if (chunk.done) break;
       bytes += chunk.value.byteLength;
       if (bytes > GUIDE_MAX_BYTES) throw new Error('HOUSE_GUIDE_TOO_LARGE');
@@ -77,29 +82,54 @@ export async function readBoundedGuide(response: Response): Promise<string> {
     body += decoder.decode();
     if (!body.trim()) throw new Error('HOUSE_GUIDE_EMPTY');
     return body;
-  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  } finally { void reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 export async function readHouseGuideContext(db: HostDb, origin: string, fetchDocument: typeof globalThis.fetch,
+  active: () => boolean): Promise<HouseGuideResult> {
+  const cached=cachedHouseGuide(db,origin,active);
+  const remaining=currentReadCallBudget()?.remainingMs() ?? 10_000;
+  try {
+    return await withReadCallBudget({timeoutMs:cached.status === 'available' ? Math.min(1500,Math.max(0,remaining-50)) : Math.max(0,remaining-50)},
+      () => refreshHouseGuideContext(db,origin,fetchDocument,active));
+  } catch(error) {
+    const failure=remoteReadFailure(error,origin,{phase:'delegate'});
+    if (!failure.code.startsWith('HOUSE_REMOTE_')) return {status:'unavailable',origin,code:'HOUSE_GUIDE_FETCH_FAILED',failure};
+    const result=cachedHouseGuide(db,origin,active);
+    if (result.status === 'available') return {...result,freshness:{...result.freshness!,status:'refresh_failed',attemptedAtMs:Date.now(),failure:remoteReadFailure(error,origin,{phase:'delegate'})}};
+    return {status:'unavailable',origin,code:'HOUSE_GUIDE_FETCH_FAILED',failure:remoteReadFailure(error,origin,{phase:'delegate'})};
+  }
+}
+async function refreshHouseGuideContext(db: HostDb, origin: string, fetchDocument: typeof globalThis.fetch,
   active: () => boolean): Promise<HouseGuideResult> {
   const row = currentGuideRow(db,origin,active);
   if (!row) return {status:'unavailable',origin,code:'HOUSE_GUIDE_CONTEXT_STALE'};
   if (!row.guide_url) return {status:'unavailable',origin,code:'HOUSE_GUIDE_NOT_DECLARED'};
-  const state = refreshState(db,row);
+  const state = refreshState(db,row), waiting=currentReadCallBudget();
+  const waiter=() => { try { waiting?.assertActive(); return active(); } catch { return false; } };
+  state.waiters.add(waiter);
+  const release=() => {
+    state.waiters.delete(waiter);
+    if (![...state.waiters].some(check=>check())) state.abort?.abort();
+  };
+  waiting?.signal.addEventListener('abort',release,{once:true});
   const current = () => {
+    assertReadCallActive();
     const latest = currentGuideRow(db,origin,active);
-    return latest !== null && refreshState(db,latest) === state;
+    return latest !== null && refreshState(db,latest) === state && [...state.waiters].some(check=>check());
   };
   if (!state.pending && (state.dirty || Date.now()-state.checkedAt >= GUIDE_REVALIDATE_MS || !row.guide_body)) {
     const revision = state.revision; state.attemptedAt = Date.now();
     const startedAt = performance.now(), actionSignal = currentActionSignal();
     let phase: HouseReadDiagnostic['phase'] = 'before-fetch';
     let deadline: AbortSignal | undefined;
-    state.pending = (async () => {
+    const abort=new AbortController(); state.abort=abort;
+    const failed=(error:unknown) => { state.dirty=true; state.failure=remoteReadFailure(error,origin,{phase,deadline,timeoutMs:10_000,startedAt,actionSignal}); };
+    state.pending = withSharedReadProducer(abort.signal,async () => {
       try {
         const cached = row.guide_body && row.guide_digest === entryDigest(row.guide_body);
         const request = (conditional: boolean) => {
-          phase = 'fetch'; deadline = AbortSignal.timeout(15_000);
-          return fetchDocument(row.guide_url,{method:'GET',redirect:'error',signal:deadline,
+          phase = 'fetch'; deadline = AbortSignal.timeout(10_000);
+          return budgetedFetch(fetchDocument)(row.guide_url,{method:'GET',redirect:'error',signal:deadline,
             headers:conditional ? {'If-None-Match':`"${row.guide_digest}"`} : {}});
         };
         let response = await request(!!cached);
@@ -118,18 +148,21 @@ export async function readHouseGuideContext(db: HostDb, origin: string, fetchDoc
           });
         }
         const latestDigest = db.queryOne<Row>('SELECT * FROM house_guide_context WHERE origin=?',[origin])?.guide_digest;
+        if (response.status !== 304) state.fetchedAt=Date.now();
         state.checkedAt = Date.now(); state.failure = undefined;
         state.dirty = state.revision !== revision && state.hint !== latestDigest;
       } catch (error) {
-        state.dirty = true; state.failure = remoteReadFailure(error,origin,{phase,deadline,timeoutMs:15_000,startedAt,actionSignal});
+        failed(error);
         // Preserve the last complete body and pending invalidation.
       }
-    })().finally(() => { state.pending = undefined; });
+    }).catch(failed).finally(() => { state.pending = undefined; state.abort=undefined; });
   }
-  if (state.pending) await state.pending;
+  try {
+  if (state.pending) await waitForRead(state.pending);
   const result = cachedHouseGuide(db,origin,active);
   return result.status === 'unavailable' && result.code === 'HOUSE_GUIDE_NOT_CACHED' && state.failure
     ? {...result,code:'HOUSE_GUIDE_FETCH_FAILED',failure:state.failure} : result;
+  } finally { waiting?.signal.removeEventListener('abort',release); release(); }
 }
 /** Existing resident cadence only revalidates initialized caches. Historical
  * pointer backfill remains a foreground read; failures cannot become 1s polling. */
@@ -196,8 +229,11 @@ export async function readJoinedHouseGuide(db: HostDb, origin: string, ports: Ho
       backfillCurrent = () => gate.isActive()
         && JSON.stringify(readParticipation(db,origin)) === JSON.stringify(row)
         && JSON.stringify(pinnedBinding(db,origin)) === JSON.stringify(binding);
-      const manifest = await ports.fetchManifest();
-      const prepared = await ports.prepareBinding(manifest);
+      assertReadCallActive();
+      const manifest = await waitForRead(ports.fetchManifest());
+      assertReadCallActive();
+      const prepared = await waitForRead(ports.prepareBinding(manifest));
+      assertReadCallActive();
       const concurrent = db.transaction(tx => {
         if (!gate.isActive() || JSON.stringify(readParticipation(tx,origin)) !== JSON.stringify(row)) throw new Error('HOUSE_GUIDE_CONTEXT_STALE');
         const refusal = prepared.commit(tx);

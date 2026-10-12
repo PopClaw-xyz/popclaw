@@ -1,3 +1,4 @@
+import { assertReadCallActive, budgetedFetch, waitForRead } from '../runtime/read-call-budget.js';
 /**
  * Manifest client (ADR-0041's house-handshake first hop)
  *
@@ -43,14 +44,15 @@ export async function conditionalGet(
 ): Promise<ConditionalResult> {
   const fetchFn = opts.fetch ?? globalThis.fetch;
   try {
-    const res = await fetchFn(url, {
+    const res = await budgetedFetch(fetchFn)(url, {
       ...(opts.etag ? { headers: { 'if-none-match': opts.etag } } : {}),
       signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS),
     });
     if (res.status === 304) return { status: 'not_modified' };
     if (!res.ok) return { status: 'unavailable' };
     const etag = res.headers.get('etag');
-    const text = await res.text();
+    const text = await waitForRead(res.text());
+    assertReadCallActive();
     return { status: 'ok', ...(etag ? { etag } : {}), text };
   } catch {
     return { status: 'unavailable' };

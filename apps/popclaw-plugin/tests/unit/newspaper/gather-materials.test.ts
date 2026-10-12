@@ -960,3 +960,13 @@ describe('I5: 正文预算与条数上限', () => {
     });
   });
 });
+
+it('does not freeze an issue when cancellation occurs during final material validation', async () => {
+  const { withReadCallBudget } = await import('../../../src/runtime/read-call-budget.js');
+  const controller=new AbortController();
+  _resetIssuesForTest();
+  await expect(withReadCallBudget({signal:controller.signal},async()=>gatherRaw(deps({
+    mintToken:()=> 'budget_cancelled',validateMaterials:()=>controller.abort(),
+  })))).rejects.toMatchObject({code:'HOUSE_ACTION_STALE'});
+  expect(getIssue('cbudget_cancelled')).toBeUndefined();
+});

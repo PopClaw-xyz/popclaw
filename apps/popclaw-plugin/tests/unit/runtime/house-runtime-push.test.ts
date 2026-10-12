@@ -440,3 +440,14 @@ it('actual MCP ports and shared collaborators keep same-root non-owner summary r
  await expect(toolText(tools,'popclaw_world_summary')).rejects.toThrow('HOUSE_DISABLED');
  expect(s.reads).toHaveLength(reads);expect(s.received).toEqual([]);
 });
+
+it('appends cached guide contexts without starting any House reads after the business result', async () => {
+ const s=await fixture();
+ expect((await s.owner.readHouseGuide(s.origin)).status).toBe('available');
+ const read=vi.spyOn(s.owner,'readHouseGuide');
+ const before=s.reads.length;
+ const contexts=await s.owner.pendingHouseGuides(new Set());
+ expect(contexts).toHaveLength(1);
+ expect(read).not.toHaveBeenCalled();
+ expect(s.reads).toHaveLength(before);
+});

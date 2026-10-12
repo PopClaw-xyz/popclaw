@@ -1,3 +1,4 @@
+import { budgetedFetch } from '../read-call-budget.js';
 import { ensureHouseOriginBindingsSchema, ensureHouseRecoveryCursorEvidenceSchema } from './house-runtime-schema.js';
 export { ensureHouseOriginBindingsSchema, ensureHouseRecoveryCursorEvidenceSchema } from './house-runtime-schema.js';
 import { houseBindingBlocked } from '../../world/house-recovery-fence.js';
@@ -17,7 +18,7 @@ import type { InboxReadCredential } from '../../messaging/inbox-stream-client.js
 import type { ReadAuthority, ReadCredentialOutcome } from '../../identity/read-authority.js';
 import type { ConfiguredHousePinningStrategy } from './configured-first-pin.js';
 import { cancelInitialSetup } from './participation-journal.js';
-import { houseGuideBackgroundDue, invalidateHouseGuide, readJoinedHouseGuide, pendingHouseGuides, markGuidesInAgentInput, markHouseGuideDelivered, type HouseGuideContext } from '../../world/house-guide-context.js';
+import { cachedHouseGuide, houseGuideBackgroundDue, invalidateHouseGuide, readJoinedHouseGuide, pendingHouseGuides, markGuidesInAgentInput, markHouseGuideDelivered, type HouseGuideContext } from '../../world/house-guide-context.js';
 import { findParticipationReceipt } from './participation-journal.js';
 import type { HouseParticipationReceiptQuery, HouseParticipationReceiptResult } from './participation-admission.js';
 import { HouseLifecycleManager, type HouseGate, type ManagerOptions } from './manager.js';
@@ -391,7 +392,7 @@ export class HouseRuntime {
         isActive: () => joined.isActive() && (!readGate || readGate.isActive()) };
       const read = readJoinedHouseGuide(this.opts.db, origin, {
         gate,
-        fetchManifest: () => fetchSessionManifest(origin, this.opts.fetch ?? globalThis.fetch, gate.signal),
+        fetchManifest: () => fetchSessionManifest(origin, budgetedFetch(this.opts.fetch ?? globalThis.fetch), gate.signal),
         prepareBinding: manifest => makeRelationBindingPreparer({db: this.opts.db,
           configuredKeyFor: origin => this.opts.configuredPinFor?.(origin),
           allowInsecureOrigin: origin => isPrivateAddressOrigin(origin)})({origin,
@@ -407,7 +408,11 @@ export class HouseRuntime {
     } catch (error) { return Promise.reject(error); }
   }
   pendingHouseGuides(present?: ReadonlySet<string>): Promise<HouseGuideContext[]> {
-    return pendingHouseGuides(this.opts.db, origin => this.readHouseGuide(origin), present);
+    return pendingHouseGuides(this.opts.db, origin => {
+      assertHouseActionActive(origin);
+      const gate=this.publicReadGate(origin); assertActionActive(gate);
+      return Promise.resolve(cachedHouseGuide(this.opts.db,origin,() => !this.stopped && gate.isActive() && !gate.signal.aborted));
+    }, present);
   }
   markGuidesInAgentInput(serialized: string): void { markGuidesInAgentInput(this.opts.db, serialized); }
   markHouseGuideDelivered(context: HouseGuideContext): boolean { return markHouseGuideDelivered(this.opts.db,context); }

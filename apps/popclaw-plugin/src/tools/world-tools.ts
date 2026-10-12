@@ -1,3 +1,5 @@
+import { assertReadCallActive, withReadCallBudget } from '../runtime/read-call-budget.js';
+import { freshnessText } from '../world/read-freshness.js';
 /**
  * The world tools (guide / summary / author history / follow + unfollow, plus
  * the newspaper reader-pass pairing). Registered only when the composition
@@ -151,12 +153,13 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         "The owner's name is never fixed — never tell him it is. Once onboarding is finished he can change it with popclaw_set_name; " +
         'while onboarding is in progress a naming answer goes to popclaw_onboarding_continue instead.',
       parameters: WorldGuideSchema,
-      execute: async () => {
+      execute: async () => withReadCallBudget({}, async () => {
         const lang = ownerLang();
         const wd = await getWorldDeps();
         const guide = wd.guideClient.fetchGuideResult ? await wd.guideClient.fetchGuideResult() : undefined;
         const md = guide ? (guide.ok ? guide.text : null) : await wd.guideClient.fetchGuideText();
         const parts: string[] = [];
+        if (guide?.ok && guide.freshness) parts.push(freshnessText(guide.freshness,lang));
         if (md === null) {
           parts.push(renderCopy(lang, 'world.guide.unreachable', { lantern: lanternDownText(lang) }));
           if (guide && !guide.ok) parts.push(formatHouseReadFailure(lang,guide.failure));
@@ -191,8 +194,9 @@ export function registerWorldTools(ctx: ToolsCtx): void {
               h.guide,
           );
         }
+        assertReadCallActive();
         return { type: 'text' as const, text: parts.join('\n\n') };
-      },
+      }),
     });
 
     api.registerTool({
@@ -208,7 +212,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         'After presenting it, suggest what the owner could do next (dig into someone with popclaw_author_latest, ' +
         'follow someone with popclaw_follow, reply/post with the draft tools).',
       parameters: WorldSummaryToolSchema,
-      execute: async (_callId: string, params: unknown) => {
+      execute: async (_callId: string, params: unknown) => withReadCallBudget({}, async () => {
         const scope = deps.currentGuideReadScope?.();
         const p = params as { window_hours?: number; retry?: boolean };
         const windowHours =
@@ -249,7 +253,7 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         if ((scope && !scope.isCurrent()) || (generation && !generation.isCurrent()))
           throw new Error(formatHouseReadFailure(lang,{code:'HOUSE_ACTION_STALE'}));
         const renderOpts = {lang,nameOf,sources:{cache:bag?.worldFeedCache,cacheUnreachable}};
-        const blocks = [renderWorldSummary(summary,renderOpts)];
+        const blocks = [freshnessText(summaryResult.freshness,lang),renderWorldSummary(summary,renderOpts)].filter(Boolean);
         // #588: the house answered, and the answer was "nothing". That reads
         // as a calm world whether the world is calm or the OTHER mounted
         // houses have gone dark, so an empty summary says when each house last
@@ -268,9 +272,10 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         if ((scope && !scope.isCurrent()) || (generation && !generation.isCurrent())) {
           throw new Error(formatHouseReadFailure(lang, { code: 'HOUSE_ACTION_STALE' }));
         }
+        assertReadCallActive();
         rememberWorldSummary(summary,renderOpts);
         return { type: 'text' as const, text: blocks.join('\n\n') };
-      },
+      }),
     });
 
     api.registerTool({

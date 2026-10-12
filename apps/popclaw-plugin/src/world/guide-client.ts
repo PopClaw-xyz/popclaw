@@ -1,3 +1,5 @@
+import { budgetedFetch, waitForRead, assertReadCallActive } from '../runtime/read-call-budget.js';
+import type { ReadFreshness } from './read-freshness.js';
 /** Complete House guide reads, with shared runtime cache or standalone conditional GET. */
 import { readBoundedGuide, type HouseGuideResult } from './house-guide-context.js';
 import { entryDigest } from '../runtime/house-lifecycle/participation-journal.js';
@@ -7,7 +9,7 @@ import { remoteReadFailure } from './house-read-diagnostic.js';
 import { LORE_HOUSE_TIMEOUT_MS } from './http-timeout.js';
 import { type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
 
-export type GuideTextResult = { readonly ok: true; readonly text: string }
+export type GuideTextResult = { readonly ok: true; readonly text: string;readonly freshness?:ReadFreshness }
   | { readonly ok: false; readonly failure: HouseReadFailure };
 
 export interface GuideClientOptions {
@@ -45,8 +47,8 @@ export class GuideClient {
     };
     try {
       if (this.opts.readGuide) {
-        const result = await this.opts.readGuide();
-        return result.status === 'available' ? {ok:true,text:result.guide}
+        const result = await waitForRead(this.opts.readGuide());
+        return result.status === 'available' ? {ok:true,text:result.guide,freshness:result.freshness}
           : {ok:false,failure:result.failure ?? {code:'HOUSE_REMOTE_UNKNOWN',origin}};
       }
       const generation = this.opts.readGeneration?.();
@@ -57,7 +59,7 @@ export class GuideClient {
       const url = `${origin.replace(/\/$/, '')}/v1/guide.md`;
       const request = (conditional: boolean) => {
         phase = 'fetch'; deadline = AbortSignal.timeout(LORE_HOUSE_TIMEOUT_MS);
-        return this.fetchFn(url, {redirect:'error',signal:deadline,
+        return budgetedFetch(this.fetchFn)(url, {redirect:'error',signal:deadline,
           headers:conditional && cached ? {'If-None-Match':`"${cached.digest}"`} : {}});
       };
       let response = await request(!!cached);
@@ -72,6 +74,7 @@ export class GuideClient {
       phase = 'body';
       const text = await readBoundedGuide(response);
       if (!current()) return stale();
+      assertReadCallActive();
       if (generation) this.cached = {text,digest:entryDigest(text),generation};
       return {ok:true,text};
     } catch (error) {

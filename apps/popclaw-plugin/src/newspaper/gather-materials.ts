@@ -1,3 +1,4 @@
+import { assertReadCallActive } from '../runtime/read-call-budget.js';
 /** Complete local collection → immutable candidate ledger → bounded reading pages. */
 import { summaryMaterialText } from './summary-material.js';
 import { retainPublicMaterialBasis, publicCoverageText } from './public-material-source.js';
@@ -37,6 +38,7 @@ export type GatherResult =
   | { kind: 'candidates'; payload: string; candidateToken: string };
 
 export function gatherNewspaperMaterials(deps: GatherDeps, opts: { hours?: number } = {}): GatherResult {
+  assertReadCallActive();
   const collected = collectNewspaperMaterials(deps, opts);
   const coverage = deps.publicBatch ? publicCoverageText(deps.publicBatch.coverage) : '';
   if (collected.kind === 'empty') {
@@ -57,6 +59,7 @@ export function gatherNewspaperMaterials(deps: GatherDeps, opts: { hours?: numbe
   stored = { ...stored, language: deps.language ?? ownerLangTag() };
   deps.validateMaterials?.(stored);
   // Number once and persist everything before returning any part of it.
+  assertReadCallActive();
   putIssue(candidateToken, stored, deps.manifestDir, deps.sessionKey);
   const payload = beginReading(candidateToken, text, deps);
   return { kind: 'candidates', payload, candidateToken };

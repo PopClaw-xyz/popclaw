@@ -600,6 +600,11 @@ export const EN: Lexicon = {
     // Rollout slice 1 — popclaw_world_guide (register-tools.ts). Natural
     // English, semantically equivalent to the zh branch, not a gloss.
     // -------------------------------------------------------------------
+    'world.read.freshness': 'Read status: {status}; source: {origin}; fetched: {fetched}; checked: {checked}; last attempt: {attempted}. Cached content is not a live observation.',
+    'world.read.fresh': 'fresh',
+    'world.read.stale': 'cached, not revalidated',
+    'world.read.refresh_failed': 'cached, refresh failed',
+    'world.read.unknown': 'not recorded',
     'world.guide.unreachable': 'The world guide is unreachable right now — {lantern}',
     'world.guide.defaultVoice': 'a new world',
     'world.guide.streamsLine': 'Streams: {names} ({count})',

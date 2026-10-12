@@ -1,3 +1,6 @@
+import { assertReadCallActive, budgetedFetch, waitForRead, withReadCallBudget, currentReadCallBudget } from '../runtime/read-call-budget.js';
+import type { ReadFreshness } from './read-freshness.js';
+import { houseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
 /**
  * WorldSummaryClient — S4-T2
  *
@@ -106,10 +109,13 @@ export interface WorldSummaryClientOptions {
   readonly baseUrl: string;
   /** Host-proven connection generation; omitting it disables failed-read reuse. */
   readonly readGeneration?: () => ReadRequestScope | undefined;
+  /** Existing host lane check; a generation alone never permits cached fallback. */
+  readonly assertReadAccess?: () => void;
+  readonly readSourceBinding?: () => string | undefined;
   readonly fetch?: typeof globalThis.fetch;
 }
 
-export type WorldSummaryResult = {readonly ok:true;readonly summary:WorldSummaryResponse;readonly requestId?:string}
+export type WorldSummaryResult = {readonly ok:true;readonly summary:WorldSummaryResponse;readonly requestId?:string;readonly freshness?:ReadFreshness}
   | {readonly ok:false;readonly failure:HouseReadFailure;readonly reused?:boolean};
 
 function safeRequestId(response: Response): string | undefined {
@@ -122,7 +128,7 @@ export class WorldSummaryClient {
   // This caches a public representation, never a successful request or permission.
   // Every use revalidates through the normal gated HTTP read. No URL-only pending merge.
   private readonly responses = new Map<string, {
-    etag: string; body: WorldSummaryResponse; generation?: ReadRequestScope;
+    etag: string; body: WorldSummaryResponse; generation?: ReadRequestScope; sourceBinding?:string; fetchedAtMs:number; checkedAtMs:number;
   }>();
 
   constructor(private readonly opts: WorldSummaryClientOptions) {
@@ -131,6 +137,18 @@ export class WorldSummaryClient {
 
   captureReadGeneration(): ReadRequestScope | undefined {
     return this.opts.readGeneration?.();
+  }
+
+  /** Reusing a failed refresh is still a new read of source-bound cached data. */
+  validateCachedResult(result: WorldSummaryResult): WorldSummaryResult {
+    try {
+      assertReadCallActive();
+      if (!result.ok || !this.opts.assertReadAccess || !result.freshness?.sourceBinding
+        || this.opts.readSourceBinding?.() !== result.freshness.sourceBinding)
+        return {ok:false,failure:{code:'HOUSE_ACTION_STALE',origin:this.opts.baseUrl}};
+      this.opts.assertReadAccess();
+      return result;
+    } catch(error) { return {ok:false,failure:houseReadFailure(error,this.opts.baseUrl)}; }
   }
 
   /**
@@ -149,51 +167,63 @@ export class WorldSummaryClient {
   async fetchSummaryResult(windowHours?: number): Promise<WorldSummaryResult> {
     const qs = new URLSearchParams();
     if (windowHours !== undefined) qs.set('window_hours', String(windowHours));
-    const qStr = qs.toString();
-    const url = `${this.opts.baseUrl.replace(/\/$/, '')}/v1/world-summary${qStr ? `?${qStr}` : ''}`;
+    const url = `${this.opts.baseUrl.replace(/\/$/, '')}/v1/world-summary${qs.size ? `?${qs}` : ''}`;
+    const origin = this.opts.baseUrl, attemptedAtMs = Date.now();
     const deadline = AbortSignal.timeout(LORE_HOUSE_TIMEOUT_MS);
-    let generation: ReadRequestScope | undefined;
-    const current = () => !generation || generation.isCurrent();
-    const stale = (): WorldSummaryResult => {
-      this.responses.delete(url);
-      return {ok:false,failure:{code:'HOUSE_ACTION_STALE',origin:this.opts.baseUrl}};
-    };
+    let sourceBinding:string|undefined;
+    let generation: ReadRequestScope | undefined, phase: 'fetch' | 'body' = 'fetch';
+    let requestId: string | undefined;
+    const current = () => (!generation || generation.isCurrent()) && (!this.opts.readSourceBinding || this.opts.readSourceBinding() === sourceBinding);
+    const stale = (): WorldSummaryResult => { this.responses.delete(url); return {ok:false,failure:{code:'HOUSE_ACTION_STALE',origin}}; };
     try {
-      generation = this.captureReadGeneration();
+      assertReadCallActive(); this.opts.assertReadAccess?.();
+      generation = this.captureReadGeneration(); sourceBinding=this.opts.readSourceBinding?.();
       if (!current()) return stale();
       let cached = this.responses.get(url);
-      if (cached && (cached.generation?.token !== generation?.token || !cached.generation?.isCurrent() && cached.generation !== undefined)) {
+      if (cached && (cached.sourceBinding !== sourceBinding || cached.generation?.token !== generation?.token || cached.generation && !cached.generation.isCurrent())) {
         this.responses.delete(url); cached = undefined;
       }
-      const res = await this.fetchFn(url, { signal: deadline,
-        ...(cached ? {headers:{'If-None-Match':cached.etag}} : {}) });
-      const requestId = safeRequestId(res);
-      if (!current()) return stale();
-      if (res.status === 304 && cached) return {ok:true,summary:cached.body,...(requestId ? {requestId} : {})};
-      this.responses.delete(url);
-      if (!res.ok) return {ok:false,failure:{code:'HOUSE_REMOTE_HTTP',origin:this.opts.baseUrl,status:res.status,
-        diagnostic:{phase:'fetch',cause:'unknown',...(requestId ? {requestId} : {})}}};
+      const freshness = (status: ReadFreshness['status'], fetchedAtMs: number, checkedAtMs: number, failure?: HouseReadFailure): ReadFreshness =>
+        ({status,origin,...(sourceBinding ? {sourceBinding} : {}),fetchedAtMs,checkedAtMs,attemptedAtMs,...(failure ? {failure} : {})});
+      const fallback = (failure: HouseReadFailure): WorldSummaryResult => {
+        // No fallback on local denial, unknown identity, cancellation or changed source.
+        assertReadCallActive(); this.opts.assertReadAccess?.();
+        if (!current()) return stale();
+        if (cached && generation && sourceBinding && this.opts.assertReadAccess && failure.code.startsWith('HOUSE_REMOTE_'))
+          return {ok:true,summary:cached.body,freshness:freshness('refresh_failed',cached.fetchedAtMs,cached.checkedAtMs,failure)};
+        this.responses.delete(url);
+        return {ok:false,failure};
+      };
       try {
-        const json = await res.json();
+        return await withReadCallBudget({timeoutMs:Math.max(0,(currentReadCallBudget()?.remainingMs() ?? LORE_HOUSE_TIMEOUT_MS)-50)}, async () => {
+        const res = await budgetedFetch(this.fetchFn)(url,{signal:deadline,...(cached?.etag ? {headers:{'If-None-Match':cached.etag}} : {})});
+        requestId = safeRequestId(res);
+        if (!current()) return stale();
+        if (res.status === 304 && cached) {
+          assertReadCallActive(); this.opts.assertReadAccess?.(); cached.checkedAtMs=Date.now();
+          return {ok:true,summary:cached.body,freshness:freshness('fresh',cached.fetchedAtMs,cached.checkedAtMs),...(requestId ? {requestId} : {})};
+        }
+        if (!res.ok) return fallback({code:'HOUSE_REMOTE_HTTP',origin,status:res.status,diagnostic:{phase,cause:'unknown',...(requestId ? {requestId} : {})}});
+        phase='body';
+        const json = await waitForRead(res.json());
+        assertReadCallActive(); this.opts.assertReadAccess?.();
         if (!current()) return stale();
         const body = parseWorldSummary(json);
-        if (!body) return {ok:false,failure:{code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl,
-          diagnostic:{phase:'body',cause:'unknown',...(requestId ? {requestId} : {})}}};
-        const etag = res.headers?.get('ETag');
-        if (etag) {
-          if (this.responses.size >= 8) this.responses.delete(this.responses.keys().next().value!);
-          this.responses.set(url,{etag,body,...(generation ? {generation} : {})});
-        }
-        return {ok:true,summary:body,...(requestId ? {requestId} : {})};
+        if (!body) return fallback({code:'HOUSE_REMOTE_PARSE',origin,diagnostic:{phase,cause:'unknown',...(requestId ? {requestId} : {})}});
+        assertReadCallActive(); this.opts.assertReadAccess?.();
+        if (!current()) return stale();
+        const now=Date.now(), etag=res.headers?.get('ETag') ?? '';
+        if (this.responses.size >= 8) this.responses.delete(this.responses.keys().next().value!);
+        this.responses.set(url,{etag,body,...(sourceBinding ? {sourceBinding} : {}),fetchedAtMs:now,checkedAtMs:now,...(generation ? {generation} : {})});
+        return {ok:true,summary:body,freshness:freshness('fresh',now,now),...(requestId ? {requestId} : {})};
+        });
       } catch (error) {
-        this.responses.delete(url);
-        const failure = remoteReadFailure(error,this.opts.baseUrl,{phase:'body',deadline,timeoutMs:LORE_HOUSE_TIMEOUT_MS,requestId});
-        return {ok:false,failure:error instanceof SyntaxError && failure.code !== 'HOUSE_REMOTE_TIMEOUT'
-          ? {code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl,diagnostic:{phase:'body',cause:'unknown',...(requestId ? {requestId} : {})}} : failure};
+        const failure = remoteReadFailure(error,origin,{phase,deadline,timeoutMs:LORE_HOUSE_TIMEOUT_MS,requestId});
+        return fallback(error instanceof SyntaxError && failure.code !== 'HOUSE_REMOTE_TIMEOUT'
+          ? {code:'HOUSE_REMOTE_PARSE',origin,diagnostic:{phase,cause:'unknown'}} : failure);
       }
     } catch (error) {
-      this.responses.delete(url);
-      return {ok:false,failure:remoteReadFailure(error,this.opts.baseUrl,{phase:'fetch',deadline,timeoutMs:LORE_HOUSE_TIMEOUT_MS})};
+      return {ok:false,failure:houseReadFailure(error,origin)};
     }
   }
 

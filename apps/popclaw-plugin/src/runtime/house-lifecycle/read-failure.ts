@@ -6,6 +6,8 @@ export type HouseReadFailureCode = 'HOUSE_DISABLED' | 'HOUSE_CONNECTING' | 'HOUS
   | 'HOUSE_REMOTE_NETWORK' | 'HOUSE_REMOTE_TIMEOUT' | 'HOUSE_REMOTE_HTTP' | 'HOUSE_REMOTE_PARSE' | 'HOUSE_REMOTE_UNKNOWN';
 /** Safe remote-read diagnostics: no raw messages, headers, stacks or URLs. */
 export interface HouseReadDiagnostic {
+  /** Distinguishes the total read budget from an individual HTTP timeout. */
+  readonly budget?: 'read-call';
   readonly phase: 'before-fetch' | 'delegate' | 'fetch' | 'body';
   readonly cause: 'timeout' | 'dns' | 'tls' | 'connection' | 'aborted' | 'unknown';
   readonly elapsedMs?: number;
