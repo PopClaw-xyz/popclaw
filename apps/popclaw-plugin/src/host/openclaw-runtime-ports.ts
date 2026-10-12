@@ -1,3 +1,4 @@
+import { assertHouseActionActive, assertActionActive } from '../runtime/house-lifecycle/action-context.js';
 import { sharedNativeReadContext } from './native-read-context.js';
 /**
  * The OpenClaw gateway root's `RuntimePorts`: what differs about the gateway
@@ -191,6 +192,7 @@ export function gatewayRuntimePorts(input: {
       // Row 23: the gateway reads the world over the owner lane.
       snapshotFetch: (houses, origin) => houses.houseFetch(origin),
       clientFetch: (houses) => houses.fetchHouse,
+      assertSummaryReadAccess: (houses, origin) => { assertHouseActionActive(origin); assertActionActive(houses.captureGate(origin)); },
       guideRead: (houses, origin) => houses.readHouseGuide(origin,houses.captureGate(origin)),
       summaryReadGeneration: (houses, origin) => {
         const gate = houses.captureGate(origin);

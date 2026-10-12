@@ -286,3 +286,28 @@ describe('conditional summary generation guards', () => {
     expect(await pending).toMatchObject({ok:false,failure:{code:'HOUSE_ACTION_STALE'}});
   });
 });
+
+it('returns a dated same-source cached summary when refresh fails, but not after access is revoked', async () => {
+  let allowed = true, first = true;
+  const generation = { token:{}, isCurrent:() => true };
+  const client = new WorldSummaryClient({baseUrl:BASE, readGeneration:() => generation,readSourceBinding:()=>'source-a',
+    assertReadAccess:() => { if (!allowed) throw new Error('revoked'); },
+    fetch:async () => { if (!first) throw new Error('offline'); first=false; return new Response(JSON.stringify(makeValidResponse()),{headers:{ETag:'"a"'}}); },
+  });
+  const original = await client.fetchSummaryResult();
+  expect(original).toMatchObject({ok:true,freshness:{status:'fresh',origin:BASE,fetchedAtMs:expect.any(Number)}});
+  const fallback = await client.fetchSummaryResult();
+  expect(fallback).toMatchObject({ok:true,summary:makeValidResponse(),freshness:{status:'refresh_failed',origin:BASE,failure:{code:'HOUSE_REMOTE_NETWORK'}}});
+  allowed=false;
+  expect(await client.fetchSummaryResult()).toMatchObject({ok:false});
+});
+
+it('does not reuse a cached summary after its source binding changes under the same generation', async () => {
+  let binding='a', first=true;
+  const generation={token:{},isCurrent:()=>true};
+  const client=new WorldSummaryClient({baseUrl:BASE,readGeneration:()=>generation,assertReadAccess:()=>{},readSourceBinding:()=>binding,
+    fetch:async()=>{if(!first)return new Response('',{status:503});first=false;return new Response(JSON.stringify(makeValidResponse()),{headers:{ETag:'"a"'}});}});
+  expect((await client.fetchSummaryResult()).ok).toBe(true);
+  binding='b';
+  expect(await client.fetchSummaryResult()).toMatchObject({ok:false,failure:{code:'HOUSE_REMOTE_HTTP'}});
+});

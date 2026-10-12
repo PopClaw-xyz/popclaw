@@ -1,7 +1,9 @@
+import { waitForRead } from '../runtime/read-call-budget.js';
 import type { ReadRequestScope } from '../runtime/read-request-scope.js';
 import type { WorldSummaryResult } from './world-summary-client.js';
 
 interface SummaryReadClient {
+  validateCachedResult?(result:WorldSummaryResult):WorldSummaryResult;
   captureReadGeneration?(): ReadRequestScope | undefined;
 }
 interface ReadAttempt {
@@ -33,8 +35,9 @@ export class SummaryReadReuse {
     // An original gate can expire before the manager rotates its signal. Check
     // that captured gate as well as the current capture before reusing anything.
     if (previous && !retry && previous.generation.isCurrent()) {
-      const result = await previous.result;
+      const result = await waitForRead(previous.result);
       if (!current() || !previous.generation.isCurrent()) return stale();
+      if (result.ok && result.freshness?.status === 'refresh_failed') return client.validateCachedResult?.(result) ?? stale();
       return result.ok ? result : { ...result, reused: true };
     }
     const pending = Promise.resolve().then(work);
@@ -42,7 +45,7 @@ export class SummaryReadReuse {
     windows.set(windowHours, attempt);
     try {
       const result = await pending;
-      if (result.ok || !result.failure.code.startsWith('HOUSE_REMOTE_') || !current()) {
+      if ((result.ok ? result.freshness?.status !== 'refresh_failed' : !result.failure.code.startsWith('HOUSE_REMOTE_')) || !current()) {
         if (windows.get(windowHours) === attempt) windows.delete(windowHours);
       }
       return current() ? result : stale();

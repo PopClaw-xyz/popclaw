@@ -99,3 +99,13 @@ it('refreshes an expired captured gate even if the manager has not rotated its s
   expect(await reuse.read(request,client,24,false,work)).toBe(success);
   expect(work).toHaveBeenCalledTimes(2);
 });
+it('rechecks source and access before reusing a successful cached fallback',async()=>{
+  const reuse=new SummaryReadReuse(),request=scope();
+  const cached:WorldSummaryResult={...success,freshness:{status:'refresh_failed',origin:'https://example.test',sourceBinding:'old',fetchedAtMs:1,checkedAtMs:1,attemptedAtMs:2}};
+  const validateCachedResult=vi.fn(()=>({ok:false as const,failure:{code:'HOUSE_ACTION_STALE' as const}}));
+  const client={...clientScope(),validateCachedResult},work=vi.fn(async()=>cached);
+  expect(await reuse.read(request,client,24,false,work)).toBe(cached);
+  expect(await reuse.read(request,client,24,false,work)).toMatchObject({ok:false,failure:{code:'HOUSE_ACTION_STALE'}});
+  expect(validateCachedResult).toHaveBeenCalledTimes(1);
+  expect(work).toHaveBeenCalledTimes(1);
+});

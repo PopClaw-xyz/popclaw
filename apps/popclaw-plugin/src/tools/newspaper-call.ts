@@ -1,3 +1,4 @@
+import { assertReadCallActive, waitForRead, withReadCallBudget } from '../runtime/read-call-budget.js';
 import { prepareSummaryMaterial } from '../newspaper/summary-material.js';
 import { readNewspaperPage } from '../newspaper/reading-page.js';
 import type { HouseRuntime } from '../runtime/house-lifecycle/house-runtime.js';
@@ -458,7 +459,8 @@ async function gatherCandidatePage(
   const worldDeps = call.deps.getWorldDeps ? await call.deps.getWorldDeps().catch(() => undefined) : undefined;
   const worldSummary = worldDeps?.newspaperSummary
     ? await prepareSummaryMaterial({...worldDeps.newspaperSummary,nameOf:rt.nameOf}) : undefined;
-  const publicBatch = await materialSource?.prepareCollect();
+  const publicBatch = await waitForRead(Promise.resolve(materialSource?.prepareCollect()));
+  assertReadCallActive();
   const r = gatherNewspaperMaterials(
     {
       ...(worldSummary ? {worldSummary} : {}),
@@ -608,8 +610,11 @@ export async function runNewspaperCall(call: NewspaperCall, params: unknown): Pr
     // set is already on disk, so nothing is gathered again — re-reading the feed here
     // would let the world move underneath the numbers it is answering with.
     if (args.hasPicks && args.picks) return answerPicks(call, rt, args, args.picks);
-    const paper = await readPaperContext(rt);
-    return await gatherCandidatePage(call, rt, args.hours, paper, modelIgnoredNote);
+    return await withReadCallBudget({},async () => {
+      const paper = await waitForRead(readPaperContext(rt));
+      assertReadCallActive();
+      return gatherCandidatePage(call, rt, args.hours, paper, modelIgnoredNote);
+    });
   } catch (err) {
     if (err instanceof PublicMaterialRefusal) NewspaperStageStore.collection(call.toolCtx.sessionKey, 'source-refused');
     return { type: 'text' as const, text: err instanceof PublicMaterialRefusal ? renderCopy(ownerLang(), 'newspaper.source.refused', { reason: err.code }) : failureText('popclaw_newspaper', err) };

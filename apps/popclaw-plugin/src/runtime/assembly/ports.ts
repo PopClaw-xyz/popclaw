@@ -121,6 +121,7 @@ export interface WorldPort<S extends object> {
   guideRead?(houses: HouseRuntime, origin: string): ReturnType<HouseRuntime['readHouseGuide']>;
   /** Optional reuse identity for this host's own read lane, never a permission grant.
    * Hosts without a proven connection identity retain fresh, normally gated reads. */
+  assertSummaryReadAccess?(houses: HouseRuntime, origin: string): void;
   summaryReadGeneration?(houses: HouseRuntime, origin: string): ReadRequestScope;
 }
 

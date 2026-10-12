@@ -263,3 +263,37 @@ it('does not attach an old preflight failure after participation changes',async(
   });
   expect(result).toEqual({status:'unavailable',origin:ORIGIN,code:'HOUSE_GUIDE_CONTEXT_STALE'});
 });
+
+it('keeps a shared producer alive for another authorized waiter when its initiating waiter times out', async () => {
+  const { withReadCallBudget }=await import('../../../src/runtime/read-call-budget.js');
+  const f=fixture();
+  let resolve!:(response:Response)=>void;
+  const fetch=()=>new Promise<Response>(r=>{resolve=r;});
+  const first=withReadCallBudget({timeoutMs:200},()=>readHouseGuideContext(f.db,ORIGIN,fetch,()=>true));
+  await new Promise(r=>setTimeout(r,10));
+  const second=withReadCallBudget({timeoutMs:1000},()=>readHouseGuideContext(f.db,ORIGIN,fetch,()=>true));
+  expect(await first).toMatchObject({status:'unavailable'});
+  resolve(new Response('complete shared guide'));
+  expect(await second).toMatchObject({status:'available',guide:'complete shared guide'});
+});
+
+it('does not write a late guide body after its last waiter is cancelled', async () => {
+  const { withReadCallBudget }=await import('../../../src/runtime/read-call-budget.js');
+  const f=fixture(); let resolve!:(response:Response)=>void;
+  const controller=new AbortController();
+  const task=withReadCallBudget({signal:controller.signal},()=>readHouseGuideContext(f.db,ORIGIN,()=>new Promise<Response>(r=>{resolve=r;}),()=>true));
+  await new Promise(r=>setTimeout(r,5)); controller.abort();
+  await expect(task).rejects.toMatchObject({code:'HOUSE_ACTION_STALE'});
+  resolve(new Response('too late'));
+  await new Promise(r=>setTimeout(r,5));
+  expect(f.row()?.guide_body).toBeNull();
+});
+
+it('returns a dated cached guide within the refresh cap when the remote body stalls',async()=>{
+  const f=fixture(),body='previous complete guide';
+  f.db.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?',[body,entryDigest(body)]);
+  const started=Date.now();
+  const result=await readHouseGuideContext(f.db,ORIGIN,async()=>new Response(new ReadableStream({start(){}})),()=>true);
+  expect(Date.now()-started).toBeLessThan(4000);
+  expect(result).toMatchObject({status:'available',guide:body,freshness:{status:'refresh_failed',fetchedAtMs:null,attemptedAtMs:expect.any(Number),failure:{code:'HOUSE_REMOTE_TIMEOUT'}}});
+});

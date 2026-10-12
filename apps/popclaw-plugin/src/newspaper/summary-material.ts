@@ -1,3 +1,5 @@
+import { assertReadCallActive, waitForRead, withReadCallBudget } from '../runtime/read-call-budget.js';
+import { freshnessText } from '../world/read-freshness.js';
 /** A frozen editorial reference, not signed article material or authority. */
 import { summaryDeclaration } from '../world/guide.js';
 import { renderWorldSummary } from '../world/summary-snapshot-format.js';
@@ -31,20 +33,24 @@ export async function prepareSummaryMaterial(input: NewspaperSummarySource & {
   readonly nameOf?: NameChain; readonly lang?: Lang;
 }): Promise<WorldSummaryMaterial | undefined> {
   try {
+    return await withReadCallBudget({timeoutMs:1500},async () => {
     const generation = input.summaryClient.captureReadGeneration?.();
     const current = () => !generation || generation.isCurrent();
     if (!current()) return undefined;
-    const guide = await input.guideClient.fetchGuideText();
+    const guide = await waitForRead(input.guideClient.fetchGuideText());
     if (!current() || guide === null || summaryDeclaration(guide) !== 'supported') return undefined;
     const result = input.summaryClient.fetchSummaryResult
       ? await input.summaryClient.fetchSummaryResult()
       : await input.summaryClient.fetchSummary().then(summary => summary ? {ok:true as const,summary} : {ok:false as const});
     if (!current() || !result.ok || !result.summary.snapshot) return undefined;
     const snapshot = result.summary.snapshot;
-    const text = renderWorldSummary(result.summary,{lang:input.lang ?? ownerLang(),nameOf:input.nameOf});
+    const lang=input.lang ?? ownerLang();
+    const text = [freshnessText('freshness' in result ? result.freshness : undefined,lang),renderWorldSummary(result.summary,{lang,nameOf:input.nameOf})].filter(Boolean).join('\n\n');
+    assertReadCallActive();
     if (!current()) return undefined;
     return {origin:input.origin,snapshotId:snapshot.snapshot_id,cutoffAtMs:snapshot.cutoff_at_ms,
       generatedAtMs:snapshot.generated_at_ms,text};
+    });
   } catch { return undefined; }
 }
 
