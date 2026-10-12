@@ -36,6 +36,34 @@ before approval, and the send body checks again after approval. File contents
 never replace the frozen draft. Digest versions, token/TTL/session rules, origin
 guards and consent are outside this presentation contract.
 
+## MCP request lifetime
+
+`host/mcp-confirmation-lifecycle.ts` owns active request leases for both MCP
+adapters. The MCP root constructs one owner, injects it into both adapters,
+forwards protocol errors to it and stops it before draining the runtime.
+Transport close also stops that owner. A tool cancellation ends only its lease;
+an adapter stop ends its lane; root shutdown ends both lanes. Ending the general
+adapter now cancels an already open form, rather than waiting for its deadline.
+The general MCP wrapper also binds ledger consumption to its live request: an
+answer accepted before cancellation cannot authorize a body that consumes it
+after cancellation. Native records have no MCP lease and retain their existing
+behavior. Completed SDK forms detach cancellation forwarding, so ending a later grant
+lease does not send a cancellation for an answer already received.
+
+The general adapter still describes its registered subject before asking and
+records the answer in the subject ledger. World still captures the complete
+input, performs its local duplicate lookup before building the form, and binds
+its grant to that input and callback lifetime. Its subject remains native-only;
+MCP World dispatch asks once inside its existing invocation adapter. Sharing
+request ownership does not merge these domain authorization records.
+
+The general dialog keeps its own deadline and the SDK backstop 60 seconds
+later. World keeps the SDK deadline. Window settings, World grant TTL, display
+budgets, strict literal `confirm === true`, refusal codes and rendering are
+unchanged. Late-answer reporting retains its existing conservative attribution:
+only the general adapter's own closed windows are remembered; an ambiguous or
+unmatched orphan is unattributed and never grants authority.
+
 ## Verification
 
 `tests/unit/host/approval-presentation.test.ts` exercises policy/size independence,

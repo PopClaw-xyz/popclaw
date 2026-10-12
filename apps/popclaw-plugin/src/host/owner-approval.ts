@@ -261,8 +261,8 @@ export const OWNER_CONFIRMATION_FAILED = 'OWNER_CONFIRMATION_FAILED';
  *  loses a confirmation the owner already gave. Nothing is granted either way;
  *  what this code buys is that the person is told which of the three it was. */
 export const OWNER_CONFIRMATION_ANSWER_INVALID = 'OWNER_CONFIRMATION_ANSWER_INVALID';
-/** The call itself ended while the dialog was open: the host aborted the tool
- *  call, or the root shut down. Not our window closing, and not consent. */
+/** The MCP call ended before its answer could authorize the body: the host
+ *  aborted the call, or the root shut down. Not our window closing, and not consent. */
 export const OWNER_CONFIRMATION_INACTIVE = 'OWNER_CONFIRMATION_INACTIVE';
 export const OWNER_APPROVAL_DIALOG_FAILURES = [
   OWNER_CONFIRMATION_CANCELLED, OWNER_CONFIRMATION_FAILED, OWNER_CONFIRMATION_ANSWER_INVALID,
@@ -517,7 +517,7 @@ const callLedger = getOrCreatePerProcess('owner-approval-call-ledger-v1', () => 
   records: new Map<string, ApprovalRecord>(),
   consumed: new Map<string, symbol>(),
   originRefusals: new Map<string, { readonly reason: OwnerApprovalOriginRefusal; readonly at: number; readonly owner: symbol }>(),
-  mcpLiveCalls: new Map<string, { readonly owner: symbol; readonly token: symbol }>(),
+  mcpLiveCalls: new Map<string, { readonly owner: symbol; readonly token: symbol; readonly isCurrent?: () => boolean }>(),
 }));
 const moduleOwner = Symbol('owner-approval-module');
 const records = callLedger.records;
@@ -598,9 +598,9 @@ function trimInactive<T>(entries: Map<string, T>, limit: number): void {
 /** Pin one MCP invocation until its wrapper's finally. Ending grants nothing;
  * it drops full records in every state and retains only bounded replay history.
  * A reset invalidates the token, so an old finally cannot touch a new call. */
-export function beginMcpOwnerApprovalCall(toolName: string, callRef: string): () => boolean {
+export function beginMcpOwnerApprovalCall(toolName: string, callRef: string, isCurrent?: () => boolean): () => boolean {
   const key = recordKey(toolName, callRef);
-  const lease = { owner: moduleOwner, token: Symbol('mcp-owner-approval-call') };
+  const lease = { owner: moduleOwner, token: Symbol('mcp-owner-approval-call'), isCurrent };
   mcpLiveCalls.set(key, lease);
   return () => {
     if (mcpLiveCalls.get(key)?.token !== lease.token) return false;
@@ -618,6 +618,14 @@ export function beginMcpOwnerApprovalCall(toolName: string, callRef: string): ()
     trimInactive(originRefusals, MAX_RECORDS);
     return unconsumedGrant;
   };
+}
+/** Native records have no MCP lease. A live MCP wrapper binds consumption to
+ * its request, including cancellation after the answer but before the body
+ * consumes it. A broken liveness callback cannot become consent. */
+function mcpCallIsCurrent(key: string): boolean {
+  const current = mcpLiveCalls.get(key)?.isCurrent;
+  try { return current ? current() === true : true; }
+  catch { return false; }
 }
 /** Leave a refused call the name of what refused it, for the tool body that is
  *  about to ask. Silently does nothing without a call identity: there would be
@@ -1225,7 +1233,8 @@ export function consumeOwnerApproval(toolName: string, params: unknown, callRef:
   // An MCP dialog that ended without an answer, for a named reason other than
   // our window closing. Spent like any other ending, and never consent.
   if (record.failed !== null) return { decision: 'unavailable', reason: record.failed };
-  if (record.decision === 'allow-once') return { decision: 'approved' };
+  if (record.decision === 'allow-once') return mcpCallIsCurrent(key)
+    ? { decision: 'approved' } : { decision: 'unavailable', reason: OWNER_CONFIRMATION_INACTIVE };
   // Answered, but not with consent. `allow-always` lands here deliberately: an
   // answer was given and it was not the one that authorizes, which is a deny.
   if (record.decision === 'deny' || record.decision === 'allow-always') return { decision: 'denied' };
@@ -1410,5 +1419,5 @@ export function ownerApprovalGranted(toolName: string, callRef: string): boolean
   // The same one-value table `consumeOwnerApproval` uses. A reader that called
   // an `allow-always` record "granted" would disagree with the consumer that
   // denies it, and a lane chosen on a disagreement is the worst kind.
-  return record.decision === 'allow-once';
+  return record.decision === 'allow-once' && mcpCallIsCurrent(recordKey(toolName, call));
 }
