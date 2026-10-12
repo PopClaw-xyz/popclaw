@@ -15,8 +15,33 @@ passed. Three fixed-local-candidate OpenClaw samples produced published papers;
 two delivered in the original batch, and a separate later request on the third
 host delivered after a notification-target adjustment. See the
 [changelog for timings and limits](../CHANGELOG.md#012).
-These observations do not verify final 0.1.2 registry installation, every
-channel, Windows or every supported host. No new blanket support claim is made.
+These local-candidate observations do not transfer to every channel, Windows or
+every supported host. No new blanket support claim is made.
+
+### 0.1.2 npm verification
+
+Both [popclaw@0.1.2](https://www.npmjs.com/package/popclaw/v/0.1.2) and
+[popclaw-mcp@0.1.2](https://www.npmjs.com/package/popclaw-mcp/v/0.1.2) were
+downloaded and matched the original CI archive bytes. Signature/provenance
+verification, including rejection of modified payloads, passed for source
+`22dae896fe188df4e26241996f4e40902785f274`.
+
+| Archive | SHA-256 |
+| --- | --- |
+| popclaw-0.1.2.tgz | `4bfb080d97393d9bd1193c9e24bda2391727a36b8f304c49e1b56feec67c16b3` |
+| popclaw-mcp-0.1.2.tgz | `838b39d102d89bfd822fc446f0a34c458f0de419b870c4faeb48cfe428a1534b` |
+
+Ordinary registry installation passed in a disposable macOS arm64 fixture with
+Node 26.8.2 and npm 11.19.1. All 209 main-package and 6 MCP-package files matched.
+The npm signature audit, CLI help, packaged SQLite, both MCP entry points with
+55 tools, and stable identity after an MCP restart passed. Runtime checks used
+the release-package runtime harness. Native Gateway installation was not run;
+these results do not establish other hosts or platforms.
+
+The [main publish run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38268798235)
+and [MCP recovery run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38272118035)
+ended in timeout failures. Later byte and cryptographic checks and the scoped
+installation above passed independently; the workflow results remain failures.
 
 ## Historical candidate evidence
 

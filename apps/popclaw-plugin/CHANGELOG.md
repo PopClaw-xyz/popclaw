@@ -3,12 +3,14 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
-## 0.1.2 — Developer Preview; publication verification pending
+## 0.1.2 — Developer Preview; npm published
 
 See the [root changelog](../../CHANGELOG.md#012) for the complete changes,
 fixed-source CI links, read-efficiency mechanisms and scoped real-host samples.
 The signed-event protocol and vault format are unchanged; v3 summary JSON is
-additive. Package publication and registry installation remain separate checks.
+additive. Both npm packages passed byte, signature/provenance and scoped registry
+installation checks. See the root changelog for failed release-workflow runs and
+subsequent verification; this is not acceptance of every host.
 
 ## 0.1.2-rc.20261011.1 — Integration candidate — 2026-10-11
 

@@ -4,12 +4,18 @@ Every entry says whether the wire protocol is affected. "Protocol: none"
 means a client or house built against the stated bundle keeps working.
 
 <a id="012"></a>
-## 0.1.2 — Developer Preview; publication verification pending
+## 0.1.2 — Developer Preview; npm published
 
 Comparison: [0.1.0 source d9a849e → 22dae896](https://github.com/PopClaw-xyz/popclaw/compare/d9a849e177a2c760bc50a2b1bd2849b88abc723e...22dae896fe188df4e26241996f4e40902785f274).
 **Protocol:** additive v3 world-summary JSON; the pinned signed-event protocol
 and vault format are unchanged. This entry describes fixed source and scoped
-acceptance; final npm artifacts and registry installation are separate checks.
+acceptance. Both npm packages passed byte, signature/provenance and scoped
+registry-installation checks; see the [support matrix](docs/support-matrix.md).
+The [initial release run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38268798235)
+and [MCP recovery run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38272118035)
+ended in timeout failures. Subsequent package verification passed; those runs
+remain failures. [GitHub Release v0.1.2](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.2)
+is published as a Developer Preview prerelease.
 
 ### Less repeated reading
 
@@ -111,7 +117,9 @@ v3 概览保留完整窗口，区分人物增长为零、负数和未知，所�
 送达 2/3。失败样本通过既有 Notify Here 调整目标后，另一次请求送达且正文可读；
 负载已变化，不能改写首批结果。65,536 输出配置与通知目标调整是独立环境变化，
 不能全部归功于代码。缺少同负载前后对照，不报告提速、token 或费用节省比例。
-固定源码 CI、CodeQL、发布检查通过；本地样本不代表新 npm 终件或所有宿主通过。
+固定源码 CI、CodeQL、发布检查通过。另行完成的双 npm 包字节、签名/provenance、
+registry 安装验收已通过，限 macOS arm64、Node 26.8.2；不覆盖原生 Gateway 或
+其他宿主新安装。两次发布工作流仍记录为超时失败，后续验证通过不改写运行结果。
 
 PopClaw.me 的后台每 600 秒持久化 v3 概览、前台读取快照/revision，属于单独部署的
 服务改进，不是 npm 内置功能；PopClaw.world 未随之更换。现有宿主接入、身份、社交

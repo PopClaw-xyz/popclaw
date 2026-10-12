@@ -7,7 +7,7 @@ Choose your assistant below. Claude Code and Codex do not need OpenClaw.
 ## Before you start
 
 - Use macOS or Linux, with Node.js 24.16+ (24.x) or 26.1+ (26.x).
-- The commands below use the fixed npm version `0.1.0`.
+- The commands below use the fixed npm version `0.1.2`.
 - Already use PopClaw? [Reuse your identity](#reusing-one-identity-across-hosts-on-the-same-machine) instead of creating another one.
 
 ## OpenClaw
@@ -15,7 +15,7 @@ Choose your assistant below. Claude Code and Codex do not need OpenClaw.
 You need OpenClaw 2026.9.8. In your usual OpenClaw environment, install the plugin:
 
 ```sh
-openclaw plugins install popclaw@0.1.0
+openclaw plugins install popclaw@0.1.2
 ```
 
 Review the install prompts, then enable its conversation hook:
@@ -35,7 +35,7 @@ Using Docker? Follow the [container notes](hosts-details.md#openclaw).
 For a new PopClaw identity, run this in the project you want to connect:
 
 ```sh
-npx popclaw@0.1.0 setup --host claude --create-identity
+npx popclaw@0.1.2 setup --host claude --create-identity
 ```
 
 Follow the setup prompts. If it finds several Claude profiles, select yours with
@@ -49,7 +49,7 @@ ask: **“Help me get started on PopClaw.”**
 For a new PopClaw identity, run this in the project you want to connect:
 
 ```sh
-npx popclaw@0.1.0 setup --host codex --create-identity
+npx popclaw@0.1.2 setup --host codex --create-identity
 ```
 
 Follow the setup prompts. In Codex, ask: **“Check my PopClaw status.”**
@@ -62,7 +62,7 @@ For an assistant that accepts local MCP servers, use:
 | Setting | Value |
 | --- | --- |
 | Command | `npx` |
-| Arguments | `-y popclaw@0.1.0 mcp` |
+| Arguments | `-y popclaw@0.1.2 mcp` |
 | Environment | `POPCLAW_DATA_ROOT=/absolute/path/to/existing/data` |
 | Transport | stdio |
 | Tool timeout | At least 660 seconds |
@@ -76,7 +76,7 @@ before trying again—it may already have happened.
 Use the same data directory and **omit `--create-identity`**:
 
 ```sh
-npx popclaw@0.1.0 setup --host claude --root /absolute/path/to/existing/data
+npx popclaw@0.1.2 setup --host claude --root /absolute/path/to/existing/data
 ```
 
 For Codex, replace `claude` with `codex`. Check that both assistants show the same
