@@ -17,6 +17,7 @@ import type { HouseGate } from '../runtime/house-lifecycle/manager.js';
 import { popclaw } from '@popclaw/contracts';
 
 export interface WorldFeedStreamOptions {
+  readonly onStreamOpen?: () => void;
   readonly baseUrl: string;
   readonly isOfficialActor?: (actorId: string) => boolean;
   readonly gate?: Pick<HouseGate, 'isActive' | 'signal'>;
@@ -157,6 +158,7 @@ export class WorldFeedStreamClient {
       if (this.es !== es) return;
       if (!this.active()) { this.reconnect(es); return; }
       this.receiving = true;
+      this.opts.onStreamOpen?.();
     };
     es.onmessage = (e) => {
       if (this.es !== es) return;

@@ -28,7 +28,7 @@ function fixture() {
   const guide={status:'available',origin,bindingDigest:guideBindingDigest(db,origin),opSeq:1,guide:body,guideDigest:digest};
   const event={runId:id.runId,sessionId:id.sessionId,historyMessages:[{role:'toolResult',content:[{type:'text',text:JSON.stringify({house_guide_contexts:[guide]})}]}]};
   const mark=vi.fn(context=>markHouseGuideDelivered(db,context));
-  const rt={host:{db},houseRuntime:{markHouseGuideDelivered:mark}};
+  const rt={host:{db},houseRuntime:{markHouseGuideDelivered:mark,publicReadGate:()=>({isActive:()=>true})}};
   const delivered=()=>db.queryOne<{delivered_digest:string|null}>('SELECT delivered_digest FROM house_guide_context')?.delivered_digest;
   return {db,guide,event,rt,mark,delivered};
 }
@@ -79,4 +79,31 @@ it.each(['before_reset','before_compaction','after_compaction','session_end','ag
   const h=hooks(),observed=h.context.observe({runId:id.runId,sessionId:id.sessionId,historyMessages:[]},id)!;
   await h.emit(eventName,{runId:id.runId,sessionId:id.sessionId});
   expect(observed.scope.isCurrent()).toBe(false);
+});
+
+it('injects the cached guide into the next ordinary prompt and suppresses only actual history presence', async()=>{
+  const f=fixture(),h=hooks();
+  getOrCreatePerProcess('runtime',()=>Promise.resolve(f.rt));
+  const fresh=await h.emit('before_prompt_build',{prompt:'hello',messages:[]}) as {prependContext?:string};
+  expect(fresh?.prependContext).toContain(f.guide.guide);
+  expect(f.delivered()).toBeNull();
+  expect(await h.emit('before_prompt_build',{prompt:'hello',messages:f.event.historyMessages})).toBeUndefined();
+  const compacted=await h.emit('before_prompt_build',{prompt:'hello',messages:[]}) as {prependContext?:string};
+  expect(compacted?.prependContext).toContain(f.guide.guide);
+});
+
+it('observes a freshly injected current prompt as actual input before the first tool',async()=>{
+  const f=fixture(),h=hooks();getOrCreatePerProcess('runtime',()=>Promise.resolve(f.rt));
+  await h.emit('llm_input',{...f.event,historyMessages:[],prompt:'source rules\n'+JSON.stringify({house_guide_contexts:[f.guide]})});
+  expect(f.delivered()).toBe(f.guide.guideDigest);
+});
+
+it('does not wait for an existing runtime boot to finish in before_prompt_build',async()=>{
+  const f=fixture(),h=hooks();let ready!:(rt:typeof f.rt)=>void;
+  const pending=new Promise<typeof f.rt>(resolve=>{ready=resolve;});
+  getOrCreatePerProcess('runtime',()=>pending);
+  const result=h.emit('before_prompt_build',{prompt:'hello',messages:[]});
+  const marker=Symbol('still waiting');
+  expect(await Promise.race([result,new Promise(resolve=>setTimeout(()=>resolve(marker),20))])).toBeUndefined();
+  ready(f.rt);
 });

@@ -119,3 +119,98 @@ it('suppresses only the complete current bound guide present in this input', asy
   const inactiveRead = (origin: string) => readHouseGuideContext(f.db, origin, globalThis.fetch, () => false);
   expect(await pendingHouseGuides(f.db, inactiveRead, new Set())).toEqual([]);
 });
+
+it('revalidates stale cached guides conditionally and retains a failed refresh for retry', async () => {
+  const f = fixture(), body = 'old guide', digest = entryDigest(body);
+  f.db.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?', [body,digest]);
+  const requests: RequestInit[] = [];
+  let fail = true;
+  const fetcher: typeof fetch = async (_url, init) => {
+    requests.push(init!);
+    return fail ? new Response('offline',{status:503}) : new Response('new guide');
+  };
+  expect((await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true)).status).toBe('available');
+  expect(requests).toHaveLength(1);
+  expect(new Headers(requests[0]?.headers).get('if-none-match')).toBe(`"${digest}"`);
+  expect(f.row()?.guide_body).toBe(body);
+  fail = false;
+  await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);
+  expect(f.row()?.guide_body).toBe('new guide');
+  await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);
+  expect(requests).toHaveLength(2);
+});
+
+it('coalesces concurrent cache fills and handles 304 with and without a cached body', async () => {
+  const f=fixture(); let calls=0; let release!:()=>void;
+  const pending=new Promise<void>(resolve=>{release=resolve;});
+  const fetcher: typeof fetch=async()=>{calls++;await pending;return calls===1?new Response(null,{status:304}):new Response('fresh');};
+  const a=readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true), b=readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);
+  release(); await Promise.all([a,b]);
+  expect(calls).toBe(2); expect(f.row()?.guide_body).toBe('fresh');
+});
+
+it('coalesces duplicate and reordered hints while taking only the GET body as current', async () => {
+  const {invalidateHouseGuide}=await import('../../../src/world/house-guide-context.js');
+  const f=fixture(); let calls=0;
+  const fetcher:typeof fetch=async()=>{calls++;return new Response('current');};
+  await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);
+  invalidateHouseGuide(f.db,ORIGIN,entryDigest('current'));
+  await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true); expect(calls).toBe(1);
+  invalidateHouseGuide(f.db,ORIGIN,entryDigest('older'));
+  invalidateHouseGuide(f.db,ORIGIN,entryDigest('older'));
+  await Promise.all([readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true),readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true)]);
+  expect(calls).toBe(2);expect(f.row()?.guide_body).toBe('current');
+});
+
+it.each(['exit','binding','generation','gate'])('fences a pending fetch after %s changes', async change=>{
+  const f=fixture();let release!:(response:Response)=>void,active=true;
+  const fetched=new Promise<Response>(resolve=>{release=resolve;});
+  const pending=readHouseGuideContext(f.db,ORIGIN,async()=>fetched,()=>active);
+  if(change==='exit')f.db.execute("UPDATE house_participation SET desired='disabled'");
+  if(change==='binding')f.db.execute('UPDATE house_binding_pin SET revision=revision+1');
+  if(change==='generation')f.db.execute('UPDATE house_participation SET op_seq=op_seq+1');
+  if(change==='gate')active=false;
+  release(new Response('must not land'));
+  expect((await pending).status).toBe('unavailable');expect(f.row()?.guide_body).toBeNull();
+});
+
+it('uses 304 for the current body and revalidates after six hours without repeating normal reads',async()=>{
+  const {vi}=await import('vitest');
+  const {GUIDE_REVALIDATE_MS}=await import('../../../src/world/house-guide-context.js');
+  const f=fixture();let calls=0;
+  const fetcher:typeof fetch=async()=>{calls++;return calls===1?new Response('cached'):new Response(null,{status:304});};
+  vi.useFakeTimers();try{
+    await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);
+    await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);expect(calls).toBe(1);
+    vi.setSystemTime(Date.now()+GUIDE_REVALIDATE_MS);
+    expect(await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true)).toMatchObject({status:'available',guide:'cached'});
+    expect(calls).toBe(2);
+  }finally{vi.useRealTimers();}
+});
+
+it('rejects oversized UTF-8 bytes and mismatched cached body digests',async()=>{
+  const f=fixture();
+  f.db.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?',['corrupt',entryDigest('different')]);
+  const result=await readHouseGuideContext(f.db,ORIGIN,async()=>new Response('中'.repeat(100_000)),()=>true);
+  expect(result.status).toBe('unavailable');expect(f.row()?.guide_body).toBe('corrupt');
+});
+
+it('repeated stale hints after successful revalidation do not repeatedly fetch the same version',async()=>{
+  const {invalidateHouseGuide}=await import('../../../src/world/house-guide-context.js');
+  const f=fixture();let calls=0;
+  const fetcher:typeof fetch=async()=>{calls++;return new Response('latest');};
+  await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);
+  invalidateHouseGuide(f.db,ORIGIN,entryDigest('older'));
+  await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);
+  invalidateHouseGuide(f.db,ORIGIN,entryDigest('older'));
+  await readHouseGuideContext(f.db,ORIGIN,fetcher,()=>true);
+  expect(calls).toBe(2);
+});
+
+it('normal MCP access checks already delivered guides when no stream is running',async()=>{
+  const f=fixture(),digest=entryDigest('already delivered');
+  f.db.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?,delivered_digest=?',['already delivered',digest,digest]);
+  const guides=await pendingHouseGuides(f.db,origin=>readHouseGuideContext(f.db,origin,async()=>new Response('new version'),()=>true));
+  expect(guides).toHaveLength(1);expect(guides[0]?.guide).toBe('new version');expect(guides[0]?.delivered).toBe(false);
+  expect(f.row()?.delivered_digest).toBe(digest);
+});

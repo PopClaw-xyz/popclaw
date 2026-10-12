@@ -71,6 +71,7 @@ export async function consumePublicSse(
   signal: AbortSignal,
   consume: (event: ScopedSseEvent) => void | Promise<void>,
   onActivity?: () => void,
+  onGuideDigest?: (digest: string) => void,
 ): Promise<void> {
   if (!response.body) throw new Error('PUBLIC_STREAM_BODY_MISSING');
   const reader = response.body.getReader();
@@ -91,7 +92,11 @@ export async function consumePublicSse(
       }
       type = null; data = []; size = 0; return;
     }
-    if (current.startsWith(':')) return;
+    if (current.startsWith(':')) {
+      const match = /^: ?popclaw-guide-sha256=([a-f0-9]{64})$/.exec(current);
+      if (match) { active(); onGuideDigest?.(match[1]!); }
+      return;
+    }
     const colon = current.indexOf(':');
     if (colon < 0) throw new Error('PUBLIC_SSE_FRAMING_INVALID');
     const field = current.slice(0, colon);

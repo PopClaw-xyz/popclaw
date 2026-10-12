@@ -7,6 +7,7 @@ import { isLocalInviteCall } from '../invite/local-invite-call.js';
 
 import { houseGuideContextKey } from '../world/house-guide-context.js';
 import { optionalWorldOffer } from '../onboarding/optional-world.js';
+import { renderCopy } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { canAppendToolNotice, type ToolNoticeContext } from '../notifier/tool-notice.js';
 import { fileLastRun } from '../runtime/last-run.js';
@@ -165,9 +166,10 @@ export function withTail(
             if (guides?.length) {
               if (payload) {
                 payload.house_guide_contexts = guides;
+                payload.house_guide_context_notice = renderCopy(ownerLang(),'world.guide.currentContext');
                 if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) payload.optional_world_offer = optionalWorldOffer(ownerLang());
               } else {
-                output += '\n' + JSON.stringify({house_guide_contexts:guides});
+                output += '\n' + JSON.stringify({house_guide_contexts:guides,house_guide_context_notice:renderCopy(ownerLang(),'world.guide.currentContext')});
                 if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) output += '\n' + optionalWorldOffer(ownerLang());
               }
             }

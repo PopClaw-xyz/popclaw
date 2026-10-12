@@ -148,6 +148,7 @@ export function mcpRuntimePorts(input: {
       // Row 23: the MCP root reads the world over the public read lane.
       snapshotFetch: (houses, origin) => houses.houseReadFetch(origin),
       clientFetch: (houses, origin) => houses.houseReadFetch(origin),
+      guideRead: (houses, origin) => houses.readHouseGuide(origin,houses.publicReadGate(origin)),
     },
     // No proactive push under MCP: notifications are pulled on the spot by
     // `popclaw_notifications` under this consumer.

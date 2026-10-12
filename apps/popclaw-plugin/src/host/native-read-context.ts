@@ -81,7 +81,8 @@ export function createNativeReadContext(): NativeReadContext {
         : previous?.scope.isCurrent() && previous.ownerInput === ownerInput
           ? previous.scope.requestToken ?? Object.freeze({}) : Object.freeze({});
       if (previous) close(previous);
-      const observed = observedHouseGuideKeys(e.historyMessages), emitted = new Set<string>();
+      const observed = new Set([...observedHouseGuideKeys(e.historyMessages),
+        ...observedHouseGuideKeys(e.prompt), ...observedHouseGuideKeys(e.systemPrompt)]), emitted = new Set<string>();
       const scope: GuideReadScope = Object.freeze({ token: Object.freeze({}),
         ...(requestToken ? {requestToken} : {}),
         isCurrent: () => run.live && runs.get(key) === run,

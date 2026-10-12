@@ -71,3 +71,29 @@ describe('GuideClient', () => {
     expect(await client.fetchGuideText()).toBeNull();
   });
 });
+
+it('standalone guide validates through its fetch gate and reuses the full body on 304',async()=>{
+  let calls=0;const headers:Headers[]=[];const generation={token:{},isCurrent:()=>true};
+  const client=new GuideClient({baseUrl:BASE,readGeneration:()=>generation,fetch:async(_url,init)=>{
+    headers.push(new Headers(init?.headers));calls++;
+    if(calls===3)throw new ActionInactiveError('HOUSE_TRUST_REVOKED',BASE);
+    return calls===1?new Response(GUIDE_TEXT):new Response(null,{status:304});
+  }});
+  expect(await client.fetchGuideText()).toBe(GUIDE_TEXT);
+  expect(await client.fetchGuideText()).toBe(GUIDE_TEXT);
+  expect(headers[1]?.get('if-none-match')).toMatch(/^"[a-f0-9]{64}"$/);
+  expect(await client.fetchGuideResult()).toMatchObject({ok:false,failure:{code:'HOUSE_TRUST_REVOKED'}});
+});
+
+it('does not reuse standalone representations across unknown or changed subject generations',async()=>{
+  const {entryDigest}=await import('../../../src/runtime/house-lifecycle/participation-journal.js');
+  let token:object|undefined={},body='first';const headers:Headers[]=[];
+  const client=new GuideClient({baseUrl:BASE,readGeneration:()=>token?{token,isCurrent:()=>true}:undefined,fetch:async(_url,init)=>{
+    headers.push(new Headers(init?.headers));return new Response(body);
+  }});
+  await client.fetchGuideResult();await client.fetchGuideResult();
+  expect(headers[1]?.get('if-none-match')).toBe(`"${entryDigest('first')}"`);
+  token={};body='second';await client.fetchGuideResult();expect(headers[2]?.has('if-none-match')).toBe(false);
+  token=undefined;await client.fetchGuideResult();expect(headers[3]?.has('if-none-match')).toBe(false);
+  await client.fetchGuideResult();expect(headers[4]?.has('if-none-match')).toBe(false);
+});

@@ -56,6 +56,7 @@ async function fixture(summaryEnabled=false){
    reads.push({method:req.method,url:req.url??'',
     credential:!!(req.headers.authorization??req.headers.cookie??req.headers[INBOX_TOKEN_HEADER.toLowerCase()])});
    if((req.url??'').includes('hold=1')){hold.arrived.resolve();await hold.release.promise;}
+   if((req.url??'').startsWith('/v1/manifest')){res.writeHead(200,{'content-type':'application/json','X-Popclaw-Manifest-Proof':house.proofHeader});res.end(house.bodyBytes);return;}
    if((req.url??'').startsWith('/v1/guide.md')){res.writeHead(200,{'content-type':'text/markdown'});res.end(summaryEnabled ? GUIDE.replace('voice: a test voice', 'voice: a test voice\nstreams:\n  - name: summary\n    endpoint: /v1/world-summary') : GUIDE);return;}
    if(summaryEnabled && (req.url??'').startsWith('/v1/world-summary')){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({window_hours:24,generated_at_ms:1,total_posts:17,distinct_authors:3,authors:{},hot_posts:[]}));return;}
    if((req.url??'').startsWith('/v1/profile/')){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(PROFILE));return;}
@@ -75,7 +76,7 @@ async function fixture(summaryEnabled=false){
  // This fixture starts with actual configured first trust, rather than
  // treating an unverified seeded row as permission for its public reads.
  const owner = runtimes[0]!; owner.manager.seedLegacyHouse(origin);
- const house = mintHouse({ origin });
+ const house = mintHouse({ origin,manifest:{guide_url:'/v1/guide.md'} });
  expect((await pinConfiguredHouses({ db: dbs[0]!, recipientPopclawId: 'fixture', origins: [origin],
    pinning: owner.configuredHousePinning, fetch: house.fetch as typeof fetch }))[0]?.outcome).toBe('pinned');
  return {dir,origin,received,reads,hold,dbs,owner:runtimes[0]!,reader:runtimes[1]!};

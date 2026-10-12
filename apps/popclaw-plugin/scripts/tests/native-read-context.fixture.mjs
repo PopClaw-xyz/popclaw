@@ -15,7 +15,7 @@ test('Native read context survives official direct and CodeMode call chains',asy
   const require=createRequire(join(root,'package.json')),{build}=require('esbuild');
   const sdk=realpathSync(join(root,'node_modules/openclaw'));
   assert.equal(JSON.parse(readFileSync(join(sdk,'package.json'))).version,'2026.9.8');
-  const inputs=['host/native-read-context.ts','host/native-read-context-hooks.ts','host/native-read-context-tools.ts','tools/tool-tail.ts','tools/mcp-adapter.ts','host/openclaw-notify-route.ts','runtime/read-request-scope.ts'];
+  const inputs=['host/native-read-context.ts','host/native-read-context-hooks.ts','host/native-read-context-tools.ts','tools/tool-tail.ts','tools/mcp-adapter.ts','host/openclaw-notify-route.ts','runtime/read-request-scope.ts','world/house-guide-context.ts'];
   const hashes=()=>Object.fromEntries(inputs.map(file=>[file,createHash('sha256').update(readFileSync(join(root,'src',file))).digest('hex')]));
   const sourceSha256=hashes(),box=realpathSync(mkdtempSync(join(tmpdir(),'popclaw-native-read-sdk-')));
   symlinkSync(join(root,'node_modules'),join(box,'node_modules'),'dir');
@@ -33,14 +33,29 @@ test('Native read context survives official direct and CodeMode call chains',asy
     import {withTail} from ${spec('tools/tool-tail.ts')};
     import {getOrCreatePerProcess,peekPerProcess,clearPerProcess} from ${spec('runtime/once.ts')};
     import {entryDigest} from ${spec('runtime/house-lifecycle/participation-journal.ts')};
+    import {InMemoryHostDb} from ${spec('host/in-memory-host-db.ts')};
+    import {runMigrations} from ${spec('host/migrations.ts')};
+    import {ensureHouseLifecycleSchema} from ${spec('runtime/house-lifecycle/participation-store.ts')};
+    import {establishTrustInTx} from ${spec('world/house-binding-pin.ts')};
+    import {guideBindingDigest,recordJoinedGuide,markHouseGuideDelivered} from ${spec('world/house-guide-context.ts')};
+    const db=new InMemoryHostDb();runMigrations(db,${JSON.stringify(join(root,'migrations'))});ensureHouseLifecycleSchema(db);
+    const origin='https://guide.invalid';
+    db.transaction(tx=>{
+      establishTrustInTx(tx,{origin,houseKey:'synthetic-fixture-key',incarnation:'fixture'},'tofu',1);
+      tx.execute("INSERT INTO house_participation(house_origin,installation_id,op_seq,desired,phase,updated_at) VALUES (?,'fixture',1,'enabled','connected',1)",[origin]);
+      recordJoinedGuide(tx,{origin,opSeq:1,rawBytes:new TextEncoder().encode('{"guide_url":"/guide.md"}'),manifestDigest:'fixture'});
+      tx.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?',['Complete synthetic guide',entryDigest('Complete synthetic guide')]);
+    });
+    export const dispose=()=>db.close();
     export const context=sharedNativeReadContext();
     export const facts=getOrCreatePerProcess('native-read-fixture-facts',()=>[]);
     let tokenCount=0;const tokens=new WeakMap();
-    export const guide={status:'available',origin:'https://guide.invalid',bindingDigest:'bound',opSeq:1,
+    export const guide={status:'available',origin:'https://guide.invalid',bindingDigest:guideBindingDigest(db,origin),opSeq:1,
       guideUrl:'https://guide.invalid/guide.md',guide:'Complete synthetic guide',guideDigest:entryDigest('Complete synthetic guide'),delivered:true};
     let receipts=0;
-    const rt={host:{db:{queryAll:()=>[{origin:guide.origin,binding_digest:guide.bindingDigest,op_seq:guide.opSeq,guide_url:guide.guideUrl,guide_body:guide.guide,guide_digest:guide.guideDigest}]}},
-      houseRuntime:{pendingHouseGuides:async()=>[guide],publicReadGate:()=>({isActive:()=>true}),markHouseGuideDelivered:()=>{receipts++;return true;}}};
+    const rt={host:{db},
+      houseRuntime:{pendingHouseGuides:async()=>[guide],publicReadGate:()=>({isActive:()=>true}),markHouseGuideDelivered:context=>{receipts++;return markHouseGuideDelivered(db,context);}}};
+    export const updateGuide=text=>{guide.guide=text;guide.guideDigest=entryDigest(text);db.execute('UPDATE house_guide_context SET guide_body=?,guide_digest=?',[text,guide.guideDigest]);};
     export const receiptCount=()=>receipts;
     export const hasRuntime=()=>peekPerProcess('runtime')!==undefined;
     export const installRuntime=()=>getOrCreatePerProcess('runtime',()=>Promise.resolve(rt));
@@ -75,7 +90,7 @@ test('Native read context survives official direct and CodeMode call chains',asy
   const hooks=await sdkImport('hook-runner-global-CwCyBBBr.mjs'),wrapper=await sdkImport('agent-tools.before-tool-call-BbipAsOC.mjs');
   const search=await sdkImport('tool-search-n_DuQ-T8.mjs'),codeMode=await sdkImport('tool-surface-bridge-CgDvORRC.mjs');
   const errors=[],logger={info(){},warn(){},error(m){errors.push(m);},debug(){}};
-  const configFor=path=>({tools:{codeMode:{enabled:true,executor:'node',timeoutMs:10000}},plugins:{enabled:true,allow:[pluginId],load:{paths:[path]},entries:{[pluginId]:{enabled:true,hooks:{allowConversationAccess:true}}}}});
+  const configFor=path=>({tools:{codeMode:{enabled:true,executor:'node',timeoutMs:10000}},plugins:{enabled:true,allow:[pluginId],load:{paths:[path]},entries:{[pluginId]:{enabled:true,hooks:{allowConversationAccess:true,allowPromptInjection:true}}}}});
   const acquisitions=[];
   for(const label of ['a','b'])acquisitions.push(await loader.t({config:configFor(paths[label]),env,workspaceDir:join(box,'workspace-'+label),onlyPluginIds:[pluginId],toolDiscovery:true,runtimeSideEffects:false,logger}));
   const acquisition=acquisitions[1],config=configFor(paths.b);
@@ -110,6 +125,23 @@ test('Native read context survives official direct and CodeMode call chains',asy
     assert.equal(acknowledged.house_guide_contexts,undefined);
     cases.push('bundle B llm_input sees bundle A runtime memo and acknowledges complete observed input; no service-local closure');
 
+    a.updateGuide('Complete updated guide / 完整新版指南');b.updateGuide(a.guide.guide);
+    const nextPrompt=await runner.runBeforePromptBuild({prompt:'Ordinary chat without PopClaw tools',messages:history},id);
+    assert.ok(nextPrompt?.prependContext.includes(a.guide.guide));
+    const receiptsBefore=a.receiptCount();
+    await runner.runLlmInput({...input(id,history),prompt:nextPrompt.prependContext+'\nOrdinary chat'},id);
+    assert.equal(a.receiptCount(),receiptsBefore+1);
+    assert.equal(decode(await direct[0].execute('after-prompt-input',{})).house_guide_contexts,undefined);
+    const storedHistory=[...history,{role:'user',content:nextPrompt.prependContext+'\nOrdinary chat'}];
+    assert.equal(await runner.runBeforePromptBuild({prompt:'Next ordinary chat',messages:storedHistory},id),undefined);
+    await runner.runBeforeCompaction({sessionId:id.sessionId},id);
+    await runner.runAfterCompaction({sessionId:id.sessionId},id);
+    const compacted=await runner.runBeforePromptBuild({prompt:'After compaction',messages:[{role:'user',content:'summary without guide'}]},id);
+    assert.ok(compacted?.prependContext.includes(a.guide.guide));
+    const fresh=await runner.runBeforePromptBuild({prompt:'New chat',messages:[]},{...id,sessionId:'another-physical'});
+    assert.ok(fresh?.prependContext.includes(a.guide.guide));
+    cases.push('official before_prompt_build next ordinary chat receives updated cache; llm_input prompt receipt suppresses tool tail; actual history suppresses later prompts; compaction/new chat restores complete bilingual body');
+
     const cmId={...id,runId:'synthetic-codemode-run'};
     await runner.runLlmInput(input(cmId),cmId);
     const catalogRef=search.h();search._({catalogRef,tools:rawTools,hookContext:{...cmId,config}});
@@ -128,17 +160,17 @@ test('Native read context survives official direct and CodeMode call chains',asy
     const postReset=decode(await direct[0].execute('post-reset',{}));assert.equal(postReset.scope,false);assert.equal(postReset.house_guide_contexts.length,1);
     assert.equal(b.facts.length,beforeReset+1);
     cases.push('reset revokes prior scope; absent bridge redelivers guide despite process receipt');
-    const deniedConfig=configFor(paths.b);deniedConfig.plugins.entries[pluginId].hooks.allowConversationAccess=false;
+    const deniedConfig=configFor(paths.b);deniedConfig.plugins.entries[pluginId].hooks.allowConversationAccess=false;deniedConfig.plugins.entries[pluginId].hooks.allowPromptInjection=false;
     const denied=await loader.t({config:deniedConfig,env,workspaceDir:join(box,'workspace-denied'),onlyPluginIds:[pluginId],toolDiscovery:true,runtimeSideEffects:false,logger});
     acquisitions.push(denied);
-    assert.ok(!denied.registry.typedHooks.some(hook=>hook.hookName==='llm_input'||hook.hookName==='agent_end'));
+    assert.ok(!denied.registry.typedHooks.some(hook=>hook.hookName==='llm_input'||hook.hookName==='agent_end'||hook.hookName==='before_prompt_build'));
     const deniedId={...id,runId:'synthetic-denied-run'};hooks.i(denied.registry);
     await hooks.t().runLlmInput(input(deniedId,history),deniedId);
     const deniedTool=resolver.i({context:{...context,config:deniedConfig},env,runtimeRegistry:denied.registry,toolAllowlist:[pluginId],assertInvocationCurrent:()=>{}})[0];
     const deniedResult=decode(await wrapper.l(deniedTool,{...deniedId,config:deniedConfig},{emitDiagnostics:false}).execute('denied-input',{}));
     assert.equal(deniedResult.scope,false);assert.equal(deniedResult.house_guide_contexts.length,1);
-    cases.push('SDK denies llm_input/agent_end without conversation-access permission; tool uses no scope and redelivers guide safely');
+    cases.push('SDK honors denied conversation access and prompt injection; tool uses no scope and redelivers guide safely');
     assert.deepEqual(hashes(),sourceSha256);
     console.log(JSON.stringify({sdk:'2026.9.8',node:process.version,sourceSha256,cases,facts:b.facts,codeModeToolCalls:cm.toolCallCount,errors,boundaries:['synthetic admitted host context and read bodies','no network, real private records, channel delivery, runtime boot or deployment','official SDK modules imported unchanged; no custom CodeMode transport or hook implementation']}));
-  }finally{a.clearRuntime();a.context.closeAll();hooks.a();for(const acquired of acquisitions.reverse())await acquired.release();}
+  }finally{a.clearRuntime();a.context.closeAll();hooks.a();for(const acquired of acquisitions.reverse())await acquired.release();a.dispose();b.dispose();}
 });
