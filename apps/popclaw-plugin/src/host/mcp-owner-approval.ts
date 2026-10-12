@@ -16,11 +16,11 @@
  * `consumeOwnerApproval` is synchronous; that conflated the asking with the
  * consuming. Only the asking has to be asynchronous.
  *
- * SCOPE. This serves tools that registered an approval subject.
- * `popclaw_world_invoke` keeps its existing, reviewed MCP elicitation route
- * (`mcp-owner-authorization.ts`) and is NOT rewritten onto this one — two
- * working paths is an accepted transient, and unifying them is a named
- * follow-up. Nothing here touches that path.
+ * SCOPE. This adapter retains the general subject ledger and presentation
+ * policy. World retains its duplicate precheck and exact-input grant binding
+ * in `mcp-owner-authorization.ts`. Both share request ownership, cancellation
+ * and SDK result classification through `mcp-confirmation-lifecycle.ts`.
+ * Sharing that lifecycle does not register the World subject on this root.
  *
  * WHAT KEEPS THAT TRUE, because it is not true by itself: this root wraps
  * EVERY tool, so the world tool stays outside only while it registers no
@@ -47,13 +47,14 @@
  * render a form is inherited from the measurements recorded in
  * `mcp-owner-authorization.ts`, not re-observed here.
  */
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { createMcpConfirmationLifecycle, type McpConfirmationLifecycle,
+  type McpConfirmationRequest, type McpConfirmationServerBox } from './mcp-confirmation-lifecycle.js';
+export { OWNER_APPROVAL_ANSWERED_AFTER_TIMEOUT } from './mcp-confirmation-lifecycle.js';
 import type { ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js';
 import {
   OWNER_APPROVAL_WINDOW_MS, OWNER_CONFIRMATION_ANSWER_INVALID, OWNER_CONFIRMATION_CANCELLED,
   OWNER_CONFIRMATION_FAILED, OWNER_CONFIRMATION_INACTIVE,
-  askOwnerApprovalBeforeDispatch, discardUnconsumedOwnerApproval, setOwnerApprovalSurface,
+  askOwnerApprovalBeforeDispatch, beginMcpOwnerApprovalCall, setOwnerApprovalSurface,
   unconsumedGrantReport,
   type ApprovalDisplayBudget, type OwnerApprovalAskResult, type OwnerApprovalPrompt,
 } from './owner-approval.js';
@@ -62,17 +63,18 @@ import { renderCopy } from '../lexicon/index.js';
 import { APPROVAL_LAYOUT, displayWidth, type ApprovalDialogProfile } from './approval-presentation.js';
 import { OWNER_APPROVAL_WINDOW_MAX_SECONDS } from './approval-window.mjs';
 import { ownerLang } from '../lexicon/owner-language.js';
+import { allocateMcpCallRef } from '../tools/mcp-adapter.js';
 
 type FormSchema = ElicitRequestFormParams['requestedSchema'];
 
 /** Late-bound for the same reason `McpServerBox` is: the MCP `Server` is built
  *  after the tool surface is collected, so this can only hold a box. */
-export interface McpApprovalServerBox {
-  current?: Pick<Server, 'elicitInput' | 'getClientCapabilities' | 'getClientVersion'>;
-}
+export type McpApprovalServerBox = McpConfirmationServerBox;
 
 export interface McpOwnerApprovalOptions {
   readonly server: McpApprovalServerBox;
+  /** The root shares one owner with the World adapter. Omission creates an isolated owner. */
+  readonly lifecycle?: McpConfirmationLifecycle;
   /** How long one dialog may stay open. Absent means the shared window
    *  (`OWNER_APPROVAL_WINDOW_MS`, via `prompt.timeoutMs`). The MCP root fills
    *  it from `ownerApprovalTimeoutFromEnv` — and hands the world dialog the
@@ -92,12 +94,8 @@ export interface McpOwnerApprovalBackend {
   /**
    * The call identity the TOOL BODY will be given for this MCP request.
    *
-   * It must be the same string on both sides or the record can never be found,
-   * and the derivation is not ours: `dispatchMcpCall` builds it from the
-   * JSON-RPC request id. Duplicated here rather than imported because that
-   * module belongs to another thread this round; a test pins the two against
-   * each other so a change on either side goes red rather than silently
-   * failing every approval.
+   * Allocated once per invocation, not derived from the JSON-RPC wire id.
+   * The root passes this exact string to the wrapper and the tool body.
    */
   callRef(extra: { readonly requestId?: string | number }): string;
   /**
@@ -169,8 +167,6 @@ export const OWNER_APPROVAL_TIMEOUT_ENV = 'POPCLAW_OWNER_APPROVAL_TIMEOUT_SECOND
 export const OWNER_APPROVAL_TIMEOUT_BOUNDS = Object.freeze({
   minSeconds: OWNER_APPROVAL_WINDOW_MS / 1000, maxSeconds: OWNER_APPROVAL_WINDOW_MAX_SECONDS,
 });
-/** What a late answer is reported as. It names a log line, never a result. */
-export const OWNER_APPROVAL_ANSWERED_AFTER_TIMEOUT = 'OWNER_APPROVAL_ANSWERED_AFTER_TIMEOUT';
 /**
  * What the owner reads when the window closed first. It rides at the end of
  * the send-draft timeout sentence in every locale (`sendDraft.refused.timeout`)
@@ -205,29 +201,6 @@ export function ownerApprovalTimeoutFromEnv(
       `popclaw: ${OWNER_APPROVAL_TIMEOUT_ENV} is outside ${minSeconds}–${maxSeconds} — using ${seconds}`);
   }
   return seconds * 1000;
-}
-
-/** The exact prefix the installed SDK gives an orphaned response
- *  (`protocol.js:466`). A test drives the real SDK into producing it, so a
- *  wording change there turns red here rather than going quiet. */
-const ORPHANED_RESPONSE = 'Received a response for an unknown message ID: ';
-/** How far behind our own window the SDK's timer sits. Ours always fires
- *  first; the SDK's exists only so a request can never wait forever. */
-const WINDOW_BACKSTOP_MS = 60_000;
-/** How many abandoned dialogs are remembered, and for how long. A dialog the
- *  host never closes is never answered either; this only bounds the memory. */
-const ABANDONED_MAX = 16;
-const ABANDONED_TTL_MS = 60 * 60 * 1000;
-
-/** Whether an orphaned response is an answer to an elicitation — the shape
- *  every such answer has (`action`), read and nothing else. */
-function orphanedElicitAnswer(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : null;
-  if (message === null || !message.startsWith(ORPHANED_RESPONSE)) return false;
-  try {
-    const response = JSON.parse(message.slice(ORPHANED_RESPONSE.length)) as { result?: { action?: unknown } };
-    return typeof response?.result?.action === 'string';
-  } catch { return false; }
 }
 
 /* --------------------------------------------------------------------------
@@ -375,23 +348,14 @@ export function buildApprovalDialog(
   };
 }
 
-/** The id `dispatchMcpCall` will hand the tool body. Kept byte-identical to it
- *  on purpose — see `McpOwnerApprovalBackend.callRef`. */
-export function mcpApprovalCallRef(extra: { readonly requestId?: string | number }): string {
-  const id = String(extra.requestId ?? '');
-  return `mcp_${/^[A-Za-z0-9_.:-]{1,120}$/.test(id) ? id : Date.now()}`;
+/** A new invocation identity; the caller retains its wire id separately. */
+export function mcpApprovalCallRef(_extra: { readonly requestId?: string | number }): string {
+  return allocateMcpCallRef();
 }
 
 export function createMcpOwnerApproval(options: McpOwnerApprovalOptions): McpOwnerApprovalBackend {
-  let stopped = false;
-  const timeoutMs = options.elicitTimeoutMs;
-  /** Dialogs this backend stopped waiting for. The SDK does not tell us the
-   *  message id it used, so a late answer is matched by elimination: exactly
-   *  one abandoned dialog means we know whose it was; more than one, we say
-   *  we do not. (The world dialog shares the server, so its late answers land
-   *  here too; with none of ours outstanding they are reported unattributed.) */
-  let abandoned: Array<{ readonly tool: string; readonly callRef: string; readonly at: number }> = [];
-
+  const lifecycle = options.lifecycle ?? createMcpConfirmationLifecycle(options);
+  const lane = lifecycle.createLane();
   /** Called through the logger object rather than off a detached reference:
    *  a host logger's methods may be bound to it. Falls back to `warn` so the
    *  one report that must never vanish cannot vanish. */
@@ -410,97 +374,46 @@ export function createMcpOwnerApproval(options: McpOwnerApprovalOptions): McpOwn
     } catch { /* the report is lost; the call's result is not. */ }
   }
 
-  function client(): NonNullable<McpApprovalServerBox['current']> | null {
-    if (stopped) return null;
-    const server = options.server.current;
-    // The same test the world dialog makes: a client that does not declare
-    // form elicitation cannot be asked, and saying so is better than sending a
-    // request it will reject.
-    if (!server || !server.getClientCapabilities()?.elicitation?.form) return null;
-    return server;
+  async function elicit(prompt: OwnerApprovalPrompt, request: McpConfirmationRequest): Promise<OwnerApprovalAskResult> {
+    const result = await request.ask(buildApprovalDialog(prompt), {
+      timeoutMs: options.elicitTimeoutMs ?? prompt.timeoutMs, authority: 'owned-window',
+    });
+    switch (result.kind) {
+      case 'allow': return 'allow-once';
+      case 'deny': return 'deny';
+      case 'timeout': return 'timeout';
+      case 'unavailable': return 'APPROVAL_SURFACE_ABSENT';
+      case 'inactive': return OWNER_CONFIRMATION_INACTIVE;
+      case 'cancel': return OWNER_CONFIRMATION_CANCELLED;
+      case 'answer-invalid': return OWNER_CONFIRMATION_ANSWER_INVALID;
+      case 'invalid-action': return OWNER_CONFIRMATION_FAILED;
+      case 'failed':
+        options.logger?.warn({ code: result.code }, `popclaw: owner approval dialog failed — ${String(result.error)}`);
+        return OWNER_CONFIRMATION_FAILED;
+    }
   }
 
-  async function elicit(prompt: OwnerApprovalPrompt, tool: string, callRef: string,
-    signal?: AbortSignal): Promise<OwnerApprovalAskResult> {
-    const server = client();
-    // Between `canAsk()` and here the client can go away: this host can no
-    // longer ask, which is exactly what `APPROVAL_SURFACE_ABSENT` means. Not a
-    // window that closed, and not consent.
-    if (!server) return 'APPROVAL_SURFACE_ABSENT';
-    const dialog = buildApprovalDialog(prompt);
-    const window = timeoutMs ?? prompt.timeoutMs;
-    // OUR OWN TIMER DECIDES WHAT A TIMEOUT IS — not the error code. The SDK
-    // reports its own timer AND an aborted signal (the host cancelled the tool
-    // call, or we shut down) with the same RequestTimeout (`protocol.js:685`),
-    // so the code cannot tell "the window closed on the owner" from "the call
-    // went away". This timer aborts with the same McpError the SDK's own timer
-    // would use, so the `notifications/cancelled` on the wire is unchanged.
-    let windowClosed = false;
-    const closer = new AbortController();
-    const timer = setTimeout(() => {
-      windowClosed = true;
-      closer.abort(McpError.fromError(ErrorCode.RequestTimeout, 'Request timed out', { timeout: window }));
-    }, window);
-    let result;
-    try {
-      result = await server.elicitInput(
-        { mode: 'form', message: dialog.message, requestedSchema: dialog.requestedSchema },
-        // The SDK's own timer is only a backstop behind ours; if it ever fired
-        // first, that is a failure, not the owner's window.
-        { timeout: window + WINDOW_BACKSTOP_MS, signal: signal ? AbortSignal.any([signal, closer.signal]) : closer.signal },
-      );
-    } catch (error: unknown) {
-      const code = (error as { code?: unknown } | null)?.code;
-      if (windowClosed) {
-        // THE WINDOW CLOSED. Whatever the owner does in a dialog the host
-        // leaves open is now an orphan — remembered only so that, if it
-        // arrives, someone can see it did. It is never turned into consent.
-        const now = Date.now();
-        abandoned = [...abandoned.filter(a => now - a.at < ABANDONED_TTL_MS), { tool, callRef, at: now }]
-          .slice(-ABANDONED_MAX);
-        return 'timeout';
-      }
-      // The HOST ended the call while the dialog was open. Not a timeout, and
-      // not remembered as an abandoned dialog: an answer arriving for it was
-      // not given after a window we closed, so it must not be attributed as one.
-      if (signal?.aborted) return OWNER_CONFIRMATION_INACTIVE;
-      // The owner answered, but the SDK refused the answer against the form
-      // (`server/index.js` validates accepted content): the host's fault, and
-      // the owner is told so rather than that time ran out.
-      if (code === ErrorCode.InvalidParams) return OWNER_CONFIRMATION_ANSWER_INVALID;
-      options.logger?.warn({ code }, `popclaw: owner approval dialog failed — ${String(error)}`);
-      // Disconnect, transport failure, anything else. Never consent.
-      return OWNER_CONFIRMATION_FAILED;
-    } finally { clearTimeout(timer); }
-    // `decline` is a person saying no. `cancel` is the dialog closed without
-    // an answer — its own name, not a timeout. Anything else is malformed.
-    if (result.action === 'decline') return 'deny';
-    if (result.action === 'cancel') return OWNER_CONFIRMATION_CANCELLED;
-    if (result.action !== 'accept') return OWNER_CONFIRMATION_FAILED;
-    // Consent is `accept` AND `confirm === true`. An accepted form whose box
-    // came back anything else is a refusal — including an untouched box, which
-    // comes back `false` under `default: false` (Claude Code 2.1.283 /
-    // codex-cli 0.157.1, 2026-09-27; see `buildApprovalDialog`).
-    return result.content?.['confirm'] === true ? 'allow-once' : 'deny';
+  async function prepare(toolName: string, params: unknown, callRef: string,
+    request: McpConfirmationRequest): Promise<void> {
+    setOwnerApprovalSurface(lane.canAsk());
+    await askOwnerApprovalBeforeDispatch(toolName, params, callRef,
+      prompt => elicit(prompt, request), MCP_APPROVAL_PROFILE);
   }
 
   return {
     callRef: mcpApprovalCallRef,
-    canAsk(): boolean { return client() !== null; },
+    canAsk(): boolean { return lane.canAsk(); },
     async beforeDispatch(toolName, params, callRef, signal): Promise<void> {
-      // Set from the CONNECTED CLIENT every call rather than once at install:
-      // whether this root can ask is a property of who connected, which is not
-      // known when the wrapper is installed. Idempotent — one root serves one
-      // client — and it keeps `APPROVAL_SURFACE_ABSENT` meaning exactly "this
-      // host cannot ask" instead of "the wrapper is missing".
-      setOwnerApprovalSurface(client() !== null);
-      await askOwnerApprovalBeforeDispatch(toolName, params, callRef,
-        prompt => elicit(prompt, toolName, callRef, signal), MCP_APPROVAL_PROFILE);
+      const request = lane.open(toolName, callRef, signal);
+      try { await prepare(toolName, params, callRef, request); }
+      finally { request.finish(); }
     },
     async aroundDispatch<T>(toolName: string, params: unknown, callRef: string,
       signal: AbortSignal | undefined, body: () => Promise<T>): Promise<T> {
-      await this.beforeDispatch(toolName, params, callRef, signal);
+      const request = lane.open(toolName, callRef, signal);
+      const finish = beginMcpOwnerApprovalCall(toolName, callRef, request.isActive);
       try {
+        await prepare(toolName, params, callRef, request);
         return await body();
       } finally {
         // THE SEAM'S OWN SILENT FAILURE, MADE LOUD.
@@ -516,7 +429,8 @@ export function createMcpOwnerApproval(options: McpOwnerApprovalOptions): McpOwn
         // point is that this can no longer be invisible. Dropping the record
         // is the other half: no grant may outlive the call it was given for.
         // `finally`, so a throwing body is reported too.
-        if (discardUnconsumedOwnerApproval(toolName, callRef)) {
+        request.finish();
+        if (finish()) {
           // The sentence itself lives beside the drop, so the native root's
           // `after_tool_call` guard reports one defect in one wording.
           reportDefect({ tool: toolName, call_ref: callRef },
@@ -524,22 +438,7 @@ export function createMcpOwnerApproval(options: McpOwnerApprovalOptions): McpOwn
         }
       }
     },
-    noteProtocolError(error: unknown): void {
-      try {
-        if (!orphanedElicitAnswer(error)) return;
-        const now = Date.now();
-        abandoned = abandoned.filter(a => now - a.at < ABANDONED_TTL_MS);
-        const only = abandoned.length === 1 ? abandoned[0]! : null;
-        if (only) abandoned = [];
-        const tools = new Set(abandoned.map(a => a.tool));
-        // Tool, call ref, reason. Not the action, not the form, not the draft.
-        options.logger?.warn({
-          tool: only?.tool ?? (tools.size === 1 ? [...tools][0] : null),
-          call_ref: only?.callRef ?? null,
-          reason: OWNER_APPROVAL_ANSWERED_AFTER_TIMEOUT,
-        }, 'popclaw: an approval dialog was answered after its window closed — ignored, nothing was sent');
-      } catch { /* a report is lost; nothing else is affected. */ }
-    },
-    stop(): void { stopped = true; setOwnerApprovalSurface(false); },
+    noteProtocolError: error => lifecycle.noteProtocolError(error),
+    stop(): void { lane.stop(); setOwnerApprovalSurface(false); },
   };
 }

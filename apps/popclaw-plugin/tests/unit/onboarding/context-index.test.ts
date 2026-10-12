@@ -43,6 +43,6 @@ describe('SessionContextIndex', () => {
     idx.register([item(1, 'a', 'x'), item(2, 'b', 'y')]);
     idx.register([item(3, 'c', 'z'), item(4, 'd', 'w')]);
     expect(idx.recent(10)).toHaveLength(3);             // capacity=3
-    expect(idx.recent(10)[0]?.authorPopclawId).toBe('pid-4'); // 最新在前
+    expect(idx.recent(10)[0]?.authorPopclawId).toBe('pid-4'); // Newest first.
   });
 });

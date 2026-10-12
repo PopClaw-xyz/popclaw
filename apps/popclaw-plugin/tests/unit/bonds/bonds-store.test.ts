@@ -207,8 +207,8 @@ describe('BondsStore — unreportedDynamics / markDynamicsReported', () => {
   });
 });
 
-// 审查抓到的：做梦写回可能被重放（一批人写到一半出错 → 令牌保留 → agent 整批重交）。
-// 裸 INSERT 会让近况列表长出一串一模一样的行。
+// Review finding: dream writeback can be replayed (partial batch failure retains the token, then the agent resubmits the whole batch).
+// A plain INSERT would add identical rows to the recent-activity list.
 describe('BondsStore.addDynamic — 幂等', () => {
   it('同一人 + 同 ts + 同一句话，重放不再长出重复行', () => {
     const s = freshStore();
@@ -220,14 +220,14 @@ describe('BondsStore.addDynamic — 幂等', () => {
   it('真正不同的近况照样都记下', () => {
     const s = freshStore();
     s.addDynamic('ALICE', { ts: 100, summary: '发射成功', isMilestone: true });
-    s.addDynamic('ALICE', { ts: 100, summary: '换了工作', isMilestone: true }); // 同 ts 不同事
-    s.addDynamic('ALICE', { ts: 200, summary: '发射成功', isMilestone: false }); // 同事不同 ts
+    s.addDynamic('ALICE', { ts: 100, summary: '换了工作', isMilestone: true }); // Same timestamp, different event.
+    s.addDynamic('ALICE', { ts: 200, summary: '发射成功', isMilestone: false }); // Same event, different timestamp.
     expect(s.recentDynamics('ALICE', 10)).toHaveLength(3);
   });
 });
 
-// 交情本 = 本地社交资产的唯一规整点：认人认出来的名号要落进这里。
-// 与 setNickname 的分野就是这三条（真机 2026-07-29：苍梧阁的行在、名字空）。
+// The bond book is the single normalization point for local social assets: resolved nicknames belong here.
+// These three cases distinguish this from setNickname (2026-07-29 real-device case: the Cangwu Pavilion row existed but its name was empty).
 describe('BondsStore.fillNickname — 只填空、不建行', () => {
   it('名字空着 → 填上，返回 true', () => {
     const s = freshStore();
@@ -263,8 +263,8 @@ describe('BondsStore.fillNickname — 只填空、不建行', () => {
     expect(s.fillNickname('CANGWU', '苍梧小居士')).toBe(false);
   });
 
-  // 改口径（2026-07-30）：对名号的工作单是**全部行**，不只是空名字的 —— 名号会变，
-  // 本地这份是缓存。以前只取空的，于是「handle 占着名号位」的行永远排不进工作单。
+  // Policy update (2026-07-30): nickname resolution must process ALL rows, not only unnamed ones, because names can change.
+  // The local copy is a cache. Selecting only empty names left rows with a handle in the nickname slot permanently outside the worklist.
   it('idsForNicknameSync 列全部行（有名字的也要对）', () => {
     const s = freshStore();
     s.ensure('NAMELESS');
@@ -277,6 +277,6 @@ describe('BondsStore.fillNickname — 只填空、不建行', () => {
     s.setNickname('P', 'owl_scribe_7');
     expect(s.syncNickname('P', 'Blackfeather')).toBe(true);
     expect(s.get('P')?.nickname).toBe('Blackfeather');
-    expect(s.syncNickname('P', 'Blackfeather')).toBe(false); // 不制造无谓写
+    expect(s.syncNickname('P', 'Blackfeather')).toBe(false); // Avoid unnecessary writes.
   });
 });

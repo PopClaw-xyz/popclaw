@@ -338,10 +338,11 @@ it('returns durable descriptor outcomes without disturbing a completed replay fo
 });
 
 import { PublicStreamJournal, preparePublicStreamJournal, verifyPublicStreamJournalSchema, EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST } from '../../../src/world/scoped-stream-journal.js';
-const publicCapability = { house, capabilityRevision: 'revision-1', publicStream: { endpoint: '/v1/world-stream' as const, mode: 'public-v1' as const, log_incarnation: log, envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: ['sc_a'] } };
-function publicOptions(db: InMemoryHostDb) {
+const publicCapability = { house, capabilityRevision: 'revision-1', publicStream: { endpoint: '/v1/world-stream' as const, mode: 'public-v1' as const, log_incarnation: log, envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: ['sc_a'] } };
+function publicOptions(db: InMemoryHostDb, baseline: string = 'public-envelope-02', incarnation: string = log) {
   const controller = new AbortController();
-  return { executionDb: db, capability: publicCapability, producerPolicy: { house, capabilityRevision: 'revision-1', officialActorIds: [] }, selection: { fullPublic: true, scopes: ['sc_a'] }, consumerContracts: [], approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST, gate: { origin: house.origin, signal: controller.signal, isActive: () => !controller.signal.aborted }, controller };
+  const capability = { ...publicCapability, publicStream: { ...publicCapability.publicStream, envelope_baseline: baseline as 'public-envelope-02', log_incarnation: incarnation } };
+  return { executionDb: db, capability, producerPolicy: { house, capabilityRevision: 'revision-1', officialActorIds: [] }, selection: { fullPublic: true, scopes: ['sc_a'] }, consumerContracts: [], approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST, gate: { origin: house.origin, signal: controller.signal, isActive: () => !controller.signal.aborted }, controller };
 }
 describe('PublicStreamJournal protected lifecycle', () => {
   it('never creates or repairs protected schema on normal construction', () => {
@@ -355,6 +356,18 @@ describe('PublicStreamJournal protected lifecycle', () => {
     db.execute('DROP TABLE world_public_cursors_v1');
     expect(() => new PublicStreamJournal(options)).toThrow();
     expect(db.queryOne("SELECT name FROM sqlite_master WHERE name='world_public_cursors_v1'")).toBeNull();
+  });
+  it('binds public-envelope-02 only to a fresh log and rejects legacy and unknown baselines', () => {
+    const db = new InMemoryHostDb(); dbs.push(db);
+    const v2 = publicOptions(db, 'public-envelope-02');
+    expect(() => preparePublicStreamJournal(v2)).not.toThrow();
+    v2.controller.abort();
+    const old = publicOptions(new InMemoryHostDb(), 'public-envelope-01');
+    dbs.push(old.executionDb as InMemoryHostDb);
+    expect(() => preparePublicStreamJournal(old)).toThrow('PUBLIC_BASELINE_UNSUPPORTED');
+    const unknown = publicOptions(new InMemoryHostDb(), 'public-envelope-99');
+    dbs.push(unknown.executionDb as InMemoryHostDb);
+    expect(() => preparePublicStreamJournal(unknown)).toThrow('PUBLIC_BASELINE_UNSUPPORTED');
   });
   it('preserves positions and never restores persisted readiness on restart', () => {
     const db = new InMemoryHostDb(); dbs.push(db); const options = publicOptions(db);
@@ -553,9 +566,16 @@ it('persists exact originals and lane positions across a closed file-backed SQLi
 });
 it('changes authenticated log only through a new gate and preserves all older associations',()=>{
   const db=new InMemoryHostDb();dbs.push(db);const setup=openPublic(db);const first=beginPublic(setup.journal,'17');const raw=signedPublic();setup.journal.append(first,publicFrame('17',raw));checkpointPublic(setup.journal,first,'17');setup.journal.end(first);setup.options.controller.abort();
-  const controller=new AbortController();const options={...setup.options,controller,gate:{origin:house.origin,signal:controller.signal,isActive:()=>!controller.signal.aborted},capability:{...setup.options.capability,publicStream:{...setup.options.capability.publicStream,log_incarnation:'new-log'}}};
+  // Simulate the persisted profile written by a previous 01 client. It remains
+  // historical evidence during a current 02 log switch.
+  db.execute("UPDATE world_public_log_profiles_v1 SET envelope_baseline='public-envelope-01' WHERE log_incarnation=?",[log]);
+  const controller=new AbortController();const options={...setup.options,controller,gate:{origin:house.origin,signal:controller.signal,isActive:()=>!controller.signal.aborted},capability:{...setup.options.capability,publicStream:{...setup.options.capability.publicStream,log_incarnation:'new-log',envelope_baseline:'public-envelope-02' as const}}};
   const next=new PublicStreamJournal(options);next.activate();expect(next.request().publicAfter).toBe('0');const second=beginPublic(next,'5');next.append(second,publicFrame('5',raw));checkpointPublic(next,second,'5');
   expect(db.queryAll<{log_incarnation:string;seq:string}>('SELECT log_incarnation,seq FROM world_public_frames_v1 ORDER BY seq')).toEqual([{log_incarnation:log,seq:'17'},{log_incarnation:'new-log',seq:'5'}]);
+  expect(db.queryAll<{log_incarnation:string;retired:number;envelope_baseline:string}>('SELECT log_incarnation,retired,envelope_baseline FROM world_public_log_profiles_v1 ORDER BY log_incarnation')).toEqual([
+    {log_incarnation:log,retired:1,envelope_baseline:'public-envelope-01'},
+    {log_incarnation:'new-log',retired:0,envelope_baseline:'public-envelope-02'},
+  ]);
   expect(()=>setup.journal.append(first,publicFrame('18',signedPublic(null,2)))).toThrow();expect(next.receiveStatus().caughtUp).toBe(true);
 });
 

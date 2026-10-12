@@ -1,9 +1,10 @@
 /**
- * 工单 #553 批次 C：PublicWorldStreamClient 行为回归。
+ * Issue #553 batch C: PublicWorldStreamClient behavior regressions.
  *
- * 覆盖：帧落盘（原字节 BLOB）+ 游标推进；重发幂等（不重复派发）；内容类
- * onContent 收到装回原字节的投影；Ranger 路径 onEnvelope 收到解码信封；
- * 未知 kind 只落盘不派发；重启后续传游标进 URL；IngressProxy 延迟绑定。
+ * Covers raw frame BLOB persistence and cursor advancement; idempotent replay without
+ * duplicate dispatch; content onContent receiving projections with restored raw bytes;
+ * Ranger onEnvelope receiving decoded envelopes; unknown kinds persisted without dispatch;
+ * restart cursors included in the URL; and deferred IngressProxy binding.
  */
 
 import { strict as assert } from 'node:assert';
@@ -209,7 +210,7 @@ describe('PublicWorldStreamClient', () => {
     const frame = { seq: 7, envelope: quest.bytes, kind: 'quest_dispatch' };
     es.emit(frame, '7');
     await flush();
-    es.emit(frame, '7'); // 服务端回放/live 交界的重发（已 dispatched → 跳过）
+    es.emit(frame, '7'); // Replay at the server replay/live boundary (already dispatched → skip).
     await flush();
 
     assert.equal(seen.length, 1, 'duplicate delivery must not re-dispatch');
@@ -236,8 +237,8 @@ describe('PublicWorldStreamClient', () => {
     const row = db.queryOne<{ kind: string }>(`SELECT kind FROM world_stream WHERE seq = 2`);
     assert.ok(row);
     assert.equal(row.kind, 'world.postcard');
-    // house vocabulary：没给投影就不走内容消费者；信封照交 handler——
-    // 「谁关心」由 EventDispatcher 决定（classify 不认识就静默丢）。
+    // House vocabulary: without a projection, skip content consumers but still pass the envelope to the handler.
+    // EventDispatcher decides who consumes it (unrecognized classify results are silently dropped).
     assert.equal(seenContent.length, 0);
     assert.equal(seen.length, 1, 'envelope still reaches the dispatcher-boundary handler');
   });
@@ -280,7 +281,7 @@ describe('PublicWorldStreamClient', () => {
       connected += 1;
     });
 
-    // bind 前无接收器——先起一个（Ranger 场景）。
+    // No receiver before bind; start one first (Ranger scenario).
     const real = makeClient(db);
     proxy.bind(real);
     const es = FakeEventSource.lastInstance!;
@@ -296,11 +297,11 @@ describe('PublicWorldStreamClient', () => {
     assert.equal(FakeEventSource.lastInstance!.closed, true, 'stop closes the receiver');
   });
 
-  // 复验 G1 的复现场景：按真实 index.ts 装配顺序 start()（纯内容）→
-  // proxy.bind —— 留下的 pending 任务必须由真实 Ranger 处理器恰好执行一次，
-  // 空启动不得把它标记完成。
+  // Recheck G1 using the real index.ts assembly order: start() (content-only) →
+  // proxy.bind. The real Ranger handler must execute retained pending tasks exactly once;
+  // starting without a handler must not mark them complete.
   it('boot-order no-op start must not consume pending tasks (G1)', async () => {
-    // 先留下一个失败待办。
+    // First leave a failed pending task.
     const quest = questEnvelope();
     {
       const seed = makeClient(db);
@@ -319,18 +320,18 @@ describe('PublicWorldStreamClient', () => {
       await seed.stop();
     }
 
-    // 真实装配顺序：IngressProxy 先吃 start(handler)，receiver 以纯内容
-    // 模式启动，然后 bind。
+    // Real assembly order: IngressProxy receives start(handler), the receiver starts in content-only
+    // mode, then bind runs.
     let realCalls = 0;
     const proxy = new IngressProxy();
     await proxy.start(() => {
       realCalls += 1;
     });
     const receiver = makeClient(db);
-    const boot = receiver.start(); // content-only — G1 修复点：不传 no-op
+    const boot = receiver.start(); // content-only: G1 fix point, do not pass a no-op.
     proxy.bind(receiver);
     await boot;
-    // bind 内部的 start/retryPending 未被 bind 等待——多排一层微任务。
+    // bind does not await its internal start/retryPending; allow an extra microtask.
     await flush();
     await flush();
 
@@ -345,8 +346,8 @@ describe('PublicWorldStreamClient', () => {
     await receiver.stop();
   });
 
-  // 复验 G2 的复现场景：重扫的旧清单在等待期间，别入口完成的任务不得
-  // 被再次执行（独占段内重查持久旗标）。
+  // Recheck G2: while a sweep's old task list is waiting, tasks completed through another entry point must not
+  // run again (recheck the persisted flag inside the exclusive section).
   it('a stale sweep list must not re-execute an event completed elsewhere (G2)', async () => {
     let releaseA!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -373,10 +374,10 @@ describe('PublicWorldStreamClient', () => {
     await client.absorb(mk(qb.eventId, qb.bytes, 2)).catch(() => {});
     seeded = false;
 
-    // 重扫开始：先执行 a（卡在 gate 上）；与此同时 b 经实时入口完成。
+    // Start the sweep: run a first (blocked at the gate), while b completes through the live path.
     const sweep = client.retryPending();
-    await flush(); // a 进入 gate
-    await client.absorb(mk(qb.eventId, qb.bytes, 2)); // live 完成 b（旧实现：sweep 稍后会重执行 b）
+    await flush(); // a enters the gate.
+    await client.absorb(mk(qb.eventId, qb.bytes, 2)); // Live processing completes b (the old sweep would execute b again later).
     releaseA();
     await sweep;
 
@@ -391,7 +392,7 @@ describe('PublicWorldStreamClient', () => {
     await client.stop();
   });
 
-  // 复验 F1 的复现场景：首次处理在途时，重放帧 + 重连重扫都不得再次进入处理器。
+  // Recheck F1: replayed frames and reconnect sweeps must not reenter the handler while the first attempt is in flight.
   it('an in-flight dispatch is not re-entered by redelivery or a retry sweep', async () => {
     let release!: () => void;
     let calls = 0;
@@ -411,11 +412,11 @@ describe('PublicWorldStreamClient', () => {
       envelope: quest.bytes,
       projection: null,
     };
-    // 第一次在途（handler 卡在 gate 上），随后同一帧重放 + 重连重扫。
+    // First attempt in flight (handler blocked at the gate), then replay the same frame and start a reconnect sweep.
     const first = client.absorb(frame);
-    const second = client.absorb(frame); // 在途重放
-    await flush(); // 让第一次真正进入 handler
-    const sweep = client.retryPending(); // 重连重扫（不 await——它会等在途的同一个 Promise）
+    const second = client.absorb(frame); // Replay while in flight.
+    await flush(); // Let the first attempt actually enter the handler.
+    const sweep = client.retryPending(); // Reconnect sweep: do not await, since it waits on the same in-flight Promise.
     await flush();
     assert.equal(calls, 1, 'in-flight redelivery/retry must await, not re-enter');
 
@@ -430,7 +431,7 @@ describe('PublicWorldStreamClient', () => {
       1,
     );
 
-    // 在途清除后，失败路径仍可重试：派发失败 → dispatched 留 0 → 下轮重扫再跑。
+    // Once in-flight state clears, failures remain retryable: dispatch fails → dispatched stays 0 → next sweep retries.
     let failNext = true;
     const flaky = makeClient(db);
     await flaky.start(() => {
@@ -450,20 +451,20 @@ describe('PublicWorldStreamClient', () => {
         envelope: quest2.bytes,
         projection: null,
       })
-      .catch(() => {}); // 直接调用方自己接住失败（SSE 路径由 onmessage 接）
+      .catch(() => {}); // Direct callers catch failures themselves (onmessage catches them on the SSE path).
     assert.equal(calls, 1, 'failed attempt consumed');
-    await flaky.retryPending(); // 同进程内重试（模拟重连重扫）
+    await flaky.retryPending(); // Retry in the same process, simulating a reconnect sweep.
     assert.equal(calls, 101, 'retry after in-process failure succeeds');
   });
 
-  // 验收报告 R3 的复现场景：派发失败 → 重启 → 重试成功；已派发的重发不再执行。
+  // Acceptance report R3: dispatch failure → restart → successful retry; replay of dispatched events does not execute again.
   it('a failed dispatch is retried after restart; completed work is not re-run', async () => {
     const errors: unknown[] = [];
     const quest = questEnvelope();
     let failFirst = true;
     let successes = 0;
 
-    // 第一段：处理器抛错（同步），事件已落盘、游标已推进、dispatched 仍 0。
+    // Phase one: handler throws synchronously; event persisted, cursor advanced, dispatched still 0.
     const first = new PublicWorldStreamClient({
       baseUrl: 'http://house.test',
     isOfficialActor: id => id === fixtureActor,
@@ -486,7 +487,7 @@ describe('PublicWorldStreamClient', () => {
       `SELECT task_done FROM world_stream WHERE event_id = ?`, [quest.eventId])?.task_done, 0);
     assert.equal(first.cursor(), 7, 'receive cursor advanced (receive ≠ processed)');
 
-    // 第二段：同一 db 重启，start() 的 retryPending 把 pending 行重派并成功。
+    // Phase two: restart with the same DB; start() uses retryPending to redispatch the pending row successfully.
     failFirst = false;
     const second = makeClient(db);
     await second.start(() => {
@@ -497,16 +498,16 @@ describe('PublicWorldStreamClient', () => {
     assert.equal(db.queryOne<{ task_done: number }>(
       `SELECT task_done FROM world_stream WHERE event_id = ?`, [quest.eventId])?.task_done, 1);
 
-    // 已派发事件的重发（服务端重叠）不再执行副作用。
+    // Replay of a dispatched event (server overlap) does not repeat side effects.
     FakeEventSource.lastInstance!.emit({ seq: 7, envelope: quest.bytes, kind: 'quest_dispatch' }, '7');
     await flush();
     assert.equal(successes, 1, 'completed dispatch is not re-run on redelivery');
   });
 
-  // 第四轮复验的非阻断项：把「换绑重置」的语义钉死成定性测试——它是
-  // 旧装配顺序（start(占位符)→bind(真)）的兼容手段；换绑**另一个真**
-  // handler 会重跑旧真 handler 已完成的任务（副作用由服务端幂等兜底）。
-  // 生产装配从不换绑真 handler。此测试的存在让未来任何语义改动都是显式的。
+  // Nonblocking fourth-review finding: pin reset-on-rebind semantics with a characterization test. It supports
+  // the old assembly order (start(placeholder) → bind(real)). Rebinding to another real
+  // handler reruns tasks completed by the previous real handler (server idempotency protects side effects).
+  // Production assembly never rebinds real handlers. This test makes future semantic changes explicit.
   it('rebinding a DIFFERENT real handler re-arms completed tasks (pinned legacy semantics)', async () => {
     const quest = questEnvelope();
     const mkFrame = (seq: number) => ({
@@ -532,13 +533,13 @@ describe('PublicWorldStreamClient', () => {
       1,
     );
 
-    // 换绑另一个真 handler：全部 task_done 重置，任务对 B 重跑一次。
+    // Rebind to another real handler: reset all task_done flags and rerun tasks once for B.
     await client.start(() => {
       callsB += 1;
     });
     assert.equal(callsA, 1, 'the old handler is not invoked again');
     assert.equal(callsB, 1, 'the new real handler re-runs the re-armed task exactly once');
-    // 重跑后旗标归位；再次重扫/重发不再执行。
+    // Restore flags after rerunning; subsequent sweeps/replays do not execute again.
     await client.retryPending();
     assert.equal(callsB, 1, 're-armed execution completes once, then settles');
   });
@@ -563,7 +564,7 @@ function publicFixture(overrides: Partial<PublicV1ReceiverOptions> = {}) {
     return new Response(new ReadableStream<Uint8Array>({ start(c) { streams.push(c); } }), { headers: { 'content-type': 'text/event-stream' } });
   }) as unknown as typeof fetch;
   const options: PublicV1ReceiverOptions = {
-    capability: { house: publicHouse, capabilityRevision: 'verified_rev_1', publicStream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'public_log_1', envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: ['sc_a'] } },
+    capability: { house: publicHouse, capabilityRevision: 'verified_rev_1', publicStream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'public_log_1', envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: ['sc_a'] } },
     gate: { origin: publicHouse.origin, signal: abort.signal, isActive: () => !abort.signal.aborted },
     executionDb: db, selection: { fullPublic: true, scopes: ['sc_a'] },
     producerPolicy: { house: publicHouse, capabilityRevision: 'verified_rev_1', officialActorIds: [fixtureActor] },
@@ -697,6 +698,55 @@ describe('PublicV1Receiver durable transport and lifetime', () => {
     expect(new URL(f.requests[1]!.url).searchParams.get('public_after')).toBe('12');
     expect(f.requests[1]!.options.headers).toEqual({ accept: 'text/event-stream' });
     expect(f.receiver.receiveStatus().caughtUp).toBe(false);
+  });
+  it('reconnects a silent public stream from its committed cursors', async () => {
+    const f = publicFixture({ idleTimeoutMs: 50 });
+    await f.receiver.start(); f.boundary('12'); f.checkpoint('12');
+    await publicEventually(() => expect(f.receiver.receiveStatus().caughtUp).toBe(true));
+    await publicEventually(() => expect(f.requests[0]!.options.signal!.aborted).toBe(true));
+    expect(f.receiver.receiveStatus().caughtUp).toBe(false);
+    expect(f.receiver.receiveStatus().errorCode).toBe('PUBLIC_STREAM_IDLE');
+    await publicEventually(() => expect(f.requests).toHaveLength(2));
+    const resumed = new URL(f.requests[1]!.url);
+    expect(resumed.searchParams.get('public_after')).toBe('12');
+    expect(resumed.searchParams.get('cursors')).toBe('sc_a:12');
+    expect(f.requests[1]!.options.headers).toEqual({ accept: 'text/event-stream' });
+  });
+  it('keeps an idle public stream open while heartbeat bytes arrive', async () => {
+    const f = publicFixture({ idleTimeoutMs: 150 });
+    await f.receiver.start(); f.boundary('12'); f.checkpoint('12');
+    await publicEventually(() => expect(f.receiver.receiveStatus().caughtUp).toBe(true));
+    for (let i = 0; i < 4; i++) {
+      await new Promise(resolve => setTimeout(resolve, 60));
+      f.streams[0]!.enqueue(new TextEncoder().encode(': keep-alive\n\n'));
+    }
+    await flush();
+    expect(f.requests).toHaveLength(1);
+    expect(f.requests[0]!.options.signal!.aborted).toBe(false);
+    expect(f.receiver.receiveStatus()).toMatchObject({ caughtUp: true, checkpointHighWater: '12' });
+    expect(f.errors).toEqual([]);
+  });
+  it('retries a public fetch that never returns headers', async () => {
+    const signals: AbortSignal[] = [];
+    const fetcher = vi.fn((_input: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init!.signal!; signals.push(signal);
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    })) as unknown as typeof fetch;
+    const f = publicFixture({ idleTimeoutMs: 50, fetch: fetcher });
+    await f.receiver.start();
+    await publicEventually(() => expect(signals[0]!.aborted).toBe(true));
+    await publicEventually(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    expect(f.receiver.receiveStatus().caughtUp).toBe(false);
+    expect(f.errors.some(error => error instanceof Error && error.message === 'PUBLIC_STREAM_IDLE')).toBe(true);
+  });
+  it('clears the public idle timer when its owner stops reception', async () => {
+    const f = publicFixture({ idleTimeoutMs: 50 });
+    await f.receiver.start(); f.boundary(); f.checkpoint();
+    await publicEventually(() => expect(f.receiver.receiveStatus().caughtUp).toBe(true));
+    await f.receiver.stop();
+    await new Promise(resolve => setTimeout(resolve, 80));
+    expect(f.requests).toHaveLength(1);
+    expect(f.errors).toEqual([]);
   });
   it('joins late fetch resolution and cancellation before stop resolves', async () => {
     const pending = deferred<Response>(); const cancelPending = deferred(); const cancel = vi.fn(() => cancelPending.promise);

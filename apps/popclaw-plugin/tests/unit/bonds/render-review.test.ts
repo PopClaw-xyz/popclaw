@@ -35,12 +35,12 @@ describe('renderReview', () => {
     expect(text).toContain('发了新文章');
     expect(text).toContain('大事');
     expect(text).toContain('融资千万');
-    // acquaintance non-milestone (id 3) is below the 近况 floor → not shown
+    // acquaintance non-milestone (id 3) is below the recent-activity floor → not shown
     expect(text).not.toContain('普通帖');
   });
 
-  // 提议行漏的是裸 popclaw_id 前缀。
-  // 全局规矩是「名号#印信」——裸前缀既念不出来，也跟别人的前缀分不开。
+  // Proposal rows leaked the raw popclaw_id prefix.
+  // The global rule is name#sigil: raw prefixes are unreadable and hard to distinguish.
   it('提议行与动态行都走名字链，不漏裸 id 前缀', () => {
     const id = 'Fo1Potk3v4qL45UmEDmnkRj2K5QEMctPKVAPjN9j1VS2';
     const text = renderReview({
@@ -65,8 +65,8 @@ describe('renderReview', () => {
     expect(text).toContain('/popclaw review 1 1'); // accept hint for proposal #1
   });
 
-  // 关注门铃 §6.5 兜底腿之二：晨卡「待关注」一节（双保险）。名字照存
-  // `名#印信` —— 与注入乘客同一口径，主人的词汇与 agent 的匹配底数不漂移。
+  // Follow doorbell §6.5, second fallback: the morning card's pending-follow section (redundant coverage). Store names as
+  // name#sigil, matching the injected content so owner vocabulary and agent matching use the same identity.
   it('pendingFollows 非空 → 渲染「待关注」一节：编号、名字照存、节尾回复语法', () => {
     const text = renderReview({
       dynamics: [dyn({ id: 1, popclawId: 'A', tier: 'close', remarkName: '阿青', summary: '发了新文章' })],

@@ -426,6 +426,15 @@ export const CHILD_SYSTEM_PROMPT =
   'hand it back verbatim and deliver nothing to any channel yourself.\n' +
   'Read every page_cursor continuation until the complete-document end marker before final selection or finishing copy. ' +
   'A long source can span pages; join its complete parts before quoting it. Continue the same saved issue, never regather to fill a page. ' +
+  'After reading the selected materials, prepare ONLY the next small batch: at most 12 items, fewer when their copy is long. ' +
+  'As soon as that batch has complete q, h and s values, CALL popclaw_publish_newspaper. ' +
+  'Do not draft or plan the entire issue in one output before the first call. A written promise, JSON in chat, ' +
+  'or a mention of the tool is not a hand-in; the actual tool call saves the copy. ' +
+  'Every hand-in carries the material page\'s basis verbatim. Include masthead and teaser in the first hand-in; ' +
+  'later hand-ins need only the same basis and the remaining items (each with its own q, h and s). ' +
+  'If a receipt says items are still unwritten, read its page_cursor continuations when present, then write and call ' +
+  'with the next small batch in this same run. Do not repeat accepted items, regather, or stop on an unfinished receipt. ' +
+  'These batches do not limit the total issue. Only the completed publish receipt is your final answer. ' +
   'If a page looks short to you but carries no truncation notice and no marker saying the middle ' +
   'was omitted: work with what you have, do not request that page again, and do not stop. ' +
   'A partial hand-in is the way through — `q` is checked per item, against that item\'s own body ' +

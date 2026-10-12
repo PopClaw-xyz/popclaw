@@ -55,8 +55,8 @@ describe('ProposalsStore', () => {
     expect(s.lastFor('A', 'friend')).toBeNull();
   });
 
-  // 已决定/失效提议不再作为新建议送达。
-  // L2 投递前的 live 核对靠这个查询。
+  // Decided or expired proposals must not arrive again as new suggestions.
+  // The live check before L2 delivery uses this query.
   it('hasPendingFor: 只有活的 pending (person,toTier) 才为真', () => {
     const s = freshStore(1000);
     s.add({ popclawId: 'A', fromTier: 'friend', toTier: 'close', rationale: '' });
@@ -67,9 +67,9 @@ describe('ProposalsStore', () => {
     expect(s.hasPendingFor('A', 'close')).toBe(false);
   });
 
-  // 直接设档与待决提议的状态一致性。
-  // 主人亲手设了档 = 那个人的提议问题已被回答：命中的记 accepted，
-  // 被行动盖过的记 rejected，别人的提议一个字不动。
+  // Keep direct tier changes consistent with pending proposal state.
+  // An owner-set tier answers that person's proposal: mark the matching proposal accepted,
+  // mark proposals superseded by the action rejected, and leave other people's proposals unchanged.
   it('settlePendingForManualTier: 命中档位记 accepted，其余记 rejected，别人不动', () => {
     const s = freshStore(5000);
     s.add({ popclawId: 'A', fromTier: 'friend', toTier: 'close', rationale: '' });

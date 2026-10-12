@@ -45,7 +45,7 @@ function manifest(options: { badProof?: boolean; legacy?: boolean; noSession?: b
   const document = {
     intent_kinds: [{ kind: 'booking.reserve', schema_version: 1, transport: 'house', signer: 'user', description: 'Reserve', params_schema: { type: 'object' }, result_schema: { type: 'object' }, result_attachments: { allowed: [], required_on_success: [] }, consistency: 'none' }],
     world_interaction: { version: 1,
-      public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: options.log ?? 'log_1', envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: [] },
+      public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: options.log ?? 'log_1', envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: [] },
       ...(!options.noSession ? { actions: { status_endpoint: '/v1/world-actions/status', result_authority_pubkey: bs58.encode(houseKey.publicKey), kinds: ['booking.reserve'], attachments: [] },
         guide: { path: '/v1/guide.md', sha256: cidFromCanonical(new TextEncoder().encode(guide)), revision: '1' } } : {}),
     },

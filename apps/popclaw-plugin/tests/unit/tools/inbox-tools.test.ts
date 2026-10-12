@@ -12,6 +12,8 @@ import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
 import { runMigrations } from '../../../src/host/migrations.js';
 import { ownerLang, setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { renderCopy } from '../../../src/lexicon/index.js';
+import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
+import { stageMediaForSend } from '../../../src/notifier/media-staging.js';
 import { InboxStore } from '../../../src/messaging/inbox-store.js';
 import {
   MIGRATIONS_DIR,
@@ -78,6 +80,26 @@ describe('registerPopclawTools', () => {
     expect(exact).toMatchObject({ from_popclaw_id: 'bob', house: 'house-world', ts: 100, received_at_ms: 600000, notification_state: 'silent' });
     const again = JSON.parse((await inbox.execute('list-again', {})).text);
     expect(again.messages[0]).toMatchObject({ notification_state: 'silent', retrieved: true, resolved: false });
+  });
+
+  it('the registered inbox tool uses the native staging capability for exact reads', async () => {
+    const db = new InMemoryHostDb();
+    runMigrations(db, MIGRATIONS_DIR);
+    const store = new InboxStore(db);
+    const root = mkdtempSync(join(tmpdir(), 'inbox-native-read-'));
+    const paths = new PopclawPaths(root);
+    mkdirSync(paths.dmMediaDir(), { recursive: true });
+    const original = join(paths.dmMediaDir(), 'photo.jpg');
+    writeFileSync(original, Buffer.from([255, 216, 255]));
+    store.record({ ts: 100, receivedAtMs: 1000, fromPopclawId: 'alice', toPopclawId: 'me', body: 'photo', mediaPath: original });
+    const dir = join(root, 'host-media');
+    const stageInboxAttachment = vi.fn((p: string) => stageMediaForSend(p, dir));
+    const { api, tools } = buildFakeApi();
+    registerPopclawTools({ api, stageInboxAttachment, runtime: async () => ({ inboxStore: store, paths }) as unknown as Awaited<ReturnType<Parameters<typeof registerPopclawTools>[0]['runtime']>> });
+    const result = await findTool(tools, 'popclaw_show_inbox').execute('read', { message_id: store.recent(1)[0]!.id });
+    expect(stageInboxAttachment).toHaveBeenCalledOnce();
+    expect(JSON.parse(result.text).attachment.path).toBe(join(dir, 'photo.jpg'));
+    expect((result as unknown as {images: unknown[]}).images).toHaveLength(1);
   });
 
   it('the show_inbox description keeps the resolve rule it inherited', () => {
@@ -224,17 +246,17 @@ describe('registerPopclawTools', () => {
     expect(inbox).toContain('not popclaw_world_private_messages');
   });
 
-  // 真机 2026-07-31：host-c 那台（kimi-k2.7）被要求"把刚才那段语音发给 host-a"，答
-  // 「host-c 当前没有下载或读取陛下语音附件的工具」—— 而那个 .ogg 当时就躺在宿主的
-  // inbound 目录里。host-a 那台（Claude）猜到了路径，弱模型不会猜。给它一个列表，
-  // 别指望它推路径、更别指望它有文件系统工具去列目录。
+  // Real run, 2026-07-31: host-c (kimi-k2.7), asked to send the latest voice message to host-a, replied
+  // that it had no tool to download or read the owner's voice attachment, although the .ogg was already in the host's
+  // inbound directory. host-a (Claude) guessed the path; weaker models do not. Provide a list instead of
+  // expecting path inference or filesystem tools to list the directory.
   it('popclaw_recent_attachments 报出主人刚递过来的文件（新的在前，带绝对路径）', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'popclaw-inbound-'));
     const media = join(dir, 'media', 'inbound');
     mkdirSync(media, { recursive: true });
     writeFileSync(join(media, 'old.jpg'), Buffer.alloc(10, 1));
     writeFileSync(join(media, 'voice---abc.ogg'), Buffer.alloc(2048, 2));
-    // 让 ogg 明确比 jpg 新
+    // Make ogg explicitly newer than jpg.
     const now = Date.now();
     utimesSync(join(media, 'old.jpg'), new Date(now - 600_000), new Date(now - 600_000));
 
@@ -244,8 +266,8 @@ describe('registerPopclawTools', () => {
 
     const out = await findTool(tools, 'popclaw_recent_attachments').execute('cid', {});
     const lines = out.text.split('\n').filter((l: string) => l.includes('.ogg') || l.includes('.jpg'));
-    expect(lines[0]).toContain('voice---abc.ogg');       // 新的在前
-    expect(lines[0]).toContain(join(media, 'voice---abc.ogg')); // 绝对路径，可直接喂 attachment_path
+    expect(lines[0]).toContain('voice---abc.ogg');       // Newest first.
+    expect(lines[0]).toContain(join(media, 'voice---abc.ogg')); // Absolute path, directly usable as attachment_path.
     expect(out.text).toContain('KB');
   });
 

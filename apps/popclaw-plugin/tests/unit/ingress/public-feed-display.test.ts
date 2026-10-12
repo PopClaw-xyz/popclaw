@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,10 +10,14 @@ import { cidFromCanonical } from '@popclaw/algorithms';
 import { LocalHostDb } from '../../../src/host/local-host-db.js';
 import { PublicFeedDisplay, type PublicDisplayCapture } from '../../../src/ingress/public-feed-display.js';
 import { preparePublicStreamJournal, PublicStreamJournal, EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST } from '../../../src/world/scoped-stream-journal.js';
+import { HouseFeedReader } from '../../../src/ingress/house-feed-reader.js';
+import { WorldFeedCache } from '../../../src/ingress/world-feed-cache.js';
+import type { HouseRuntime } from '../../../src/runtime/house-lifecycle/house-runtime.js';
+import * as capabilities from '../../../src/world/world-capabilities.js';
 import { readPublicJournal } from '../../../src/ingress/public-journal-reader.js';
 
 const clean: Array<() => void> = [];
-afterEach(() => { for (const close of clean.splice(0).reverse()) close(); });
+afterEach(() => { vi.restoreAllMocks(); for (const close of clean.splice(0).reverse()) close(); });
 const signer = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(54)), actor = bs58.encode(signer.publicKey);
 function signed(body: popclaw.event.IEventEnvelope, timestamp = 100) {
   const e = { actor: { popclawId: actor, nickname: 'Local author' }, timestamp, ...body };
@@ -24,7 +28,7 @@ function fixture(log = 'log_display', highWater = '100') {
   const root = mkdtempSync(join(tmpdir(), 'public-display-')); clean.push(() => rmSync(root, { recursive: true, force: true }));
   const db = new LocalHostDb(join(root, 'journal.db')); clean.push(() => db.close());
   const capability = { house: { origin: 'https://display.invalid', houseKey: actor, incarnation: 'house_display' }, capabilityRevision: 'a'.repeat(64),
-    publicStream: { endpoint: '/v1/world-stream' as const, mode: 'public-v1' as const, log_incarnation: log, envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: [] } };
+    publicStream: { endpoint: '/v1/world-stream' as const, mode: 'public-v1' as const, log_incarnation: log, envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: [] } };
   const producerPolicy = { house: capability.house, capabilityRevision: capability.capabilityRevision, officialActorIds: [actor] };
   const options = { executionDb: db, capability, producerPolicy, selection: { fullPublic: true, scopes: [] }, consumerContracts: [], approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST };
   preparePublicStreamJournal(options);
@@ -40,14 +44,15 @@ function fixture(log = 'log_display', highWater = '100') {
     const envelope = popclaw.event.EventEnvelope.decode(event.raw);
     journal.append(generation, popclaw.event.WorldStreamFrame.encode(popclaw.event.WorldStreamFrame.fromObject({ seq, kind: envelope.houseEvent?.kind ?? envelope.body!, scopes: envelope.houseEvent?.publicScopes ?? [], envelope: event.raw, ...(projection ? { projection } : {}) })).finish());
   }
-  function live() { const c = { phase: 'replay', publicThroughSeq: 100 }; journal.checkpoint(generation, c, popclaw.world.PublicStreamCheckpoint.encode(c).finish()); }
-  return { db, capability, display, append, live, capture, setCurrent: (v: boolean) => { current = v; }, setHistory: (v: boolean) => { history = v; } };
+  function checkpoint(high: string, phase = 'live') { const c = popclaw.world.PublicStreamCheckpoint.fromObject({ phase, publicThroughSeq: high }); journal.checkpoint(generation, c, popclaw.world.PublicStreamCheckpoint.encode(c).finish()); }
+  function live() { checkpoint(highWater, 'replay'); }
+  return { db, capability, display, append, live, checkpoint, capture, setCurrent: (v: boolean) => { current = v; }, setHistory: (v: boolean) => { history = v; } };
 }
 function stored(db: LocalHostDb) {
   return db.queryAll<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map(({ name }) => [name, db.queryAll(`SELECT * FROM ${name}`)]);
 }
 
-it.each(['intact', 'bad-signature', 'wrong-projection'] as const)('newspaper complete window reads and verifies evidence beyond the former 2048-frame scan: %s', mode => {
+it.each(['intact', 'bad-signature', 'wrong-projection'] as const)('newspaper complete window reads and verifies evidence beyond the former 2048-frame scan: %s', async mode => {
   const f = fixture('log_long_window', '2050');
   const tail = signed({ post: { blocks: [{ content: 'The oldest complete newspaper window item.' }] } }, 1);
   f.append(1, tail);
@@ -74,6 +79,10 @@ it.each(['intact', 'bad-signature', 'wrong-projection'] as const)('newspaper com
   expect(complete.status.truncated).toBe(false);
   // This fixture deliberately remains replaying: exhaustive local reads cannot claim remote coverage.
   expect(complete.status.incomplete).toBe(true);
+  const prepared = await f.display.prepare({ completeWindow: true, ownProjection: true });
+  expect(prepared.read({ completeWindow: true }).items).toHaveLength(2050);
+  expect(prepared.read().items).toHaveLength(20);
+  expect(prepared.read({ completeWindow: true }).truncated).toBe(false);
 }, 60000);
 it('shows exact signed native content without projection and does not write any journal state', () => {
   const f = fixture(), event = signed({ post: { blocks: [{ content: 'Public text beyond old snapshots' }] } });
@@ -90,7 +99,7 @@ it('retains local history after logout and marks replay/gap as incomplete', () =
   const f = fixture(); f.append(1, signed({ reply: { body: 'Already received reply', inReplyTo: { platform: 'popclaw', platformPostId: 'f'.repeat(64) } } }));
   expect(f.display.read({}).sources[0]!.incomplete).toBe(true);
   f.live(); f.setHistory(true);
-  expect(f.display.read({})).toMatchObject({ items: [{ body: 'Already received reply' }], sources: [{ history: true, incomplete: false }] });
+  expect(f.display.read({})).toMatchObject({ items: [{ body: 'Already received reply' }], sources: [{ history: true, incomplete: true }] });
   f.db.execute("UPDATE world_public_cursors_v1 SET stale=1,gap_reason='retention'");
   expect(f.display.read({}).sources[0]!.incomplete).toBe(true);
 });
@@ -211,4 +220,108 @@ it('does not substitute relay preview for an empty signed body', () => {
   const f = fixture(), e = signed({ post: { media: [{ url: 'https://media.invalid/only.png' }] } });
   f.append(1, e, { eventId: e.eventId, platform: 'popclaw', platformPostId: e.eventId, textPreview: 'Relay-only text' });
   expect(f.display.read().items[0]).toMatchObject({ body: '', media: [{ url: 'https://media.invalid/only.png' }] });
+});
+
+
+it('does not memoize public-v1 journal captures inside a host request', async () => {
+  const f = fixture(), source = f.capability.house.origin;
+  vi.spyOn(capabilities, 'readHouseCapabilityView').mockReturnValue({} as never);
+  const capturePublicDisplay = vi.fn(() => f.capture());
+  const houses = { capturePublicDisplay } as unknown as HouseRuntime;
+  const store = { baseUrl: source, slug: 'display', db: f.db, dbPath: ':memory:', cache: new WorldFeedCache({ db: f.db }) };
+  const scope = { token: {}, isCurrent: () => true };
+  const reader = new HouseFeedReader({ db: f.db, houses, stores: () => [store], currentReadScope: () => scope });
+  f.append(1, signed({ post: { blocks: [{ content: 'First journal material' }] } }));
+  expect((await reader.prepare()).read().items).toHaveLength(1);
+  f.append(2, signed({ post: { blocks: [{ content: 'New journal material' }] } }, 200));
+  const before = stored(f.db);
+  expect((await reader.prepare()).read().items).toHaveLength(2);
+  expect(capturePublicDisplay).toHaveBeenCalledTimes(2);
+  expect(stored(f.db)).toEqual(before);
+});
+
+
+it('reads only through the checkpoint captured with its source status', () => {
+  const f = fixture('checkpoint_window', '1');
+  f.append(1, signed({ post: { blocks: [{ content: 'Checkpointed material' }] } }, 1)); f.live();
+  f.append(2, signed({ post: { blocks: [{ content: 'Pending live material' }] } }, 2));
+  expect(f.display.read()).toMatchObject({ items: [{ body: 'Checkpointed material' }],
+    sources: [{ checkpointHighWater: '1', incomplete: false }] });
+  f.checkpoint('2');
+  expect(f.display.read()).toMatchObject({ items: [{ body: 'Pending live material' }, { body: 'Checkpointed material' }],
+    sources: [{ checkpointHighWater: '2', incomplete: false }] });
+});
+it('retains partial local materials without a checkpoint and never calls them complete', () => {
+  const f = fixture(); f.append(1, signed({ post: { blocks: [{ content: 'Still replaying' }] } }));
+  expect(f.display.read()).toMatchObject({ items: [{ body: 'Still replaying' }],
+    sources: [{ checkpointHighWater: null, incomplete: true }] });
+});
+it('treats checkpoint zero as a real empty window and checks exact uint64 values', () => {
+  const f = fixture('empty_window', '0'); f.live();
+  f.append(1, signed({ post: { blocks: [{ content: 'Not checkpointed yet' }] } }));
+  expect(f.display.read()).toMatchObject({ items: [], sources: [{ checkpointHighWater: '0', incomplete: false }] });
+  f.db.execute("UPDATE world_public_bindings_v1 SET checkpoint_h='18446744073709551616'");
+  expect(f.display.read()).toMatchObject({ items: [], sources: [{ unavailable: true }] });
+});
+it('verifies an unchanged retained projection only once without skipping projection integrity checks', () => {
+  const f = fixture(), e = signed({ post: { blocks: [{ content: 'One checked projected frame' }] } });
+  f.append(1, e, { eventId: e.eventId, platform: 'popclaw', platformPostId: e.eventId, actorNickname: 'Observed name' }); f.live();
+  const verify = vi.spyOn(nacl.sign.detached, 'verify');
+  expect(f.display.read().items[0]?.body).toBe('One checked projected frame');
+  expect(verify).toHaveBeenCalledTimes(1);
+  f.db.execute('UPDATE world_public_events_v1 SET current_projection=?', [popclaw.event.WorldFeedItem.encode({
+    eventId: e.eventId, platform: 'popclaw', platformPostId: e.eventId, actorNickname: 'Changed name',
+  }).finish()]);
+  expect(f.display.read()).toMatchObject({ items: [], sources: [{ unavailable: true }] });
+});
+it('freezes prepared materials and evidence while a new invocation sees the later checkpoint', async () => {
+  const f = fixture('prepared_window', '1'), e = signed({ post: { blocks: [{ content: 'First material' }] } }, 1);
+  f.append(1, e); f.live();
+  const prepared = await f.display.prepare();
+  f.append(2, signed({ post: { blocks: [{ content: 'Later material' }] } }, 2)); f.checkpoint('2');
+  expect(prepared.read()).toMatchObject({ items: [{ body: 'First material' }], sources: [{ checkpointHighWater: '1' }] });
+  expect(prepared.search('Later').items).toEqual([]);
+  const returned = prepared.read(); returned.items[0]!.item.textPreview = 'Caller mutation';
+  expect(prepared.read().items[0]?.item.textPreview).toBe('First material');
+  const [source] = prepared.publicSources;
+  expect(source?.items).toHaveLength(1); expect(source?.status.checkpointHighWater).toBe('1');
+  const row = f.db.queryOne<{ frame_bytes: Uint8Array; observed_at: number }>("SELECT frame_bytes,observed_at FROM world_public_frames_v1 WHERE seq='1'")!;
+  const digest = cidFromCanonical(new TextEncoder().encode(JSON.stringify([cidFromCanonical(row.frame_bytes), row.observed_at])));
+  expect(source?.items[0]?.source.frameDigest).toBe(digest);
+  expect((await f.display.prepare()).read().items).toHaveLength(2);
+  f.setCurrent(false);
+  expect(prepared.read()).toMatchObject({ items: [], sources: [{ unavailable: true }] });
+});
+it('prepares the public House window once, retains filtering depth and performs no snapshot HTTP', async () => {
+  const f = fixture('house_window', '110'), origin = f.capability.house.origin;
+  for (let seq = 1; seq <= 110; seq++) f.append(seq, signed({ post: { blocks: [{ content: `Material [${seq}]` }] } }, seq));
+  f.live();
+  vi.spyOn(capabilities, 'readHouseCapabilityView').mockReturnValue({} as never);
+  const fetch = vi.fn(() => { throw new Error('UNEXPECTED_NETWORK'); });
+  const houses = { capturePublicDisplay: () => f.capture(), houseReadFetch: () => fetch } as unknown as HouseRuntime;
+  const store = { baseUrl: origin, slug: 'display', db: f.db, dbPath: ':memory:', cache: new WorldFeedCache({ db: f.db }) };
+  const reader = new HouseFeedReader({ db: f.db, houses, stores: () => [store] });
+  const verify = vi.spyOn(nacl.sign.detached, 'verify');
+  const prepared = await reader.prepare();
+  expect(prepared.read({ limit: 100 }).items).toHaveLength(100);
+  expect(prepared.search('[1]').items[0]?.body).toBe('Material [1]');
+  expect(prepared.read({ completeWindow: true }).items).toHaveLength(20);
+  expect(verify).toHaveBeenCalledTimes(110);
+  expect(prepared.publicSources[0]?.items).toHaveLength(110);
+  expect(fetch).not.toHaveBeenCalled();
+  const complete = await reader.prepare({ completeWindow: true, ownProjection: true });
+  expect(complete.read({ completeWindow: true }).items).toHaveLength(110);
+  expect(complete.publicSources[0]?.status.checkpointHighWater).toBe('110');
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('keeps checkpoint-era projection when the retained projection belongs to a later sequence', () => {
+  const f = fixture('projection_window', '1'), e = signed({ post: { blocks: [{ content: 'Fixed signed material' }] } });
+  f.append(1, e, { eventId: e.eventId, platform: 'popclaw', platformPostId: e.eventId, actorNickname: 'Checkpoint name' }); f.live();
+  f.db.execute("UPDATE world_public_events_v1 SET current_projection=?,projection_seq='2'", [popclaw.event.WorldFeedItem.encode({
+    eventId: e.eventId, platform: 'popclaw', platformPostId: e.eventId, actorNickname: 'Later name',
+  }).finish()]);
+  const result = f.display.read();
+  expect(result.sources[0]).toMatchObject({ unavailable: false, checkpointHighWater: '1' });
+  expect(result.items[0]?.item.actorNickname).toBe('Checkpoint name');
 });

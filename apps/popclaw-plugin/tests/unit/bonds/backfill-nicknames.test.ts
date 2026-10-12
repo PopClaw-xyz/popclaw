@@ -23,8 +23,8 @@ describe('backfillBondNicknames — 开机补课', () => {
     expect(s.get('CANGWU')?.nickname).toBe('苍梧小居士');
   });
 
-  // 改口径（2026-07-30）：名字非空的行**也要问**——名号会变，本地这份是缓存。
-  // 以前"非空就不问"正是 handle 卡在名号位两天没人纠正的原因。
+  // Revised contract (2026-07-30): query rows with nonempty names too; nicknames can change and this is a cache.
+  // Skipping nonempty names left a handle in the nickname field for two days without correction.
   it('名字非空的行照样对，灯坊改了就跟着改', async () => {
     const s = freshStore();
     s.setNickname('CANGWU', '旧名号');
@@ -72,10 +72,10 @@ describe('backfillBondNicknames — 开机补课', () => {
   });
 });
 
-// 真机 2026-07-30：主人把灯坊上的名号改成「Blackfeather」，苍梧阁那边收到的私信
-// 仍显示 `owl_scribe_7#7t4k2n9q`。查证：苍梧阁交情本里 `nickname = owl_scribe_7`
-// —— X handle 被写进了名号字段（灯坊在没名片时会拿 handle 顶 nickname），而
-// `fillNickname` 只填空，于是真名号永远进不来。名号是缓存，得跟着灯坊走。
+// Real host, 2026-07-30: the owner changed their House nickname to Blackfeather, but DMs received
+// at Cangwu Pavilion still showed `owl_scribe_7#7t4k2n9q`. Its bond book had `nickname = owl_scribe_7`:
+// the X handle occupied the nickname field (a House substitutes the handle when no namecard exists),
+// and `fillNickname` only filled empty fields, so the real nickname never arrived. Cached nicknames must follow House updates.
 describe('名号是缓存，要跟着灯坊更新（真机 2026-07-30）', () => {
   function bed(rows: Record<string, string>) {
     const store = {
@@ -105,7 +105,7 @@ describe('名号是缓存，要跟着灯坊更新（真机 2026-07-30）', () =>
       store,
       lookup: async () => ({ nickname: 'owl_scribe_7', handles: ['owl_scribe_7'] }),
     });
-    expect(rows.ownerId).toBe(''); // 名号位留空，显示自己会退到 handle 那一档
+    expect(rows.ownerId).toBe(''); // Leave the nickname empty so display falls back to the handle.
   });
 
   it('已经存着 handle、灯坊也还只有 handle → 不动（不制造无谓写）', async () => {

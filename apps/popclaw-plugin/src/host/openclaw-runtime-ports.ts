@@ -1,3 +1,4 @@
+import { sharedNativeReadContext } from './native-read-context.js';
 /**
  * The OpenClaw gateway root's `RuntimePorts`: what differs about the gateway
  * host, handed to the shared runtime assembly (`runtime/assembly`).
@@ -169,6 +170,7 @@ export function gatewayRuntimePorts(input: {
       replyPing: line,
     },
     world: {
+      currentReadScope: () => sharedNativeReadContext().current(),
       // Same lane HouseRuntime's own refusals take: a world action refused for
       // want of authorization has to leave one line behind, or there is
       // nothing in `logs/` to start reading from.

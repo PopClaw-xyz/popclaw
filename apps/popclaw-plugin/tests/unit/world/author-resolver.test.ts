@@ -1,8 +1,9 @@
 /**
- * S4.1-T2: resolveAuthor — 名字/handle → popclaw_id 候选。
+ * S4.1-T2: resolveAuthor maps names/handles to popclaw_id candidates.
  *
- * 匹配优先级：精确 > 前缀 > 子串（全部不区分大小写、忽略空白），
- * 同级按平台广度（复用 aggregateNotableAuthors 的排序，禁止第二份聚合逻辑）。
+ * Priority is exact, then prefix, then substring (case-insensitive and whitespace-normalized). Ties
+ * use platform breadth, reusing aggregateNotableAuthors ordering rather than introducing separate
+ * aggregation logic.
  */
 import { describe, it, expect } from 'vitest';
 import { resolveAuthor } from '../../../src/world/author-resolver.js';
@@ -14,7 +15,9 @@ function src(popclawId: string, platform: string, nickname?: string): AuthorSour
 
 const ELON = 'ElonPopclawId1111111111111111111';
 
-/** 同一人多平台 + 干扰项的标准 source 集。 */
+/**
+ * Standard source set: one person on multiple platforms plus distractors.
+ */
 const SOURCES: AuthorSource[] = [
   src(ELON, 'x', 'Elon Musk'),
   src(ELON, 'youtube', 'Elon Musk'),
@@ -46,7 +49,7 @@ describe('resolveAuthor 归一化（大小写 + 空白不敏感）', () => {
 });
 
 describe('resolveAuthor 优先级：精确 > 前缀 > 子串', () => {
-  // 'musk'：精确命中单平台 musk，前缀命中三平台 muskrat，子串命中四平台 Elon Musk
+  // musk: exact match on single-platform musk, prefix match on three-platform muskrat, substring match on four-platform Elon Musk.
   const TIERED: AuthorSource[] = [
     src(ELON, 'x', 'Elon Musk'),
     src(ELON, 'youtube', 'Elon Musk'),
@@ -65,7 +68,7 @@ describe('resolveAuthor 优先级：精确 > 前缀 > 子串', () => {
 
   it('前缀命中排在子串命中之前', () => {
     const hits = resolveAuthor('mus', TIERED);
-    // 无精确；muskrat(3 平台) 与 musk(1 平台) 都是前缀 → 平台广度定序；Elon Musk 是子串
+    // No exact match: muskrat (three platforms) and musk (one) are prefixes ordered by platform breadth; Elon Musk is a substring match.
     expect(hits.map((h) => h.popclawId)).toEqual(['rat', 'solo', ELON]);
   });
 });

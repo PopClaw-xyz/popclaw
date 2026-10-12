@@ -4,18 +4,18 @@
  * the tool modules under `src/tools/`. `main.ts` is the dev CLI/daemon and registers no
  * tools, so it builds no bag.
  *
- * 这是一整类**静默失效**的守卫。`register-tools` 读 runtime 一律走可选链
- * （`rt?.knownFollowers?.allFollowerIds?.()`），所以某个根没供上的那一格不报错、
- * 不抛异常 —— 只是那个功能悄悄没了。真出过事：MCP 桥从来没有 `knownFollowers`，
- * 于是「关注我的人」整类人在认人里被无声丢掉（网关侧同一个坑 2026-07-30 在真机上
- * 咬过一次，换个宿主又复发了一遍）。
+ * This guards an entire class of silent failures. register-tools always reads runtime through
+ * optional chains (`rt?.knownFollowers?.allFollowerIds?.()`), so a missing root-supplied slot
+ * produces no error or exception; the feature silently disappears. This happened when the MCP
+ * bridge never supplied knownFollowers and person resolution silently omitted all followers
+ * (the gateway had already hit the same failure on a real machine on 2026-07-30).
  *
- * 两道闸，各管一半：
- *  ① **少供** —— `runtime/plugin-runtime.ts` 把包袱写成类型，三个根都按它标注，
- *     少一格编译不过。这道闸是 tsc 的，不需要测试。
- *  ② **多读**（本文件） —— `register-tools` 读的时候把 runtime `as` 成一堆**局部**
- *     结构类型，那些 cast 绕过了 ①：读一个契约里压根没有的名字，tsc 一声不吭。
- *     所以这里对着源码做集合包含检查：读到的每一个名字都必须在契约里声明过。
+ * Two gates cover separate halves:
+ *  ① Missing supply: runtime/plugin-runtime.ts types the bag and all three roots annotate it.
+ *     Missing slots fail compilation; tsc owns this gate, so no test is needed.
+ *  ② Excess reads (this file): register-tools casts runtime to local structural types, bypassing
+ *     gate ①. Reading a name absent from the contract produces no tsc error. Scan source for
+ *     set containment: every name read must be declared in the contract.
  *
  * Outside the scan on purpose: `src/commands/status-deps.ts` reads the runtime
  * through `Pick<PluginRuntime, ...>`, not a local cast, so gate ① (tsc) already
@@ -100,7 +100,7 @@ function occurrences(pattern: RegExp, files: readonly string[] = MCP_PATH_FILES)
   return found;
 }
 
-/** 契约里声明的字段名（顶层缩进两格的 `name:` / `readonly name:`）。 */
+/** Contract field names: top-level, two-space-indented name: / readonly name:. */
 function declaredContractKeys(): Set<string> {
   const src = readFileSync(join(SRC, 'runtime/plugin-runtime.ts'), 'utf-8');
   const body = src.slice(src.indexOf('export interface PluginRuntime {'));
@@ -119,18 +119,18 @@ function requiredContractKeys(): Set<string> {
 }
 
 /**
- * 字段名 —— 只认**存进变量再读**那一种（`const rt = await runtime()` 后的 `rt.x`），
- * 那是 register-tools 的绝大多数读法。极少数就地读（`(await deps.runtime())?.nameOf`）
- * 扫不到，所以这道闸是「主要读法全覆盖」而不是「一个不漏」。
+ * Field names: recognize only reads through a stored variable (rt.x after const rt = await runtime()),
+ * the dominant register-tools pattern. Rare inline reads such as (await deps.runtime())?.nameOf
+ * are outside the scan, so this covers the main pattern, not every possible read.
  */
 function keysReadByTools(): Set<string> {
-  // 2026-08-25 拆分后，工具不再挤在 register-tools.ts 一个文件里，而是散在
-  // src/tools/*.ts 的各领域模块。整个目录一起扫，这道闸的覆盖面才不缩水。
+  // After the 2026-08-25 split, tools live in domain modules under src/tools/*.ts instead of one register-tools.ts file.
+  // Scan the whole directory to preserve this gate's coverage.
   const dir = join(SRC, 'tools');
   // Recursive, so a later per-domain subdirectory cannot drop out of the scan.
   const files = readdirSync(dir, { recursive: true, encoding: 'utf-8' }).filter((f) => f.endsWith('.ts'));
-  // 一个 glob 扫空（目录改名、文件再挪一次）会让下面的包含检查空集通过 ——
-  // 闸门看起来还绿着，其实什么都没查。所以先钉住「确实扫到了东西」。
+  // An empty glob after renaming or moving files would let containment pass vacuously,
+  // leaving a green gate that checked nothing. First assert that the scan found something.
   expect(files.length).toBeGreaterThan(5);
   const src = files.map((f) => readFileSync(join(dir, f), 'utf-8')).join('\n');
   const keys = new Set([...src.matchAll(/\brt\??\.([a-zA-Z_][\w]*)/g)].map((m) => m[1]!));

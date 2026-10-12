@@ -1,12 +1,12 @@
 /**
- * 社交日志采集点 —— 每个 kind 挂在动作**确实成功之后**，不挂在意图上。
- *
- * 采集点一律挂在命令函数内部（而不是 index.ts 的 slash 路由 + register-tools 的
- * 工具 execute 两处），因为两个入口都汇流到同一个命令函数 —— 挂在汇流点才能保证
- * 「一个动作 = 一条记录」，挂在入口层必然双写。
+ * Social-log collection points: attach every kind after an action actually succeeds, never to intent.
+ * Collect inside command functions, not both index.ts slash routing and register-tools execute: both
+ * entries converge on one command. Recording at the convergence guarantees one action = one record;
+ * entry-layer recording duplicates it.
  */
 import { withOutcomes } from '../../helpers/with-outcomes.js';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 
@@ -19,7 +19,10 @@ import { runPopclawMessageCommand } from '../../../src/commands/popclaw-message.
 import { runPopclawMarkCommand } from '../../../src/commands/popclaw-mark.js';
 import { runFollowCommand } from '../../../src/commands/follow.js';
 import { runPopclawUnfollowCommand } from '../../../src/commands/popclaw-unfollow.js';
-import { routeReplyPing } from '../../../src/pings/reply-pings.js';
+import { ReplyPingsStore, routeReplyPing } from '../../../src/pings/reply-pings.js';
+import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
+import { runMigrations } from '../../../src/host/migrations.js';
+import { SqliteNotifier } from '../../../src/notifier/sqlite-notifier.js';
 
 class FakeLog implements SocialLogRecorder {
   entries: SocialLogEntry[] = [];
@@ -28,7 +31,9 @@ class FakeLog implements SocialLogRecorder {
   }
 }
 
-/** 会抛的 recorder —— 用来证明"日志故障绝不影响主流程"。 */
+/**
+ * A recorder that throws, proving log failures never affect the main flow.
+ */
 const exploding: SocialLogRecorder = {
   record() {
     throw new Error('disk on fire');
@@ -121,7 +126,7 @@ describe('post_sent / reply_sent — runPopclawPostCommand', () => {
 });
 
 // ---------------------------------------------------------------------------
-// reply_sent — /popclaw reply（跨平台）
+// reply_sent: /popclaw reply (cross-platform).
 // ---------------------------------------------------------------------------
 
 const replyCache = {
@@ -191,7 +196,7 @@ const msgDeps = (socialLog?: SocialLogRecorder) =>
     socialLog,
   }) as unknown as Parameters<typeof runPopclawMessageCommand>[1];
 
-// #227: 收件人 id 必须是**真公钥**（正文加密到它）；随手编的 base58 串不是曲线上的点。
+// #227: recipient ID must be a real public key because the body is encrypted to it; an arbitrary base58 string need not be a curve point.
 const RECIPIENT = bs58.encode(nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(9)).publicKey);
 
 describe('dm_sent — runPopclawMessageCommand', () => {
@@ -332,15 +337,18 @@ describe('follow_added / follow_removed', () => {
 });
 
 // ---------------------------------------------------------------------------
-// reply_received — routeReplyPing（复用已有采集点，不新造）
+// reply_received: routeReplyPing reuses an existing collection point, without adding another.
 // ---------------------------------------------------------------------------
 
 const OWNER = 'OWNER';
 const TARGET_POST = 'my-post-1';
+const pingDatabases: InMemoryHostDb[] = [];
+afterEach(() => { for (const db of pingDatabases.splice(0)) db.close(); });
 
 function pingDeps(socialLog?: SocialLogRecorder) {
-  const arrived = new Set<string>();
-  const firsts = new Set<string>();
+  const db = new InMemoryHostDb();
+  pingDatabases.push(db);
+  runMigrations(db, fileURLToPath(new URL('../../../migrations', import.meta.url)));
   return {
     ownerPopclawId: OWNER,
     cache: {
@@ -352,11 +360,8 @@ function pingDeps(socialLog?: SocialLogRecorder) {
         platformPostId: TARGET_POST,
       }),
     },
-    pings: {
-      claimArrival: (id: string) => (arrived.has(id) ? false : (arrived.add(id), true)),
-      claimFirstReply: (id: string) => (firsts.has(id) ? false : (firsts.add(id), true)),
-    },
-    notifier: { enqueue: () => {} },
+    pings: new ReplyPingsStore(db),
+    notifier: new SqliteNotifier(db),
     now: () => 1_700_000_100,
     socialLog,
   } as never;

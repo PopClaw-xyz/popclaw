@@ -8,8 +8,8 @@ import {
 } from '../../../src/observability/trace.js';
 
 describe('traceEnabled', () => {
-  // 内测期默认开（主人 2026-07-31 裁定）。断言绑在常量上，等发布包把常量翻成
-  // false，这条测试跟着翻，不用改一行代码。
+  // Enabled by default during internal testing (owner ruling, 2026-07-31). Bind the assertion to the constant so when release sets it
+  // false, this test follows without code changes.
   it('follows TRACE_DEFAULT_ON when nothing is set', () => {
     expect(traceEnabled('routing', {})).toBe(TRACE_DEFAULT_ON);
     expect(traceEnabled('routing', { POPCLAW_TRACE: '' })).toBe(TRACE_DEFAULT_ON);
@@ -46,8 +46,8 @@ describe('traceEnabled', () => {
 });
 
 describe('traceTextEnabled — the owner-words switch', () => {
-  // 主人 2026-07-31 裁定：内测期原话也默认记，发布时**只翻同一个常量**（ADR-0045
-  // 「翻转点只有一个常量」）。所以默认值绑常量，不引入第二个要记得翻的开关。
+  // Owner ruling, 2026-07-31: verbatim text is also recorded by default during internal testing. At release, flip only the same constant
+  // (ADR-0045: one constant is the sole switch), never introduce a second switch to remember.
   it('follows TRACE_DEFAULT_ON when nothing is set', () => {
     expect(traceTextEnabled({})).toBe(TRACE_DEFAULT_ON);
     expect(traceTextEnabled({ POPCLAW_TRACE_TEXT: '' })).toBe(TRACE_DEFAULT_ON);

@@ -503,7 +503,7 @@ describe('runDedicatedNewspaper', () => {
   // -----------------------------------------------------------------------
   // Flash-completion batch mandate (2026-09-03 night ruling): the product
   // MUST complete on deepseek-v4-flash-class models, and model swap is NOT
-  // the fix path. Real machine (甲机) that night: the child gathered
+  // the fix path. On the real machine (host A) that night, the child gathered
   // today's materials fine, then died 3× with "Agent run ended before
   // producing a complete result" — writing a whole ~30-item issue in ONE
   // model output burns the output budget mid-generation (earlier telemetry:

@@ -13,6 +13,7 @@ import { localParticipationPort } from './local-participation.js';
 import type { LocalSetupEvidence } from './local-participation.js';
 import { PopclawPaths } from './popclaw-paths.js';
 import { createMcpOwnerAuthorization, type McpOwnerAuthorization, type McpServerBox } from './mcp-owner-authorization.js';
+import type { McpConfirmationLifecycle } from './mcp-confirmation-lifecycle.js';
 import { worldDuplicateLookup } from '../runtime/world-runtime.js';
 import { buildLLMClient } from '../recommend/llm-factory.js';
 import type { LLMClient } from '../recommend/llm-client.js';
@@ -84,6 +85,7 @@ export function mcpRuntimePorts(input: {
   releaseStorage: () => void;
   serverBox: McpServerBox;
   approvalWindowMs: number | undefined;
+  confirmationLifecycle?: McpConfirmationLifecycle;
   consumerId: () => string;
 }): RuntimePorts<McpWorldSlots> {
   const { logger, dataRoot, serverBox, approvalWindowMs } = input;
@@ -141,6 +143,7 @@ export function mcpRuntimePorts(input: {
       // SAME window as the send-approval dialog: read once in `main`.
       lane: ({ actorId, worlds }) => {
         const ownerAuthorization = createMcpOwnerAuthorization({ actorId, server: serverBox,
+          lifecycle: input.confirmationLifecycle,
           elicitTimeoutMs: approvalWindowMs,
           duplicates: worldDuplicateLookup(worlds) });
         return { ownerAuthorization, stop: () => ownerAuthorization.stop(), slots: { worldOwnerAuthorization: ownerAuthorization } };
@@ -191,6 +194,7 @@ export async function buildMcpRuntime(input: {
   closing: AbortSignal;
   serverBox: McpServerBox;
   approvalWindowMs: number | undefined;
+  confirmationLifecycle?: McpConfirmationLifecycle;
   /** Absolute POPCLAW_DATA_ROOT, validated by the root. */
   dataRoot: string;
   consumerId: () => string;
@@ -203,5 +207,5 @@ export async function buildMcpRuntime(input: {
   const host = new LocalHostAdapter({ dataRoot, logger,
     beforeDbInitialize: db => (releaseStorage = registerStorageRuntime(db, storagePaths)) });
   return assembleRuntime(host, mcpRuntimePorts({ receiveMode, initialEvidence:input.initialEvidence, logger, dataRoot, storagePaths, releaseStorage: () => releaseStorage(),
-    serverBox: input.serverBox, approvalWindowMs: input.approvalWindowMs, consumerId: input.consumerId }), input.closing);
+    serverBox: input.serverBox, approvalWindowMs: input.approvalWindowMs, confirmationLifecycle: input.confirmationLifecycle, consumerId: input.consumerId }), input.closing);
 }

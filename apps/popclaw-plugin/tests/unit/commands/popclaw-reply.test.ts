@@ -1,10 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import nacl from 'tweetnacl';
 import bs58 from 'bs58';
 import { MasterKeySigner } from '../../../src/identity/master-key-signer.js';
 import type { MasterKey } from '../../../src/identity/keystore.js';
 import { runPopclawReplyCommand } from '../../../src/commands/popclaw-reply.js';
 import { popclaw } from '@popclaw/contracts';
+import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
+
+afterEach(() => setOwnerLang(undefined));
 
 function makeSigner(): MasterKeySigner {
   const seed = new Uint8Array(32);
@@ -31,6 +34,20 @@ const cacheStub = (item: ReturnType<typeof cacheItem> | null) => ({
 });
 
 describe('runPopclawReplyCommand', () => {
+  it.each(['en', 'zh-CN'] as const)('reports a bare 503 refusal in %s without logging reply_sent', async lang => {
+    setOwnerLang(lang, 'config');
+    const socialLog = { record: vi.fn() };
+    const out = await runPopclawReplyCommand({ positional: ['12345', 'Synthetic reply'] }, {
+      signer: makeSigner(), cache: cacheStub(cacheItem()), nickname: 'Owner', socialLog,
+      egress: { push: vi.fn().mockResolvedValue({ status: 503 }) },
+    });
+    expect(out).toMatchObject({ isError: true });
+    expect(out.text).toContain(lang === 'en' ? 'not delivered' : '未送达');
+    expect(out.text).toContain('503');
+    expect(out.text).not.toContain('undefined');
+    expect(socialLog.record).not.toHaveBeenCalled();
+  });
+
   it('signs + pushes a Reply envelope; reply contains correct PostRef and body', async () => {
     const signer = makeSigner();
     const cache = cacheStub(cacheItem({ authorPopclawId: 'AuthorXYZ' }));

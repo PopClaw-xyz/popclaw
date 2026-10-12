@@ -61,7 +61,7 @@ describe('publishNewspaper —— 次日捎带（门铃兜底腿）', () => {
     });
     expect(r.text).toContain(block);
     expect(r.text).toContain('48 小时后我就不提了');
-    // 骑在页脚之后：这是「次日报纸投递消息末尾」的捎带,不是正文的一部分。
+    // Append after the footer: this piggybacks on the next-day newspaper delivery message, not its body.
     expect(r.text.indexOf(block)).toBeGreaterThan(r.text.indexOf(renderCopy('zh-CN', 'newspaper.publish.footer')));
   });
 

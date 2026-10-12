@@ -27,6 +27,8 @@ import type { HouseStore } from '../../../src/ingress/world-feed-store.js';
 import { refusingReadAuthorityFor } from '../../helpers/read-authority.js';
 
 import { PublicFeedDisplay } from '../../../src/ingress/public-feed-display.js';
+import { HouseFeedReader } from '../../../src/ingress/house-feed-reader.js';
+import * as publicJournal from '../../../src/ingress/public-journal-reader.js';
 import { PublicStreamJournal, EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST } from '../../../src/world/scoped-stream-journal.js';
 import { canonicalizeEnvelope } from '../../../src/protocol/public-envelope.js';
 import { WorldFeedCache } from '../../../src/ingress/world-feed-cache.js';
@@ -64,7 +66,7 @@ async function displayFixture() {
   const partition = catalog.open(displayOrigin);
   async function observe(log = 'display_log_1', officialIds: unknown = []) {
     const rawBytes = new TextEncoder().encode(JSON.stringify({ official_ids: officialIds, world_interaction: { version: 1,
-      public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: log, envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: [] } } }));
+      public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: log, envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: [] } } }));
     const core = { house: { origin: displayOrigin, houseKey: bs58.encode(displayPair.publicKey), incarnation: 'display_house_1' },
       manifestDigest: cidFromCanonical(rawBytes), signedAt: 1 };
     const bytes = popclaw.world.ManifestProof.encode(core).finish(), prefix = new TextEncoder().encode('POPCLAW_WORLD_MANIFEST_PROOF_V1');
@@ -115,6 +117,7 @@ async function newspaperFixture(avatar = false) {
   const cache = new WorldFeedCache({ db: cacheDb }); await cache.start();
   const display = new PublicFeedDisplay({ sources: () => [{ origin: displayOrigin, slug: f.house.slug, capture: () => f.rt.capturePublicDisplay(f.house) }] });
   const runtime = { houseRuntime: f.rt, publicFeedDisplay: display, worldFeedCache: cache,
+    houseFeedReader: new HouseFeedReader({ db: f.db, houses: f.rt, stores: () => [f.house] }),
     inboxStore: { recent: () => [] }, socialGraph: { followsIn: () => false },
     boot: { nickname: 'Synthetic owner', webBaseUrl: 'https://example.invalid', loreHouseUrls: [],
       canvasBaseUrl: 'https://canvas.invalid', signer: { popclawId: vi.fn(async () => 'SyntheticPublisher'),
@@ -141,6 +144,49 @@ it('actual non-owner child gathers signed protected journal materials while the 
   const result = await f.tools()('popclaw_newspaper', { hours: 24 });
   expect(result.text).toContain('candidate_basis');
   expect(result.text).toContain('Astronomy');
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('collects the complete newspaper window once through the local House reader', async () => {
+  const f = await newspaperFixture();
+  const checkpoint = popclaw.world.PublicStreamCheckpoint.fromObject({ phase: 'replay', scopes: [], publicThroughSeq: '100' });
+  f.journal.checkpoint(f.generation, checkpoint, popclaw.world.PublicStreamCheckpoint.encode(checkpoint).finish());
+  const reader = new HouseFeedReader({ db: f.db, houses: f.rt, stores: () => [f.house] });
+  const source = publicMaterialSource({ ...f.runtime, houseFeedReader: reader })!;
+  const scan = vi.spyOn(publicJournal, 'readPublicJournal');
+  const batch = await source.prepareCollect();
+  expect(batch.items.map(item => item.eventId)).toEqual([f.eventId]);
+  expect(scan).toHaveBeenCalledTimes(1);
+  expect(scan.mock.calls[0]![3]).toMatchObject({ completeWindow: true, ownProjection: true });
+  expect(batch.coverage[0]).toMatchObject({ checkpointHighWater: '100', incomplete: true });
+  expect(batch.references[0]).toMatchObject({ eventId: f.eventId, sequence: '1' });
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('keeps an acquired newspaper window fixed while the resident receives a later checkpoint', async () => {
+  const f = await newspaperFixture();
+  const checkpoint = popclaw.world.PublicStreamCheckpoint.fromObject({ phase: 'replay', scopes: [], publicThroughSeq: '100' });
+  f.journal.checkpoint(f.generation, checkpoint, popclaw.world.PublicStreamCheckpoint.encode(checkpoint).finish());
+  const reader = new HouseFeedReader({ db: f.db, houses: f.rt, stores: () => [f.house] });
+  const acquire = reader.prepare.bind(reader);
+  vi.spyOn(reader, 'prepare').mockImplementationOnce(async query => {
+    const prepared = await acquire(query);
+    const e = { actor: { popclawId: bs58.encode(displayPair.publicKey) }, timestamp: Math.floor(Date.now()/1000),
+      post: { blocks: [{ content: 'Later resident material belongs to the next acquisition.' }] } };
+    const bytes = canonicalizeEnvelope(e), eventId = cidFromCanonical(bytes);
+    const envelope = popclaw.event.EventEnvelope.encode({ ...e, eventId, signature: nacl.sign.detached(bytes, displayPair.secretKey) }).finish();
+    f.journal.append(f.generation, popclaw.event.WorldStreamFrame.encode({ seq: 101, kind: 'post', envelope }).finish());
+    const next = popclaw.world.PublicStreamCheckpoint.fromObject({ phase: 'live', scopes: [], publicThroughSeq: '101' });
+    f.journal.checkpoint(f.generation, next, popclaw.world.PublicStreamCheckpoint.encode(next).finish());
+    return prepared;
+  });
+  const source = publicMaterialSource({ ...f.runtime, houseFeedReader: reader })!;
+  const first = await source.prepareCollect();
+  expect(first.items.map(item => item.eventId)).toEqual([f.eventId]);
+  expect(first.coverage[0]).toMatchObject({ checkpointHighWater: '100' });
+  const next = await source.prepareCollect();
+  expect(next.items).toHaveLength(2);
+  expect(next.coverage[0]).toMatchObject({ checkpointHighWater: '101' });
   expect(fetch).not.toHaveBeenCalled();
 });
 
@@ -333,10 +379,10 @@ it('off-page observations stay in the complete candidate basis and remain verifi
   expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
 });
 
-it.each(['empty','partial-no-material'] as const)('actual child collection %s reaches a content-free, accurate dispatcher receipt', async outcome => {
+it.each([true,false])('historical child collection with checkpoint=%s reports incomplete coverage without leaking content', async checkpointed => {
   const f=await newspaperFixture();
   f.partition.db.execute('DELETE FROM world_public_associations_v1');
-  if(outcome==='empty') {
+  if(checkpointed) {
     const checkpoint={phase:'replay',publicThroughSeq:100};
     f.journal.checkpoint(f.generation,checkpoint,popclaw.world.PublicStreamCheckpoint.encode(checkpoint).finish());
   }
@@ -345,8 +391,9 @@ it.each(['empty','partial-no-material'] as const)('actual child collection %s re
   const result=await runDedicatedNewspaper({makeIssueHint:()=> 'material-receipt-test', recordDispatch:r=>records.push(r),
     subagent:{run:async({sessionKey})=>{child=sessionKey; await f.tools(sessionKey)('popclaw_newspaper',{hours:24});return {runId:'synthetic-no-model'};},
       waitForRun:async()=>({status:'ok'}),deleteSession:async()=>{}}});
-  expect(records[0]?.stage?.collection).toBe(outcome);
-  expect(result).toContain(outcome==='empty'?'no usable newspaper materials':'coverage was incomplete');
+  // A non-owner's retained checkpoint does not prove current remote coverage.
+  expect(records[0]?.stage?.collection).toBe('partial-no-material');
+  expect(result).toContain('coverage was incomplete');
   expect(result).not.toContain('without publishing a receipt');
   expect(JSON.stringify(records[0]?.stage)).not.toContain('Astronomy');
   expect(NewspaperStageStore.take(child)).toBeUndefined();

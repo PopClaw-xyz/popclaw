@@ -1,6 +1,6 @@
 /**
- * 切片 G — 坊 digest 接进报纸：门楣①级、「值得一逛的家」、家书标头。
- * 素材形状逐字取自 2026-07-31 实拉的 popclaw.world `/api/popclaw/digest`。
+ * Slice G: house digest in the newspaper: tier-① masthead, homes worth visiting, and house-letter heading.
+ * Material shape taken verbatim from the real popclaw.world /api/popclaw/digest response fetched 2026-07-31.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { gatherNewspaperMaterials as gatherRaw, type GatherDeps } from '../../../src/newspaper/gather-materials.js';
@@ -13,13 +13,13 @@ import { setOwnerTz } from '../../../src/time/time-context.js';
 import { deriveSigil } from '../../../src/invite/sigil.js';
 import { renderCopy } from '../../../src/lexicon/index.js';
 
-// D8：素材机械槽的断言调同一个渲染函数算预期值（deps 里钉的是 zh-CN 主人）。
+// D8: derive expected mechanical material slots using the same renderer (deps pin a zh-CN owner).
 const mat = (key: string, vars: Record<string, string> = {}): string =>
   renderCopy('zh-CN', `newspaper.material.${key}`, vars);
 
 const NOW = 100000;
 
-/** 一条 world 坊素材（有它才有 world 叠）。 */
+/** One world-house item, required for a world section. */
 const worldItem = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   platform: 'popclaw', platformPostId: 'w1', eventId: 'wevent1234567890',
   platformPostCreatedAt: 99000, authorPopclawId: 'A', handle: 'a', originalUrl: '',
@@ -59,8 +59,8 @@ const withDigest = (d: WorldDigest, over: Partial<GatherDeps> = {}): GatherDeps 
   deps({ digestOf: (slug) => (slug === 'popclaw-world' ? d : undefined), ...over });
 
 /**
- * v0.2：门楣与「值得一逛的家」由版面照素材排，不再念给模型听 —— 所以这些断言
- * 落在 gather 存下的那份 issue 上，而不是简报文本上。措辞槽还是同一批词表键。
+ * v0.2: layout renders the masthead and homes-worth-visiting from materials, without asking the model.
+ * Assert against the issue stored by gather, not briefing text; wording slots retain the same lexicon keys.
  */
 function issueOf(d: GatherDeps): IssueData {
   const r = gatherNewspaperMaterials(d, { hours: 24 });
@@ -68,9 +68,9 @@ function issueOf(d: GatherDeps): IssueData {
   return getIssue('tok_test')!;
 }
 const mantleOf = (i: IssueData): MantleItem | undefined => i.mantles?.[0];
-/** 「值得一逛的家」第一张卡上的主人称呼 —— 名字链那一串断言全落在这一格上。 */
+/** Owner display name on the first home card: all name-resolution-chain assertions target this slot. */
 const ownerOf = (d: GatherDeps): string => homesOf(issueOf(d))!.homes[0]!.owner;
-/** 第一封坊来信（世界来信栏的素材）。 */
+/** First house letter (material for the world-letters section). */
 const letterOf = (d: GatherDeps): HouseLetterItem => issueOf(d).houseLetters![0]!;
 const homesOf = (i: IssueData): HomeSection | undefined => i.homeSections?.[0];
 
@@ -81,7 +81,7 @@ beforeEach(() => {
 afterEach(() => setOwnerTz(undefined));
 
 
-/** 两步协议壳：候选页 → 全选 → 素材页（见 gather-materials.test.ts 里的同名壳）。 */
+/** Two-step protocol wrapper: candidate page → select all → material page (see the matching wrapper in gather-materials.test.ts). */
 function gatherNewspaperMaterials(
   d: GatherDeps,
   o: { hours?: number } = {},
@@ -106,14 +106,14 @@ describe('G2 门楣①级 — 坊 digest 的实况', () => {
   it('home → 「在家」+ 门牌，必带 as_of，压过②级', () => {
     const i = issueOf(
       withDigest(digest(), {
-        // ②级的素材同时在场：①级取到就该把它压下去。
+        // Tier-② material is also present; successful tier-① retrieval must suppress it.
         cache: { recentForReading: () => [
           worldItem({ kind: 'house:world.trip', houseFields: { phase: 'returned', place_name: '苏州' } }),
         ] as never },
       }),
     );
-    expect(mantleOf(i)?.level).toBe(1); // ①级压过②级
-    expect(mantleOf(i)?.asOf).toBe('15:04'); // 07:04Z = 上海 15:04
+    expect(mantleOf(i)?.level).toBe(1); // Tier ① overrides tier ②.
+    expect(mantleOf(i)?.asOf).toBe('15:04'); // 07:04Z = 15:04 in Shanghai.
     expect(mantleOf(i)?.text).toBe(`蒂法 · ${mat('figure.atHome')}`);
     expect(mantleOf(i)?.url).toBe('https://popclaw.world/h/7t4k2n9q');
     expect(mantleOf(i)?.houseSlug).toBe('popclaw-world');
@@ -164,7 +164,7 @@ describe('G2 门楣①级 — 坊 digest 的实况', () => {
     );
     const text = mantleOf(i)!.text;
     expect(text).toContain(`小蓝 · ${mat('figure.onWayHomeFrom', { city: '苏州' })}`);
-    // 归期那一格：时刻随时区格式化，这里只核「归期已过」那个记号确实印了出来
+    // Return-time slot: timezone controls formatting; only verify that the overdue marker is printed.
     const overdueMark = mat('figure.dueBackOverdue', { time: 'T' }).replace(
       mat('figure.dueBack', { time: 'T' }),
       '',
@@ -221,11 +221,11 @@ describe('G3 值得一逛的家', () => {
       homes: [home() as never],
       ranking_basis_i18n: { en: 'Newest home first; visit counts are not yet meaningful.' },
     });
-    // 主人读英文 → 印坊自己的英文
+    // English-reading owner → print the house's own English copy.
     expect(homesOf(issueOf(withDigest(d, { language: 'en-US' })))!.rankingBasis).toBe(
       'Newest home first; visit counts are not yet meaningful.',
     );
-    // 主人读中文 → 坊没给 zh，回落原文（原文本来就是中文）
+    // Chinese-reading owner, no zh supplied by the house → original text (already Chinese).
     expect(homesOf(issueOf(withDigest(d)))!.rankingBasis).toContain('按小屋落成时间倒序');
   });
 
@@ -314,7 +314,7 @@ describe('G3 值得一逛的家', () => {
     const keeper = ownerOf(
       withDigest(
         digest({
-          // sigil 特意给成 deriveSigil(id)——两者自洽，才轮到验证 popclaw_id 那条优先路径。
+          // Set sigil to deriveSigil(id) deliberately: consistency is required to exercise popclaw_id priority.
           homes: [
             home({
               owner: { nickname: '苏小小', sigil: deriveSigil(id), popclaw_id: id, display: `苏小小#${deriveSigil(id)}` },
@@ -339,21 +339,21 @@ describe('G3 值得一逛的家', () => {
             }) as never,
           ],
         }),
-        // 没注入 nameOf → 名字链缺省不认得任何人，退到 displayNamed 的老兜底（serverName=nickname）。
+        // No nameOf injected: the default name chain knows nobody, so use the existing displayNamed fallback (serverName=nickname).
       ),
     );
     expect(keeper).toBe(`苏小小#${deriveSigil(id)}`);
   });
 
   it('popclaw_id 与 sigil 不自洽（互相推不出）→ 弃用 popclaw_id、退回印信反查——显示 sigil 那个人，绝不是 popclaw_id 那个人的备注名', () => {
-    const idClaimed = 'OWNER_MISMATCH_CLAIMED'; // digest 声称的 popclaw_id，本机把它备注为「老李」
-    const idActual = 'OWNER_MISMATCH_ACTUAL'; // sigil 反查出来的真主人，本机把它备注为「老王」
+    const idClaimed = 'OWNER_MISMATCH_CLAIMED'; // Claimed digest popclaw_id, locally nicknamed Lao Li.
+    const idActual = 'OWNER_MISMATCH_ACTUAL'; // Actual owner resolved by sigil, locally nicknamed Lao Wang.
     const keeper = ownerOf(
       withDigest(
         digest({
           homes: [
             home({
-              // sigil 是 idActual 的印信，popclaw_id 却报成 idClaimed —— 两者互相推不出，digest 自身矛盾。
+              // sigil belongs to idActual but popclaw_id claims idClaimed; neither derives from the other, so the digest contradicts itself.
               owner: { nickname: '苏小小', sigil: deriveSigil(idActual), popclaw_id: idClaimed, display: '苏小小#假印信' },
             }) as never,
           ],
@@ -366,12 +366,12 @@ describe('G3 值得一逛的家', () => {
       ),
     );
     expect(keeper).toBe(`老王#${deriveSigil(idActual)}`);
-    expect(keeper).not.toContain('老李'); // 绝不把 idClaimed 的备注名安到 idActual 头上——认错人比不认得更糟
+    expect(keeper).not.toContain('老李'); // Never attach idClaimed's nickname to idActual: misidentification is worse than no identification.
   });
 
-  // 没给 owner.popclaw_id 时的老路（sigil 反查 / display 兜底）已由上面「名字链：sigil
-  // 本地反查得到」「名字链：反查不到」两条覆盖 —— 那两条的素材本就不带 popclaw_id，
-  // 这次改动没碰这条分支，回归照旧绿。
+  // The old path without owner.popclaw_id (sigil reverse lookup / display fallback) is already covered by the two
+  // name-chain tests above for successful and failed local sigil lookup; their materials omit popclaw_id.
+  // This change leaves that branch untouched and its regressions passing.
 });
 
 describe('G4 家书 [homeletter/v1] 标头', () => {

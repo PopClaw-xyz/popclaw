@@ -77,7 +77,7 @@ export function renderVerifiedProfileSummary(p: VerifiedProfileInput, lang: Lang
   const count = valid && n > 0 ? renderCopy(lang, 'passport.snapshotApprox', {count: formatFollowerCount(n)})
     : valid && n === 0 && p.follower_count_observed === true ? '0'
     : renderCopy(lang, 'passport.snapshotUnconfirmed');
-  const lines = [`${prefix} ${label} @${snapshotText(p.handle)}`, renderCopy(lang, 'passport.snapshotFollowers', {count})];
+  const lines = [`${prefix} ${label} @${snapshotText(p.handle)}`, renderCopy(lang, 'passport.snapshotFollowers', {platform: label, count})];
   if (p.bio?.trim()) lines.push(renderCopy(lang, 'passport.snapshotBio', {platform: label, bio: snapshotText(p.bio, 120)}));
   return lines;
 }

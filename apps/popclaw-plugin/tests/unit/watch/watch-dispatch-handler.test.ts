@@ -66,9 +66,9 @@ describe('handleWatchDispatch', () => {
   });
 });
 
-// 起点是灯坊给的"他同意的那一刻"，绝不是 0。
-// 从 0 开始 = 首次轮询就把这个账号有史以来的帖子全拉回来（主人明令不做的
-// "搬运号"行为），而且 registry 是纯内存的，游侠每次重启都会再全拉一遍。
+// Start from the House's timestamp of consent, never zero.
+// Starting at zero would fetch the account's entire post history on the first poll, the mirroring-account behavior
+// the owner explicitly forbade. The registry is in-memory, so every ranger restart would repeat that full fetch.
 describe('watch start point', () => {
   function dispatchWith(since?: number | string) {
     const registry = new WatchRegistry();

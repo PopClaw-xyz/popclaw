@@ -38,6 +38,24 @@ export interface IntentPullClient {
  *  it back off the captured wire headers. */
 const NONCE_BYTES = 12;
 
+/** Validate the entire wire batch before either absorption or cursor advancement.
+ *  Unix millisecond timestamps must be exactly representable integers.
+ *  Business-level refusal (unsupported ids or labels) remains the store's job. */
+export function assertFollowIntentBatch(intents: unknown): asserts intents is FollowIntentRow[] {
+  if (!Array.isArray(intents) || intents.some((row: unknown) => {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) return true;
+    const it = row as Record<string, unknown>;
+    return typeof it.owner_popclaw_id !== 'string' ||
+      typeof it.followee_popclaw_id !== 'string' ||
+      typeof it.followee_label !== 'string' ||
+      typeof it.first_ts !== 'number' || !Number.isSafeInteger(it.first_ts) ||
+      typeof it.latest_ts !== 'number' || !Number.isSafeInteger(it.latest_ts) ||
+      typeof it.click_count !== 'number' || !Number.isFinite(it.click_count);
+  })) {
+    throw new Error('intent pull: server returned a malformed 200');
+  }
+}
+
 export function makeIntentPullClient(opts: {
   baseUrl: string;
   signer: Signer;
@@ -84,13 +102,13 @@ export function makeIntentPullClient(opts: {
       } catch {
         throw new Error('intent pull: server returned a non-JSON 200');
       }
-      const intents = (parsed as { intents?: unknown }).intents;
+      const intents = parsed !== null && typeof parsed === 'object'
+        ? (parsed as { intents?: unknown }).intents
+        : undefined;
       // A malformed 200 must not masquerade as an empty batch — the caller
       // would advance its cursor past real intents.
-      if (!Array.isArray(intents)) {
-        throw new Error('intent pull: server returned a malformed 200');
-      }
-      return intents as FollowIntentRow[];
+      assertFollowIntentBatch(intents);
+      return intents;
     },
   };
 }

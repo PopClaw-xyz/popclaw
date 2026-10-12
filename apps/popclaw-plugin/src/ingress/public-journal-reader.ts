@@ -1,5 +1,6 @@
 /** Verified, bounded protected-journal reads shared by display and one-issue collection. No writes. */
 import { popclaw } from '@popclaw/contracts';
+import { cidFromCanonical } from '@popclaw/algorithms';
 import type { HostDb } from '../host/host-db.js';
 import type { PublicDisplayCapture, PublicDisplayItem, PublicDisplaySource } from './public-feed-display.js';
 import { verifyPublicStreamJournalSchema } from '../world/scoped-stream-journal.js';
@@ -83,11 +84,15 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
   verifyPublicStreamJournalSchema(db);
   const capability = capture.capability, log = capability.publicStream.log_incarnation;
   const binding = JSON.stringify([capability.house.origin, capability.house.houseKey, capability.house.incarnation]);
-  const row = db.queryOne<{ active_log: string; capability_revision: string; selection_json: string; phase: string }>(
-    'SELECT active_log,capability_revision,selection_json,phase FROM world_public_bindings_v1 WHERE binding_id=?', [binding]);
-  const status = { origin: source.origin, slug: source.slug, capabilityRevision: capability.capabilityRevision, logIncarnation: log,
-    history: capture.history, incomplete: true, unavailable: false, truncated: false, observedAt: null as number | null };
+  const row = db.queryOne<{ active_log: string; capability_revision: string; selection_json: string; phase: string; checkpoint_h: string | null }>(
+    'SELECT active_log,capability_revision,selection_json,phase,checkpoint_h FROM world_public_bindings_v1 WHERE binding_id=?', [binding]);
+  const status = { protocol: 'public-v1' as const, origin: source.origin, slug: source.slug, capabilityRevision: capability.capabilityRevision, logIncarnation: log,
+    checkpointHighWater: null as string | null, history: capture.history, incomplete: true, unavailable: false, truncated: false, observedAt: null as number | null };
   if (!row || row.active_log !== log || row.capability_revision !== capability.capabilityRevision) return { items: [], status };
+  // This cutoff and every retained row come from the caller's one SQLite snapshot.
+  // No checkpoint means partial local evidence, never remote coverage.
+  const checkpoint = row.checkpoint_h === null ? null : uint64(row.checkpoint_h);
+  status.checkpointHighWater = checkpoint;
   const selection = JSON.parse(row.selection_json) as { fullPublic: boolean; scopes: string[] };
   if (!selection || typeof selection.fullPublic !== 'boolean' || !Array.isArray(selection.scopes) || selection.scopes.length > 32
     || selection.scopes.some(scope => typeof scope !== 'string' || !/^[A-Za-z0-9_-]{4,64}$/.test(scope))
@@ -95,7 +100,7 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
   const cursors = db.queryAll<{ lane: string; scope_id: string; stale: number; after_seq: string }>(
     'SELECT lane,scope_id,stale,after_seq FROM world_public_cursors_v1 WHERE binding_id=? AND log_incarnation=?', [binding, log]);
   const lanes = [{ lane: 'public', scope: '', selected: selection.fullPublic }, ...selection.scopes.map(scope => ({ lane: 'scope', scope, selected: true }))].filter(lane => lane.selected);
-  status.incomplete = row.phase !== 'live' || lanes.some(lane => {
+  status.incomplete = capture.history || checkpoint === null || row.phase !== 'live' || lanes.some(lane => {
     const cursor = cursors.find(cursor => cursor.lane === lane.lane && cursor.scope_id === lane.scope);
     if (cursor) uint64(cursor.after_seq);
     return !cursor || cursor.stale !== 0;
@@ -106,9 +111,9 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
     const page: FrameRow[] = db.queryAll<FrameRow>(
       `SELECT f.seq,f.event_id,f.frame_bytes,f.observed_at,e.envelope,e.current_projection,e.projection_log,e.projection_seq
        FROM world_public_frames_v1 f JOIN world_public_events_v1 e USING(binding_id,event_id)
-       WHERE f.binding_id=? AND f.log_incarnation=? ${options.reference ? 'AND f.event_id=? AND f.seq=?' : ''} ${before === null ? '' : 'AND (length(f.seq) < ? OR (length(f.seq)=? AND f.seq COLLATE BINARY < ?))'}
+       WHERE f.binding_id=? AND f.log_incarnation=? ${checkpoint === null ? '' : 'AND (length(f.seq) < ? OR (length(f.seq)=? AND f.seq COLLATE BINARY <= ?))'} ${options.reference ? 'AND f.event_id=? AND f.seq=?' : ''} ${before === null ? '' : 'AND (length(f.seq) < ? OR (length(f.seq)=? AND f.seq COLLATE BINARY < ?))'}
        ORDER BY length(f.seq) DESC,f.seq COLLATE BINARY DESC LIMIT ?`,
-      [binding, log, ...(options.reference ? [options.reference.eventId, options.reference.sequence] : []), ...(before === null ? [] : [before.length, before.length, before]), PAGE_SIZE]);
+      [binding, log, ...(checkpoint === null ? [] : [checkpoint.length, checkpoint.length, checkpoint]), ...(options.reference ? [options.reference.eventId, options.reference.sequence] : []), ...(before === null ? [] : [before.length, before.length, before]), PAGE_SIZE]);
     if (!page.length) { finished = true; break; }
     for (const frame of page) {
       if (!options.completeWindow && (scanned >= MAX_FRAMES || bytes + frame.frame_bytes.length + frame.envelope.length > MAX_BYTES)) { status.truncated = true; finished = true; break; }
@@ -133,24 +138,29 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
       const bodyUnavailable = !!envelope.houseEvent && !decoded?.fields;
       const body = decoded?.text || (decoded?.fields ? Object.entries(decoded.fields).map(([key, value]) => `${key}: ${value}`).join('\n') : '');
       let item = fallback(envelope, body), relaySnapshot = false;
-      const retainedProjection = options.ownProjection
+      // A later observation must not replace metadata from this fixed window.
+      const ownProjection = options.ownProjection || (checkpoint !== null && frame.projection_log === log
+        && frame.current_projection !== null && BigInt(uint64(frame.projection_seq)) > BigInt(checkpoint));
+      const retainedProjection = ownProjection
         ? (verified.frame.projection ? popclaw.event.WorldFeedItem.encode(verified.frame.projection).finish() : null)
         : frame.projection_log === log ? frame.current_projection : null;
       if (retainedProjection) {
-        if (!options.ownProjection && uint64(frame.projection_seq) !== frame.seq) throw new Error('PUBLIC_DISPLAY_PROJECTION_SEQUENCE_MISMATCH');
+        if (!ownProjection && uint64(frame.projection_seq) !== frame.seq) throw new Error('PUBLIC_DISPLAY_PROJECTION_SEQUENCE_MISMATCH');
         inspectPublicCarrier(retainedProjection, 'projection', true);
         const projection = popclaw.event.WorldFeedItem.decode(retainedProjection);
         if (verified.frame.projection && !same(popclaw.event.WorldFeedItem.encode(verified.frame.projection).finish(), popclaw.event.WorldFeedItem.encode(projection).finish())) throw new Error('PUBLIC_DISPLAY_PROJECTION_CONFLICT');
-        decodePublicFrame(popclaw.event.WorldStreamFrame.encode({ ...verified.frame, projection }).finish(), capture.producerPolicy);
+        // The frame already verified this exact projection. Only a separately
+        // retained projection absent from that frame needs a second verification.
+        if (!verified.frame.projection) decodePublicFrame(popclaw.event.WorldStreamFrame.encode({ ...verified.frame, projection }).finish(), capture.producerPolicy);
         if (!projection.platform || !projection.platformPostId) throw new Error('PUBLIC_DISPLAY_PROJECTION_INVALID');
-        item = { ...(options.ownProjection ? item : {}), ...projection, originalUrl: projection.origin?.url || projection.originalUrl || '' };
+        item = { ...(ownProjection ? item : {}), ...projection, originalUrl: projection.origin?.url || projection.originalUrl || '' };
         relaySnapshot = true;
       }
       // Relay metadata cannot rename or merge signed content. Mirrors keep
       // their signed external source identity; native content uses its CID.
       const canonical = fallback(envelope, body);
       item = { ...item, platform: canonical.platform, platformPostId: canonical.platformPostId,
-        ...(options.ownProjection && !time(item.platformPostCreatedAt) ? { platformPostCreatedAt: canonical.platformPostCreatedAt } : {}),
+        ...(ownProjection && !time(item.platformPostCreatedAt) ? { platformPostCreatedAt: canonical.platformPostCreatedAt } : {}),
         ...(envelope.post?.origin ? { origin: envelope.post.origin, originalUrl: envelope.post.origin.url ?? '' } : {}),
         eventId: envelope.eventId, envelope: new Uint8Array(frame.envelope) };
       const id = JSON.stringify([item.platform, item.platformPostId]);
@@ -158,7 +168,8 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
       // this content key; older frames never overwrite it by arrival time.
       if (!newest.has(id)) newest.set(id, { item, body, kind: verified.kind,
         relaySnapshot, bodyUnavailable, media: decoded?.media ?? [], mirrorSigner: !!envelope.post?.origin && !relaySnapshot,
-        source: { origin: source.origin, slug: source.slug, observedAt: frame.observed_at, sequence: frame.seq, logIncarnation: log } });
+        source: { origin: source.origin, slug: source.slug, observedAt: frame.observed_at, sequence: frame.seq, logIncarnation: log,
+          frameDigest: cidFromCanonical(new TextEncoder().encode(JSON.stringify([cidFromCanonical(frame.frame_bytes), frame.observed_at]))) } });
     }
     if (page.length < PAGE_SIZE) finished = true;
   }

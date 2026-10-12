@@ -70,6 +70,7 @@ export async function consumePublicSse(
   response: Response,
   signal: AbortSignal,
   consume: (event: ScopedSseEvent) => void | Promise<void>,
+  onActivity?: () => void,
 ): Promise<void> {
   if (!response.body) throw new Error('PUBLIC_STREAM_BODY_MISSING');
   const reader = response.body.getReader();
@@ -109,6 +110,7 @@ export async function consumePublicSse(
         if (line || type !== null || data.length) throw new Error('PUBLIC_SSE_TRUNCATED');
         return;
       }
+      if (chunk.value.length) onActivity?.();
       for (const char of decoder.decode(chunk.value, { stream: true })) {
         if (++size > 1048576) throw new Error('PUBLIC_SSE_SIZE_LIMIT');
         if (char === '\r') { await endLine(); afterCr = true; }

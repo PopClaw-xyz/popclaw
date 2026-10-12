@@ -47,17 +47,19 @@ export function formatInviteResult(
   const sigil = result.expectedSigil;
   const eventId = result.pushedEventId ?? '(pending)';
   if (push.status >= 200 && push.status < 300) {
+    // A house without a task receipt provides no background tracking capability.
+    const tracked = !!push.taskId;
     if (proofUrl) {
       // ADR-0034 one-shot proof flow: the post already exists, rangers fetch it by id.
       return [
         renderCopy(lang, 'invite.result.initiated', { platform, handle, eventId }),
         renderCopy(lang, 'invite.result.proofAttached', { proofUrl }),
         renderCopy(lang, 'invite.result.proofNote', { handle, sigil }),
-        renderCopy(lang, 'invite.result.proofEta'),
+        renderCopy(lang, tracked ? 'invite.result.proofEta' : 'invite.result.noTracking'),
       ].join('\n');
     }
-    // ADR-0040 act one: the receipt lays out the whole arc up front — you do
-    // one thing, I'll watch the rest.
+    // ADR-0040 act one: show the owner's posting step and the actual tracking
+    // capability carried by this receipt.
     // Three steps + three reassurances (48h valid / sigil never changes / no
     // penalty on expiry).
     return [
@@ -71,7 +73,7 @@ export function formatInviteResult(
       // Honesty by design: never fake an honor guard — quorum is currently 1,
       // and the ranger headcount is never hardcoded into the copy.
       renderCopy(lang, 'invite.result.step2'),
-      renderCopy(lang, 'invite.result.step3'),
+      renderCopy(lang, tracked ? 'invite.result.step3' : 'invite.result.noTracking'),
       '',
       renderCopy(lang, 'invite.result.reassurance'),
       // Said either way, so the default is a stated choice rather than a silence.
@@ -90,7 +92,7 @@ export function formatInviteResult(
       renderCopy(lang, 'invite.result.smallAccountHint', { platform, handle }),
       renderCopy(lang, 'invite.result.proofRetryCmd', { platform, handle }),
       '',
-      renderCopy(lang, 'invite.result.checkStatus'),
+      ...(tracked ? [renderCopy(lang, 'invite.result.checkStatus')] : []),
     ].join('\n');
   }
   if (push.status === 409 && push.detail?.includes('already verified')) {

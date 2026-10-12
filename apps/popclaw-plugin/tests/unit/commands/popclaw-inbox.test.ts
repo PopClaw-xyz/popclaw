@@ -57,7 +57,7 @@ describe('runPopclawInboxCommand', () => {
     expect(out.text).toContain(`alice_h#${deriveSigil('Alice123')}`);
   });
 
-  // 名册查无时只报印信 —— 裸 id 的 `前6…后4` 对主人是纯噪音（ADR-0032）。
+  // When the directory has no match, show only the sigil: a raw ID's first-six/last-four abbreviation is noise to the owner (ADR-0032).
   it('falls back to the sigil (never a bare popclaw_id prefix) when no handle', async () => {
     const id = 'AbcDefGhiJklMnoPqrStu';
     store.record({ ts: 100, fromPopclawId: id, toPopclawId: 'me', body: 'hi', receivedAtMs: 0 });
@@ -80,7 +80,7 @@ describe('runPopclawInboxCommand', () => {
     expect(out.text).toMatch(/re:.*999|re:.*x:999/);
   });
 
-  // #231：有图的条目把落盘路径给出来，agent/主人能直接用；没图的一个字不多说。
+  // #231: expose the saved image path so the agent/owner can use it directly; add nothing for entries without images.
   it('shows 📎 图片 with the local path for DMs that carried a picture', async () => {
     store.record({
       ts: 100, fromPopclawId: 'Bob', toPopclawId: 'me', body: '看这个',
@@ -92,7 +92,7 @@ describe('runPopclawInboxCommand', () => {
     expect(out.text.match(/📎/g)).toHaveLength(1);
   });
 
-  // 纯图无字：正文那行不能只剩缩进空白挂在那儿。
+  // An image-only message must not leave an indented, blank body line.
   it('纯图无正文的条目只列图，不留空正文行', async () => {
     store.record({
       ts: 100, fromPopclawId: 'Bob', toPopclawId: 'me', body: '',
@@ -100,7 +100,7 @@ describe('runPopclawInboxCommand', () => {
     });
     const out = await runPopclawInboxCommand({ positional: [], flags: {} }, { store });
     expect(out.text).toContain('📎 图片: /root/data/dm-media/100-Bob.png');
-    // 正文那行本来是 6 个空格 + body；body 为空就整行不该出现。
+    // The body line was six spaces plus body; omit the entire line when body is empty.
     expect(out.text.split('\n').some((l) => /^\s+$/.test(l))).toBe(false);
   });
 

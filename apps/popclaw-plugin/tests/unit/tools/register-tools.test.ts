@@ -82,7 +82,7 @@ describe('registerPopclawTools', () => {
       'popclaw_show_feed',
       'popclaw_search_feed',
       'popclaw_show_inbox',
-      // 待回（Pings）· 回我帖
+      // Pending pings: replies to my posts.
       'popclaw_show_pings',
       'popclaw_show_recommend',
       // daily newspaper: gather materials → agent renders → publish to canvas
@@ -110,15 +110,15 @@ describe('registerPopclawTools', () => {
       'popclaw_set_bio',
       // bond retrieval (Task 2)
       'popclaw_find_bonds',
-      // taste core 追加（做梦第 2 步：onboarding 之后主人随时还能补）
+      // taste core append (dream step 2): the owner can add more after onboarding.
       'popclaw_note_taste',
-      // ADR-0042: agent 自己向官方报"我撞墙了"
+      // ADR-0042: the agent reports a blocker to the official contact.
       'popclaw_feedback',
-      // ADR-0044 §2 的回归：空壳删掉后按准则 1 做出真实现（语言/时区，S1）
+      // ADR-0044 section 2 regression: replace the empty stub with a real implementation under principle 1 (language/timezone, S1).
       'popclaw_update_cadence',
-      // R1 顺一句：主人说「别提了」就闭嘴。同一条准则 1 —— 空壳转正，真写 muted 账本。
+      // R1 nudges: stop when the owner says "do not mention it". Principle 1 turns the stub into a real muted-ledger write.
       'popclaw_mute_notices',
-      // 「这人是谁」—— MCP 宿主没有斜杠命令，看别人的名帖只能靠工具。
+      // "Who is this person?": MCP hosts lack slash commands, so viewing someone else's namecard requires a tool.
       'popclaw_show_namecard',
       // #585: verification used to be slash-only, i.e. impossible on MCP. Not
       // gated on any dep — an MCP citizen must be able to get verified.
@@ -140,15 +140,12 @@ describe('registerPopclawTools', () => {
   });
 
   /**
-   * 2026-08-28, 甲机: the writer reported "the tool requires picks as a flat array,
-   * not a grouped object" and had two submissions rejected — while the brief was asking
-   * it for the grouped object. Same turn, the newspaper tool's own description told it to
-   * send `publish_token` on the second call, a parameter that stopped existing when the
-   * candidate token was renamed; only `candidate_token` is declared.
-   *
-   * A description that names a parameter the schema does not declare is an instruction the
-   * model cannot obey: the host validates against the schema, so the call is rejected
-   * before it ever reaches us — and the receipt says nothing about why.
+   * 2026-08-28, host A: the writer reported "the tool requires picks as a flat array, not a grouped
+   * object" and had two submissions rejected while the brief requested a grouped object. In the same
+   * turn, the newspaper description requested publish_token on the second call, though candidate-token
+   * renaming had removed that parameter; only candidate_token is declared. A description naming an
+   * undeclared parameter is impossible to obey: host schema validation rejects it before it reaches
+   * us, and the receipt does not explain why.
    */
   it('工具描述里点名的 *_token 参数,schema 必须真的有', () => {
     const { api, tools } = buildFakeApi();
@@ -168,13 +165,12 @@ describe('registerPopclawTools', () => {
   // newspaper bug: popclaw_newspaper registered, agent kept improvising; also PR #89).
   // This test fails the moment the two drift apart, in either direction.
   /**
-   * 2026-08-30，乙机整夜出不来报纸。它说「候选令牌过期了」——而盘上那个令牌好端端躺着。
-   * 真相是：它交的 picks 没能活着到达插件（形状不对、被宿主的 schema 校验丢掉），
-   * `hasPicks` 为假，于是代码**掉进了「重新取素材」那条分支**，回给它一张新的候选页和新令牌。
-   * 模型只能把这读成「我那个过期了」，于是再试。两分钟里铸了八份候选集，一份挑选都没成。
-   *
-   * **带着 candidate_token 来的调用，意思只有一个：我要交挑选。** 这时候给它一张新页面，
-   * 是这条工具链能做的最坏的回答。
+   * On host B, 2026-08-30, no newspaper appeared all night. The model claimed its candidate token had
+   * expired, but it remained on disk. picks had not reached the plugin because of its shape/host
+   * schema validation. hasPicks was false, so code fell into regathering and returned a new candidate
+   * page/token. The model interpreted that as expiry and retried: eight sets in two minutes, no
+   * successful picks. A call carrying candidate_token means submission of picks; returning a new page
+   * is the worst response for this tool chain.
    */
   ;
 
@@ -183,9 +179,9 @@ describe('registerPopclawTools', () => {
   ;
 
   /**
-   * 宿主给「声明了但没赋值」的对象字段补一个 `{}`，是这一周反复见到的那类怪癖。
-   * 若用 `p.picks ?? flat`，一个空的 picks 就会把带着数字的 picks_flat 整个吃掉 ——
-   * 而 picks_flat 存在的全部理由，正是绕开这类怪癖。
+   * Hosts repeatedly fill declared-but-unset object fields with `{}`. With `p.picks ?? flat`, empty
+   * picks would swallow numbered picks_flat entirely, though avoiding this quirk is why picks_flat
+   * exists.
    */
   ;
 
@@ -200,9 +196,9 @@ describe('registerPopclawTools', () => {
     registerPopclawTools({
       api,
       runtime: vi.fn() as unknown as Parameters<typeof registerPopclawTools>[0]['runtime'],
-      // 7.1 的 plugins doctor 要求 contracts.tools 覆盖一切"可能注册"的工具——
-      // recent_attachments 以 inboundMediaDirs 非空为门槛，全集测试必须把门打开
-      // （真机 2026-08-11 彩排：manifest 缺它被 doctor 当场点名）。
+      // 7.1 plugins doctor requires contracts.tools to cover every tool that might register.
+      // recent_attachments requires nonempty inboundMediaDirs, so the complete-set test must open that gate.
+      // During the real-host rehearsal on 2026-08-11, doctor flagged its missing manifest entry.
       inboundMediaDirs: [tmpdir()],
       // non-undefined getters → the onboarding + world tools also register (full set)
       getOrchestrator: (async () => ({})) as unknown as Parameters<
@@ -378,10 +374,10 @@ describe('registerPopclawTools', () => {
     ] as const) {
       expect(descOf(tool)).toContain(`\`${job}\``);
       expect(descOf(tool)).toContain('result delivery off');
-      // 2026-07-31 真机：主人的宿主配置是**排他**的 `tools.allow` 白名单，只列了插件
-      // 工具，于是宿主自带的 cron 被静默切掉（#338）。agent 手上没有 cron，就把活儿
-      // 寄回官方等回信。缺的是这台机器上的一次授权，只有主人能给——所以描述必须当场
-      // 说清「让主人开什么」，并堵死两条错路（手改 crontab / 把活儿寄出去）。
+      // Real host, 2026-07-31: the owner's exclusive tools.allow listed only plugin tools,
+      // silently filtering out the host's cron (#338). Without cron, the agent mailed the task to the official contact
+      // and waited. This machine lacked an authorization only the owner could grant. The description must
+      // state what the owner should enable and block two wrong paths: editing crontab manually or mailing the task away.
       expect(descOf(tool)).toContain('`cron` to `tools.allow`');
       expect(descOf(tool)).toContain('only the owner can grant it');
     }
@@ -402,9 +398,9 @@ describe('registerPopclawTools', () => {
     expect(desc).toContain('no extra parameters');
   });
 
-  // 2026-07-31 真机：agent 拿着被切过的通知预览当整封信，把信里已经写清的做法又
-  // 写成一封 feedback 寄回去问。截断已经改成明说（owner-notifier），这里管另一半：
-  // 读全文再动手、能自己做的别寄回去问、feedback 不是问事处。
+  // Real host, 2026-07-31: an agent treated a truncated notification as the full letter and sent feedback
+  // asking about instructions already in it. owner-notifier now discloses truncation; this covers the other half:
+  // read the full letter before acting, do feasible work locally, and do not use feedback as a help desk.
   it('the inbox/feedback tools tell the agent to read the full letter, not mail it back', () => {
     const { api, tools } = buildFakeApi();
     registerPopclawTools({
@@ -422,10 +418,10 @@ describe('registerPopclawTools', () => {
     expect(feedback).toContain('never send a second letter asking the same thing');
   });
 
-  // 2026-07-31 真机：agent 撞墙（宿主 cron 被 tools.allow 白名单切掉，#338）后把同一
-  // 件事寄了三封 feedback，然后**停在那里等回信**。反馈是 fire-and-forget（ADR-0042：
-  // 无工单、无 SLA），等 = 永远卡住；而真正缺的是这台机器上的一次授权，给得起的人就
-  // 坐在同一个对话里。描述里必须有分诊三档 + 「寄信不能替代前两档」+ 「绝不等回信」。
+  // Real host, 2026-07-31: after tools.allow filtered cron (#338), the agent sent three feedback letters about
+  // the same blocker and stopped work to await a reply. Feedback is fire-and-forget (ADR-0042: no ticket or SLA),
+  // so waiting blocks forever. The actual missing permission can be granted by the owner in this conversation.
+  // The description must give three triage categories, say mailing cannot replace the first two, and forbid awaiting replies.
   it('popclaw_feedback carries the blocked-triage rule (owner grant is not a product gap)', () => {
     const { api, tools } = buildFakeApi();
     registerPopclawTools({
@@ -434,11 +430,11 @@ describe('registerPopclawTools', () => {
     });
     const feedback = (findTool(tools, 'popclaw_feedback') as unknown as { description: string })
       .description;
-    // ① 自己能做的自己做 ② 缺权限 → 告诉主人开什么 ③ popclaw 真做不到 → 才寄信
+    // 1. Do feasible work yourself. 2. Missing permission: tell the owner what to enable. 3. Only mail what PopClaw truly cannot do.
     expect(feedback).toContain('whose problem it is');
     expect(feedback).toContain('tell the owner exactly what to enable');
     expect(feedback).toContain('popclaw never changes it for them');
-    // 寄信不是行动的替代品，而且绝不等回信（无工单无 SLA）
+    // Mailing is no substitute for action, and never wait for a reply (no ticket or SLA).
     expect(feedback).toContain('never a substitute');
     expect(feedback).toContain('never wait for a reply');
   });
@@ -454,11 +450,11 @@ describe('registerPopclawTools', () => {
     expect(r.text).toBe(`${renderCopy(ownerLang(), 'draft.expiredToken', { token: 'nope' })}`);
   });
 
-  // 认人（ADR-0028 修订）：DM 工具的 recipient 收人用形式，草稿时就翻译成完整 id。
+  // Identity resolution (ADR-0028 revision): DM recipient accepts human-facing forms, resolved to a complete ID during drafting.
   it('popclaw_draft_message resolves 名号#印信 locally (bond hit → 零往返)', async () => {
     const { api, tools } = buildFakeApi();
     const bondsStore = makeRealBondsStore();
-    // #227: 必须是真公钥 —— 私信正文要加密到它。
+    // #227: use a real public key; the DM body must be encrypted to it.
     const recipientId = bs58.encode(nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(7)).publicKey);
     const sigil = deriveSigil(recipientId);
     bondsStore.setNickname(recipientId, 'Blackfeather');
@@ -476,20 +472,20 @@ describe('registerPopclawTools', () => {
     const draft = await draftTool.execute('cid', { recipient: `Blackfeather#${sigil}`, body: 'hi' });
 
     expect(draft.text).toContain(`Blackfeather#${sigil}`);
-    expect(draft.text).toContain(recipientId); // 机器钥匙同时递给 agent
+    expect(draft.text).toContain(recipientId); // Pass the machine reference to the agent too.
     expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/);
-    expect(resolve).not.toHaveBeenCalled(); // 交情本命中 → 不问灯坊
+    expect(resolve).not.toHaveBeenCalled(); // Bond-book hit: do not query the House.
 
-    // 发出回执与草稿同款人话（不是裸 id）。
+    // Send receipts use the draft's human-readable wording, not a bare ID.
     const token = draftToken(draft.text)!;
     const sent = await sendDraftConfirmed(sendTool.execute, token!);
     expect(sent.text).toContain(`Blackfeather#${sigil}`);
     expect(JSON.parse(sent.text).owner_text).not.toContain(recipientId);
   });
 
-  // 发送前关系建议：把收方的 relative-value 闸在发送侧
-  // 翻译给主人。闸判的是「收件人有没有关注我」（ADR-0012 修订），所以建议只看
-  // 这一个方向 —— 主人关注了对方但对方没回关，恰恰是最该提醒的那一种。
+  // Pre-send relationship advice translates the recipient-side relative-value gate
+  // for the owner. It asks whether the recipient follows me (ADR-0012 revision), so advice uses only
+  // that direction: following someone who does not follow back is precisely when the warning matters most.
   async function draftTo(recipientId: string, knownFollowers?: unknown) {
     const { api, tools } = buildFakeApi();
     const bondsStore = makeRealBondsStore();
@@ -513,7 +509,7 @@ describe('registerPopclawTools', () => {
     const id = someoneId();
     const draft = await draftTo(id, { allFollowerIds: () => [] });
     expect(draft.text).toContain('还没关注你');
-    expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/); // 建议不拦发送
+    expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/); // Advice does not block sending.
   });
 
   it('草稿预览：对方已关注我 → 不啰嗦', async () => {
@@ -528,10 +524,10 @@ describe('registerPopclawTools', () => {
   });
 
   // -------------------------------------------------------------------------
-  // #231 第 2 刀 — popclaw_draft_message 的 image_path
+  // #231, part 2: popclaw_draft_message's image_path.
   //
-  // 真机 2026-07-28：没有夹图入口时 agent 自己发明了往 body 里塞
-  // "MEDIA:/Users/…"，对方收到一截裸本地路径。这一组是那条黑路的回归闸。
+  // Real host, 2026-07-28: without an image attachment entry, the agent invented putting
+  // "MEDIA:/Users/..." in body, exposing a bare local path to the recipient. These tests guard that invalid route.
   // -------------------------------------------------------------------------
 
   function writeTmpImage(name: string, bytes: Uint8Array): string {
@@ -553,7 +549,7 @@ describe('registerPopclawTools', () => {
       body: '看这只猫',
       image_path: imagePath,
     });
-    // 主人确认的是**完整内容**：哪张图、多大。
+    // The owner confirms complete content: which image and how large it is.
     expect(draft.text).toContain('📎 附件：cat.png');
     expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/);
 
@@ -571,7 +567,7 @@ describe('registerPopclawTools', () => {
     );
     expect(opened.ok && opened.mime).toBe('image/png');
     expect(opened.ok && Array.from(opened.bytes)).toEqual(Array.from(PNG));
-    // 正文里绝不能出现本地路径（那正是真机上 agent 发明的黑路）。
+    // The body must never contain the local path (the invalid route invented by the real-host agent).
     expect(fx.recipient.openDm(dm, senderId)).toMatchObject({ ok: true, plaintext: '看这只猫' });
   });
 
@@ -592,14 +588,14 @@ describe('registerPopclawTools', () => {
     const payload = sp.payload;
     const dm = popclaw.event.EventEnvelope.decode(payload).directMessage!;
     expect(Object.prototype.hasOwnProperty.call(dm, 'mediaCiphertext')).toBe(false);
-    // prost 重编码 == 我们编的 → CID 一致。
+    // prost re-encoding equals our encoding: CID is identical.
     const reencoded = popclaw.event.EventEnvelope.encode(
       popclaw.event.EventEnvelope.decode(payload),
     ).finish();
     expect(Array.from(reencoded)).toEqual(Array.from(payload));
   });
 
-  // 纯图无字（2026-07-29 真机）：主人发表情包被「正文必填」打回。
+  // Image-only DM (real host, 2026-07-29): an owner's sticker was rejected because a body was required.
   it('popclaw_draft_message 纯图无 body → 预览写「纯图，无正文」，发出后收件人解出图、正文空', async () => {
     const { api, tools } = buildFakeApi();
     const fx = makeImageDmFixture();
@@ -610,7 +606,7 @@ describe('registerPopclawTools', () => {
       recipient: fx.recipientRef,
       image_path: writeTmpImage('meme.gif', GIF),
     });
-    // 主人确认的仍是**完整内容**：这封信没有字，只有这张图。
+    // The owner still confirms the complete content: no text, only this image.
     expect(JSON.parse(draft.text).owner_text).not.toContain('正文');
     expect(draft.text).toContain('📎 附件：meme.gif');
     expect(JSON.parse(draft.text).draft_id).toMatch(/^message-/);
@@ -681,8 +677,8 @@ describe('registerPopclawTools', () => {
     expect(fx.push).not.toHaveBeenCalled();
   });
 
-  // 放开格式（2026-07-31）：参数改叫 attachment_path，旧的 image_path 留作别名
-  // —— 上面那条用例递的就是 image_path，两条合起来把新旧两个入口都盖住了。
+  // Expanded formats (2026-07-31): rename the parameter attachment_path, retaining image_path as an alias.
+  // The test above supplies image_path; together the tests cover both old and new entries.
   it('attachment_path 收语音与文本，草稿预览带文件名', async () => {
     const { api, tools } = buildFakeApi();
     const fx = makeImageDmFixture();
@@ -729,7 +725,7 @@ describe('registerPopclawTools', () => {
     expect(fx.push).not.toHaveBeenCalled();
   });
 
-  // follow 也走同一条本地优先通路（Critical 1 的回归闸：拉丁名号变体）。
+  // follow uses the same local-first path (Critical 1 regression: Latin nickname variants).
   it('popclaw_follow resolves locally and follows the FULL popclaw_id (名号#印信 / 拉丁名号)', async () => {
     for (const nickname of ['Blackfeather', 'blackfeather']) {
       const { api, tools } = buildFakeApi();
@@ -754,13 +750,13 @@ describe('registerPopclawTools', () => {
       const ref = nickname === 'blackfeather' ? nickname : `${nickname}#${deriveSigil(followeeId)}`;
       const r = await followTool.execute('cid', { name: ref });
 
-      expect(resolve).not.toHaveBeenCalled(); // 交情本命中 → 不问灯坊
+      expect(resolve).not.toHaveBeenCalled(); // Bond-book hit: do not query the House.
       expect(declareFollow).toHaveBeenCalledWith(followeeId);
       expect(r.text).toContain(nickname);
     }
   });
 
-  // popclaw_unfollow 对称新增（spec 2026-07-26）：同一条本地优先通路 + 精准命中直接执行。
+  // Symmetric popclaw_unfollow addition (spec 2026-07-26): same local-first path and exact-match direct execution.
   it('popclaw_unfollow resolves locally and revokes the FULL popclaw_id', async () => {
     const { api, tools } = buildFakeApi();
     const bondsStore = makeRealBondsStore();
@@ -784,7 +780,7 @@ describe('registerPopclawTools', () => {
     const unfollowTool = findTool(tools, 'popclaw_unfollow');
     const r = await unfollowTool.execute('cid', { name: `${nickname}#${deriveSigil(followeeId)}` });
 
-    expect(resolve).not.toHaveBeenCalled(); // 交情本命中 → 不问灯坊
+    expect(resolve).not.toHaveBeenCalled(); // Bond-book hit: do not query the House.
     expect(revokeFollow).toHaveBeenCalledWith(followeeId);
     expect(r.text).toContain(nickname);
     // The one unfollow receipt (relation.unfollowReceivedNoHouse) — "取关"
@@ -904,26 +900,26 @@ describe('registerPopclawTools', () => {
     expect(sent.text).toMatch(/已引用/);
   });
 
-  // 真机 bug（2026-07-27）：宿主一天 33 次以 tool-discovery / full 模式重载插件,
-  // 每次都是一个**新的模块实例**。草稿表原本是模块作用域的 Map,重载即陪葬 →
-  // agent 刚拿到的 draft_token 几秒后 send 报 unknown。修法是把表挂进程级全局
-  // （同 runOncePerProcess 的 globalThis 机制,P-006 §3）。
-  // 这条测试就是那次重载：注册两轮,第一轮发的 token 必须能被第二轮的 send 消费。
+  // Real-host bug, 2026-07-27: the host reloaded the plugin 33 times in one day via tool-discovery / full mode,
+  // each creating a new module instance. Drafts lived in a module-scoped Map and disappeared on reload,
+  // so send returned unknown for a draft_token obtained seconds earlier. Store it in process-wide globals
+  // using the same globalThis mechanism as runOncePerProcess (P-006 section 3).
+  // This test reproduces reload: register twice; the second registration's send must consume the first one's token.
   it('draft_token survives a plugin re-register (new module instance → same process store)', async () => {
-    // `vi.resetModules()` + 重新 import 才是真的第二个模块实例 —— 同进程内直接
-    // 调两次 registerPopclawTools 共用同一份模块作用域,复现不出这个 bug。
+    // vi.resetModules() plus re-import creates an actual second module instance; calling
+    // registerPopclawTools twice in one process shares module scope and cannot reproduce this bug.
     vi.resetModules();
     const modA = await import('../../../src/tools/register-tools.js');
     vi.resetModules();
     const modB = await import('../../../src/tools/register-tools.js');
-    expect(modA.registerPopclawTools).not.toBe(modB.registerPopclawTools); // 确证：两个实例
+    expect(modA.registerPopclawTools).not.toBe(modB.registerPopclawTools); // Confirm two instances.
 
     const first = buildFakeApi();
     modA.registerPopclawTools({ api: first.api, runtime: makeMockRuntime() });
     const draft = await findTool(first.tools, 'popclaw_draft_post').execute('cid', { body: 'hi' });
     const token = draft.text.match(/draft_id: (post-[0-9]+)/)![1];
 
-    // 宿主重载：新模块实例 + 全新的 api / tools 数组。
+    // Host reload: a fresh module instance and completely new api / tools arrays.
     const second = buildFakeApi();
     modB.registerPopclawTools({ api: second.api, runtime: makeMockRuntime() });
 
@@ -936,9 +932,9 @@ describe('registerPopclawTools', () => {
   });
 
 
-  // 真机故障（2026-07-29 晨）回归锁：草稿 id 必须**低熵**。原来的
-  // `message_<ms>_<8位随机>` 长得像密钥，被宿主的脱敏/压缩层改写
-  // （`messag…8yda`、`***`），agent 拿着改过的 id 来 send 永远 unknown。
+  // Real-host failure regression, morning of 2026-07-29: draft IDs must have low entropy. The old
+  // `message_<ms>_<8 random chars>` looked like a key and was rewritten by host redaction/compaction
+  // to `messag...8yda` or `***`, making send always return unknown for the rewritten ID.
   it('draft ids are low-entropy sequential — nothing a secret-masker would touch', async () => {
     const { api, tools } = buildFakeApi();
     registerPopclawTools({ api, runtime: makeMockRuntime() });
@@ -946,11 +942,11 @@ describe('registerPopclawTools', () => {
     const d2 = await findTool(tools, 'popclaw_draft_post').execute('cid', { body: 'b' });
     const id1 = d1.text.match(/draft_id: (post-[0-9]+)/)![1]!;
     const id2 = d2.text.match(/draft_id: (post-[0-9]+)/)![1]!;
-    expect(id1).toMatch(/^post-\d+$/);           // 无时间戳、无随机段
-    expect(Number(id2.slice(5))).toBe(Number(id1.slice(5)) + 1); // 进程内严格递增
+    expect(id1).toMatch(/^post-\d+$/);           // No timestamp or random component.
+    expect(Number(id2.slice(5))).toBe(Number(id1.slice(5)) + 1); // Strictly increasing within the process.
   });
 
-  // 确认闸不许弱化：token 一次性使用,消费即删。
+  // Do not weaken the confirmation gate: tokens are single-use and deleted on consumption.
   it('draft_token is single-use — the second send is refused', async () => {
     const { api, tools } = buildFakeApi();
     registerPopclawTools({ api, runtime: makeMockRuntime() });
@@ -966,8 +962,8 @@ describe('registerPopclawTools', () => {
     expect(again.text).toMatch(/single-use|只能用一次/);
   });
 
-  // 表只增不减是慢性泄漏；30 分钟 TTL 兜底,过期的报错要告诉 agent 重新 draft,
-  // 别再让它猜「要快速连续调用」这种迷信。
+  // A table that only grows leaks over time; the 30-minute TTL bounds it. Expiry errors must tell the agent to draft again,
+  // not encourage guessing that calls must occur rapidly in succession.
   it('draft_token expires after 30 minutes, with an actionable message', async () => {
     const nowSpy = vi.spyOn(Date, 'now');
     try {
@@ -995,10 +991,10 @@ describe('registerPopclawTools', () => {
   // F2-checks the agent's HTML and uploads it to canvas. (spec 2026-06-18)
   ;
 
-  // 2026-07-31 真机截图：报头是「苍梧小居士晚报 · July 31, 2026」——中文报名配英文
-  // 日期。根因是这里曾**直读** cadence 的 `delivery.primaryLanguage`，没配过的主人
-  // 拿到的永远是 `defaultCadence()` 的 en-US，整条活语言登记被绕过。
-  // 语言只有一个读取口：`ownerLangTag()`。
+  // Real-host screenshot, 2026-07-31: the masthead paired "苍梧小居士晚报" with "July 31, 2026". This path
+  // had read cadence's delivery.primaryLanguage directly, so unconfigured owners always got defaultCadence()'s
+  // en-US, bypassing the entire live language registry.
+  // Language has one read entry: ownerLangTag().
   ;
 
   // Honesty gap (person-first v2 follow-up): the follow-state label must come from
@@ -1362,7 +1358,7 @@ describe('registerPopclawTools', () => {
     });
   });
 
-  // 待回（Pings）· spec 2026-07-25 §7 — 未读尾巴挂在统一出口；已读只由取走推进。
+  // Pending pings (spec 2026-07-25 section 7): unread tails use a shared exit; only retrieval advances read state.
   describe('unread ping tail + popclaw_show_pings', () => {
     function registerWithPings(unreadIds: string[], replies: unknown[] = []) {
       const markRead = vi.fn((ids: readonly string[]) => {
@@ -1395,7 +1391,7 @@ describe('registerPopclawTools', () => {
       const out = await findTool(tools, 'popclaw_show_marks').execute('c1', {});
       expect(out.text).not.toContain('📬 3 条待回');
       expect(markRead).not.toHaveBeenCalled();
-      // agent 看到尾巴却没取 → 下次继续提示
+      // The agent saw the tail but did not retrieve content: remind again next time.
       const again = await findTool(tools, 'popclaw_show_marks').execute('c1', {});
       expect(again.text).not.toContain('📬 3 条待回');
     });
@@ -1437,23 +1433,26 @@ describe('registerPopclawTools', () => {
       expect(out.text).toContain('这个我熟');
       expect(out.text).toContain('陌生人');
       expect(markRead).toHaveBeenCalledWith(['e1']);
-      // 标完已读 → 同一轮的未读尾巴不再提示
+      // After marking read, this turn no longer includes an unread tail.
       expect(out.text).not.toContain('条待回');
     });
   });
 });
 
 // ---------------------------------------------------------------------------
-// 顺一句（R1 spec §4）：composeTail 的两宿主接线（这里是 OpenClaw/register-tools
-// 那一面；纯函数层面的 8 道闸测试在 nudge.test.ts）。
+// Nudges (R1 spec section 4): composeTail wiring for both hosts; this covers OpenClaw/register-tools,
+// while nudge.test.ts covers the eight pure-function gates.
 // ---------------------------------------------------------------------------
 
 describe('顺一句 tail（R1 spec §4）', () => {
-  /** 已毕业 >24h、零关注（→ no_follows 缺口）、其余缺口全过关的最小 runtime。 */
+  /**
+   * Minimal runtime: graduated over 24 hours ago, zero follows (no_follows gap), and all other gaps
+   * satisfied.
+   */
   function registerWithSettledFacts(unreadIds: string[] = []) {
     const host = new InMemoryHostAdapter();
     const nowSec = Math.floor(Date.now() / 1000);
-    const graduatedAt = nowSec - 25 * 3600; // ≥24h（闸②）
+    const graduatedAt = nowSec - 25 * 3600; // At least 24 hours (gate 2).
     const rt = {
       host,
       boot: { popclawId: 'OWNER', webBaseUrl: 'https://popclaw.me' },
@@ -1511,12 +1510,12 @@ describe('顺一句 tail（R1 spec §4）', () => {
     const out2 = await findTool(tools, 'popclaw_show_marks').execute('c2', {});
     expect(out2.text).not.toContain('顺一句');
     const cfg = (await host.config.loadJson('plugin')) as { onboarding?: { nudge?: { lifetime?: number } } };
-    expect(cfg.onboarding?.nudge?.lifetime).toBe(1); // 没有重复记账
+    expect(cfg.onboarding?.nudge?.lifetime).toBe(1); // No duplicate recording.
   });
 
   it('runtime 缺 onboardingState/socialGraph 等字段（最小测试桩）→ 尾巴静默退化，不额外抛错', async () => {
-    // marksStore 都不给：popclaw_show_marks 本身会报它自己的 ⚠️ 错误（既有纪律，
-    // 与尾巴无关）——这里只钉尾巴计算不因缺字段而抛出/追加脏文本。
+    // No marksStore: popclaw_show_marks reports its own existing warning. Independently verify tail computation
+    // does not throw or append invalid text because of missing fields.
     const { api, tools } = buildFakeApi();
     registerPopclawTools({
       api,
@@ -1524,7 +1523,7 @@ describe('顺一句 tail（R1 spec §4）', () => {
     });
     const out = await findTool(tools, 'popclaw_show_marks').execute('c1', {});
     expect(out.text).not.toContain('顺一句');
-    expect(out.text).not.toContain('\n\n'); // 没有尾巴段落被追加
+    expect(out.text).not.toContain('\n\n'); // No tail paragraph was appended.
   });
 
   describe('popclaw_mute_notices', () => {
@@ -1549,7 +1548,7 @@ describe('顺一句 tail（R1 spec §4）', () => {
 });
 
 // ---------------------------------------------------------------------------
-// popclaw_note_taste（做梦第 2 步）：onboarding 之后主人随时能往 taste 主权层追加
+// popclaw_note_taste (dream step 2): the owner can append to the sovereign taste layer any time after onboarding.
 // ---------------------------------------------------------------------------
 
 describe('popclaw_note_taste', () => {
@@ -1573,10 +1572,10 @@ describe('popclaw_note_taste', () => {
     });
 
     const md = readFileSync(join(tasteRoot, 'core/private.md'), 'utf-8');
-    // P-002 形态：frontmatter 占位 + 正文照实存原话
+    // P-002 shape: placeholder frontmatter plus verbatim original body.
     expect(md).toMatch(/^---\ntags: \[\]\nmute: \[\]\n---\n/);
     expect(md).toContain('我关心航天工程的实现细节');
-    // manifest 缺失时创建（否则 TasteLoader 看不见）
+    // Create the manifest when absent, or TasteLoader cannot see it.
     const manifest = JSON.parse(readFileSync(join(tasteRoot, 'manifest.json'), 'utf-8'));
     expect(manifest.sources['core/private.md'].enabled).toBe(true);
     expect(out.text).toContain('记下了');
@@ -1592,7 +1591,7 @@ describe('popclaw_note_taste', () => {
 
     const md = readFileSync(join(tasteRoot, 'core/private.md'), 'utf-8');
     expect(md).toContain('我不想再看币圈喊单');
-    expect(md).toContain('mute: []'); // 仍是空占位，没被自作聪明填上
+    expect(md).toContain('mute: []'); // Still an empty placeholder, not filled automatically.
   });
 
   it('多次调用追加不覆盖（主权层绝不丢主人写过的字）', async () => {
@@ -1606,7 +1605,7 @@ describe('popclaw_note_taste', () => {
     const md = readFileSync(join(tasteRoot, 'core/private.md'), 'utf-8');
     expect(md).toContain('第一句：我关心开源治理');
     expect(md).toContain('第二句：也关心分布式系统');
-    expect(md.match(/^---$/gm)).toHaveLength(2); // 只有一份 frontmatter
+    expect(md.match(/^---$/gm)).toHaveLength(2); // Only one frontmatter block.
   });
 
   it('空白 note → 不建文件，回话引导主人说点什么', async () => {
@@ -1633,15 +1632,15 @@ describe('popclaw_note_taste', () => {
     setOwnerLang('zh-CN', 'config'); // restore file default for tests after this one
   });
 
-  // 通用画布：agent 在自己这一轮渲好 HTML，直接递过来 —— 不必先落盘再走斜杠命令。
-  // 这是「工具出素材、agent 自渲染」铁律在画布上的最后一块拼图。
+  // General canvas: the agent renders HTML in its own turn and hands it over directly, without saving a file and using a slash command.
+  // This completes the canvas application of the rule: tools supply material, agents render it.
   ;
 
   // -------------------------------------------------------------------------
   // popclaw_feedback (ADR-0042)
   //
-  // 真机 2026-07-29：主人的 agent 把反馈正文都拟好了，却发不出去 —— 反馈只挂了
-  // 斜杠命令，没挂工具。整条功能的重点恰恰是**agent** 报自己撞的墙。
+  // Real host, 2026-07-29: the owner's agent had drafted feedback but could not send it: feedback existed only
+  // as a slash command, not a tool, despite the feature being for agents to report their blockers.
   // -------------------------------------------------------------------------
   describe('popclaw_feedback', () => {
     const contactId = bs58.encode(nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(9)).publicKey);
@@ -1655,9 +1654,9 @@ describe('popclaw_note_taste', () => {
       '正文',
     ].join('\n');
 
-    // 真机 2026-09-21：世界动作失败后，模型没人要求就自己寄了一封反馈给主坊
-    // 联系人。信是一封对外私信，因此 agent 这条路只出草稿，由主人确认后
-    // popclaw_send_draft 才真发 —— 和别的对外私信同一道门。
+    // Real host, 2026-09-21: after a world action failed, the model sent unsolicited feedback to the primary House
+    // contact. This is an outbound DM, so the agent entry must only draft it; after owner confirmation,
+    // popclaw_send_draft sends through the same gate as every other outbound DM.
     it('drafts the feedback for the guide-declared contact, and only the confirmation sends it', async () => {
       const { api, tools } = buildFakeApi();
       const push = vi.fn(async (_b: Uint8Array) => ({ status: 200, eventId: 'ab'.repeat(32) }));
@@ -1674,14 +1673,14 @@ describe('popclaw_note_taste', () => {
         body: '想做什么：把会话存成帖子\n卡在哪里：没有这个工具',
       });
 
-      expect(push).not.toHaveBeenCalled(); // 一次工具调用 = 零外发
-      expect(draft.text).toContain('苍梧'); // 草稿点名收信人
-      expect(draft.text).toContain('卡在哪里：没有这个工具'); // 和信的原文
+      expect(push).not.toHaveBeenCalled(); // One tool call means zero outbound sends.
+      expect(draft.text).toContain('苍梧'); // The draft names its recipient
+      expect(draft.text).toContain('卡在哪里：没有这个工具'); // and includes the original letter text.
 
       const token = draftToken(draft.text)!;
       const sent = await sendDraftConfirmed(findTool(tools, 'popclaw_send_draft').execute, token!);
 
-      expect(push).toHaveBeenCalledTimes(1); // 走的就是普通私信那条路（签名+加密）
+      expect(push).toHaveBeenCalledTimes(1); // It uses the ordinary DM route (signing + encryption).
       expect(sent.text).toContain('bug 反馈已加密送出');
       expect(sent.text).toContain('联系人苍梧');
     });
@@ -1741,7 +1740,7 @@ describe('popclaw_note_taste', () => {
       expect(r.text).toContain('未发送');
     });
 
-    // 说明书没声明联系人 → 诚实报错，并且报的是**这座坊**（houseSlug 接线的闸）。
+    // No contact declared in the guide: report an honest error naming this House (houseSlug wiring guard).
     it('names the house honestly when no feedback contact is declared', async () => {
       const { api, tools } = buildFakeApi();
       const push = vi.fn(async (_b: Uint8Array) => ({ status: 200, eventId: 'ab'.repeat(32) }));
@@ -1755,7 +1754,7 @@ describe('popclaw_note_taste', () => {
 
       const r = await findTool(tools, 'popclaw_feedback').execute('c', { kind: 'need', body: 'x' });
 
-      // makeMockRuntime 的主坊是 http://localhost:9000 → hostDbSlug。
+      // makeMockRuntime's primary House is http://localhost:9000, yielding hostDbSlug.
       expect(r.text).toContain('localhost-9000');
       expect(push).not.toHaveBeenCalled();
     });
@@ -1763,9 +1762,9 @@ describe('popclaw_note_taste', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 提议各决定面的对象展示走「名号#印信」
-// 名字链，绝不裸 id 前缀；直接设档（manual tier move）settle 该人 pending
-// 提议——命中的记 accepted，被行动盖过的记 rejected。
+// All proposal-decision surfaces display their target through the nickname#sigil
+// name chain, never bare ID prefixes. Manual tier changes settle that person's pending
+// proposals: matching ones accepted, superseded ones rejected.
 // ---------------------------------------------------------------------------
 
 describe('bond proposal surfaces — 名字链 + 直接设档 settle', () => {

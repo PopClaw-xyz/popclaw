@@ -22,15 +22,13 @@ import type { ToolsCtx } from './tools-context.js';
 import { formatPerson } from '../identity/person-resolver.js';
 import { deriveSigil } from '../invite/sigil.js';
 import {
-  draftDigest, noteDraftPreview, noteDraftToolOutput, putDraft,
+  draftDigest,
   type DraftAttachmentSnapshot, type DraftSnapshot,
 } from './draft-store.js';
 import { loadDmAttachment } from '../messaging/dm-media.js';
 import { checkDirectMessageFits } from '../messaging/sign-message.js';
 import { deliverDraftPreview, draftResultText } from './draft-preview-delivery.js';
-import { withDraftReview } from './draft-review.js';
-import {retainSocialDraft, socialDraftToken} from './durable-social-drafts.js';
-import {pinSocialSendPlan} from './draft-send-plan.js';
+import {beginSocialDraft} from './social-draft-lifecycle.js';
 
 // Build provenance for the `[feedback/v1]` header — same esbuild `define` as
 // index.ts / mcp.ts. Unbundled (tests, tsx) there is no define; say so honestly.
@@ -93,6 +91,7 @@ function feedbackSnapshot(plan: FeedbackDraftPlan, attachment?: DraftAttachmentS
 /** Feedback + cadence registrations, in their original order. */
 export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
   const { api, runtime, total, deps } = ctx;
+  const draftDeps = {...deps, runtime};
 
   // ADR-0042 — the agent speaks to the vendor directly. The whole point of this feature is
   // that **the agent itself** reports the wall it hit: on real hardware, 2026-07-29, the
@@ -124,7 +123,8 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
     parameters: FeedbackSchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { kind: string; body: string; house?: string; attach_doctor_report?: boolean };
-      const rt = (await runtime()) as {
+      const draftRuntime = await runtime();
+      const rt = draftRuntime as {
         boot: {
           signer: Signer;
           nickname: string;
@@ -195,25 +195,23 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
                 throw err;
               }
             }
-            const token = await socialDraftToken(deps, 'message');
             // A letter is parked under the `message` prefix because it is an
             // outbound DM and must clear the DM door, but what the owner is
             // asked to approve is a letter — so the snapshot says so, and it
             // carries the same recipient, house and complete text the preview
             // below shows; the id is only an internal lookup handle.
-            putDraft(token, send, {...feedbackSnapshot(plan, attachment), binding: socialDraftBinding(deps.socialSendHost, toolCtx),
-              ...(deps.durableSocialDrafts ? {sendPlan: {...pinSocialSendPlan(await runtime(), plan.house),
-                person: {popclawId: plan.contactPopclawId, nickname: plan.contactName ?? '', sigil: deriveSigil(plan.contactPopclawId)},
-                receiptPrefix: plan.receiptPrefix, receiptSuffix: plan.receiptSuffix}} : {})});
+            const draft = await beginSocialDraft(draftDeps,
+              feedbackSnapshot(plan, attachment),
+              deps.durableSocialDrafts ? runtime : draftRuntime, {person: {popclawId: plan.contactPopclawId, nickname: plan.contactName ?? '', sigil: deriveSigil(plan.contactPopclawId)},
+                receiptPrefix: plan.receiptPrefix, receiptSuffix: plan.receiptSuffix},
+              () => socialDraftBinding(deps.socialSendHost, toolCtx), {feedbackSend: send});
+            const token = draft.id;
             const preview = feedbackDraftPreview(plan, token, ownerLang());
             const outcome = await deliverDraftPreview(toolCtx, preview);
-            noteDraftPreview(token, preview, outcome.status);
             // The letter as the host will render it in its own transcript:
             // this text is what `popclaw_feedback` returns, unchanged
             // (popclaw-feedback.ts hands a draftDm result straight back).
-            const text = withDraftReview(token, draftResultText(preview, outcome), deps.draftReviewFiles);
-            noteDraftToolOutput(token, text);
-            await retainSocialDraft(deps, token);
+            const text = await draft.complete(preview, outcome.status, draftResultText(preview, outcome));
             return { text };
           },
           // react is not wired in: kind is a bug|need enum, so a typed tool can never reach the deprecated up/down alias.
