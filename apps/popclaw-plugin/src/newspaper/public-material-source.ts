@@ -105,7 +105,10 @@ export class NewspaperPublicMaterialSource {
         throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_BASIS_MISSING');
       if (!Array.isArray(issue.publicCoverage) || Object.keys(issue.byHouse).some(slug => !issue.publicCoverage!.some(source => source.slug === slug)))
         throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_COVERAGE_MISSING');
-      const sources = this.runtime.publicMaterialSources(), seen = new Set<string>(), captures: PublicMaterialCapture[] = [];
+      const sources = this.runtime.publicMaterialSources(), seen = new Set<string>();
+      // Reuse only this synchronous validation's source capture. Individual
+      // references still verify their signed bytes and current authority.
+      const captures = new Map<(typeof sources)[number], PublicMaterialCapture>();
       for (const p of issue.pulse) {
         const key = JSON.stringify([p.eventId, p.houseSlug]);
         if (seen.has(key)) throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_REFERENCE_CONFLICT'); seen.add(key);
@@ -114,7 +117,9 @@ export class NewspaperPublicMaterialSource {
           || ref.materialDigest !== materialDigest(p)) throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_MATERIAL_CHANGED');
         const source = sources.find(s => s.origin === ref.origin && s.slug === ref.slug);
         if (!source) throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_SOURCE_MISSING');
-        const capture = source.capture(); capture.assertCurrent();
+        let capture = captures.get(source);
+        if (!capture) { capture = source.capture(); captures.set(source, capture); }
+        capture.assertCurrent();
         if (capture.authority !== ref.authority) throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_SOURCE_UPDATED');
         readPublicJournalSnapshot(capture.executionDb, db => {
           if (frameDigest(capture, ref.eventId, ref.sequence) !== ref.frameDigest) throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_EVIDENCE_CHANGED');
@@ -126,9 +131,20 @@ export class NewspaperPublicMaterialSource {
           if (hit.body !== p.text)
             throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_BODY_CHANGED');
         });
-        capture.assertCurrent(); captures.push(capture);
+        capture.assertCurrent();
       }
-      for (const capture of captures) capture.assertCurrent();
+      // Lightweight currentness checks do not cover full partition integrity.
+      // Recheck every touched source after all references, including damage to
+      // an earlier source while a later source was being read.
+      for (const [source, capture] of captures) {
+        const checked = source.capture(); checked.assertCurrent();
+        if (checked.executionDb !== capture.executionDb || checked.authority !== capture.authority
+          || JSON.stringify(checked.capability) !== JSON.stringify(capture.capability)
+          || JSON.stringify(checked.producerPolicy) !== JSON.stringify(capture.producerPolicy))
+          throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_SOURCE_UPDATED');
+        capture.assertCurrent();
+      }
+      for (const capture of captures.values()) capture.assertCurrent();
     } catch (error) { if (error instanceof PublicMaterialRefusal) throw error;
       throw new PublicMaterialRefusal(error instanceof Error ? error.message : 'NEWSPAPER_PUBLIC_SOURCE_REFUSED'); }
   }

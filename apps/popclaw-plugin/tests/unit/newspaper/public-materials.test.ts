@@ -9,7 +9,8 @@ import { cidFromCanonical } from '@popclaw/algorithms';
 import { MockAgent, getGlobalDispatcher, setGlobalDispatcher } from 'undici';
 import { uploadCanvas } from '../../../src/egress/canvas-egress.js';
 import { noteContextTokenBudget, _resetBudgetForTest } from '../../../src/newspaper/host-budget.js';
-import { publicMaterialSource } from '../../../src/newspaper/public-material-source.js';
+import { publicMaterialSource, NewspaperPublicMaterialSource } from '../../../src/newspaper/public-material-source.js';
+import { hostDbSlug } from '../../../src/ingress/host-slug.js';
 import { readNewspaperDocument } from '../../../src/newspaper/reading-page.js';
 import { NewspaperOutcomeStore, NewspaperStageStore, runDedicatedNewspaper, type NewspaperDispatchRecord } from '../../../src/newspaper/dedicated-session.js';
 import { LocalHostDb } from '../../../src/host/local-host-db.js';
@@ -58,26 +59,26 @@ const displayPin = Buffer.from(displayPair.publicKey).toString('hex');
 
 /** All initialization is explicit fixture setup; capture must only borrow the
  * selected handle after this setup has finished. No real host files are used. */
-async function displayFixture() {
+async function displayFixture(origin = displayOrigin) {
   const root = mkdtempSync(join(tmpdir(), 'house-runtime-display-'));
   displayCleanup.push(() => rmSync(root, { recursive: true, force: true }));
   const paths = new PopclawPaths(root), db = new LocalHostDb(paths.socialDb());
   displayCleanup.push(() => db.close());
   runMigrations(db, join(import.meta.dirname, '../../../migrations'));
-  establishTrust(db, {origin:displayOrigin, houseKey:bs58.encode(displayPair.publicKey), incarnation:'display_house_1'}, 'configured');
+  establishTrust(db, {origin:origin, houseKey:bs58.encode(displayPair.publicKey), incarnation:'display_house_1'}, 'configured');
   ensureHouseLifecycleSchema(db);
-  db.execute("INSERT INTO house_participation(house_origin,installation_id,desired,phase,op_seq,ack_key_hex) VALUES(?,'fixture','enabled','disconnected',1,?)", [displayOrigin, displayPin]);
+  db.execute("INSERT INTO house_participation(house_origin,installation_id,desired,phase,op_seq,ack_key_hex) VALUES(?,'fixture','enabled','disconnected',1,?)", [origin, displayPin]);
   const catalog = new ExecutionStoreCatalog({ db, paths, actorId: bs58.encode(displayPair.publicKey) });
   displayCleanup.push(() => catalog.close());
-  const partition = catalog.open(displayOrigin);
+  const partition = catalog.open(origin);
   async function observe(log = 'display_log_1', officialIds: unknown = []) {
     const rawBytes = new TextEncoder().encode(JSON.stringify({ official_ids: officialIds, world_interaction: { version: 1,
       public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: log, envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: [] } } }));
-    const core = { house: { origin: displayOrigin, houseKey: bs58.encode(displayPair.publicKey), incarnation: 'display_house_1' },
+    const core = { house: { origin: origin, houseKey: bs58.encode(displayPair.publicKey), incarnation: 'display_house_1' },
       manifestDigest: cidFromCanonical(rawBytes), signedAt: 1 };
     const bytes = popclaw.world.ManifestProof.encode(core).finish(), prefix = new TextEncoder().encode('POPCLAW_WORLD_MANIFEST_PROOF_V1');
     const signing = new Uint8Array(prefix.length + bytes.length); signing.set(prefix); signing.set(bytes, prefix.length);
-    const prepared = await makeWorldManifestPreparer()({ origin: displayOrigin, rawBytes, ackKeyHex: displayPin,
+    const prepared = await makeWorldManifestPreparer()({ origin: origin, rawBytes, ackKeyHex: displayPin,
       provenance: 'configured_pin', signal: new AbortController().signal,
       proofHeader: Buffer.from(popclaw.world.ManifestProof.encode({ ...core,
         authoritySignature: nacl.sign.detached(signing, displayPair.secretKey) }).finish()).toString('base64') });
@@ -85,15 +86,15 @@ async function displayFixture() {
   }
   await observe();
   const maintenance = MaintenanceSession.begin(db, paths, 'display fixture initialization');
-  initializePublicStreamJournal({ catalog, origin: displayOrigin, maintenance, configuredPin: displayPin });
+  initializePublicStreamJournal({ catalog, origin: origin, maintenance, configuredPin: displayPin });
   maintenance.finish({ recovery: false, reason: 'synthetic journal initialized' });
   db.execute("UPDATE house_participation SET phase='connected',session_id='test_session',house_revision=5,lease_expires_at=?", [Math.floor(Date.now()/1000)+3600]);
   let pin = displayPin;
-  const rt = new HouseRuntime({ readAuthorityFor: refusingReadAuthorityFor, db, signer: {} as Signer, origins: [displayOrigin], publicV1Mode: true,
+  const rt = new HouseRuntime({ readAuthorityFor: refusingReadAuthorityFor, db, signer: {} as Signer, origins: [origin], publicV1Mode: true,
     executionStores: catalog, configuredPinFor: () => pin });
   instances.push(rt);
   const cacheRecord = vi.fn();
-  const house = { baseUrl: displayOrigin, slug: 'display-runtime-invalid', db: partition.db,
+  const house = { baseUrl: origin, slug: hostDbSlug(origin), db: partition.db,
     executionDb: partition.db, dbPath: partition.path, cacheReadOnly: true,
     cache: { record: cacheRecord } } as unknown as HouseStore;
   const openStore = vi.fn(async () => house);
@@ -104,13 +105,13 @@ async function displayFixture() {
 }
 
 
-async function newspaperFixture(avatar = false) {
-  const f = await displayFixture();
+async function newspaperFixture(avatar = false, origin = displayOrigin) {
+  const f = await displayFixture(origin);
   const captured = f.rt.capturePublicDisplay(f.house);
   const journal = new PublicStreamJournal({ executionDb: f.partition.db, capability: captured.capability,
     producerPolicy: captured.producerPolicy, selection: { fullPublic: true, scopes: [] }, consumerContracts: [],
     approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST,
-    gate: { origin: displayOrigin, signal: new AbortController().signal, isActive: () => true } });
+    gate: { origin: origin, signal: new AbortController().signal, isActive: () => true } });
   journal.activate();
   const boundary = popclaw.world.PublicStreamBoundary.fromObject({ logIncarnation: 'display_log_1', highWaterSeq: '100', fullPublic: true });
   const generation = journal.begin(boundary, popclaw.world.PublicStreamBoundary.encode(boundary).finish(), journal.request());
@@ -121,7 +122,7 @@ async function newspaperFixture(avatar = false) {
   journal.append(generation, popclaw.event.WorldStreamFrame.encode({ seq: 1, kind: 'post', envelope: raw, ...(avatar ? { projection: { eventId, platform: 'popclaw', platformPostId: eventId, authorPopclawId: bs58.encode(displayPair.publicKey), actorVerified: [{ platform:'x', handle:'astronomy_fixture' }] } } : {}) }).finish());
   const cacheDb = new LocalHostDb(join(f.paths.socialDb(), '..', 'empty-cache.db')); displayCleanup.push(() => cacheDb.close());
   const cache = new WorldFeedCache({ db: cacheDb }); await cache.start();
-  const display = new PublicFeedDisplay({ sources: () => [{ origin: displayOrigin, slug: f.house.slug, capture: () => f.rt.capturePublicDisplay(f.house) }] });
+  const display = new PublicFeedDisplay({ sources: () => [{ origin, slug: f.house.slug, capture: () => f.rt.capturePublicDisplay(f.house) }] });
   const runtime = { houseRuntime: f.rt, publicFeedDisplay: display, worldFeedCache: cache,
     houseFeedReader: new HouseFeedReader({ db: f.db, houses: f.rt, stores: () => [f.house] }),
     inboxStore: { recent: () => [] }, socialGraph: { followsIn: () => false },
@@ -625,4 +626,189 @@ it('records only bounded read diagnostic fields and clears them after a successf
   expect(JSON.stringify(NewspaperStageStore.peek(key))).not.toContain('never-store');
   NewspaperStageStore.note(key, 'candidatePage');
   expect(NewspaperStageStore.peek(key)?.collectionFailure).toBeUndefined();
+});
+
+
+async function costFixture(count: number, origin = displayOrigin) {
+  const f = await newspaperFixture(false, origin);
+  for (let seq = 2; seq <= count; seq++) {
+    const e = { actor: { popclawId: bs58.encode(displayPair.publicKey), nickname: 'Journal author' },
+      timestamp: Math.floor(Date.now()/1000), post: { blocks: [{ content: `Astronomy material ${seq}: a distinct verified journal observation for local cost measurement.` }] } };
+    const bytes = canonicalizeEnvelope(e), eventId = cidFromCanonical(bytes);
+    const raw = popclaw.event.EventEnvelope.encode({ ...e, eventId,
+      signature: nacl.sign.detached(bytes, displayPair.secretKey) }).finish();
+    f.journal.append(f.generation, popclaw.event.WorldStreamFrame.encode({ seq, kind: 'post', envelope: raw }).finish());
+  }
+  return f;
+}
+
+it.each([8, 16])('keeps full partition verification constant for %i signed local candidates', async count => {
+  const f = await costFixture(count);
+  const integrity = vi.spyOn(f.partition.db, 'queryOne');
+  const selected = vi.spyOn(f.catalog, 'verifySelected');
+  const capture = vi.spyOn(f.rt, 'capturePublicMaterial');
+  const verify = vi.spyOn(nacl.sign.detached, 'verify');
+  const scan = vi.spyOn(publicJournal, 'readPublicJournal');
+  const start = performance.now();
+  const candidate = await gather(f);
+  const profile = { elapsedMs: performance.now()-start, candidates: candidate.issue.pulse.length,
+    integrity: integrity.mock.calls.filter(([sql]) => sql === 'PRAGMA integrity_check').length,
+    selected: selected.mock.calls.length, capture: capture.mock.calls.length,
+    verify: verify.mock.calls.length, scan: scan.mock.calls.length };
+  console.log('LOCAL_JOURNAL_PROFILE', JSON.stringify(profile));
+  expect(profile.candidates).toBe(count);
+  expect(fetch).not.toHaveBeenCalled();
+  // Keep both full material validations and their real signature checks.
+  expect(profile.verify).toBe(3*count);
+  expect(profile.scan).toBe(1+2*count);
+  // One collection capture, plus initial and final captures per validation.
+  expect(profile.capture).toBe(5);
+  expect(profile.integrity).toBe(12);
+}, 30_000);
+
+it('returns local signed candidates within budget when integrity checks have modeled synchronous cost', async () => {
+  const f = await costFixture(8), query = f.partition.db.queryOne.bind(f.partition.db);
+  const baseline = Date.now(); let modeledMs = 0, integrityChecks = 0;
+  vi.spyOn(Date, 'now').mockImplementation(() => baseline+modeledMs);
+  vi.spyOn(f.partition.db, 'queryOne').mockImplementation((...args) => {
+    const result = query(...args);
+    if (args[0] === 'PRAGMA integrity_check') { integrityChecks++; modeledMs += 350; }
+    return result;
+  });
+  const session = childSessionKey('local-cost-regression');
+  const result = await f.tools(session)('popclaw_newspaper', { hours: 24 });
+  const manifests = existsSync(f.paths.newspaperManifestsDir()) ? readdirSync(f.paths.newspaperManifestsDir()).filter(n => n.endsWith('.json')) : [];
+  console.log('MODELED_LOCAL_CPU', JSON.stringify({ modeledMs, integrityChecks, manifests: manifests.length,
+    stage: NewspaperStageStore.peek(session), candidateReturned: result.text.includes('candidate_basis') }));
+  expect(fetch).not.toHaveBeenCalled();
+  expect(result.text).toContain('candidate_basis');
+}, 30_000);
+
+
+it.each(['later frame', 'revoked lease', 'catalog replacement', 'mounted handle replacement'])(
+  'multi-reference validation rejects %s during a local read', async change => {
+  const f = await costFixture(2), candidate = await gather(f), source = publicMaterialSource(f.runtime)!;
+  expect(() => source.validate(candidate.issue)).not.toThrow();
+  const original = publicJournal.readPublicJournal;
+  let calls = 0;
+  vi.spyOn(publicJournal, 'readPublicJournal').mockImplementation((...args) => {
+    const result = original(...args);
+    if (++calls === 1) {
+      if (change === 'later frame') f.partition.db.execute("UPDATE world_public_frames_v1 SET frame_bytes=x'00' WHERE event_id=?", [candidate.issue.pulse[1]!.eventId]);
+      if (change === 'revoked lease') f.db.execute('UPDATE house_participation SET lease_expires_at=1');
+      if (change === 'catalog replacement') f.db.execute("UPDATE execution_store_catalog_v1 SET store_id='replaced_store'");
+      if (change === 'mounted handle replacement') {
+        const replacement = new LocalHostDb(join(f.paths.socialDb(), '..', 'replacement.db'));
+        displayCleanup.push(() => replacement.close()); Object.assign(f.house, { executionDb: replacement });
+      }
+    }
+    return result;
+  });
+  expect(() => source.validate(candidate.issue)).toThrow();
+  expect(fetch).not.toHaveBeenCalled(); expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+});
+
+it('full final partition recheck rejects damage after the last signed reference', async () => {
+  const f = await costFixture(2), candidate = await gather(f), source = publicMaterialSource(f.runtime)!;
+  expect(() => source.validate(candidate.issue)).not.toThrow();
+  const original = publicJournal.readPublicJournal;
+  let calls = 0;
+  vi.spyOn(publicJournal, 'readPublicJournal').mockImplementation((...args) => {
+    const result = original(...args);
+    if (++calls === candidate.issue.pulse.length) {
+      // Valid table names, identity, schema and signed frames remain unchanged.
+      // A cheap currentness fence cannot detect a row violating its real CHECK.
+      f.partition.db.execute('PRAGMA ignore_check_constraints=ON');
+      f.partition.db.execute('UPDATE world_public_cursors_v1 SET stale=2');
+      f.partition.db.execute('PRAGMA ignore_check_constraints=OFF');
+    }
+    return result;
+  });
+  expect(() => source.validate(candidate.issue)).toThrow('EXECUTION_PARTITION_CORRUPT');
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+});
+
+it.each(['frame', 'lease', 'partition identity'])(
+  'starts a fresh validation on the next call after %s changes', async change => {
+  const f = await costFixture(2), candidate = await gather(f), source = publicMaterialSource(f.runtime)!;
+  expect(() => source.validate(candidate.issue)).not.toThrow();
+  if (change === 'frame') f.partition.db.execute("UPDATE world_public_frames_v1 SET frame_bytes=x'00'");
+  if (change === 'lease') f.db.execute('UPDATE house_participation SET lease_expires_at=1');
+  if (change === 'partition identity') f.partition.db.execute("UPDATE execution_partition_identity_v1 SET actor_id='replacement'");
+  expect(() => source.validate(candidate.issue)).toThrow();
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+});
+
+
+it.each(['execution DB', 'capability', 'producer policy'])(
+  'final recapture rejects a different %s even with the same authority string', async change => {
+  const f = await costFixture(2), candidate = await gather(f), source = publicMaterialSource(f.runtime)!;
+  const original = f.rt.capturePublicMaterial.bind(f.rt);
+  const replacement = new LocalHostDb(join(f.paths.socialDb(), '..', 'unselected.db'));
+  displayCleanup.push(() => replacement.close());
+  let calls = 0;
+  vi.spyOn(f.rt, 'capturePublicMaterial').mockImplementation(house => {
+    const captured = original(house);
+    if (++calls !== 2) return captured;
+    if (change === 'execution DB') return { ...captured, executionDb: replacement };
+    if (change === 'capability') return { ...captured, capability: { ...captured.capability, capabilityRevision: 'changed' } };
+    return { ...captured, producerPolicy: { ...captured.producerPolicy, officialActorIds: ['changed'] } };
+  });
+  expect(() => source.validate(candidate.issue)).toThrow('NEWSPAPER_PUBLIC_SOURCE_UPDATED');
+  expect(calls).toBe(2);
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+});
+
+
+async function twoSourceCandidate() {
+  const a = await costFixture(2), b = await costFixture(2, 'https://second-display.invalid');
+  const first = await gather(a), second = await gather(b);
+  const source = new NewspaperPublicMaterialSource({ publicMaterialSources: () => [
+    ...a.rt.publicMaterialSources(), ...b.rt.publicMaterialSources(),
+  ] });
+  const issue = { ...first.issue, pulse: [...first.issue.pulse, ...second.issue.pulse],
+    byHouse: { ...first.issue.byHouse, ...second.issue.byHouse },
+    publicCoverage: [...first.issue.publicCoverage!, ...second.issue.publicCoverage!],
+    publicMaterials: { version: 1 as const, references: [
+      ...first.issue.publicMaterials!.references, ...second.issue.publicMaterials!.references,
+    ] } };
+  return { a, b, source, issue };
+}
+
+it('fully rechecks both real source partitions after reading all references', async () => {
+  const { a, b, source, issue } = await twoSourceCandidate();
+  const first = vi.spyOn(a.rt, 'capturePublicMaterial'), second = vi.spyOn(b.rt, 'capturePublicMaterial');
+  expect(() => source.validate(issue)).not.toThrow();
+  expect(first).toHaveBeenCalledTimes(2); expect(second).toHaveBeenCalledTimes(2);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it('final full recheck detects earlier-source corruption while reading a later source', async () => {
+  const { a, b, source, issue } = await twoSourceCandidate();
+  expect(() => source.validate(issue)).not.toThrow();
+  const original = publicJournal.readPublicJournal;
+  vi.spyOn(publicJournal, 'readPublicJournal').mockImplementation((...args) => {
+    const result = original(...args);
+    if (args[2].origin === b.house.baseUrl) {
+      a.partition.db.execute('PRAGMA ignore_check_constraints=ON');
+      a.partition.db.execute('UPDATE world_public_cursors_v1 SET stale=2');
+      a.partition.db.execute('PRAGMA ignore_check_constraints=OFF');
+    }
+    return result;
+  });
+  expect(() => source.validate(issue)).toThrow('EXECUTION_PARTITION_CORRUPT');
+});
+
+it('last currentness fence detects earlier-source revocation during later-source recapture', async () => {
+  const { a, b, source, issue } = await twoSourceCandidate();
+  expect(() => source.validate(issue)).not.toThrow();
+  const original = b.rt.capturePublicMaterial.bind(b.rt);
+  let captures = 0;
+  vi.spyOn(b.rt, 'capturePublicMaterial').mockImplementation(house => {
+    const captured = original(house);
+    if (++captures === 2) a.db.execute('UPDATE house_participation SET lease_expires_at=1');
+    return captured;
+  });
+  expect(() => source.validate(issue)).toThrow('NEWSPAPER_PUBLIC_AUTHORITY_CHANGED');
+  expect(captures).toBe(2);
 });
