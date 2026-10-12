@@ -3,7 +3,7 @@ import {SummaryReadReuse} from '../../../src/world/summary-read-reuse.js';
 import type {WorldSummaryResult} from '../../../src/world/world-summary-client.js';
 const failure:WorldSummaryResult={ok:false,failure:{code:'HOUSE_REMOTE_TIMEOUT',diagnostic:{phase:'fetch',cause:'timeout',timeoutMs:10000}}};
 const success:WorldSummaryResult={ok:true,summary:{window_hours:24,generated_at_ms:1,total_posts:1,distinct_authors:1,authors:{},hot_posts:[]}};
-const clientScope=()=>{const generation=scope();return {captureReadGeneration:()=>generation};};
+const clientScope=()=>{const generation=scope();return {captureReadGeneration:()=>generation,validateCachedResult:(result:WorldSummaryResult)=>result};};
 const scope=()=>({token:{},requestToken:{},isCurrent:()=>true});
 function deferred() {let resolve!:(value:WorldSummaryResult)=>void;const promise=new Promise<WorldSummaryResult>(r=>{resolve=r;});return {promise,resolve};}
 it('coalesces simultaneous reads without caching a completed successful overview',async()=>{
@@ -108,4 +108,14 @@ it('rechecks source and access before reusing a successful cached fallback',asyn
   expect(await reuse.read(request,client,24,false,work)).toMatchObject({ok:false,failure:{code:'HOUSE_ACTION_STALE'}});
   expect(validateCachedResult).toHaveBeenCalledTimes(1);
   expect(work).toHaveBeenCalledTimes(1);
+});
+it('revalidates a pending fresh success against a changed binding even with the same generation token',async()=>{
+  const reuse=new SummaryReadReuse(),request=scope(),wait=deferred();
+  let binding='old';
+  const client={...clientScope(),validateCachedResult:(result:WorldSummaryResult)=>binding==='old' ? result : {ok:false as const,failure:{code:'HOUSE_ACTION_STALE' as const}}};
+  const first=reuse.read(request,client,24,false,()=>wait.promise);
+  const second=reuse.read(request,client,24,false,()=>wait.promise);
+  await Promise.resolve();binding='new';wait.resolve(success);
+  await first;
+  expect(await second).toMatchObject({ok:false,failure:{code:'HOUSE_ACTION_STALE'}});
 });

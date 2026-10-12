@@ -297,3 +297,19 @@ it('returns a dated cached guide within the refresh cap when the remote body sta
   expect(Date.now()-started).toBeLessThan(4000);
   expect(result).toMatchObject({status:'available',guide:body,freshness:{status:'refresh_failed',fetchedAtMs:null,attemptedAtMs:expect.any(Number),failure:{code:'HOUSE_REMOTE_TIMEOUT'}}});
 });
+
+it('rebuilds a joined read under the live waiter gate after the initiating action is revoked',async()=>{
+  const {withAction}=await import('../../../src/runtime/house-lifecycle/action-context.js');
+  const f=fixture(),a=new AbortController(),b=new AbortController();
+  let release!:(response:Response)=>void, callsB=0;
+  const first=withAction({signal:a.signal,isActive:()=>!a.signal.aborted},()=>readHouseGuideContext(f.db,ORIGIN,()=>new Promise<Response>(r=>{release=r;}),()=>!a.signal.aborted));
+  await new Promise(r=>setTimeout(r,5));
+  const second=withAction({signal:b.signal,isActive:()=>true},()=>readHouseGuideContext(f.db,ORIGIN,async()=>{callsB++;return new Response('B authorized guide');},()=>true));
+  await new Promise(r=>setTimeout(r,5));a.abort();
+  await first;
+  expect(await second).toMatchObject({status:'available',guide:'B authorized guide'});
+  expect(callsB).toBe(1);
+  release(new Response('A late guide'));
+  await new Promise(r=>setTimeout(r,5));
+  expect(f.row()?.guide_body).toBe('B authorized guide');
+});
