@@ -1,4 +1,5 @@
 import { deferred } from '../../helpers/deferred.js';
+import { configuredOwnerTz, setOwnerTz } from '../../../src/time/time-context.js';
 /** Normal tool registration with real read clients and synthetic transports only. */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
@@ -72,29 +73,56 @@ describe('summary declaration at the real registered first-use tool', () => {
     }
   });
 
-  it('waits for the guide, starts summary before snapshot without waiting, and tolerates snapshot rejection', async () => {
+  it('waits for the guide then reads the complete declared summary without a sampled feed', async () => {
     setOwnerLang('en', 'config');
+    const previousTz = configuredOwnerTz();
+    setOwnerTz('UTC');
+    const snapshot = JSON.parse(readFileSync(new URL('../../fixtures/world-summary-snapshot.json', import.meta.url), 'utf8'));
+    const complete = { ...summary, generated_at_ms: snapshot.generated_at_ms, snapshot };
     const guide = deferred<Response>();
     const summaryReply = deferred<Response>();
-    const snapshotReply = deferred<never[]>();
     const trace: string[] = [];
     const h = setup(socialGuide, () => { trace.push('summary'); return summaryReply.promise; }, () => guide.promise);
-    h.snapshot.mockImplementation(() => { trace.push('snapshot'); return snapshotReply.promise; });
-    const call = h.tool.execute('concurrent', { window_hours: 1 });
-    await vi.waitFor(() => expect(h.requests).toHaveLength(1));
-    expect(trace).toEqual([]);
-    guide.resolve(new Response(socialGuide));
-    await vi.waitFor(() => expect(trace).toEqual(['summary', 'snapshot']));
-    snapshotReply.reject(new Error('snapshot unavailable'));
-    summaryReply.resolve(Response.json(summary));
-    expect(await call).toMatchInlineSnapshot(`
-      {
-        "text": "📜 World digest (last 1h: 17 posts / 4 people posting)
-
-      Nobody's replied to anything in this window yet — the world just woke up, or the lore-house just opened.",
-        "type": "text",
-      }
-    `);
+    h.snapshot.mockImplementation(async () => { trace.push('snapshot'); throw new Error('sampled feed is not a summary input'); });
+    let settled = false;
+    const call = h.tool.execute('complete-summary', { window_hours: 1 }).then(result => { settled = true; return result; });
+    try {
+      await vi.waitFor(() => expect(h.requests.map(r => r.url)).toEqual([`${origin}/v1/guide.md`]));
+      expect(trace).toEqual([]);
+      expect(settled).toBe(false);
+      expect(h.snapshot).not.toHaveBeenCalled();
+      guide.resolve(new Response(socialGuide));
+      await vi.waitFor(() => expect(trace).toEqual(['summary']));
+      expect(settled).toBe(false);
+      expect(h.requests.map(r => r.url)).toEqual([`${origin}/v1/guide.md`, `${origin}/v1/world-summary?window_hours=1`]);
+      summaryReply.resolve(Response.json(complete));
+      const result = await call as { text: string };
+      expect(result.text).toContain(`Read status: fresh; source: ${origin}; fetched:`);
+      expect(result.text).toContain('; checked:');
+      expect(result.text).toContain('; last attempt:');
+      expect(result.text).toContain('Public summary · generated 2026-10-11 14:20 (UTC) · through 2026-10-11 14:20 (UTC)');
+      expect(result.text).toContain(`house ${snapshot.house_id}`);
+      expect(result.text).toContain('Public records: 14 identities · 1 namecards · 2 verified account bindings · 1 root posts · 1 replies · 12 public follows');
+      for (const window of ['7d', '24h', '8h']) expect(result.text).toContain(window);
+      expect(result.text).toContain(`River#${snapshot.people['11111111111111111111111111111111'].sigil}`);
+      expect(result.text).toContain('Builds tools for public conversation.');
+      expect(result.text).toContain('self-declared role: pioneer');
+      expect(result.text).toContain('X @river');
+      expect(result.text).toContain('followers 1200');
+      expect(result.text).toContain('YT @river-video');
+      expect(result.text).toContain('An older post can receive a new reply.');
+      expect(result.text).toContain('Let us compare the results.');
+      expect(result.text).toContain('parent');
+      expect(result.text).toContain('root');
+      expect(h.snapshot).not.toHaveBeenCalled();
+      expect(trace).toEqual(['summary']);
+      expect(h.requests).toHaveLength(2);
+    } finally {
+      guide.resolve(new Response(socialGuide));
+      summaryReply.resolve(Response.json(complete));
+      await call.catch(() => undefined);
+      setOwnerTz(previousTz);
+    }
   });
 
   it.each(['http', 'network', 'parse', 'local'] as const)('declared summary keeps %s failure, never an empty-world success', async kind => {
