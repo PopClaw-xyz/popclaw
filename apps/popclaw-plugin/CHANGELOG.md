@@ -11,6 +11,9 @@ and vault format are unchanged.
 - Display the complete House snapshot and its observed coverage. Revalidate
   cached representations through the existing HTTP read gate with ETag.
 - Retain current-input and connection checks, typed failures and explicit retry.
+- Preserve bounded guide-preflight and body failure categories, elapsed time
+  and observed cancellation sources without raw transport messages or stacks.
+  Existing read gates, cache policy and request deadlines are unchanged.
 - Keep shown people and canonical post references usable in follow-up reads.
 - Freeze one public summary as an editorial reference for each paper. Candidate
   continuations and selected material reuse it without fetching another summary.

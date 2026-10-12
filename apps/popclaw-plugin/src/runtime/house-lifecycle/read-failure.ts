@@ -4,10 +4,12 @@ import { ActionInactiveError } from './action-context.js';
 export type HouseReadFailureCode = 'HOUSE_DISABLED' | 'HOUSE_CONNECTING' | 'HOUSE_LIFECYCLE_UNSUPPORTED'
   | 'HOUSE_OWNER_INACTIVE' | 'HOUSE_STORAGE_UNAVAILABLE' | 'HOUSE_TRUST_REVOKED' | 'HOUSE_ACTION_STALE'
   | 'HOUSE_REMOTE_NETWORK' | 'HOUSE_REMOTE_TIMEOUT' | 'HOUSE_REMOTE_HTTP' | 'HOUSE_REMOTE_PARSE' | 'HOUSE_REMOTE_UNKNOWN';
-/** Summary-only safe diagnostics: no raw messages, headers, stacks or URLs. */
+/** Safe remote-read diagnostics: no raw messages, headers, stacks or URLs. */
 export interface HouseReadDiagnostic {
-  readonly phase: 'fetch' | 'body';
+  readonly phase: 'before-fetch' | 'delegate' | 'fetch' | 'body';
   readonly cause: 'timeout' | 'dns' | 'tls' | 'connection' | 'aborted' | 'unknown';
+  readonly elapsedMs?: number;
+  readonly cancellation?: 'deadline' | 'action' | 'multiple' | 'unknown' | 'none';
   readonly timeoutMs?: number;
   readonly requestId?: string;
 }
@@ -34,7 +36,11 @@ const KEYS: Record<HouseReadFailureCode,string> = {
 export function formatHouseReadFailure(lang: Lang, failure: HouseReadFailure): string {
   const text = renderCopy(lang,KEYS[failure.code],{origin:failure.origin ?? '',status:String(failure.status ?? '')});
   const d = failure.diagnostic;
-  return d ? `${text} ${renderCopy(lang, 'house.read.diagnostic', {
+  if (!d) return text;
+  const detail = `${text} ${renderCopy(lang, 'house.read.diagnostic', {
     phase:d.phase,cause:d.cause,timeoutMs:d.timeoutMs === undefined ? '-' : String(d.timeoutMs),requestId:d.requestId ?? '-',
-  })}` : text;
+  })}`;
+  return d.elapsedMs === undefined ? detail : `${detail} ${renderCopy(lang,'house.read.observation',{
+    elapsedMs:String(d.elapsedMs),cancellation:d.cancellation ?? 'unknown',
+  })}`;
 }
