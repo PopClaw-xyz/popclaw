@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { withReadCallBudget } from '../../../src/runtime/read-call-budget.js';
+import { withReadCallBudget, withReadCallScope } from '../../../src/runtime/read-call-budget.js';
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 it('bounds the entire serial read, not each individual step', async () => {
   await expect(withReadCallBudget({ timeoutMs: 25 }, async () => {
@@ -29,4 +29,21 @@ it('preserves the existing action gate when its currentness changes without abor
   const {withAction}=await import('../../../src/runtime/house-lifecycle/action-context.js');
   let active=true;
   await expect(withAction({signal:new AbortController().signal,isActive:()=>active},()=>withReadCallBudget({},async()=>{active=false;return 'denied';}))).rejects.toMatchObject({code:'HOUSE_ACTION_STALE'});
+});
+
+it('retains an individual network deadline inside a cancellation-only gather scope', async () => {
+  await expect(withReadCallScope({}, () => withReadCallBudget({timeoutMs: 15}, async () => {
+    await delay(30); return 'late network';
+  }))).rejects.toMatchObject({code:'READ_CALL_BUDGET_EXCEEDED',failure:{code:'HOUSE_REMOTE_TIMEOUT'}});
+});
+it('cancels a scope without a local deadline even when work ignores abort', async () => {
+  const controller = new AbortController();
+  const waiting = withReadCallScope({signal:controller.signal}, () => new Promise(() => {}));
+  controller.abort();
+  await expect(waiting).rejects.toMatchObject({code:'HOUSE_ACTION_STALE'});
+});
+it('does not remove an explicit trusted parent deadline', async () => {
+  await expect(withReadCallBudget({timeoutMs:15}, () => withReadCallScope({}, async () => {
+    await delay(30); return 'late';
+  }))).rejects.toMatchObject({code:'READ_CALL_BUDGET_EXCEEDED'});
 });

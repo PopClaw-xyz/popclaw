@@ -1,4 +1,4 @@
-import { assertReadCallActive, waitForRead, withReadCallBudget } from '../runtime/read-call-budget.js';
+import { assertReadCallActive, waitForRead, withReadCallScope } from '../runtime/read-call-budget.js';
 import { RemoteHouseReadError } from '../runtime/house-lifecycle/read-failure.js';
 import { prepareSummaryMaterial } from '../newspaper/summary-material.js';
 import { readNewspaperPage } from '../newspaper/reading-page.js';
@@ -619,7 +619,7 @@ export async function runNewspaperCall(call: NewspaperCall, params: unknown): Pr
     // would let the world move underneath the numbers it is answering with.
     if (args.hasPicks && args.picks) return answerPicks(call, rt, args, args.picks);
     collecting = true;
-    return await withReadCallBudget({}, () => gatherCandidatePage(call, rt, args.hours, modelIgnoredNote));
+    return await withReadCallScope({}, () => gatherCandidatePage(call, rt, args.hours, modelIgnoredNote));
   } catch (err) {
     if (collecting && err instanceof RemoteHouseReadError) {
       const failure = NewspaperStageStore.collectionFailed(call.toolCtx.sessionKey, err.failure);

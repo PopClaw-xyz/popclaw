@@ -93,7 +93,7 @@ export async function readHouseGuideContext(db: HostDb, origin: string, fetchDoc
     await Promise.resolve(); assertReadCallActive();
     return cachedHouseGuide(db,origin,active);
   }
-  const remaining=currentReadCallBudget()?.remainingMs() ?? 10_000;
+  const remaining=Math.min(10_000,currentReadCallBudget()?.remainingMs() ?? 10_000);
   try {
     return await withReadCallBudget({timeoutMs:cached.status === 'available' ? Math.min(1500,Math.max(0,remaining-50)) : Math.max(0,remaining-50)},
       () => refreshHouseGuideContext(db,origin,fetchDocument,active));
