@@ -10,6 +10,7 @@ import {draftToken} from '../helpers/draft-token.js';
 import {decryptDmBody, decryptDmMedia} from '../../src/messaging/dm-crypto.js';
 import {_draftsForTest, makeDraftToken, putDraft, DRAFT_TTL_MS, draftDigest} from '../../src/tools/draft-store.js';
 import {deliverDraftPreview} from '../../src/tools/draft-preview-delivery.js';
+import {encodeSocialDraft} from '../../src/host/social-draft-codec.js';
 import {beginSocialDraft} from '../../src/tools/social-draft-lifecycle.js';
 import {socialDraftBinding} from '../../src/host/social-send-context.js';
 import type {PluginRuntime} from '../../src/runtime/plugin-runtime.js';
@@ -136,6 +137,25 @@ describe('ordinary social draft persistence across real Node processes and SQLit
     expect(store.load(id)).toBeNull();
     expect(fx.effects()).toHaveLength(1);
     fx.db.close(); _draftsForTest.clear();
+  });
+  it.each(['save', 'load'] as const)('requires a persisted nickname during %s without relying on the material digest', async stage => {
+    const fx = durableFixture(root());
+    try {
+      const id = idOf((await fx.call('popclaw_draft_message', {recipient: fx.recipient.id, body: 'Durable nickname'})).text);
+      const store = new DurableSocialDrafts(fx.db, fx.owner.id), saved = store.load(id)!;
+      expect(saved.sendPlan!.nickname).toBe('Synthetic Owner');
+      const plan = {...saved.sendPlan!}; Reflect.deleteProperty(plan, 'nickname');
+      const invalid = {...saved, sendPlan: plan};
+      if (stage === 'save') {
+        expect(() => store.save(store.mint('message'), invalid)).toThrow('SOCIAL_DRAFT_CONTEXT_REQUIRED');
+      } else {
+        // Keep a valid row digest: the required-field check must be the guard.
+        const payload = encodeSocialDraft({version: 1, snapshot: invalid});
+        fx.db.execute('UPDATE social_chat_drafts SET payload=?,digest=? WHERE draft_id=?', [payload, draftDigest(payload), id]);
+        expect(() => store.load(id)).toThrow('SOCIAL_DRAFT_MATERIAL_CHANGED');
+      }
+      expect(fx.effects()).toHaveLength(0);
+    } finally {fx.db.close();}
   });
   it('checks actual mutable attachment bytes at completion before saving the manuscript', async () => {
     const fx = durableFixture(root()), bytes = new Uint8Array([1, 2]);

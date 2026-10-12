@@ -34,7 +34,7 @@ export async function beginSocialDraft(deps: RegisterToolsDeps, snapshot: DraftS
   const binding = getBinding();
   const rt = typeof runtimeAtDraft === 'function' ? await runtimeAtDraft() : runtimeAtDraft;
   let frozen = freezeDraftSnapshot({...snapshot, binding, sendPlan: {
-    ...(deps.durableSocialDrafts ? pinSocialSendPlan(rt, snapshot.house) : {nickname: rt.boot.nickname}), ...plan,
+    ...(deps.durableSocialDrafts ? pinSocialSendPlan(rt, snapshot.house) : {}), ...plan,
   }});
   const digest = draftSnapshotDigest(frozen);
   if (!deps.durableSocialDrafts) {

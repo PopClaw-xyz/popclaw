@@ -19,7 +19,7 @@ export class DurableSocialDrafts {
     });
   }
   save(id: string, snapshot: DraftSnapshot): void {
-    if (!snapshot.binding || !snapshot.sendPlan) throw new Error('SOCIAL_DRAFT_CONTEXT_REQUIRED');
+    if (!snapshot.binding || !snapshot.sendPlan || typeof snapshot.sendPlan.nickname !== 'string') throw new Error('SOCIAL_DRAFT_CONTEXT_REQUIRED');
     const payload = encodeSocialDraft({version: 1, snapshot});
     this.db.execute('INSERT INTO social_chat_drafts (actor_id,draft_id,payload,digest,created_at) VALUES (?,?,?,?,?)',
       [this.actor, id, payload, draftDigest(payload), Date.now()]);
@@ -30,7 +30,7 @@ export class DurableSocialDrafts {
     if (!row?.payload) return null;
     if (draftDigest(row.payload) !== row.digest) throw new Error('SOCIAL_DRAFT_MATERIAL_CHANGED');
     const stored = decodeSocialDraft<{version: number; snapshot: DraftSnapshot}>(row.payload);
-    if (stored.version !== 1 || !stored.snapshot.binding || !stored.snapshot.sendPlan) throw new Error('SOCIAL_DRAFT_MATERIAL_CHANGED');
+    if (stored.version !== 1 || !stored.snapshot.binding || !stored.snapshot.sendPlan || typeof stored.snapshot.sendPlan.nickname !== 'string') throw new Error('SOCIAL_DRAFT_MATERIAL_CHANGED');
     return stored.snapshot;
   }
   /** Single SQLite CAS, also across processes. An uncertain send is spent. */

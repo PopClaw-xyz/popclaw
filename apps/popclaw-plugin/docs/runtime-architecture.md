@@ -115,7 +115,9 @@ operation/session/installation tuple.
 Compatibility contexts keep the existing in-memory expiry, capacity, captured
 House/action authority and egress. Entries capture the egress at the original
 source-read boundary, before attachment validation or other awaits. Ordinary
-compatibility sends resolve the current runtime and nickname later. Feedback
+compatibility sends resolve the current runtime and nickname later. Creating a
+compatibility manuscript does not read boot data or invent a stored nickname;
+durable save/load requires the pinned nickname to be present. Feedback
 alone retains the callback from its command: that legacy primary-contact path
 reads the contact's latest inbox relay at send time, whereas durable feedback
 pins the declared House. This adapter preserves established behavior without

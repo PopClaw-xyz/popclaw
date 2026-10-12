@@ -7,7 +7,9 @@ import {runPopclawPostCommand} from '../commands/popclaw-post.js';
 import {assertHouseActionActive} from '../runtime/house-lifecycle/action-context.js';
 
 export interface DraftSendPlan {
-  readonly nickname: string;
+  /** Durable plans retain the drafting nickname. Compatibility reads the
+   * current runtime nickname only when its captured sender executes. */
+  readonly nickname?: string;
   readonly origin?: string;
   readonly participation?: Readonly<{opSeq: number; sessionId: string; installationId: string}> | null;
   readonly person?: PopclawMessageDeps['approvedRecipient'];
@@ -44,7 +46,7 @@ export async function sendSocialDraft(snapshot: DraftSnapshot, rt: PluginRuntime
     push: (bytes: Uint8Array) => rt.egress.pushTo(snapshot.house, bytes),
     pushTo: (_house: string | undefined, bytes: Uint8Array) => rt.egress.pushTo(snapshot.house, bytes),
   };
-  const common = {signer: rt.boot.signer, nickname: captured ? rt.boot.nickname : plan.nickname, egress, socialLog: rt.socialLog};
+  const common = {signer: rt.boot.signer, nickname: captured ? rt.boot.nickname : plan.nickname!, egress, socialLog: rt.socialLog};
   if (snapshot.kind === 'reply') {
     const args = {positional: [snapshot.target!, snapshot.body], ...(captured ? {flags: {}} : {})};
     return runPopclawReplyCommand(args, {...common, cache: {lookup: () => plan.replySource ?? null}});
