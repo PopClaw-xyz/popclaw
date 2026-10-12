@@ -156,7 +156,6 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       // passed in, and everything the closure reads off it at send time is
       // something it could rewrite after the owner has read the draft.
       const snapshot: DraftSnapshot = {
-        binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'reply',
         ...(replyItem?.authorPopclawId ? { recipientId: replyItem.authorPopclawId } : {}),
         ...(replyName ? { recipientLabel: `@${replyName}` } : {}),
@@ -167,7 +166,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         preview: null,
         output: null,
       };
-      const draft = await beginSocialDraft(draftDeps, snapshot, draftRuntime, {replySource: replyItem}, route);
+      const draft = await beginSocialDraft(draftDeps, snapshot, draftRuntime, {replySource: replyItem}, () => socialDraftBinding(deps.socialSendHost, toolCtx), route);
       const token = draft.id;
       const preview =
         `📝 Draft reply to ${snapshot.target}\n` +
@@ -292,7 +291,6 @@ export function registerWriteTools(ctx: ToolsCtx): void {
           : person.nickname,
       });
       const snapshot: DraftSnapshot = {
-        binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'dm',
         recipientId: pinned.popclawId,
         recipientLabel: `${pinned.nickname || '—'}#${pinned.sigil}`,
@@ -303,7 +301,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         preview: null,
         output: null,
       };
-      const draft = await beginSocialDraft(draftDeps, snapshot, rt, {person: pinned}, {...route, recipientRef: recipient});
+      const draft = await beginSocialDraft(draftDeps, snapshot, rt, {person: pinned}, () => socialDraftBinding(deps.socialSendHost, toolCtx), {...route, recipientRef: recipient});
       const token = draft.id;
       // What the owner confirms must be the **complete content** — if there's an image, the
       // preview identifies the attachment and size. An attachment-only letter has no empty body section.
@@ -385,7 +383,6 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const route = captureSocialDraftRoute(draftRuntime);
       const house = source?.houseSlug ?? draftRuntime?.egress?.home?.slug;
       const snapshot: DraftSnapshot = {
-        binding: socialDraftBinding(deps.socialSendHost, toolCtx),
         kind: 'post',
         ...(house ? {house} : {}),
         ...(replyTo ? { target: `reply:${replyTo}` } : quoteOf ? { target: `quote:${quoteOf}` } : {}),
@@ -394,7 +391,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
         preview: null,
         output: null,
       };
-      const draft = await beginSocialDraft(draftDeps, snapshot, draftRuntime, {postSource: source, replyTo, quoteOf}, route);
+      const draft = await beginSocialDraft(draftDeps, snapshot, draftRuntime, {postSource: source, replyTo, quoteOf}, () => socialDraftBinding(deps.socialSendHost, toolCtx), route);
       const token = draft.id;
       // When both reply_to_event_id and quote_of_event_id are supplied (which is
       // disallowed), the ternary resolves to 'reply' here for the preview text.
@@ -451,7 +448,7 @@ export function registerWriteTools(ctx: ToolsCtx): void {
       const { draft_id } = params as { draft_id: string };
       const assertCurrent = socialSendAssertion(deps.socialSendHost, toolCtx, signal);
       if (!assertCurrent) return {type: 'text' as const, text: renderCopy(ownerLang(), 'socialSend.invocationRequired')};
-      const result = await sendOrdinarySocialDraft(draftDeps, draft_id, socialDraftBinding(deps.socialSendHost, toolCtx), assertCurrent);
+      const result = await sendOrdinarySocialDraft(draftDeps, draft_id, () => socialDraftBinding(deps.socialSendHost, toolCtx), assertCurrent);
       if (result.status === 'refused') return {type: 'text' as const, text: result.text};
       const {snapshot, reply} = result;
       return {type: 'text' as const, ...('isError' in reply && reply.isError === true ? {isError: true} : {}), text: snapshot.kind === 'dm'

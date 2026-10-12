@@ -26,17 +26,24 @@ export function captureSocialDraftRoute(rt: PluginRuntime) {
 /** Capture routing and material once. Only feedback compatibility retains its
  * command's supplied callback (including the legacy live primary relay). */
 export async function beginSocialDraft(deps: RegisterToolsDeps, snapshot: DraftSnapshot,
-  rt: PluginRuntime, plan: Omit<DraftSendPlan, 'nickname'>,
+  runtimeAtDraft: PluginRuntime | (() => Promise<PluginRuntime>), plan: Omit<DraftSendPlan, 'nickname'>,
+  getBinding: () => SocialDraftBinding | null,
   compatibility?: {egress?: ReturnType<typeof captureSocialDraftRoute>['egress']; recipientRef?: string; feedbackSend?: () => Promise<SendReply>}) {
   const id = await socialDraftToken(deps, snapshot.kind === 'dm' || snapshot.kind === 'feedback' ? 'message' : snapshot.kind);
-  let frozen = freezeDraftSnapshot({...snapshot, sendPlan: {
+  // Match the entry boundary: mint first, then bind, before feedback refreshes runtime.
+  const binding = getBinding();
+  const rt = typeof runtimeAtDraft === 'function' ? await runtimeAtDraft() : runtimeAtDraft;
+  let frozen = freezeDraftSnapshot({...snapshot, binding, sendPlan: {
     ...(deps.durableSocialDrafts ? pinSocialSendPlan(rt, snapshot.house) : {nickname: rt.boot.nickname}), ...plan,
   }});
   const digest = draftSnapshotDigest(frozen);
   if (!deps.durableSocialDrafts) {
-    const egress = compatibility?.egress ?? captureSocialDraftRoute(rt).egress;
-    putDraft(id, compatibility?.feedbackSend ?? (async () => sendSocialDraft(frozen, await deps.runtime(),
-      {egress, recipientRef: compatibility?.recipientRef})), frozen);
+    let send = compatibility?.feedbackSend;
+    if (!send) {
+      const egress = compatibility?.egress ?? captureSocialDraftRoute(rt).egress;
+      send = async () => sendSocialDraft(frozen, await deps.runtime(), {egress, recipientRef: compatibility?.recipientRef});
+    }
+    putDraft(id, send, frozen);
   }
   return {
     id,
@@ -74,7 +81,7 @@ export type SocialDraftSendResult = {status: 'refused'; text: string} |
 /** Load/check without taking ownership of a retained preview. Spend before
  * transport; unknown outcomes stay spent. A pre-consumption refusal retains it. */
 export async function sendOrdinarySocialDraft(deps: RegisterToolsDeps, id: string,
-  binding: SocialDraftBinding | null, assertCurrent: () => void): Promise<SocialDraftSendResult> {
+  getBinding: () => SocialDraftBinding | null, assertCurrent: () => void): Promise<SocialDraftSendResult> {
   assertCurrent();
   const refused = (key: Parameters<typeof renderCopy>[1]): SocialDraftSendResult => ({status: 'refused', text: renderCopy(ownerLang(), key)});
   const unavailable = (): SocialDraftSendResult => ({status: 'refused', text: deps.durableSocialDrafts
@@ -93,15 +100,17 @@ export async function sendOrdinarySocialDraft(deps: RegisterToolsDeps, id: strin
       throw error;
     }
     if (!snapshot) return unavailable();
-    if (!sameSocialDraftBinding(snapshot.binding, binding)) return refused('socialSend.conversationChanged');
+    if (!sameSocialDraftBinding(snapshot.binding, getBinding())) return refused('socialSend.conversationChanged');
     rt = await deps.runtime();
     assertCurrent();
+    // Hosted current getters may rotate across either runtime await.
+    if (!sameSocialDraftBinding(snapshot.binding, getBinding())) return refused('socialSend.conversationChanged');
     files = resolveDraftReviewFiles(deps.draftReviewFiles);
     if (verifySnapshotReview(snapshot, files) === 'changed') return refused('socialSend.reviewChanged');
   } else {
     snapshot = peekDraftSnapshot(id);
     if (!snapshot) return unavailable();
-    if (!sameSocialDraftBinding(snapshot.binding, binding)) return refused('socialSend.conversationChanged');
+    if (!sameSocialDraftBinding(snapshot.binding, getBinding())) return refused('socialSend.conversationChanged');
     if (!draftContentIsCurrent(id)) return refused('socialSend.materialChanged');
     if (verifyDraftReview(id) === 'changed') return refused('socialSend.reviewChanged');
   }

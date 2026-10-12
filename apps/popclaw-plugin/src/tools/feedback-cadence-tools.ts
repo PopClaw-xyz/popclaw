@@ -123,7 +123,8 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
     parameters: FeedbackSchema,
     execute: async (_callId: string, params: unknown) => {
       const p = params as { kind: string; body: string; house?: string; attach_doctor_report?: boolean };
-      const rt = (await runtime()) as {
+      const draftRuntime = await runtime();
+      const rt = draftRuntime as {
         boot: {
           signer: Signer;
           nickname: string;
@@ -200,9 +201,10 @@ export function registerFeedbackCadenceTools(ctx: ToolsCtx): void {
             // carries the same recipient, house and complete text the preview
             // below shows; the id is only an internal lookup handle.
             const draft = await beginSocialDraft(draftDeps,
-              {...feedbackSnapshot(plan, attachment), binding: socialDraftBinding(deps.socialSendHost, toolCtx)},
-              await runtime(), {person: {popclawId: plan.contactPopclawId, nickname: plan.contactName ?? '', sigil: deriveSigil(plan.contactPopclawId)},
-                receiptPrefix: plan.receiptPrefix, receiptSuffix: plan.receiptSuffix}, {feedbackSend: send});
+              feedbackSnapshot(plan, attachment),
+              deps.durableSocialDrafts ? runtime : draftRuntime, {person: {popclawId: plan.contactPopclawId, nickname: plan.contactName ?? '', sigil: deriveSigil(plan.contactPopclawId)},
+                receiptPrefix: plan.receiptPrefix, receiptSuffix: plan.receiptSuffix},
+              () => socialDraftBinding(deps.socialSendHost, toolCtx), {feedbackSend: send});
             const token = draft.id;
             const preview = feedbackDraftPreview(plan, token, ownerLang());
             const outcome = await deliverDraftPreview(toolCtx, preview);

@@ -8,7 +8,12 @@ import {popclaw} from '@popclaw/contracts';
 import {durableFixture, fixtureContext, fixtureKey} from '../helpers/durable-social-process.js';
 import {draftToken} from '../helpers/draft-token.js';
 import {decryptDmBody, decryptDmMedia} from '../../src/messaging/dm-crypto.js';
-import {_draftsForTest, makeDraftToken, putDraft, DRAFT_TTL_MS} from '../../src/tools/draft-store.js';
+import {_draftsForTest, makeDraftToken, putDraft, DRAFT_TTL_MS, draftDigest} from '../../src/tools/draft-store.js';
+import {deliverDraftPreview} from '../../src/tools/draft-preview-delivery.js';
+import {beginSocialDraft} from '../../src/tools/social-draft-lifecycle.js';
+import {socialDraftBinding} from '../../src/host/social-send-context.js';
+import type {PluginRuntime} from '../../src/runtime/plugin-runtime.js';
+import type {RegisterToolsDeps} from '../../src/tools/tools-context.js';
 import {DurableSocialDrafts} from '../../src/tools/durable-social-drafts.js';
 const roots: string[] = [];
 const root = () => {const path = mkdtempSync(join(tmpdir(), 'popclaw-durable-test-')); roots.push(path); return path;};
@@ -131,6 +136,27 @@ describe('ordinary social draft persistence across real Node processes and SQLit
     expect(store.load(id)).toBeNull();
     expect(fx.effects()).toHaveLength(1);
     fx.db.close(); _draftsForTest.clear();
+  });
+  it('checks actual mutable attachment bytes at completion before saving the manuscript', async () => {
+    const fx = durableFixture(root()), bytes = new Uint8Array([1, 2]);
+    const draft = await beginSocialDraft({runtime: fx.runtime, durableSocialDrafts: true} as unknown as RegisterToolsDeps,
+      {kind: 'dm', recipientId: fx.recipient.id, house: 'house-fixture-invalid', body: 'Approved bytes',
+        binding: socialDraftBinding('native', fixtureContext()), attachments: [{name: 'letter.txt', mime: 'text/plain', bytes, digest: draftDigest(bytes)}],
+        preview: null, output: null}, await fx.runtime() as unknown as PluginRuntime,
+      {person: {popclawId: fx.recipient.id, nickname: 'Alice', sigil: 'fixture'}},
+      () => socialDraftBinding('native', fixtureContext()));
+    const store = new DurableSocialDrafts(fx.db, fx.owner.id);
+    // Even an unavailable direct preview yields: mutation during that await
+    // must be detected against the bytes frozen before the preview started.
+    queueMicrotask(() => {bytes[0] = 9;});
+    const preview = await deliverDraftPreview({}, 'Approved bytes');
+    await expect(draft.complete('Approved bytes', preview.status, 'Approved bytes')).rejects.toThrow('Draft not saved');
+    expect(store.load(draft.id)).toBeNull(); expect(fx.effects()).toHaveLength(0);
+    bytes[0] = 1;
+    await draft.complete('Approved bytes', 'unavailable', 'Approved bytes');
+    expect(store.load(draft.id)!.attachments[0]!.bytes).toEqual(new Uint8Array([1, 2]));
+    await fx.call('popclaw_send_draft', {draft_id: draft.id});
+    expect(fx.effects()).toHaveLength(1); fx.db.close();
   });
   it('rechecks the new invocation after async signing, spends once on revocation and never revives it', async () => {
     const dir = root(), draft = await child({root: dir, name: 'popclaw_draft_message', params: {recipient: fixtureKey(5).id, body: 'Current invocation only'}});

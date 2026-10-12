@@ -102,7 +102,9 @@ with the agent in the original conversation; an ID conveys no authorization.
 Installed local roots use `DurableSocialDrafts` in the private host database.
 These manuscripts have no expiry or capacity eviction and never enter the
 volatile callback table, including during a refused send. Persist only after
-recording the final tool output. Loading verifies stored material; sending checks
+recording the final tool output. The conversation binding is captured after
+awaiting ID allocation, and re-read after both send-time runtime awaits; this
+preserves the existing Hosted scope boundaries. Loading verifies stored material; sending checks
 the current conversation/invocation and the saved review copy directly. The
 SQLite compare-and-set consumes before transport and removes the review copy
 only for the winner. Unknown outcomes remain spent. A refusal before consumption
