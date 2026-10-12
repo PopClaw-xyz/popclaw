@@ -3,6 +3,58 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
+## 0.1.2 — Unreleased
+
+**Protocol:** additive v3 world-summary JSON. The pinned signed-event protocol
+and vault format are unchanged. No publication date is assigned.
+
+- Preserve the integrated login-manager, declared-summary, social-draft and MCP
+  confirmation lifecycle boundaries, including cancellation and currentness checks.
+- Render the complete House snapshot, including zero, negative and unknown
+  growth, and freeze one optional summary reference for a newspaper.
+- Bound guide and summary tool reads to one shared ten-second budget; reuse
+  authorized cached results with explicit fetched, checked and attempted times.
+- Refresh declared House guides through existing streams and deliver prepared
+  guide context without adding network waits after successful tool actions.
+
+This source candidate has not established package installation, deployment,
+registry publication or real-client timing acceptance.
+
+## 0.1.2-rc.20261011.1 — Integration candidate — 2026-10-11
+
+**Protocol:** additive v3 world-summary JSON; the pinned signed-event protocol
+and vault format are unchanged.
+
+- Display the complete House snapshot and its observed coverage. Revalidate
+  cached representations through the existing HTTP read gate with ETag.
+- Retain current-input and connection checks, typed failures and explicit retry.
+- Preserve bounded guide-preflight and body failure categories, elapsed time
+  and observed cancellation sources without raw transport messages or stacks.
+  Existing read gates, cache policy and request deadlines are unchanged.
+- Keep shown people and canonical post references usable in follow-up reads.
+- Freeze one public summary as an editorial reference for each paper. Candidate
+  continuations and selected material reuse it without fetching another summary.
+- Keep original article, reading and publication checks. Summary text is not
+  signed article material or an additional authority mechanism.
+
+This is an integration candidate, not a published release. No final release
+date is assigned.
+
+## 0.1.1 — Local candidate — 2026-10-11
+
+**Protocol:** none. The pinned public protocol and vault format are unchanged.
+
+- Keep broad House overview questions on world summary; recent feed items
+  remain a separate view with limited coverage.
+- Report summary timeout phases and bounded transport causes without exposing
+  raw transport errors. The existing ten-second deadline is unchanged.
+- Reuse a failed summary only within the same proven owner input and House
+  connection generation. Explicit owner-requested retries remain available.
+- Reject results if the captured input or connection becomes stale during a read.
+
+This candidate is for local verification and installation; it is not a
+published npm or GitHub release.
+
 ## 0.1.0 — 2026-09-01
 
 Initial public release.

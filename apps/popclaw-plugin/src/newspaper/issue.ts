@@ -310,6 +310,8 @@ export function castList(pulse: readonly PulseItem[]): CastMember[] {
  * anything that reorders this array breaks every issue in flight.
  */
 export interface IssueData {
+  /** This edition's ordinary editorial background; never a signed post or permission. */
+  worldSummary?: import('./summary-material.js').WorldSummaryMaterial;
   publicMaterials?: PublicMaterialBasis;
   publicCoverage?: readonly PublicMaterialCoverage[];
   /** BCP-47 tag of the owner's language (`ownerLangTag()`), for the page's `lang` attribute and the label set. */

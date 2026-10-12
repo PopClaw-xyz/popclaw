@@ -7,6 +7,7 @@
  * Split out of register-tools.ts (2026-08-25).
  */
 
+import { observedPeople } from '../identity/observed-people.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { renderCopy } from '../lexicon/index.js';
 import {
@@ -16,6 +17,7 @@ import {
 import type { AuthorSource } from '../world/notable-authors.js';
 import type { AuthorCandidate } from '../world/author-resolver.js';
 import { platformLabel } from '../world/summary-format.js';
+import { displayNamed } from '../identity/person-name.js';
 import type { NameChain } from '../identity/person-name.js';
 import type { WorldSnapshotItemLike, WorldToolsDeps } from './tools-context.js';
 
@@ -43,6 +45,7 @@ export function buildAuthorSources(
   nameOf?: NameChain,
 ): AuthorSource[] {
   return [
+    ...observedPeople().map(p => ({popclawId:p.popclawId,platform:'popclaw',nickname:p.nickname})),
     ...(summary?.hot_posts ?? []).map((p) => ({
       popclawId: p.author,
       platform: p.platform,
@@ -79,7 +82,7 @@ export async function fetchAuthorSources(
 /** Disambiguation list copy: nickname + platform, for the agent to relay to the owner to choose from. (S3 pilot: show_feed shares this function.) */
 export function disambiguationText(query: string, candidates: AuthorCandidate[], lang = ownerLang()): string {
   const lines = candidates.map(
-    (c, i) => `${i + 1}. ${c.nickname} — ${c.platforms.map(platformLabel).join('/')}`,
+    (c, i) => `${i + 1}. ${displayNamed(c.popclawId, undefined, c.nickname)} — ${c.platforms.map(platformLabel).join('/')}`,
   );
   return (
     `${renderCopy(lang, 'world.disambiguation.prompt', { query })}\n${lines.join('\n')}\n` +

@@ -47,6 +47,7 @@ export interface HouseInboxConsumerInput {
   onError(error: unknown): void;
 }
 export interface HouseResourceOptions {
+  onGuideCheck?(origin: string, reconnect: boolean): void;
   host: HostAdapter;
   signer: Signer;
   recipientPopclawId: string;
@@ -167,6 +168,7 @@ class HouseResourceSet implements PerHouseStreams {
   }
 
   refresh(): void {
+    if (this.gate.isActive()) this.opts.onGuideCheck?.(this.gate.origin,false);
     // This is the resident's local change check, independent of handshake work.
     if (this.gate.isActive() && this.inboxConsumer?.poll) {
       void this.track(() => this.inboxConsumer?.poll?.());
@@ -202,6 +204,7 @@ class HouseResourceSet implements PerHouseStreams {
       });
     };
     const common = { baseUrl: house.baseUrl, gate: this.gate,
+      onStreamOpen: () => { if (this.gate.isActive()) this.opts.onGuideCheck?.(this.gate.origin,true); },
       isOfficialActor: (id: string) => this.opts.isOfficialActor(house, id), limit: 5000,
       // NOT String(err): every stream on this house reports through here, and
       // an SSE failure arrives as a DOM-ish event object, not an Error — so a

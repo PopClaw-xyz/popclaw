@@ -1,3 +1,8 @@
+import { currentVerifiedManifestDigest } from '../../world/world-capabilities.js';
+import { guideBindingDigest } from '../../world/house-guide-context.js';
+import { pinnedBinding } from '../../world/house-binding-pin.js';
+import { readParticipation } from '../house-lifecycle/participation-store.js';
+import { assertHouseActionActive, assertActionActive } from '../house-lifecycle/action-context.js';
 /**
  * Onboarding in the runtime assembly: mounted houses, the "already started"
  * test, the world/taste/mark collaborators the orchestrator and the tools
@@ -67,8 +72,27 @@ export function buildCollaborators(input: {
   const { host, boot, paths, ports, houses, egress } = input;
   const tasteRoot = paths.tasteDir();
   const tasteLoader = new TasteLoader({ tasteDir: tasteRoot, logger: { warn: ports.log.warn } });
-  const guideClient = new GuideClient({ baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl) });
-  const summaryClient = new WorldSummaryClient({ baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl) });
+  const readSourceBinding = () => {
+    const pin=pinnedBinding(host.db,boot.loreHouseUrl), participation=readParticipation(host.db,boot.loreHouseUrl);
+    return pin && !pin.blockedReason && participation?.desired === 'enabled' && participation.phase === 'connected'
+      ? JSON.stringify([guideBindingDigest(host.db,boot.loreHouseUrl),participation.op_seq,currentVerifiedManifestDigest(host.db,pin)]) : undefined;
+  };
+  const guideClient = new GuideClient({ baseUrl: boot.loreHouseUrl, readGuide: ports.world.guideRead ? () => ports.world.guideRead!(houses,boot.loreHouseUrl) : undefined, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl) });
+  const summaryClient = new WorldSummaryClient({
+    baseUrl: boot.loreHouseUrl, fetch: ports.world.clientFetch(houses, boot.loreHouseUrl),readSourceBinding,
+    readGeneration: () => ports.world.summaryReadGeneration?.(houses, boot.loreHouseUrl),
+    assertReadAccess: ports.world.assertSummaryReadAccess ? () => ports.world.assertSummaryReadAccess!(houses,boot.loreHouseUrl) : undefined,
+  });
+  // Constructors are cheap. These clients fetch only during initial paper collection.
+  const publicFetch: typeof globalThis.fetch = (url,init) => houses.houseReadFetch(boot.loreHouseUrl)(url,init);
+  const newspaperSummary = {
+    origin:boot.loreHouseUrl,
+    guideClient:new GuideClient({baseUrl:boot.loreHouseUrl,readGuide:() => houses.readHouseGuide(boot.loreHouseUrl,houses.publicReadGate(boot.loreHouseUrl)),fetch:publicFetch}),
+    summaryClient:new WorldSummaryClient({baseUrl:boot.loreHouseUrl,fetch:publicFetch,readSourceBinding,assertReadAccess:() => {assertHouseActionActive(boot.loreHouseUrl);assertActionActive(houses.publicReadGate(boot.loreHouseUrl));},readGeneration:() => {
+      const gate = houses.publicReadGate(boot.loreHouseUrl);
+      return {token:gate.signal,isCurrent:() => !gate.signal.aborted && gate.isActive()};
+    }}),
+  };
   const marksStore = new MarksStore(host.db);
   const markService = new MarkService({
     store: marksStore,
@@ -78,7 +102,7 @@ export function buildCollaborators(input: {
     taste: { tasteRoot },
   });
   const llmComplete = ports.agent.llm(paths);
-  return { tasteRoot, tasteLoader, guideClient, summaryClient, marksStore, markService, llmComplete };
+  return { tasteRoot, tasteLoader, guideClient, summaryClient, newspaperSummary, marksStore, markService, llmComplete };
 }
 
 export function buildOnboarding(input: {

@@ -1,0 +1,169 @@
+{
+  "version": 3,
+  "snapshot_id": "fixture-20261011",
+  "house_id": "11111111111111111111111111111111",
+  "generated_at_ms": 1791728400000,
+  "cutoff_at_ms": 1791728400000,
+  "refresh_interval_ms": 600000,
+  "retained_since_ms": 1790950800000,
+  "totals": {
+    "identities": 14,
+    "namecards": 1,
+    "verified_accounts": 2,
+    "posts": 1,
+    "replies": 1,
+    "public_follows": 12
+  },
+  "windows": [
+    {
+      "hours": 168,
+      "starts_at_ms": 1791123600000,
+      "follow_coverage_start_ms": 1791642000000,
+      "activity": {
+        "new_identities": 0,
+        "new_posts": 0,
+        "new_replies": 1,
+        "active_authors": 1
+      },
+      "public_follow_net": 3,
+      "people_growth": [
+        {
+          "person_id": "11111111111111111111111111111111",
+          "net_followers": 3
+        }
+      ],
+      "top_posts": [
+        {
+          "event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "new_replies": 1
+        }
+      ]
+    },
+    {
+      "hours": 24,
+      "starts_at_ms": 1791642000000,
+      "follow_coverage_start_ms": 1791642000000,
+      "activity": {
+        "new_identities": 0,
+        "new_posts": 0,
+        "new_replies": 1,
+        "active_authors": 1
+      },
+      "public_follow_net": 3,
+      "people_growth": [
+        {
+          "person_id": "11111111111111111111111111111111",
+          "net_followers": 3
+        }
+      ],
+      "top_posts": [
+        {
+          "event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "new_replies": 1
+        }
+      ]
+    },
+    {
+      "hours": 8,
+      "starts_at_ms": 1791699600000,
+      "follow_coverage_start_ms": 1791699600000,
+      "activity": {
+        "new_identities": 0,
+        "new_posts": 0,
+        "new_replies": 1,
+        "active_authors": 1
+      },
+      "public_follow_net": 3,
+      "people_growth": [
+        {
+          "person_id": "11111111111111111111111111111111",
+          "net_followers": 3
+        }
+      ],
+      "top_posts": [
+        {
+          "event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "new_replies": 1
+        }
+      ]
+    }
+  ],
+  "people": {
+    "11111111111111111111111111111111": {
+      "popclaw_id": "11111111111111111111111111111111",
+      "sigil": "ha1pcqsq",
+      "nickname": "River",
+      "bio": "Builds tools for public conversation.",
+      "role": "pioneer",
+      "public_followers": 12,
+      "accounts": [
+        {
+          "platform": "x",
+          "handle": "river",
+          "binding_verified_at_ms": 1791642000000,
+          "follower_count": 1200,
+          "followers_captured_at_ms": 1791642000000,
+          "bio": null,
+          "platform_verified": null,
+          "platform_verification_label": null
+        },
+        {
+          "platform": "youtube",
+          "handle": "river-video",
+          "binding_verified_at_ms": 1791642000000,
+          "follower_count": null,
+          "followers_captured_at_ms": null,
+          "bio": null,
+          "platform_verified": null,
+          "platform_verification_label": null
+        }
+      ]
+    },
+    "22222222222222222222222222222222222222222222": {
+      "popclaw_id": "22222222222222222222222222222222222222222222",
+      "sigil": "pcf1emts",
+      "nickname": "Sky",
+      "bio": null,
+      "role": null,
+      "public_followers": 0,
+      "accounts": []
+    }
+  },
+  "contents": {
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa": {
+      "event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "kind": "post",
+      "author_id": "11111111111111111111111111111111",
+      "authorship": "native",
+      "platform": "popclaw",
+      "body_preview": "An older post can receive a new reply.",
+      "published_at_ms": 1790950800000,
+      "received_at_ms": 1790950800000,
+      "parent_event_id": null,
+      "root_event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reply_count_total": 1,
+      "reply_count_7d": 1,
+      "reply_count_24h": 1,
+      "reply_count_8h": 1,
+      "latest_reply_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
+      "event_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "kind": "reply",
+      "author_id": "22222222222222222222222222222222222222222222",
+      "authorship": "native",
+      "platform": "popclaw",
+      "body_preview": "Let us compare the results.",
+      "published_at_ms": 1791724800000,
+      "received_at_ms": 1791724800000,
+      "parent_event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "root_event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reply_count_total": 0,
+      "reply_count_7d": 0,
+      "reply_count_24h": 0,
+      "reply_count_8h": 0,
+      "latest_reply_id": null
+    }
+  },
+  "popular_replies": []
+}

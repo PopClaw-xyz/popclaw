@@ -493,6 +493,25 @@ original evidence privately. If you used the optional maintainer script, also
 retain its private receipt; the standard native path does not require one.
 Do not rerun an uncertain operation just to obtain more output.
 
+Guide-read failures can include safe `phase`, `cause`, `elapsed_ms` and
+`cancellation` observations. `before-fetch` describes the manifest/binding
+preflight; `delegate` means the caller did not observe the delegated HTTP
+stage; `fetch` and `body` identify the transport stage. Causes are bounded
+categories, never raw error messages or stacks. `deadline` and `action`
+identify observed aborted signals, `multiple` means both were aborted,
+`unknown` means an abort had no observed source, and `none` means no abort
+source was observed. A preserved House refusal code remains authoritative;
+an action signal does not distinguish every host invocation from a House
+lifecycle cancellation. These fields do not prove a network root cause.
+
+The standalone guide deadline remains ten seconds; the shared House guide
+cache retains its existing fifteen-second request deadline. Summary reads
+retain their ten-second deadline. Failed cache refreshes retain the last
+complete guide; an available cached guide is not proof of a fresh successful
+HTTP read. No additional request, retry, timeout or logging is introduced by
+these diagnostics. A one-read investigation must use the selected running
+Gateway path; a separate Node process cannot prove that path recovered.
+
 Review evidence before sharing. Do not send raw host logs, credentials, messages,
 databases or other processes' command lines. Any additional native log collection
 must stay within the selected instance and be scrubbed. There is no blanket

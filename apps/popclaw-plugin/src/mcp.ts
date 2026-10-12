@@ -208,6 +208,7 @@ async function main(): Promise<void> {
       return {
         guideClient: rt.guideClient,
         summaryClient: rt.summaryClient,
+          newspaperSummary: rt.newspaperSummary,
         snapshotClient: rt.worldFeedClient,
         resolveClient: new ResolveClient({ baseUrl: rt.boot.loreHouseUrl, fetch: rt.houseRuntime.houseReadFetch(rt.boot.loreHouseUrl) }),
         webBaseUrl: rt.boot.webBaseUrl,

@@ -1,3 +1,5 @@
+import { assertReadCallActive, withReadCallBudget } from '../runtime/read-call-budget.js';
+import { freshnessText } from '../world/read-freshness.js';
 /**
  * The world tools (guide / summary / author history / follow + unfollow, plus
  * the newspaper reader-pass pairing). Registered only when the composition
@@ -22,21 +24,12 @@ import { renderCopy } from '../lexicon/index.js';
 import { parseGuideFrontmatter } from '../world/guide.js';
 import { prepareDeclaredSummaryRead } from '../world/declared-summary-read.js';
 import { houseDisplayName } from '../world/house-handshake.js';
-import { WorldSummaryClient } from '../world/world-summary-client.js';
-import { aggregateNotableAuthors } from '../world/notable-authors.js';
+import { SummaryReadReuse } from '../world/summary-read-reuse.js';
+import { renderWorldSummary, rememberWorldSummary } from '../world/summary-snapshot-format.js';
 import { resolveAuthor } from '../world/author-resolver.js';
+import type { PostRefCache } from '../world/post-ref.js';
 import { rememberObservedPostIds } from '../world/post-ref.js';
 import { readHouseCapabilityView } from '../world/world-capabilities.js';
-import {
-  formatHotPostLine,
-  formatNotableAuthorLine,
-  formatNotablePersonLine,
-  formatWorldStateLine,
-  hotPostsFallbackHeading,
-  mirrorAuthorsHeading,
-  NOTABLE_PEOPLE_CAP,
-  notablePeopleHeading,
-} from '../world/summary-format.js';
 import { houseSilenceOf, houseSilenceText } from '../ingress/house-silence.js';
 import type { PublicDisplayResult } from '../ingress/public-feed-display.js';
 import type { HostDb } from '../host/host-db.js';
@@ -53,9 +46,7 @@ import type { NameChain } from '../identity/person-name.js';
 import { renderAuthorHistory } from './author-history-view.js';
 import {
   AUTHOR_LATEST_MAX_COUNT,
-  WORLD_NOTABLE_CAP,
   WORLD_SNAPSHOT_LIMIT,
-  WORLD_SUMMARY_LIST_CAP,
   WORLD_SUMMARY_WINDOW_HOURS,
   buildAuthorSources,
   disambiguationText,
@@ -132,6 +123,7 @@ function withoutOwner(resolution: FollowResolution, me: string): FollowResolutio
 }
 
 export function registerWorldTools(ctx: ToolsCtx): void {
+  const summaryReads = new SummaryReadReuse();
   const { api, runtime, deps } = ctx;
 
   // === WORLD TOOLS (S4.1-T3: act2 world capabilities on the NL path) ===
@@ -160,13 +152,16 @@ export function registerWorldTools(ctx: ToolsCtx): void {
         "The owner's name is never fixed — never tell him it is. Once onboarding is finished he can change it with popclaw_set_name; " +
         'while onboarding is in progress a naming answer goes to popclaw_onboarding_continue instead.',
       parameters: WorldGuideSchema,
-      execute: async () => {
+      execute: async () => withReadCallBudget({}, async () => {
         const lang = ownerLang();
         const wd = await getWorldDeps();
-        const md = await wd.guideClient.fetchGuideText();
+        const guide = wd.guideClient.fetchGuideResult ? await wd.guideClient.fetchGuideResult() : undefined;
+        const md = guide ? (guide.ok ? guide.text : null) : await wd.guideClient.fetchGuideText();
         const parts: string[] = [];
+        if (guide?.ok && guide.freshness) parts.push(freshnessText(guide.freshness,lang));
         if (md === null) {
           parts.push(renderCopy(lang, 'world.guide.unreachable', { lantern: lanternDownText(lang) }));
+          if (guide && !guide.ok) parts.push(formatHouseReadFailure(lang,guide.failure));
         } else {
           const { frontmatter, body } = parseGuideFrontmatter(md);
           if (frontmatter !== null) {
@@ -198,24 +193,27 @@ export function registerWorldTools(ctx: ToolsCtx): void {
               h.guide,
           );
         }
+        assertReadCallActive();
         return { type: 'text' as const, text: parts.join('\n\n') };
-      },
+      }),
     });
 
     api.registerTool({
       name: 'popclaw_world_summary',
       description:
-        'Call when the owner asks "what is trending / what is going on / any interesting people lately". ' +
+        'Call for a broad House overview: "what is new / anything new / what is going on / what is trending / any interesting people lately". ' +
+        'Default to this overview for open-ended news questions; use feed only for a requested recent item list. ' +
+        'Do not automatically retry a failed summary in the same answer. Set retry=true only for an explicit owner-requested fresh attempt. ' +
         'Reads the primary House only, and only if its guide declares a summary stream at /v1/world-summary. ' +
         'An undeclared summary is unsupported; an unreadable guide is unknown, not an empty world. ' +
         'Use popclaw_world_guide or the independent local public feed instead; neither is a substitute summary. ' +
-        'Returns an overview of the world: the world-state line + the well-known (verified names, weighted by followers) + ' +
-        'the best posts + active mirror accounts (aggregated on-device, unverified). ' +
+        'Returns the complete published public snapshot: totals, overlapping 7d/24h/8h activity, growth and reply rankings, with inline identity facts. ' +
         'After presenting it, suggest what the owner could do next (dig into someone with popclaw_author_latest, ' +
         'follow someone with popclaw_follow, reply/post with the draft tools).',
       parameters: WorldSummaryToolSchema,
-      execute: async (_callId: string, params: unknown) => {
-        const p = params as { window_hours?: number };
+      execute: async (_callId: string, params: unknown) => withReadCallBudget({}, async () => {
+        const scope = deps.currentGuideReadScope?.();
+        const p = params as { window_hours?: number; retry?: boolean };
         const windowHours =
           typeof p.window_hours === 'number' && Number.isFinite(p.window_hours) && p.window_hours > 0
             ? p.window_hours
@@ -228,69 +226,24 @@ export function registerWorldTools(ctx: ToolsCtx): void {
           throw new Error(renderCopy(lang, 'world.summary.availabilityUnknown') + reason);
         }
         if (prepared.status === 'unsupported') throw new Error(renderCopy(lang, 'world.summary.unsupported'));
-        const [summaryResult, snapshot] = await Promise.all([
-          prepared.read(windowHours),
-          wd.snapshotClient
-            .fetchSnapshot({ limit: WORLD_SNAPSHOT_LIMIT })
-            .catch(() => [] as WorldSnapshotItemLike[]),
-        ]);
+        const generation = wd.summaryClient.captureReadGeneration?.();
+        const summaryResult = await summaryReads.read(scope, wd.summaryClient, windowHours, p.retry === true,
+          () => prepared.read(windowHours), generation);
         if (!summaryResult.ok) {
           // Native hosts report the failed call; MCP's normal catch sets
           // isError=true. A failed REST read must not be a successful text tool.
-          throw new Error(formatHouseReadFailure(lang,summaryResult.failure));
+          throw new Error(`${formatHouseReadFailure(lang,summaryResult.failure)} ${renderCopy(lang,'world.summary.noAutomaticRetry')}` +
+            (summaryResult.reused ? ` ${renderCopy(lang,'world.summary.reusedFailure')}` : ''));
         }
         const summary = summaryResult.summary;
-        // The owner's alias overrides the lore-house-supplied self-reported name (the single name chain).
         const nameOf = await nameChainOf(deps);
-        const lines = summary.hot_posts.slice(0, WORLD_SUMMARY_LIST_CAP).map((post, i) =>
-          formatHotPostLine(
-            i + 1,
-            {
-              nickname: WorldSummaryClient.nicknameFor(summary, post.author, nameOf),
-              bodyPreview: post.body_preview,
-              platform: post.platform,
-              replyCount: post.reply_count,
-            },
-            lang,
-          ),
-        );
-        const notable = aggregateNotableAuthors(
-          buildAuthorSources(summary, snapshot, nameOf),
-          WORLD_NOTABLE_CAP,
-          nameOf,
-        );
-        // Line order matches act2's summary card exactly (buildSummaryCard): state line →
-        // well-known → best posts → active mirror accounts. Missing v2 fields (an older
-        // server) → the whole new section is simply omitted.
-        const titleLines = [
-          renderCopy(lang, 'world.summary.title', {
-            windowHours: String(summary.window_hours),
-            totalPosts: String(summary.total_posts),
-            distinctAuthors: String(summary.distinct_authors),
-          }),
-        ];
-        if (summary.world_state !== undefined) {
-          titleLines.push(formatWorldStateLine(summary.world_state, lang));
-        }
-        const blocks: string[] = [titleLines.join('\n')];
-        const people = (summary.notable_people ?? []).slice(0, NOTABLE_PEOPLE_CAP);
-        if (people.length > 0) {
-          blocks.push(
-            `${notablePeopleHeading(lang)}\n${people.map((p) => formatNotablePersonLine(p, lang)).join('\n')}`,
-          );
-        }
-        const colon = lang === 'zh-CN' ? '：' : ':';
-        blocks.push(
-          lines.length > 0
-            ? `${summary.summary_note ?? hotPostsFallbackHeading(lang)}${colon}\n${lines.join('\n')}`
-            : renderCopy(lang, 'world.summary.noHotPosts'),
-        );
-        if (notable.length > 0) {
-          blocks.push(
-            `${mirrorAuthorsHeading(lang)}\n` +
-              notable.map((a) => formatNotableAuthorLine(a, lang)).join('\n'),
-          );
-        }
+        let bag: { worldFeedCache?: PostRefCache } | undefined;
+        let cacheUnreachable = false;
+        try { bag = await deps.runtime() as typeof bag; } catch { cacheUnreachable = true; }
+        if ((scope && !scope.isCurrent()) || (generation && !generation.isCurrent()))
+          throw new Error(formatHouseReadFailure(lang,{code:'HOUSE_ACTION_STALE'}));
+        const renderOpts = {lang,nameOf,sources:{cache:bag?.worldFeedCache,cacheUnreachable}};
+        const blocks = [freshnessText(summaryResult.freshness,lang),renderWorldSummary(summary,renderOpts)].filter(Boolean);
         // #588: the house answered, and the answer was "nothing". That reads
         // as a calm world whether the world is calm or the OTHER mounted
         // houses have gone dark, so an empty summary says when each house last
@@ -306,8 +259,13 @@ export function registerWorldTools(ctx: ToolsCtx): void {
             // No note this turn; the summary still goes out intact.
           }
         }
+        if ((scope && !scope.isCurrent()) || (generation && !generation.isCurrent())) {
+          throw new Error(formatHouseReadFailure(lang, { code: 'HOUSE_ACTION_STALE' }));
+        }
+        assertReadCallActive();
+        rememberWorldSummary(summary,renderOpts);
         return { type: 'text' as const, text: blocks.join('\n\n') };
-      },
+      }),
     });
 
     api.registerTool({

@@ -918,6 +918,7 @@ const popclawPlugin: OpenClawPluginDefinition = definePluginEntry({
         runtime().then((rt) => ({
           guideClient: rt.guideClient,
           summaryClient: rt.summaryClient,
+          newspaperSummary: rt.newspaperSummary,
           snapshotClient: rt.worldFeedClient,
           resolveClient: new ResolveClient({ baseUrl: rt.boot.loreHouseUrl, fetch: rt.houseRuntime.fetchHouse }),
           webBaseUrl: rt.boot.webBaseUrl,

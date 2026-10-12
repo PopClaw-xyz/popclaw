@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { consumeScopedSse, scopedBase64 } from '../../../src/world/scoped-sse.js';
+import { consumePublicSse, consumeScopedSse, scopedBase64 } from '../../../src/world/scoped-sse.js';
 
 function response(chunks: (string | Uint8Array)[]) {
   return new Response(new ReadableStream({ start(controller) {
@@ -41,4 +41,11 @@ describe('scoped SSE framing', () => {
     expect([...scopedBase64('Y\nQ==')]).toEqual([97]);
     for (const bad of ['', 'YQ', 'Y Q==', 'YQ===', 'YR==', 'YWJ=']) expect(() => scopedBase64(bad)).toThrow('SCOPED_BASE64_INVALID');
   });
+});
+
+it('delivers guide comments separately without a public event or cursor', async () => {
+  const digest='a'.repeat(64), hints:string[]=[],events:unknown[]=[];
+  const response=new Response(`: popclaw-guide-sha256=${digest}\n\n: heartbeat\n\n`);
+  await consumePublicSse(response,new AbortController().signal,event=>{events.push(event);},undefined,hint=>{hints.push(hint);});
+  expect(hints).toEqual([digest]); expect(events).toEqual([]);
 });

@@ -21,15 +21,26 @@ failure classifications through `houseReadFailure`. Guide method throws are
 classified too. A synchronous summary method throw still propagates before
 companion reads start, matching the existing foreground entries.
 
-The registered `popclaw_world_summary` tool and onboarding's
-`OnboardingDiscovery.presentLantern` prepare the read first. In the supported
-branch, each invokes summary before snapshot in the same `Promise.all`, so
-neither read waits for the other. Snapshot rejection still falls back to an
-empty sample. The tool throws on summary failure; onboarding presents its
-existing retry notice and persists `degraded`, retaining its previous card
-cache. Unsupported onboarding still presents the House guide and persists
-`unsupported`. Formatting, ranking, drafts and stage transitions remain with
-their existing owners.
+The registered `popclaw_world_summary` tool, onboarding's
+`OnboardingDiscovery.presentLantern`, and the newspaper's optional summary
+reference use this operation. The tool wraps its summary read in request and
+connection-scoped `SummaryReadReuse`, retains the complete published snapshot,
+and does not fetch a companion sampled feed. It preserves the shared ten-second
+read budget, cache freshness metadata, explicit retry policy and final source
+and input-currentness checks.
+
+Onboarding still invokes summary before snapshot in the same `Promise.all`, so
+neither read waits for the other. Snapshot rejection falls back to an empty
+sample. On summary failure it presents the existing retry notice and persists
+`degraded`, retaining its previous card cache. Unsupported onboarding still
+presents the House guide and persists `unsupported`.
+
+The newspaper captures its source generation before preparation and rechecks it
+before and after summary and rendering. Preparation and reading share the
+optional 1.5-second budget. A failed or unsupported reference remains absent;
+it does not block signed article collection. Its frozen snapshot identity and
+statistical times remain separate from the cached-read freshness times.
+Formatting, ranking, drafts and stage transitions retain their existing owners.
 
 Preparation retains declaration evidence for that operation. It adds no
 result cache, deduplication, retry or authorization snapshot: every `read`

@@ -60,6 +60,7 @@ export function publicHouseBindingMatches(db: HostDb, origin: string,
 }
 
 export interface PublicReadResourceOptions {
+  onGuideCheck?(origin: string, hint: string | undefined | null): void;
   readonly db: HostDb;
   readonly catalog: ExecutionStoreCatalog;
   readonly authority: OwnerAuthority;
@@ -172,6 +173,8 @@ class PublicReadResource {
       const receiver = new PublicV1Receiver({ capability: prepared.capability, producerPolicy: prepared.producerPolicy,
         selection: prepared.selection, executionDb: prepared.partition.db,
         gate: { origin, signal: this.abort.signal, isActive: () => this.isActive() },
+        onStreamOpen: () => { if (this.isActive()) opts.onGuideCheck?.(origin,undefined); },
+        onGuideDigest: digest => { if (this.isActive()) opts.onGuideCheck?.(origin,digest); },
         consumers: [], approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST,
         fetch: opts.fetch, onError: (error: unknown) => { this.detail = String(error); opts.log?.(`public receiver (${origin}): ${String(error)}`); } });
       this.receiver = receiver;
@@ -194,7 +197,7 @@ class PublicReadResource {
   private requestStop(): void {
     void this.stop().catch(error => { this.detail = String(error); this.opts.log?.(`public teardown (${this.origin}): ${String(error)}`); });
   }
-  refresh(): void { if (!this.isActive()) this.requestStop(); }
+  refresh(): void { if (!this.isActive()) this.requestStop(); else this.opts.onGuideCheck?.(this.origin,null); }
   status(): PublicReadStatus {
     let active = this.isActive(), receive: ReturnType<PublicV1Receiver['receiveStatus']> | undefined;
     try { receive = this.receiver?.receiveStatus(); }

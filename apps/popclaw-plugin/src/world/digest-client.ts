@@ -1,3 +1,4 @@
+import { assertReadCallActive } from '../runtime/read-call-budget.js';
 /**
  * Newspaper digest client (slice G; verdict `2026-07-31-world-section-verdict.md` §3).
  *
@@ -225,6 +226,7 @@ export async function refreshHouseDigest(
       fetched_at: (deps.now ?? Date.now)(),
       digest,
     };
+    assertReadCallActive();
     try {
       mkdirSync(dirname(deps.paths.houseDigestFile(deps.slug)), { recursive: true });
       writeFileSync(deps.paths.houseDigestFile(deps.slug), JSON.stringify(rec, null, 2), 'utf8');
