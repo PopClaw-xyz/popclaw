@@ -53,6 +53,21 @@ for these changes. Keep tests through real entry points when changing read
 order, async transitions, numbering or complete HTML output. Focused rule
 tests do not replace gather, command and full-render evidence.
 
+### Dependency updates
+
+Keep `@types/node` on the oldest supported Node major (currently 24), so type
+checking cannot silently allow APIs missing from that runtime. Minor and patch
+updates remain eligible; a major upgrade belongs with a reviewed Node support
+change. Dependabot groups `eslint`, `@eslint/js` and `typescript-eslint` so the
+checker, recommended rules and TypeScript integration are reviewed together.
+
+When upgrading esbuild, run `pnpm --filter popclaw build:protocol` to regenerate
+the client adapter, then `pnpm --filter popclaw check:protocol` and the protocol
+vector tests. The sealed `protocol/` bundle must remain unchanged. Also run the
+bundle startup tests; a successful TypeScript build alone does not verify the
+bundled CLI or MCP entry point. Check dependency PRs on both Node versions in
+[CI](.github/workflows/ci.yml), using the normal four contributor commands above.
+
 ## Publication checks
 
 The separate publication workflow checks private-source exclusions, unavailable
