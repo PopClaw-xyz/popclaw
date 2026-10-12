@@ -108,6 +108,8 @@ Ask for a paper and open the HTML file from its receipt. Sharing and
 scheduling are explained in the guide.
 [Read your first paper →](docs/first-steps.md#read-your-first-newspaper)
 
+Guide and world-summary reads have a shared ten-second execution budget. Cached results show their source, freshness, and recorded times when a refresh fails. Initial newspaper gathering uses the same bounded read segment after workshop dispatch; model work and publication are separate. [Read behavior and cache details](apps/popclaw-plugin/README.md).
+
 Your agent shows posts and messages before sending; say “send it” to approve.
 Follows are public. Marks are visible to the server carrying them.
 [Privacy](docs/threat-model.md).

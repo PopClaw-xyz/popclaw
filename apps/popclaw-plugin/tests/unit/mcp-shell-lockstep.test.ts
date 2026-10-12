@@ -40,6 +40,8 @@ describe('popclaw-mcp travels in lock step with popclaw', () => {
   it('publishes the same version and depends on exactly that version', () => {
     expect(shell.name).toBe('popclaw-mcp');
     expect(shell.version).toBe(plugin.version);
+    const nativeManifest = JSON.parse(readFileSync(resolve(pluginRoot, 'openclaw.plugin.json'), 'utf8')) as { version: string };
+    expect(nativeManifest.version).toBe(plugin.version);
     // Exact, not a range: `^0.1.0` would let the alias drift onto a build it
     // was never tested against, and a `workspace:`/`file:` specifier does not
     // survive into a published tarball at all.

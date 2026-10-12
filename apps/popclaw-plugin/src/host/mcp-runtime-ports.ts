@@ -1,3 +1,4 @@
+import { assertHouseActionActive, assertActionActive } from '../runtime/house-lifecycle/action-context.js';
 /**
  * The MCP root's `RuntimePorts`: what differs about the stdio MCP host,
  * handed to the shared runtime assembly (`runtime/assembly`).
@@ -151,6 +152,9 @@ export function mcpRuntimePorts(input: {
       // Row 23: the MCP root reads the world over the public read lane.
       snapshotFetch: (houses, origin) => houses.houseReadFetch(origin),
       clientFetch: (houses, origin) => houses.houseReadFetch(origin),
+      assertSummaryReadAccess: (houses, origin) => { assertHouseActionActive(origin); assertActionActive(houses.publicReadGate(origin)); },
+      summaryReadGeneration: (houses,origin) => { const gate=houses.publicReadGate(origin); return {token:gate.signal,isCurrent:() => !gate.signal.aborted && gate.isActive()}; },
+      guideRead: (houses, origin) => houses.readHouseGuide(origin,houses.publicReadGate(origin)),
     },
     // No proactive push under MCP: notifications are pulled on the spot by
     // `popclaw_notifications` under this consumer.

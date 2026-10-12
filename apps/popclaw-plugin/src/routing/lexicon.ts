@@ -114,6 +114,7 @@ export const LEXICON: LexiconEntry[] = [
   // posts; the weak model reached for private_messages (that's DMs, not
   // posts) and a wildcard search_feed call before it ever tried this tool.
   // Asking about a house's recent content must route here, not to guesses.
+  { tool: 'popclaw_world_summary', say: ['有什么新鲜事', '江湖总观', 'what is going on', 'what is new', 'anything new'] },
   { tool: 'popclaw_show_feed', say: ['recent content', 'latest posts', '最近的内容', '最近有什么帖子'] },
   // host-b, 2026-07-30 19:29: the owner asked "what's new with them?", and
   // the model made zero calls and answered from memory, "nothing new

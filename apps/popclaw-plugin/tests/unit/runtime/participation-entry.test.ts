@@ -18,6 +18,7 @@ import {mintHouse} from '../../helpers/signed-manifest.js';
 import type {HouseStore} from '../../../src/ingress/world-feed-store.js';
 import {pinConfiguredHouses} from '../../../src/social-graph/default-house-pinning.js';
 import {runHouseLoginCommand} from '../../../src/commands/popclaw-house.js';
+import {entryDigest} from '../../../src/runtime/house-lifecycle/participation-journal.js';
 import {readHouseCapabilityView} from '../../../src/world/world-capabilities.js';
 const ME='https://house.popclaw.me',WORLD='https://house.popclaw.world';
 const closes:Array<()=>Promise<void>>=[];
@@ -277,9 +278,9 @@ it('delayed guide body succeeds with unchanged participation', async () => {
   const f = await fixture(); await f.rt.activateInitialMe();
   const started = deferred(), held = deferred();
   f.transport.mockImplementationOnce(async () => {
-    const response = new Response('delayed complete guide');
-    response.text = async () => { started.release(); await held.wait; return 'delayed complete guide'; };
-    return response;
+    return new Response(new ReadableStream({async start(controller) {
+      started.release(); await held.wait; controller.enqueue(new TextEncoder().encode('delayed complete guide')); controller.close();
+    }}));
   });
   const read = f.rt.readHouseGuide(ME); await started.wait;
   expect(guidePointer(f.db)?.guide_body).toBeNull(); held.release();
@@ -290,9 +291,9 @@ it('leave and rejoin during guide body fetch neither caches nor delivers the old
   const f = await fixture(); await f.rt.activateInitialMe();
   const started = deferred(), held = deferred();
   f.transport.mockImplementationOnce(async () => {
-    const response = new Response('old delayed guide');
-    response.text = async () => { started.release(); await held.wait; return 'old delayed guide'; };
-    return response;
+    return new Response(new ReadableStream({async start(controller) {
+      started.release(); await held.wait; controller.enqueue(new TextEncoder().encode('old delayed guide')); controller.close();
+    }}));
   });
   const read = f.rt.readHouseGuide(ME); await started.wait;
   await f.rt.commands.logoutHouse(ME); await f.rt.commands.loginHouse(ME);
@@ -320,18 +321,15 @@ it('invalid historical guide URL is caught without changing joined participation
   expect(f.db.queryOne('SELECT origin FROM house_binding_pin WHERE origin=?', [ME])).not.toBeNull();
 });
 
-it('pending guide reads remain sequential in durable row order', async () => {
+it('pending guide contexts retain durable row order without remote reads', async () => {
   const f = await fixture(); await f.rt.activateInitialMe(); await f.rt.commands.loginHouse(WORLD);
-  const calls: string[] = [], started = deferred(), held = deferred();
-  f.transport.mockImplementation(async input => {
-    const url = new URL(String(input)); calls.push(url.origin);
-    if (url.origin === ME) { started.release(); await held.wait; }
-    return new Response(url.origin + ' guide');
-  });
-  const pending = f.rt.pendingHouseGuides(); await started.wait;
-  expect(calls).toEqual([ME]); held.release();
-  expect((await pending).map(context => context.origin)).toEqual([ME, WORLD]);
-  expect(calls).toEqual([ME, WORLD]);
+  await f.rt.readHouseGuide(ME); await f.rt.readHouseGuide(WORLD);
+  f.transport.mockClear();
+  expect((await f.rt.pendingHouseGuides()).map(context => context.origin)).toEqual([ME, WORLD]);
+  expect(f.transport).not.toHaveBeenCalled();
+  f.db.execute('UPDATE house_guide_context SET guide_body=NULL,guide_digest=NULL');
+  expect(await f.rt.pendingHouseGuides()).toEqual([]);
+  expect(f.transport).not.toHaveBeenCalled();
 });
 
 
@@ -360,8 +358,8 @@ it('historical backfill preserves a pointer and complete body installed during t
   const read = f.rt.readHouseGuide(ME); await started.wait;
   f.db.execute(`INSERT INTO house_guide_context
     (origin,binding_digest,op_seq,guide_url,manifest_digest,guide_digest,guide_body,delivered_digest)
-    VALUES (?,?,?,?,?,'concurrent-digest','complete concurrent guide','concurrent-digest')`,
-    [ME, before.binding_digest, before.op_seq, before.guide_url, before.manifest_digest]);
+    VALUES (?,?,?,?,?,?,?,?)`,
+    [ME, before.binding_digest, before.op_seq, before.guide_url, before.manifest_digest,entryDigest('complete concurrent guide'),'complete concurrent guide',entryDigest('complete concurrent guide')]);
   const concurrent = guidePointer(f.db); held.release();
   expect(await read).toMatchObject({status: 'available', guide: 'complete concurrent guide', delivered: true});
   expect(guidePointer(f.db)).toEqual(concurrent);

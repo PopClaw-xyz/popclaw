@@ -140,6 +140,7 @@ export interface PluginRuntime {
   // S4.1-T3: world clients shared between orchestrator act2 and world tools.
   readonly guideClient: GuideClient;
   readonly summaryClient: WorldSummaryClient;
+  readonly newspaperSummary: import('../newspaper/summary-material.js').NewspaperSummarySource;
   // ADR-0019: mark snapshot store + execution service.
   readonly marksStore: MarksStore;
   readonly markService: MarkService;

@@ -599,6 +599,20 @@ describe('PublicV1Receiver', () => {
     await publicEventually(() => expect(f.receiver.receiveStatus().caughtUp).toBe(true));
     expect(f.receiver.consumerStatus('task')).toMatchObject({ supported: false, done: 0 });
   });
+  it('receives a guide digest comment without advancing journal cursors or dispatching an event', async () => {
+    const digest='a'.repeat(64),onGuideDigest=vi.fn(),onStreamOpen=vi.fn();
+    const f=publicFixture({onGuideDigest,onStreamOpen});
+    const before=f.db.queryAll('SELECT * FROM world_public_cursors_v1');
+    await f.receiver.start(); await publicEventually(()=>expect(f.streams).toHaveLength(1));
+    f.streams[0]!.enqueue(new TextEncoder().encode(`: popclaw-guide-sha256=${digest}\n\n`));
+    await publicEventually(()=>expect(onGuideDigest).toHaveBeenCalledWith(digest));
+    expect(onStreamOpen).toHaveBeenCalledOnce();
+    expect(f.db.queryAll('SELECT * FROM world_public_cursors_v1')).toEqual(before);
+    expect(f.db.queryAll('SELECT * FROM world_public_events_v1')).toEqual([]);
+    expect(f.receiver.isReceiving()).toBe(false);
+    f.boundary();f.checkpoint();await publicEventually(()=>expect(f.receiver.receiveStatus().caughtUp).toBe(true));
+    expect(f.errors).toEqual([]);
+  });
   it('rejects an unapproved task handler before transport or completion', async () => {
     const f = publicFixture(); await expect(f.receiver.start(vi.fn())).rejects.toThrow('PUBLIC_TASK_HANDLER_UNSUPPORTED');
     expect(f.requests).toHaveLength(0);

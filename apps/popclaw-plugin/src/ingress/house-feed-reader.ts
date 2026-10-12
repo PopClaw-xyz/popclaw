@@ -1,3 +1,4 @@
+import { assertReadCallActive, budgetedFetch, waitForRead } from '../runtime/read-call-budget.js';
 /** One normal per-House selection; every prepared result owns its evidence. */
 import { popclaw } from '@popclaw/contracts';
 import { cidFromCanonical } from '@popclaw/algorithms';
@@ -202,7 +203,7 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
     for (;;) {
       const existing = snapshots.get(key);
       if (!existing || !sameStores(existing.stores, stores)) break;
-      const prepared = await existing.pending;
+      const prepared = await waitForRead(existing.pending);
       if (!scope.isCurrent() || !existing.reusable || prepared.reusable()) return prepared.fork();
       // Another waiter may already have replaced this stale authority capture.
       if (snapshots.get(key) !== existing) continue;
@@ -213,7 +214,7 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
     snapshots.set(key, entry);
     const remove = () => { if (snapshots.get(key) === entry) snapshots.delete(key); };
     try {
-      const prepared = await entry.pending;
+      const prepared = await waitForRead(entry.pending);
       entry.reusable = prepared.reusable();
       if (!entry.reusable) remove();
       return prepared.fork();
@@ -224,14 +225,14 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
     for (const store of stores) {
       let ordinarySelected = false;
       try {
-        checkRequest();
+        assertReadCallActive(); checkRequest();
         // Existing verified optional observation retains its selected journal, including history/refusal.
         if (readHouseCapabilityView(this.deps.db,store.baseUrl)) {
           captured.push(await this.publicSource(store, query)); continue;
         }
         const before=this.deps.houses.captureOrdinaryFeed(store); before.assertCurrent();
-        const trust=await prepareConfirmHouseTrust(this.deps.db,store.baseUrl,{fetch:this.deps.houses.houseReadFetch(store.baseUrl),allowInsecureOrigin:isLoopbackOrigin(store.baseUrl)});
-        checkRequest(); before.assertCurrent();
+        const trust=await prepareConfirmHouseTrust(this.deps.db,store.baseUrl,{fetch:budgetedFetch(this.deps.houses.houseReadFetch(store.baseUrl)),allowInsecureOrigin:isLoopbackOrigin(store.baseUrl)});
+        assertReadCallActive(); checkRequest(); before.assertCurrent();
         if(!trust.ok)throw new Error(trust.refusal);
         const rawBytes=new Uint8Array(verifiedManifestBytes(trust.prepared)!);
         const document=parseWorldManifest(rawBytes,new Map());
@@ -242,9 +243,9 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
         const evidence={manifest:Buffer.from(rawBytes).toString('base64'),proof:Buffer.from(committed.binding.proofBytes).toString('base64')};
         const verified=verifyOrdinaryFeedManifest(this.deps.db,store.baseUrl,evidence);
         ordinarySelected = true;
-        const client=new WorldFeedClient({baseUrl:store.baseUrl,fetch:this.deps.houses.houseReadFetch(store.baseUrl),isOfficialActor:id=>verified.officialIds.includes(id)});
+        const client=new WorldFeedClient({baseUrl:store.baseUrl,fetch:budgetedFetch(this.deps.houses.houseReadFetch(store.baseUrl)),isOfficialActor:id=>verified.officialIds.includes(id)});
         const rows=await client.fetchVerifiedSnapshot({limit:ORDINARY_SNAPSHOT_LIMIT,...(query.author ? {author:query.author} : {}),...(query.platform ? {platform:query.platform} : {})});
-        checkRequest(); capture.assertCurrent();
+        assertReadCallActive(); checkRequest(); capture.assertCurrent();
         if (rows.length>ORDINARY_SNAPSHOT_LIMIT) throw new Error('ORDINARY_FEED_SNAPSHOT_LIMIT_EXCEEDED');
         const observedAt=Math.floor(Date.now()/1000),source={origin:store.baseUrl,slug:store.slug,observedAt,sequence:'',logIncarnation:''};
         const items: PublicDisplayItem[]=[];
@@ -260,13 +261,14 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
           if (readHouseCapabilityView(this.deps.db,store.baseUrl)) throw new Error('ORDINARY_FEED_SELECTION_CHANGED');};
         check();
         // Existing writable projection retains the exact signed envelope for later material checks.
-        if (!store.cacheReadOnly) store.db.transaction(()=>{check();for(const hit of items) store.cache.record(hit.item);check();});
+        if (!store.cacheReadOnly) store.db.transaction(()=>{assertReadCallActive();check();for(const hit of items) store.cache.record(hit.item);check();});
         const status:PublicDisplaySource={origin:store.baseUrl,slug:store.slug,protocol:'ordinary-snapshot',capabilityRevision:verified.binding.manifestDigest,
           logIncarnation:'',history:false,incomplete:true,unavailable:false,truncated:rows.length===ORDINARY_SNAPSHOT_LIMIT,observedAt};
         const ordinary:OrdinaryFeedSource={store,authority:capture.authority,evidence,items,status,assertCurrent:check};
         captured.push({status,items,check,ordinary});
-      } catch (error) { captured.push({status:{...unavailable(store,error),...(ordinarySelected?{protocol:'ordinary-snapshot' as const}:{})},items:[],check(){}}); }
+      } catch (error) { assertReadCallActive(); captured.push({status:{...unavailable(store,error),...(ordinarySelected?{protocol:'ordinary-snapshot' as const}:{})},items:[],check(){}}); }
     }
+    assertReadCallActive();
     return new PreparedHouseFeed(captured, checkRequest, query.completeWindow === true);
   }
   private async publicSource(store: HouseStore, query: PublicDisplayQuery): Promise<PreparedSource> {

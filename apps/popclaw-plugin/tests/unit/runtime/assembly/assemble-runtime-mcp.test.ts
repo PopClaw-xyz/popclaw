@@ -297,12 +297,12 @@ describe('the MCP bag, as the production root path builds it', () => {
     const rt = await boot();
     expect(Object.keys(rt).sort()).toEqual([
       'boot', 'bondsStore', 'cadenceLoader', 'egress', 'guideClient', 'host', 'houseFeedReader', 'houseRuntime', 'houseStarted', 'houses',
-      'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers', 'llmComplete', 'markService', 'marksStore', 'nameOf',
+      'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers', 'llmComplete', 'markService', 'marksStore', 'nameOf', 'newspaperSummary',
       'notifier', 'onboardingState', 'orchestrator', 'ownerNotifyTargetStore', 'paths', 'pendingFollows', 'pendingInvites',
       'proposalsStore', 'replyPings', 'scoreCache', 'shutdown', 'socialGraph', 'socialLog', 'summaryClient', 'tasteLoader',
       'publicFeedDisplay', 'uploadCanvas', 'worldFeedCache', 'worldFeedClient', 'worldOwnerAuthorization', 'worldRuntime',
     ].sort());
-    expect(Object.keys(rt)).toHaveLength(39);
+    expect(Object.keys(rt)).toHaveLength(40);
     expect(rt.worldFeedClient).toBe(rt.houseFeedReader);
     expect(rt.publicFeedDisplay).toBe(rt.houseFeedReader);
   });

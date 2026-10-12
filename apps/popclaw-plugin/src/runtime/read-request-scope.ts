@@ -1,6 +1,9 @@
 /** An explicit host run generation. This is a read-reuse identity, never authority. */
 export interface ReadRequestScope {
   readonly token: object;
+  /** Same owner input across model continuations, only when the host can prove it.
+   * This permits read reuse, never access or authority. Unknown hosts omit it. */
+  readonly requestToken?: object;
   isCurrent(): boolean;
 }
 

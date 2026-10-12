@@ -171,7 +171,7 @@ export async function assembleRuntime<S extends object, P extends object = Recor
   lifecycle.checkIntegrity?.({ paths, houseStores });
 
   const collaborators = buildCollaborators({ host, boot, paths, ports, houses, egress });
-  const { tasteLoader, guideClient, summaryClient, marksStore, markService, llmComplete } = collaborators;
+  const { tasteLoader, guideClient, summaryClient, newspaperSummary, marksStore, markService, llmComplete } = collaborators;
 
   if (drift.followBackfillLate === true) backfillFollowsFromGraph(bondsStore, socialGraph, ports);
 
@@ -257,6 +257,7 @@ export async function assembleRuntime<S extends object, P extends object = Recor
     onboardingState: stateRepo,
     guideClient,
     summaryClient,
+    newspaperSummary,
     marksStore,
     markService,
     bondsStore,

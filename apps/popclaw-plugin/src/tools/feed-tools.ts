@@ -35,8 +35,9 @@ export function registerFeedTools(ctx: ToolsCtx): void {
   registerLocalDisplayTool({
     name: 'popclaw_show_feed',
     description:
-      'Call this tool when the owner says "my feed", "anything new", "what did <someone> post", ' +
-      '"recent posts", "latest posts", "what is on/happening in my lore-house", or asks to see a lore-house\'s recent content with authors and post ids. ' +
+      'Call for an explicit recent-item list: "my feed", "what did <someone> post", "recent posts", "latest posts", ' +
+      'or a lore-house\'s recent content with authors and post ids. For open-ended news or a broad overview, use popclaw_world_summary first. ' +
+      'A successful feed is not a successful summary; disclose received-content and coverage limits after a summary failure. ' +
       "Show the user's world feed of PUBLIC posts (popclaw-native + scraped social posts) — not private messages. " +
       'filter_by_author takes a name or a popclaw_id — a name (e.g. "Elon Musk") is resolved automatically first. ' +
       'Each House selects verified local public-v1 content or its declared ordinary signed snapshot; preserve bounded/history/completeness qualifications. ' +

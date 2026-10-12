@@ -1,3 +1,4 @@
+import { summaryMaterialText } from './summary-material.js';
 /**
  * The candidate page: everything the day carried, laid out for one decision —
  * **which of these belong in the owner's paper**.
@@ -200,6 +201,7 @@ export function buildCandidatePage(issue: IssueData, opts: CandidatePageOptions)
     id: opts.publishToken,
   });
   const out: string[] = [
+    ...(issue.worldSummary ? [summaryMaterialText(issue.worldSummary, lang)] : []),
     issue.language ? languageDirective(lang, issue.language) : languageDirective(),
     ``,
     m('head', {

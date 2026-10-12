@@ -1,3 +1,4 @@
+import { withReadCallBudget, assertReadCallActive, waitForRead } from '../runtime/read-call-budget.js';
 import { isLocalInviteCall } from '../invite/local-invite-call.js';
 /**
  * The tail every tool result goes through: the unread-pings line, or else at
@@ -7,6 +8,7 @@ import { isLocalInviteCall } from '../invite/local-invite-call.js';
 
 import { houseGuideContextKey } from '../world/house-guide-context.js';
 import { optionalWorldOffer } from '../onboarding/optional-world.js';
+import { renderCopy } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { canAppendToolNotice, type ToolNoticeContext } from '../notifier/tool-notice.js';
 import { fileLastRun } from '../runtime/last-run.js';
@@ -59,7 +61,7 @@ async function pickNudgeFor(
   nowSec: number,
 ): Promise<{ key: string; line: string } | null> {
   try {
-    const rt = (await runtime()) as TailRuntime | undefined;
+    const rt = (await waitForRead(runtime())) as TailRuntime | undefined;
     if (!rt) return null;
     const row = rt.onboardingState?.get(rt.boot.popclawId) ?? null;
     const ctx: NudgeCtx = { stage: row?.stage ?? null, graduatedAt: row?.completed_at ?? null };
@@ -127,19 +129,20 @@ export function withTail(
         const capturedArgs = typeof captureParameters === 'function'
           ? [args[0], captureParameters(args[1]), ...args.slice(2)] : args;
         const invoke = async (): Promise<unknown> => {
-        let result = await inner(...capturedArgs);
+        let result = await waitForRead(inner(...capturedArgs));
+        assertReadCallActive();
         if (!canAppendToolNotice('', result)) return result;
         let context: ToolNoticeContext | undefined;
-        try { context = await noticeContext?.(args[2] instanceof AbortSignal ? args[2] : undefined); } catch { /* notice unavailable */ }
+        try { context = await waitForRead(Promise.resolve(noticeContext?.(args[2] instanceof AbortSignal ? args[2] : undefined))); } catch { /* notice unavailable */ }
         const text = (result as { text?: unknown } | null)?.text;
         if (typeof text === 'string') {
         try {
           let envelope: Record<string, unknown> | undefined;
           try { const parsed = JSON.parse(text); if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') envelope = parsed; } catch { /* ordinary text */ }
-          const rt = (await runtime()) as TailRuntime | undefined;
+          const rt = (await waitForRead(runtime())) as TailRuntime | undefined;
           const guideScope = currentGuideReadScope?.();
           const present = currentGuideReadScope ? guideScope?.isCurrent() ? guideScope.presentGuideKeys : new Set<string>() : undefined;
-          const candidates = await rt?.houseRuntime?.pendingHouseGuides(present);
+          const candidates = await waitForRead(Promise.resolve(rt?.houseRuntime?.pendingHouseGuides(present)));
           const pendingNotice = context ? context.store.hasNoticeFor(context) : false;
           const unreadLine = null;
           const nowSec = Math.floor(Date.now() / 1000);
@@ -152,7 +155,8 @@ export function withTail(
             nudgeLine: pick?.line ?? null,
           });
           if (tail && pick && tail === pick.line) {
-            const rt = (await runtime()) as TailRuntime | undefined;
+            const rt = (await waitForRead(runtime())) as TailRuntime | undefined;
+            assertReadCallActive();
             if (rt) await recordNudgeSent(rt.host, pick.key, nowSec);
           }
           // Native scopes defer the final choice until every outer wrapper has
@@ -165,9 +169,10 @@ export function withTail(
             if (guides?.length) {
               if (payload) {
                 payload.house_guide_contexts = guides;
+                payload.house_guide_context_notice = renderCopy(ownerLang(),'world.guide.currentContext');
                 if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) payload.optional_world_offer = optionalWorldOffer(ownerLang());
               } else {
-                output += '\n' + JSON.stringify({house_guide_contexts:guides});
+                output += '\n' + JSON.stringify({house_guide_contexts:guides,house_guide_context_notice:renderCopy(ownerLang(),'world.guide.currentContext')});
                 if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) output += '\n' + optionalWorldOffer(ownerLang());
               }
             }
@@ -175,6 +180,7 @@ export function withTail(
             return {text: payload ? JSON.stringify(payload) : tail ? `${output}\n\n${tail}` : output,
               keys: guides?.map(houseGuideContextKey) ?? []};
           };
+          assertReadCallActive();
           const current = guideScope?.isCurrent() === true;
           const rendered = render(current ? guideScope.presentGuideKeys : new Set<string>());
           result = { ...(result as object), text: rendered.text };
@@ -188,7 +194,9 @@ export function withTail(
         };
         // Control commands must remain able to enable or disable a house.
         if (toolName === 'popclaw_house_login' || toolName === 'popclaw_house_logout') return invoke();
-        return runCommand ? runCommand(invoke) : invoke();
+        const run = () => runCommand ? runCommand(invoke) : invoke();
+        return toolName === 'popclaw_world_summary' || toolName === 'popclaw_world_guide'
+          ? withReadCallBudget({signal:args[2] instanceof AbortSignal ? args[2] : undefined},run) : run();
       },
     };
   };

@@ -8,6 +8,7 @@ import type { HostAdapter, CancelHandle } from '../host/host-adapter.js';
 import { describeSseError } from './sse-error.js';
 
 export interface SseIngressOptions {
+  readonly onStreamOpen?: () => void;
   readonly baseUrl: string;
   readonly isOfficialActor?: (actorId: string) => boolean;
   readonly gate?: Pick<HouseGate, 'isActive' | 'signal'>;
@@ -141,6 +142,7 @@ export class SseIngress implements EventIngress {
         );
       }
       this.consecutiveFailures = 0;
+      this.opts.onStreamOpen?.();
       this.connectedCb?.();
     };
 

@@ -35,9 +35,20 @@ function identity(event: Fields, context: Fields): Identity | undefined {
 const runKey = (id: Identity) => JSON.stringify(identityFields.map(name => id[name]));
 const callKey = (id: Pick<Identity, 'agentId' | 'sessionKey' | 'sessionId'>, name: string, callId: string) =>
   JSON.stringify([id.agentId, id.sessionKey, id.sessionId, name, callId]);
-type Run = { readonly id: Identity; readonly scope: GuideReadScope; live: boolean };
+type Run = { readonly id: Identity; readonly scope: GuideReadScope; readonly ownerInput?: string; live: boolean };
 type Call = { readonly run: Run };
 type PendingGuide = Parameters<NonNullable<GuideReadScope['stageGuideEmission']>>[1];
+
+/** Transient host input identity. Do not log, persist or derive this from tool text. */
+function lastOwnerInput(messages: unknown[]): string | undefined {
+  for (let i=messages.length-1;i>=0;i-=1) {
+    const message=fields(messages[i]);
+    if (message.role === 'user') {
+      try { return JSON.stringify([i,message]); } catch { return undefined; }
+    }
+  }
+  return undefined;
+}
 
 export function createNativeReadContext(): NativeReadContext {
   const runs = new Map<string, Run>(), calls = new Map<string, Call>();
@@ -65,9 +76,15 @@ export function createNativeReadContext(): NativeReadContext {
         closeMatching(c); closeMatching(e); return;
       }
       const key = runKey(id), previous = runs.get(key);
+      const ownerInput = lastOwnerInput(e.historyMessages);
+      const requestToken = ownerInput === undefined ? undefined
+        : previous?.scope.isCurrent() && previous.ownerInput === ownerInput
+          ? previous.scope.requestToken ?? Object.freeze({}) : Object.freeze({});
       if (previous) close(previous);
-      const observed = observedHouseGuideKeys(e.historyMessages), emitted = new Set<string>();
+      const observed = new Set([...observedHouseGuideKeys(e.historyMessages),
+        ...observedHouseGuideKeys(e.prompt), ...observedHouseGuideKeys(e.systemPrompt)]), emitted = new Set<string>();
       const scope: GuideReadScope = Object.freeze({ token: Object.freeze({}),
+        ...(requestToken ? {requestToken} : {}),
         isCurrent: () => run.live && runs.get(key) === run,
         get presentGuideKeys(): ReadonlySet<string> { return new Set([...observed, ...emitted]); },
         stageGuideEmission(text: string, render: PendingGuide) {
@@ -78,7 +95,7 @@ export function createNativeReadContext(): NativeReadContext {
           if (scope.isCurrent()) for (const guide of keys) emitted.add(guide);
         },
       });
-      const run: Run = { id, scope, live: true }; runs.set(key, run);
+      const run: Run = { id, scope, ownerInput, live: true }; runs.set(key, run);
       return { scope, keys: observed };
     },
     beforeToolCall(event, context) {
