@@ -1,5 +1,7 @@
 /** Source-bound House business knowledge; reading or emitting it grants no action. */
-import { houseReadFailure, RemoteHouseReadError, type HouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
+import { RemoteHouseReadError, type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
+import { currentActionSignal } from '../runtime/house-lifecycle/action-context.js';
+import { remoteReadFailure } from './house-read-diagnostic.js';
 import type { SessionManifest } from '../runtime/house-lifecycle/control-client.js';
 import type { HostDb } from '../host/host-db.js';
 import { entryDigest } from '../runtime/house-lifecycle/participation-journal.js';
@@ -89,17 +91,24 @@ export async function readHouseGuideContext(db: HostDb, origin: string, fetchDoc
   };
   if (!state.pending && (state.dirty || Date.now()-state.checkedAt >= GUIDE_REVALIDATE_MS || !row.guide_body)) {
     const revision = state.revision; state.attemptedAt = Date.now();
+    const startedAt = performance.now(), actionSignal = currentActionSignal();
+    let phase: HouseReadDiagnostic['phase'] = 'before-fetch';
+    let deadline: AbortSignal | undefined;
     state.pending = (async () => {
       try {
         const cached = row.guide_body && row.guide_digest === entryDigest(row.guide_body);
-        const request = (conditional: boolean) => fetchDocument(row.guide_url,{method:'GET',redirect:'error',
-          signal:AbortSignal.timeout(15_000),headers:conditional ? {'If-None-Match':`"${row.guide_digest}"`} : {}});
+        const request = (conditional: boolean) => {
+          phase = 'fetch'; deadline = AbortSignal.timeout(15_000);
+          return fetchDocument(row.guide_url,{method:'GET',redirect:'error',signal:deadline,
+            headers:conditional ? {'If-None-Match':`"${row.guide_digest}"`} : {}});
+        };
         let response = await request(!!cached);
         if (response.status === 304 && !cached) response = await request(false);
         if (response.status === 304 && cached) {
           if (!current()) return;
         } else {
           if (!response.ok) { await response.body?.cancel(); throw new RemoteHouseReadError({code:'HOUSE_REMOTE_HTTP',origin,status:response.status}); }
+          phase = 'body';
           const body = await readBoundedGuide(response), digest = entryDigest(body);
           if (!current()) return;
           db.transaction(tx => {
@@ -112,7 +121,7 @@ export async function readHouseGuideContext(db: HostDb, origin: string, fetchDoc
         state.checkedAt = Date.now(); state.failure = undefined;
         state.dirty = state.revision !== revision && state.hint !== latestDigest;
       } catch (error) {
-        state.dirty = true; state.failure = houseReadFailure(error,origin);
+        state.dirty = true; state.failure = remoteReadFailure(error,origin,{phase,deadline,timeoutMs:15_000,startedAt,actionSignal});
         // Preserve the last complete body and pending invalidation.
       }
     })().finally(() => { state.pending = undefined; });
@@ -176,11 +185,17 @@ export function recordJoinedGuide(tx: HostDb, input: {
  * Backfill only inserts missing rows; it is not a join or a first-trust path. */
 export async function readJoinedHouseGuide(db: HostDb, origin: string, ports: HouseGuideReadPorts): Promise<HouseGuideResult> {
   const gate = ports.gate;
+  const startedAt = performance.now(), actionSignal = currentActionSignal();
+  let backfillFailure: HouseReadFailure | undefined;
+  let backfillCurrent = () => false;
   // Existing joined Houses may predate the journal. Refresh their verified
   // declared pointer without creating a join or first trust.
   if (gate.isActive() && !db.queryOne('SELECT origin FROM house_guide_context WHERE origin=?',[origin])) {
     const row = readParticipation(db,origin), binding = pinnedBinding(db,origin);
     if (row && binding) try {
+      backfillCurrent = () => gate.isActive()
+        && JSON.stringify(readParticipation(db,origin)) === JSON.stringify(row)
+        && JSON.stringify(pinnedBinding(db,origin)) === JSON.stringify(binding);
       const manifest = await ports.fetchManifest();
       const prepared = await ports.prepareBinding(manifest);
       const concurrent = db.transaction(tx => {
@@ -195,9 +210,15 @@ export async function readJoinedHouseGuide(db: HostDb, origin: string, ports: Ho
         const cached = cachedHouseGuide(db,origin,ports.active);
         if (cached.status === 'available') return cached;
       }
-    } catch { /* Joined status remains separate from guide availability. */ }
+    } catch (error) {
+      // Joined status remains separate from guide availability. Retain only a
+      // safe observation of the pre-guide manifest/binding stage.
+      backfillFailure = remoteReadFailure(error,origin,{phase:'before-fetch',startedAt,actionSignal});
+    }
   }
-  return readHouseGuideContext(db,origin,ports.documentFetch(),ports.active);
+  const result = await readHouseGuideContext(db,origin,ports.documentFetch(),ports.active);
+  return result.status === 'unavailable' && !result.failure && backfillFailure && backfillCurrent()
+    ? {...result,failure:backfillFailure} : result;
 }
 
 /** Identity of complete source-bound knowledge, never action authority. */

@@ -7,7 +7,7 @@ import { LocalHostDb } from '../../../src/host/local-host-db.js';
 import { runMigrations } from '../../../src/host/migrations.js';
 import { ensureHouseLifecycleSchema } from '../../../src/runtime/house-lifecycle/participation-store.js';
 import { establishTrustInTx } from '../../../src/world/house-binding-pin.js';
-import { guideBindingDigest, markGuidesInAgentInput, recordJoinedGuide, pendingHouseGuides, readHouseGuideContext, houseGuideContextKey, observedHouseGuideKeys } from '../../../src/world/house-guide-context.js';
+import { readJoinedHouseGuide, guideBindingDigest, markGuidesInAgentInput, recordJoinedGuide, pendingHouseGuides, readHouseGuideContext, houseGuideContextKey, observedHouseGuideKeys } from '../../../src/world/house-guide-context.js';
 import { entryDigest } from '../../../src/runtime/house-lifecycle/participation-journal.js';
 import { mintHouse } from '../../helpers/signed-manifest.js';
 
@@ -213,4 +213,53 @@ it('normal MCP access checks already delivered guides when no stream is running'
   const guides=await pendingHouseGuides(f.db,origin=>readHouseGuideContext(f.db,origin,async()=>new Response('new version'),()=>true));
   expect(guides).toHaveLength(1);expect(guides[0]?.guide).toBe('new version');expect(guides[0]?.delivered).toBe(false);
   expect(f.row()?.delivered_digest).toBe(digest);
+});
+
+
+it.each(['fetch','body'] as const)('retains safe native cache-fill %s diagnostics without persisting a failed body', async phase => {
+  const f = fixture();
+  const failure = () => new TypeError('SECRET transport auth/body', {cause:new AggregateError([
+    Object.assign(new Error('SECRET address'),{code:'ENETUNREACH'})
+  ],'SECRET addresses')});
+  const result = await readHouseGuideContext(f.db,ORIGIN,async () => {
+    if (phase === 'fetch') throw failure();
+    return new Response(new ReadableStream({start(c){c.error(failure());}}));
+  },()=>true);
+  expect(result).toMatchObject({status:'unavailable',failure:{code:'HOUSE_REMOTE_NETWORK',
+    diagnostic:{phase,cause:'connection',cancellation:'none',elapsedMs:expect.any(Number)}}});
+  expect(JSON.stringify(result)).not.toMatch(/SECRET|ENETUNREACH/);
+  expect(f.row()?.guide_body).toBeNull();
+});
+
+
+it('reports a failed historical manifest backfill without changing participation or creating a guide row',async()=>{
+  const f=fixture();
+  f.db.execute('DELETE FROM house_guide_context');
+  const result=await readJoinedHouseGuide(f.db,ORIGIN,{
+    gate:{signal:new AbortController().signal,isActive:()=>true},
+    fetchManifest:async()=>{throw new TypeError('SECRET manifest',{cause:Object.assign(new Error('SECRET TLS'),{code:'CERT_HAS_EXPIRED'})});},
+    prepareBinding:async()=>{throw new Error('must not prepare a missing manifest');},
+    documentFetch:()=>async()=>{throw new Error('must not fetch an undeclared guide');},
+    active:()=>true,
+  });
+  expect(result).toMatchObject({status:'unavailable',code:'HOUSE_GUIDE_CONTEXT_STALE',failure:{code:'HOUSE_REMOTE_NETWORK',
+    diagnostic:{phase:'before-fetch',cause:'tls',elapsedMs:expect.any(Number),cancellation:'none'}}});
+  expect(JSON.stringify(result)).not.toContain('SECRET');
+  expect(f.row()).toBeNull();
+  expect(f.db.queryOne<{phase:string}>('SELECT phase FROM house_participation WHERE house_origin=?',[ORIGIN])?.phase).toBe('connected');
+});
+
+
+it('does not attach an old preflight failure after participation changes',async()=>{
+  const f=fixture();f.db.execute('DELETE FROM house_guide_context');
+  const result=await readJoinedHouseGuide(f.db,ORIGIN,{
+    gate:{signal:new AbortController().signal,isActive:()=>true},
+    fetchManifest:async()=>{
+      f.db.execute("UPDATE house_participation SET op_seq=op_seq+1,phase='disconnected'");
+      throw Object.assign(new Error('SECRET old connection'),{code:'ECONNRESET'});
+    },
+    prepareBinding:async()=>{throw new Error('must not prepare');},
+    documentFetch:()=>async()=>{throw new Error('must not fetch');},active:()=>true,
+  });
+  expect(result).toEqual({status:'unavailable',origin:ORIGIN,code:'HOUSE_GUIDE_CONTEXT_STALE'});
 });

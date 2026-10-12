@@ -13,6 +13,7 @@
  * house-bound lane; only the declared guide goes through `documentFetch`,
  * which keeps every protection except origin equality.
  */
+import { GuideClient } from '../../../src/world/guide-client.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -288,4 +289,22 @@ describe('every root wires the document lane into the handshake', () => {
     expect(source('src/runtime/assembly/index.ts')).toMatch(/configureHouseResources\(\{/);
     expect(source('src/runtime/assembly/feeds.ts')).toMatch(/houses\.configureResources\(\{[\s\S]*refresh: async \(house, gate\) => \{/);
   });
+});
+
+
+it('native HouseRuntime guide delegation retains safe diagnostics, with a successful retry as a control',async()=>{
+  let fail=true;
+  const {houses,calls}=await fixture({[GUIDE_URL]:()=>{
+    if(fail)throw new TypeError('SECRET transport',{cause:Object.assign(new Error('SECRET address'),{code:'ENETUNREACH'})});
+    return new Response(GUIDE);
+  }});
+  const client=new GuideClient({baseUrl:HOUSE,readGuide:()=>houses.readHouseGuide(HOUSE,houses.captureGate(HOUSE))});
+  const result=await client.fetchGuideResult();
+  expect(result).toMatchObject({ok:false,failure:{code:'HOUSE_REMOTE_NETWORK',
+    diagnostic:{phase:'fetch',cause:'connection',elapsedMs:expect.any(Number),cancellation:'none'}}});
+  expect(JSON.stringify(result)).not.toMatch(/SECRET|ENETUNREACH/);
+  expect(calls.map(x=>x.url)).toEqual([GUIDE_URL]);
+  fail=false;
+  expect(await client.fetchGuideText()).toBe(GUIDE);
+  expect(calls.map(x=>x.url)).toEqual([GUIDE_URL,GUIDE_URL]);
 });

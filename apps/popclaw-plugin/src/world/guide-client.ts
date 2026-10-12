@@ -2,8 +2,10 @@
 import { readBoundedGuide, type HouseGuideResult } from './house-guide-context.js';
 import { entryDigest } from '../runtime/house-lifecycle/participation-journal.js';
 import type { ReadRequestScope } from '../runtime/read-request-scope.js';
+import { currentActionSignal } from '../runtime/house-lifecycle/action-context.js';
+import { remoteReadFailure } from './house-read-diagnostic.js';
 import { LORE_HOUSE_TIMEOUT_MS } from './http-timeout.js';
-import { houseReadFailure, type HouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
+import { type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
 
 export type GuideTextResult = { readonly ok: true; readonly text: string }
   | { readonly ok: false; readonly failure: HouseReadFailure };
@@ -34,6 +36,9 @@ export class GuideClient {
    * traverse their fetch gate, including conditional requests and 304 reuse. */
   async fetchGuideResult(): Promise<GuideTextResult> {
     const origin = this.opts.baseUrl;
+    const startedAt = performance.now(), actionSignal = currentActionSignal();
+    let phase: HouseReadDiagnostic['phase'] = this.opts.readGuide ? 'delegate' : 'before-fetch';
+    let deadline: AbortSignal | undefined;
     const stale = (): GuideTextResult => {
       this.cached = undefined;
       return {ok:false,failure:{code:'HOUSE_ACTION_STALE',origin}};
@@ -50,8 +55,11 @@ export class GuideClient {
       if (!generation || this.cached?.generation.token !== generation.token || !this.cached.generation.isCurrent()) this.cached = undefined;
       const cached = this.cached;
       const url = `${origin.replace(/\/$/, '')}/v1/guide.md`;
-      const request = (conditional: boolean) => this.fetchFn(url, {redirect:'error',signal:AbortSignal.timeout(LORE_HOUSE_TIMEOUT_MS),
-        headers:conditional && cached ? {'If-None-Match':`"${cached.digest}"`} : {}});
+      const request = (conditional: boolean) => {
+        phase = 'fetch'; deadline = AbortSignal.timeout(LORE_HOUSE_TIMEOUT_MS);
+        return this.fetchFn(url, {redirect:'error',signal:deadline,
+          headers:conditional && cached ? {'If-None-Match':`"${cached.digest}"`} : {}});
+      };
       let response = await request(!!cached);
       if (!current()) { await response.body?.cancel(); return stale(); }
       if (response.status === 304 && cached) return {ok:true,text:cached.text};
@@ -61,12 +69,13 @@ export class GuideClient {
         await response.body?.cancel();
         return {ok:false,failure:{code:'HOUSE_REMOTE_HTTP',origin,status:response.status}};
       }
+      phase = 'body';
       const text = await readBoundedGuide(response);
       if (!current()) return stale();
       if (generation) this.cached = {text,digest:entryDigest(text),generation};
       return {ok:true,text};
     } catch (error) {
-      return {ok:false,failure:houseReadFailure(error,origin)};
+      return {ok:false,failure:remoteReadFailure(error,origin,{phase,deadline,timeoutMs:LORE_HOUSE_TIMEOUT_MS,startedAt,actionSignal})};
     }
   }
 }

@@ -154,10 +154,12 @@ export function registerWorldTools(ctx: ToolsCtx): void {
       execute: async () => {
         const lang = ownerLang();
         const wd = await getWorldDeps();
-        const md = await wd.guideClient.fetchGuideText();
+        const guide = wd.guideClient.fetchGuideResult ? await wd.guideClient.fetchGuideResult() : undefined;
+        const md = guide ? (guide.ok ? guide.text : null) : await wd.guideClient.fetchGuideText();
         const parts: string[] = [];
         if (md === null) {
           parts.push(renderCopy(lang, 'world.guide.unreachable', { lantern: lanternDownText(lang) }));
+          if (guide && !guide.ok) parts.push(formatHouseReadFailure(lang,guide.failure));
         } else {
           const { frontmatter, body } = parseGuideFrontmatter(md);
           if (frontmatter !== null) {

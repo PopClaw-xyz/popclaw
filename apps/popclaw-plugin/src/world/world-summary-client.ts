@@ -13,9 +13,10 @@
  *   3. keeping the two concerns separate avoids a bloated class.
  * The fetch + baseUrl injection pattern is identical to WorldFeedClient's constructor.
  */
+import { remoteReadFailure } from './house-read-diagnostic.js';
 import { parseWorldSummary } from './summary-validation.js';
 import type { WorldSummarySnapshot } from './summary-snapshot-types.js';
-import { houseReadFailure, type HouseReadFailure, type HouseReadDiagnostic } from '../runtime/house-lifecycle/read-failure.js';
+import { type HouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
 import { displayPerson } from '../identity/person-resolver.js';
 import { LORE_HOUSE_TIMEOUT_MS } from './http-timeout.js';
 import type { ReadRequestScope } from '../runtime/read-request-scope.js';
@@ -111,30 +112,6 @@ export interface WorldSummaryClientOptions {
 export type WorldSummaryResult = {readonly ok:true;readonly summary:WorldSummaryResponse;readonly requestId?:string}
   | {readonly ok:false;readonly failure:HouseReadFailure;readonly reused?:boolean};
 
-/** Only the summary path adopts richer diagnostics; other read classifications stay unchanged. */
-function summaryReadFailure(error: unknown, origin: string, phase: HouseReadDiagnostic['phase'],
-  deadline: AbortSignal, requestId?: string): HouseReadFailure {
-  const failure = houseReadFailure(error, origin);
-  if (failure.code !== 'HOUSE_REMOTE_NETWORK') return failure; // Never relabel a lifecycle refusal.
-  let cause: HouseReadDiagnostic['cause'] = 'unknown';
-  let value = error;
-  for (let depth = 0; depth < 4 && value instanceof Error; depth += 1) {
-    const code = (value as Error & {code?:unknown}).code;
-    if (value.name === 'TimeoutError' || code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'UND_ERR_HEADERS_TIMEOUT'
-      || code === 'UND_ERR_BODY_TIMEOUT' || code === 'ETIMEDOUT') { cause = 'timeout'; break; }
-    if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') { cause = 'dns'; break; }
-    if (code === 'CERT_HAS_EXPIRED' || code === 'DEPTH_ZERO_SELF_SIGNED_CERT' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
-      || code === 'ERR_TLS_CERT_ALTNAME_INVALID') { cause = 'tls'; break; }
-    if (code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'EHOSTUNREACH' || code === 'ENETUNREACH'
-      || code === 'UND_ERR_SOCKET') { cause = 'connection'; break; }
-    if (value.name === 'AbortError') cause = 'aborted';
-    value = value.cause;
-  }
-  const ownTimeout = deadline.aborted && deadline.reason instanceof Error && deadline.reason.name === 'TimeoutError';
-  if (ownTimeout) cause = 'timeout';
-  return {code:cause === 'timeout' ? 'HOUSE_REMOTE_TIMEOUT' : 'HOUSE_REMOTE_NETWORK',origin,
-    diagnostic:{phase,cause,...(ownTimeout ? {timeoutMs:LORE_HOUSE_TIMEOUT_MS} : {}),...(requestId ? {requestId} : {})}};
-}
 function safeRequestId(response: Response): string | undefined {
   const value = response.headers?.get('x-request-id');
   return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) ? value : undefined;
@@ -210,13 +187,13 @@ export class WorldSummaryClient {
         return {ok:true,summary:body,...(requestId ? {requestId} : {})};
       } catch (error) {
         this.responses.delete(url);
-        const failure = summaryReadFailure(error,this.opts.baseUrl,'body',deadline,requestId);
+        const failure = remoteReadFailure(error,this.opts.baseUrl,{phase:'body',deadline,timeoutMs:LORE_HOUSE_TIMEOUT_MS,requestId});
         return {ok:false,failure:error instanceof SyntaxError && failure.code !== 'HOUSE_REMOTE_TIMEOUT'
           ? {code:'HOUSE_REMOTE_PARSE',origin:this.opts.baseUrl,diagnostic:{phase:'body',cause:'unknown',...(requestId ? {requestId} : {})}} : failure};
       }
     } catch (error) {
       this.responses.delete(url);
-      return {ok:false,failure:summaryReadFailure(error,this.opts.baseUrl,'fetch',deadline)};
+      return {ok:false,failure:remoteReadFailure(error,this.opts.baseUrl,{phase:'fetch',deadline,timeoutMs:LORE_HOUSE_TIMEOUT_MS})};
     }
   }
 

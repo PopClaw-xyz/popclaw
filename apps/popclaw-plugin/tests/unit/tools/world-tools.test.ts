@@ -123,6 +123,7 @@ const SNAPSHOT_ITEMS: FakeSnapshotItem[] = [
 
 interface WorldDepsOverrides {
   guideText?: string | null;
+  guideFailure?: import('../../../src/runtime/house-lifecycle/read-failure.js').HouseReadFailure;
   summary?: WorldSummaryResponse | null;
   summaryFailure?: import('../../../src/runtime/house-lifecycle/read-failure.js').HouseReadFailure;
   sourcesItems?: FakeSnapshotItem[];
@@ -156,7 +157,7 @@ function makeWorldDeps(o?: WorldDepsOverrides) {
   );
   return {
     deps: {
-      guideClient: { fetchGuideText },
+      guideClient: { fetchGuideText, ...(o?.guideFailure ? {fetchGuideResult:async()=>({ok:false as const,failure:o.guideFailure!})} : {}) },
       summaryClient: { captureReadGeneration:()=>generation, fetchSummary, ...(o?.summaryFailure ? {fetchSummaryResult:async()=>({ok:false as const,failure:o.summaryFailure!})} : {}) },
       snapshotClient: { fetchSnapshot },
       resolveClient: { resolve },
@@ -2012,4 +2013,18 @@ describe('v3 snapshot through registered summary tool', () => {
     expect(result.text.match(/10\. /g)).toHaveLength(7);
     expect(result.text).toContain('🌊'.repeat(199) + '末');
   });
+});
+
+
+it('one guide tool call exposes safe preflight diagnostics without calling summary or nullable guide again',async()=>{
+  const {tools,fetchGuideText,fetchSummary}=setup({guideFailure:{code:'HOUSE_REMOTE_NETWORK',
+    diagnostic:{phase:'body',cause:'dns',elapsedMs:37,cancellation:'none'}}});
+  const result=await findTool(tools,'popclaw_world_guide').execute('diagnostic-guide-only',{});
+  expect(result.text).toContain('HOUSE_REMOTE_NETWORK');
+  expect(result.text).toContain('phase=body');
+  expect(result.text).toContain('cause=dns');
+  expect(result.text).toContain('elapsed_ms=37');
+  expect(result.text).toContain('cancellation=none');
+  expect(fetchGuideText).not.toHaveBeenCalled();
+  expect(fetchSummary).not.toHaveBeenCalled();
 });
