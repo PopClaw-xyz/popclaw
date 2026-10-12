@@ -1,6 +1,7 @@
 /**
  * Owner confirmation for MCP hosts: the one place a world action asks the human
- * directly, through the `elicitation/create` form the HOST renders itself.
+ * directly, through the shared MCP request lifecycle and the
+ * `elicitation/create` form the HOST renders itself.
  *
  * Peer of `openclaw-world-execution.ts` — both are host adapters that turn one
  * out-of-band decision (there a config policy, here a human answer) into a
@@ -26,8 +27,9 @@
 import { displayWidth, isZeroWidthCodePoint } from './approval-presentation.js';
 export { displayWidth } from './approval-presentation.js';
 
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { ErrorCode, type ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js';
+import { createMcpConfirmationLifecycle, type McpConfirmationLifecycle,
+  type McpConfirmationServerBox } from './mcp-confirmation-lifecycle.js';
+import { type ElicitRequestFormParams } from '@modelcontextprotocol/sdk/types.js';
 import { captureWorldCommandInput } from '../commands/popclaw-world.js';
 import type { WorldInvokeInput } from '../world/action-client.js';
 import { canonicalActionJson } from '../world/action-receipt-journal.js';
@@ -84,12 +86,12 @@ export interface McpOwnerAuthorization {
 }
 /** Late-bound on purpose: the MCP `Server` is constructed AFTER the tool
  *  surface is registered, so the adapter can only hold a box. */
-export interface McpServerBox {
-  current?: Pick<Server, 'elicitInput' | 'getClientCapabilities' | 'getClientVersion'>;
-}
+export type McpServerBox = McpConfirmationServerBox;
 export interface McpOwnerAuthorizationOptions {
   actorId: string;
   server: McpServerBox;
+  /** The root shares one owner with the general approval adapter. */
+  lifecycle?: McpConfirmationLifecycle;
   /** Required, not optional: an unwired duplicate check would drop the warning
    *  silently, which is the one outcome this fact exists to prevent. */
   duplicates: DuplicateActionLookup;
@@ -486,7 +488,7 @@ export function createMcpOwnerAuthorization(options: McpOwnerAuthorizationOption
   const seconds = Math.round(timeoutMs / 1000);
   // The adapter's own abort: shutdown must cancel a dialog already on screen,
   // rather than letting stop() wait out the full elicitation timeout.
-  const shutdown = new AbortController();
+  const lane = (options.lifecycle ?? createMcpConfirmationLifecycle(options)).createLane();
   let stopped = false, busy = false, highWater = 0;
   function clock(): number {
     if (stopped) return fail(OWNER_CONFIRMATION_UNAVAILABLE);
@@ -495,13 +497,11 @@ export function createMcpOwnerAuthorization(options: McpOwnerAuthorizationOption
     highWater = now; return now;
   }
   /** Read the capability at CALL time: the SDK normalizes `{}` to `{form:{}}`. */
-  function live(): NonNullable<McpServerBox['current']> {
+  function live(): void {
     if (stopped) return fail(`${OWNER_CONFIRMATION_UNAVAILABLE}: the PopClaw MCP session is shutting down`);
-    const server = options.server.current;
-    if (!server || !server.getClientCapabilities()?.elicitation?.form) {
+    if (!lane.canAsk()) {
       return fail(`${OWNER_CONFIRMATION_UNAVAILABLE}: ${OWNER_CONFIRMATION_UNAVAILABLE_HINT}`);
     }
-    return server;
   }
   /** "Is an identical earlier request still unresolved?", asked of the injected
    *  lookup and of nothing else. Every way of not knowing — a throw, a rejected
@@ -536,7 +536,7 @@ export function createMcpOwnerAuthorization(options: McpOwnerAuthorizationOption
   }
   return Object.freeze({
     assertActive(): void { live(); clock(); },
-    stop(): void { stopped = true; shutdown.abort(); },
+    stop(): void { stopped = true; lane.stop(); },
     async withInvocation<T>(callId: string, input: Readonly<WorldInvokeInput>, signal: AbortSignal | undefined,
       callback: (ask: OwnerInvocation) => Promise<T>): Promise<T> {
       if (typeof callId !== 'string' || !CALL_ID.test(callId)) return fail(OWNER_CONFIRMATION_INVOCATION_INVALID);
@@ -546,15 +546,16 @@ export function createMcpOwnerAuthorization(options: McpOwnerAuthorizationOption
       if (busy) return fail(OWNER_CONFIRMATION_BUSY);
       const capturedInput = freeze(captureWorldCommandInput('invoke', input));
       const captured = canonicalActionJson(capturedInput);
-      // Either the host cancelling this tool call or the adapter stopping ends the ask.
-      const reason = AbortSignal.any([signal, shutdown.signal].filter((one): one is AbortSignal => !!one));
       // One invocation is one job, so the nonce is minted once here rather than
       // inside `authorize`: the reference the caller reports is then the same
       // string the dialog showed, whatever happened to the confirmation.
       const token = nonce();
+      // Either the host cancelling this tool call or the adapter stopping ends the ask.
+      const request = lane.open('popclaw_world_invoke', callId, signal);
+      const reason = request.signal;
       // Set synchronously, before the first await, so a re-entrant second call sees it.
       busy = true;
-      let active = true, asked = false;
+      let asked = false;
       try {
         const ask: OwnerInvocation = {
           reference: token.slice(0, REFERENCE_CHARS),
@@ -563,51 +564,39 @@ export function createMcpOwnerAuthorization(options: McpOwnerAuthorizationOption
             // Set before any await so a re-entrant second ask cannot slip through.
             if (asked) return fail(OWNER_CONFIRMATION_BUSY);
             asked = true;
-            if (!active || reason.aborted) return fail(OWNER_CONFIRMATION_INACTIVE);
+            if (!request.isActive()) return fail(OWNER_CONFIRMATION_INACTIVE);
             if (canonicalActionJson(captureWorldCommandInput('invoke', candidate)) !== captured) {
               return fail(OWNER_CONFIRMATION_INPUT_MISMATCH);
             }
-            const server = live();
+            live();
             clock();
             // Asked BEFORE the dialog is built, from the injected lookup alone:
             // the owner has to learn that an identical earlier request is still
             // unresolved while there is still something to decide.
             const duplicate = await checkDuplicate(capturedInput, reason);
-            if (!active || reason.aborted) return fail(OWNER_CONFIRMATION_INACTIVE);
+            if (!request.isActive()) return fail(OWNER_CONFIRMATION_INACTIVE);
             // Refuses instead of sending a dialog a value could forge a line in.
             const dialog = buildDialog(candidate, options.actorId, seconds, ask.reference, duplicate);
-            const result = await server.elicitInput(
-              { mode: 'form', message: dialog.message, requestedSchema: dialog.requestedSchema },
-              // The host's own cancellation of the tool call, and the adapter's own
-              // shutdown, both cancel the dialog rather than leaving it open for the whole window.
-              { timeout: timeoutMs, signal: reason },
-            ).catch((error: unknown) => {
-              const code = (error as { code?: unknown } | null)?.code;
-              if (reason.aborted) return fail(OWNER_CONFIRMATION_INACTIVE);
-              // The code, then the one sentence that prevents the silent drop:
-              // Claude Code leaves the dialog open after our cancel, and an
-              // approval given there now reaches nobody.
-              if (code === ErrorCode.RequestTimeout) {
+            const result = await request.ask(dialog, { timeoutMs, authority: 'sdk-window' });
+            switch (result.kind) {
+              case 'timeout':
                 return fail(`${OWNER_CONFIRMATION_TIMEOUT}: ${renderCopy(ownerLang(), 'world.action.approval.timedOut')}`);
-              }
-              // The SDK validates an accepted answer against the form we sent and
-              // raises InvalidParams when it does not match. That is a host bug on
-              // an answer the owner already gave, so it is not a generic failure.
-              if (code === ErrorCode.InvalidParams) {
+              case 'answer-invalid':
                 return fail(`${OWNER_CONFIRMATION_ANSWER_INVALID}: ${OWNER_CONFIRMATION_ANSWER_INVALID_HINT}`);
-              }
-              return fail(OWNER_CONFIRMATION_FAILED);
-            });
-            if (result.action === 'cancel') return fail(OWNER_CONFIRMATION_CANCELLED);
-            // An accepted form whose box is unchecked is a refusal, not consent.
-            if (result.action !== 'accept' || result.content?.['confirm'] !== true) return fail(OWNER_CONFIRMATION_DECLINED);
-            if (!active || reason.aborted) return fail(OWNER_CONFIRMATION_INACTIVE);
+              case 'inactive': return fail(OWNER_CONFIRMATION_INACTIVE);
+              case 'unavailable': live(); return fail(OWNER_CONFIRMATION_UNAVAILABLE);
+              case 'failed': return fail(OWNER_CONFIRMATION_FAILED);
+              case 'cancel': return fail(OWNER_CONFIRMATION_CANCELLED);
+              case 'deny': case 'invalid-action': return fail(OWNER_CONFIRMATION_DECLINED);
+              case 'allow': break;
+            }
+            if (!request.isActive()) return fail(OWNER_CONFIRMATION_INACTIVE);
             const expiresAt = clock() + GRANT_SECONDS;
             return freeze({
               jobId: `mcp-owner:${token}`,
               expiresAt,
               assertCurrent: (): void => {
-                if (!active || reason.aborted || stopped) return fail(OWNER_CONFIRMATION_INACTIVE);
+                if (!request.isActive() || stopped) return fail(OWNER_CONFIRMATION_INACTIVE);
                 if (clock() >= expiresAt) return fail(OWNER_CONFIRMATION_EXPIRED);
               },
             });
@@ -616,7 +605,7 @@ export function createMcpOwnerAuthorization(options: McpOwnerAuthorizationOption
         return await callback(ask);
       } finally {
         // A returned grant must die with its call, so a stale one fails assertCurrent.
-        active = false; busy = false;
+        request.finish(); busy = false;
       }
     },
   });
