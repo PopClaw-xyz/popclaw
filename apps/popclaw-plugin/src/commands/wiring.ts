@@ -64,6 +64,7 @@ import { extractPostId } from '../quest/verify-invite-handler.js';
 import { collectingLogger } from '../runtime/collecting-logger.js';
 import { readLastBuild } from '../runtime/last-build.js';
 import { canonicalPlatform } from '../scraper/platform-scraper.js';
+import { inviteAccountError, normalizeInviteHandle } from '../invite/prepare-invite-share.js';
 import { readHouseGuide } from '../world/house-handshake.js';
 import { ResolveClient } from '../world/resolve-client.js';
 
@@ -275,7 +276,7 @@ export function buildSubcommands(
       const a = subArgs(ctx);
       // Canonicalize before signing: "X"/"Twitter" must not become distinct
       // platforms server-side (already-verified checks are keyed by platform).
-      const platform = a.positional[0] ? canonicalPlatform(a.positional[0]) : a.positional[0];
+      const platform = a.positional[0] ? canonicalPlatform(a.positional[0].trim()) : a.positional[0];
       const handle = a.positional[1];
       if (!platform || !handle) {
         return {
@@ -292,7 +293,7 @@ export function buildSubcommands(
       try {
         const rt = await w.runtime();
         // Strip a leading '@' if user types /popclaw invite twitter @blackfeather
-        const cleanHandle = handle.replace(/^@/, '');
+        const cleanHandle = normalizeInviteHandle(handle);
         return await submitInvite({
           initiate: (opts) => rt.initiator.initiate(opts),
           recordPending: (entry) => rt.pendingInvites.add(entry),
@@ -792,6 +793,12 @@ export function buildSubcommands(
     if (['help', 'version', 'login', 'logout'].includes(name)) continue;
     const handler = handlers[name];
     handlers[name] = async ctx => {
+      if (name === 'invite') {
+        const [platform, handle] = subArgs(ctx).positional;
+        // Reject invalid accounts before even opening the command runtime.
+        const error = platform && handle ? inviteAccountError(platform, handle) : undefined;
+        if (error) return { text: error };
+      }
       const rt = await w.runtime();
       return rt?.houseRuntime ? rt.houseRuntime.runCommand(() => handler(ctx)) : handler(ctx);
     };

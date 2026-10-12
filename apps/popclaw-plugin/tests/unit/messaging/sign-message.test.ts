@@ -109,7 +109,7 @@ describe('sign-message — DirectMessage', () => {
     const sp = popclaw.identity.SignedPayload.decode(env.signedPayloadBytes);
     const decoded = popclaw.event.EventEnvelope.decode(sp.payload);
     expect(decoded.directMessage).toBeTruthy();
-    // #227: field 4 只剩占位串，真正的正文在 ciphertext 里，只有收件人能开。
+    // #227: field 4 contains only a placeholder; the real body is in ciphertext, readable only by the recipient.
     expect(decoded.directMessage!.body).toBe(DM_ENCRYPTED_BODY_PLACEHOLDER);
     const opened = BOB.openDm(decoded.directMessage!, await signer.popclawId());
     expect(opened.ok && opened.plaintext).toBe('are you free for a chat?');
@@ -212,13 +212,13 @@ describe('signDirectMessage (Task 8 backfill)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #231 第 2 刀 — 随信带图（第二个盒子）
+// #231, second change: attach an image in a second encrypted box.
 // ---------------------------------------------------------------------------
 
 /**
- * prost 的 CID 是「解码后按 canonical 规则重编码」算出来的。所以只要
- * pbjs 编的字节 == decode→encode 的字节，两个运行时算出的 CID 就一致。
- * 写了一个 proto3 默认值（比如空的 media_ciphertext）就会在这里露馅。
+ * prost computes the CID by decoding and reencoding canonically. If pbjs bytes equal decode/encode
+ * bytes, both runtimes compute the same CID. Explicitly writing a proto3 default, such as empty
+ * media_ciphertext, is detected here.
  */
 function assertCanonicalRoundTrip(signedPayloadBytes: Uint8Array): void {
   const sp = popclaw.identity.SignedPayload.decode(signedPayloadBytes);
@@ -243,7 +243,7 @@ describe('signDirectMessage — 图（#231）', () => {
 
     expect(dm.mediaCiphertext!.length).toBeGreaterThan(0);
     expect(dm.mediaNonce!.length).toBe(24);
-    // 端到端：收件人用自己的钥匙解回原字节与 mime。
+    // End to end: the recipient decrypts the original bytes and MIME type with their own key.
     const opened = BOB.openDmMedia(
       { ciphertext: dm.mediaCiphertext, nonce: dm.mediaNonce },
       await signer.popclawId(),
@@ -251,7 +251,7 @@ describe('signDirectMessage — 图（#231）', () => {
     expect(opened.ok).toBe(true);
     expect(opened.ok && opened.mime).toBe('image/png');
     expect(opened.ok && Array.from(opened.bytes)).toEqual(Array.from(PNG));
-    // 文字仍在自己的盒子里，互不牵连。
+    // Text remains in its own independent encrypted box.
     expect(BOB.openDm(dm, await signer.popclawId())).toMatchObject({ ok: true, plaintext: '看这个' });
     assertCanonicalRoundTrip(env.signedPayloadBytes);
   });
@@ -279,8 +279,8 @@ describe('signDirectMessage — 图（#231）', () => {
     });
     const sp = popclaw.identity.SignedPayload.decode(env.signedPayloadBytes);
     const dm = popclaw.event.EventEnvelope.decode(sp.payload).directMessage!;
-    // 不是"空数组"，是**根本没上线** —— proto3 默认值一旦写上线，prost 解码后重算
-    // 的 canonical bytes 就与我们编的不同，灯坊直接 cid_mismatch。
+    // This is not an empty array: the field must be absent from the wire. Writing a proto3 default changes the canonical bytes
+    // recomputed by prost after decoding, and the house rejects it with cid_mismatch.
     expect(Object.prototype.hasOwnProperty.call(dm, 'mediaCiphertext')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(dm, 'mediaNonce')).toBe(false);
     expect(dm.mediaCiphertext?.length ?? 0).toBe(0);

@@ -19,7 +19,7 @@ describe('personVerdict — 事实卡', () => {
     }
   });
 
-  // 「簿子里记着他是 stranger」和「簿子里根本没有他」是两件事 —— 前者主人见过他。
+  // A book entry marked stranger differs from no entry at all: the owner has seen the former.
   it('未入簿 → tier 缺席，不拿 stranger 顶替', () => {
     const v = personVerdict('X', { bondOf: () => null });
     expect(v.tier).toBeUndefined();
@@ -31,7 +31,7 @@ describe('personVerdict — 事实卡', () => {
       bondOf: () => { throw new Error('sqlite 打嗝'); },
       isFollowed: () => { throw new Error('boom'); },
     });
-    expect(v.blocked).toBe(false); // 证据缺席时保守
+    expect(v.blocked).toBe(false); // Be conservative when evidence is absent.
     expect(v.followed).toBe(false);
   });
 
@@ -45,12 +45,12 @@ describe('拉黑一票否决（真机 bug：关注过又拉黑的人照样推到
   const blocked = personVerdict('X', { bondOf: () => ({ tier: 'blocked' }) });
 
   it('关注过也挡住 —— bond block 只改 tier 不动 follow 表', () => {
-    expect(passesRelativeValueGate('dm', 'X', graphOf('X'))).toBe(true);          // 修之前
+    expect(passesRelativeValueGate('dm', 'X', graphOf('X'))).toBe(true);          // Before the fix.
     expect(passesRelativeValueGate('dm', 'X', graphOf('X'), undefined, blocked)).toBe(false);
   });
 
   it('压过 followed_you 这类显式豁免（拉黑的人来关注不该响铃）', () => {
-    expect(passesRelativeValueGate('followed_you', 'X', graphOf())).toBe(true);   // 修之前
+    expect(passesRelativeValueGate('followed_you', 'X', graphOf())).toBe(true);   // Before the fix.
     expect(passesRelativeValueGate('followed_you', 'X', graphOf(), undefined, blocked)).toBe(false);
   });
 

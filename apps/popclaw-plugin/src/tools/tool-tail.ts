@@ -1,9 +1,11 @@
+import { isLocalInviteCall } from '../invite/local-invite-call.js';
 /**
  * The tail every tool result goes through: the unread-pings line, or else at
  * most one settling nudge. `withTail` wraps an api so each registered tool's
  * result gets it appended.
  */
 
+import { houseGuideContextKey } from '../world/house-guide-context.js';
 import { optionalWorldOffer } from '../onboarding/optional-world.js';
 import { ownerLang } from '../lexicon/owner-language.js';
 import { canAppendToolNotice, type ToolNoticeContext } from '../notifier/tool-notice.js';
@@ -107,6 +109,7 @@ export function withTail(
   runtime: RegisterToolsDeps['runtime'],
   runCommand?: RegisterToolsDeps['runCommand'],
   noticeContext?: RegisterToolsDeps['getToolNoticeContext'],
+  currentGuideReadScope?: RegisterToolsDeps['currentGuideReadScope'],
 ): RegisterToolsDeps['api'] {
   /** One tool object with its execute tail-wrapped (non-tools pass through). */
   const wrapToolObject = (tool: unknown): unknown => {
@@ -120,6 +123,7 @@ export function withTail(
     return {
       ...registration,
       execute: async (...args: unknown[]): Promise<unknown> => {
+        if (isLocalInviteCall(toolName, args[1])) return inner(...args);
         const capturedArgs = typeof captureParameters === 'function'
           ? [args[0], captureParameters(args[1]), ...args.slice(2)] : args;
         const invoke = async (): Promise<unknown> => {
@@ -127,22 +131,15 @@ export function withTail(
         if (!canAppendToolNotice('', result)) return result;
         let context: ToolNoticeContext | undefined;
         try { context = await noticeContext?.(args[2] instanceof AbortSignal ? args[2] : undefined); } catch { /* notice unavailable */ }
-        let text = (result as { text?: unknown } | null)?.text;
+        const text = (result as { text?: unknown } | null)?.text;
         if (typeof text === 'string') {
         try {
           let envelope: Record<string, unknown> | undefined;
           try { const parsed = JSON.parse(text); if (parsed && !Array.isArray(parsed) && typeof parsed === 'object') envelope = parsed; } catch { /* ordinary text */ }
           const rt = (await runtime()) as TailRuntime | undefined;
-          const guides = await rt?.houseRuntime?.pendingHouseGuides();
-          if (guides?.length) {
-            if (envelope) {
-              envelope.house_guide_contexts = guides;
-              if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) envelope.optional_world_offer = optionalWorldOffer(ownerLang());
-            } else {
-              text += '\n' + JSON.stringify({house_guide_contexts:guides});
-              if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) text += '\n' + optionalWorldOffer(ownerLang());
-            }
-          }
+          const guideScope = currentGuideReadScope?.();
+          const present = currentGuideReadScope ? guideScope?.isCurrent() ? guideScope.presentGuideKeys : new Set<string>() : undefined;
+          const candidates = await rt?.houseRuntime?.pendingHouseGuides(present);
           const pendingNotice = context ? context.store.hasNoticeFor(context) : false;
           const unreadLine = null;
           const nowSec = Math.floor(Date.now() / 1000);
@@ -158,8 +155,33 @@ export function withTail(
             const rt = (await runtime()) as TailRuntime | undefined;
             if (rt) await recordNudgeSent(rt.host, pick.key, nowSec);
           }
-          if (envelope && tail) envelope.tool_tail = tail;
-          result = { ...(result as object), text: envelope ? JSON.stringify(envelope) : tail ? `${text}\n\n${tail}` : text };
+          // Native scopes defer the final choice until every outer wrapper has
+          // finished. Only the consumer that can return commits presence.
+          const baseText = text;
+          const render = (known: ReadonlySet<string>) => {
+            const guides = candidates?.filter(guide => !known.has(houseGuideContextKey(guide)));
+            const payload = envelope ? {...envelope} : undefined;
+            let output = baseText;
+            if (guides?.length) {
+              if (payload) {
+                payload.house_guide_contexts = guides;
+                if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) payload.optional_world_offer = optionalWorldOffer(ownerLang());
+              } else {
+                output += '\n' + JSON.stringify({house_guide_contexts:guides});
+                if (!rt?.houseRuntime?.publicReadGate('https://house.popclaw.world').isActive()) output += '\n' + optionalWorldOffer(ownerLang());
+              }
+            }
+            if (payload && tail) payload.tool_tail = tail;
+            return {text: payload ? JSON.stringify(payload) : tail ? `${output}\n\n${tail}` : output,
+              keys: guides?.map(houseGuideContextKey) ?? []};
+          };
+          const current = guideScope?.isCurrent() === true;
+          const rendered = render(current ? guideScope.presentGuideKeys : new Set<string>());
+          result = { ...(result as object), text: rendered.text };
+          if (current && rendered.keys.length) {
+            if (guideScope.stageGuideEmission) guideScope.stageGuideEmission(rendered.text, render);
+            else guideScope.recordEmittedGuideKeys(rendered.keys);
+          }
         } catch { /* preserve business result */ }
         }
         return result;

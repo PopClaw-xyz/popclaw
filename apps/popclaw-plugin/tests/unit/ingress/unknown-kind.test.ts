@@ -14,7 +14,9 @@ function varint(n: number): number[] {
   return out;
 }
 
-/** 一个只有 event_id（字段 1）+ 未知 body 成员（字段 `field`）的 EventEnvelope。 */
+/**
+ * An EventEnvelope containing only event_id (field 1) and an unknown body member (field `field`).
+ */
 function unknownEnvelope(field: number, eventId = 'evt-from-world'): Uint8Array {
   const idBytes = [...Buffer.from(eventId, 'utf8')];
   const bodyBytes = [...Buffer.from('{"postcard":"从 world 坊寄来"}', 'utf8')];
@@ -24,7 +26,10 @@ function unknownEnvelope(field: number, eventId = 'evt-from-world'): Uint8Array 
   ]);
 }
 
-/** 真 HouseEvent（字段 34）——popclaw.world 的词汇，本地 proto 认得格子、不认得词。 */
+/**
+ * A real HouseEvent (field 34): popclaw.world vocabulary; the local proto recognizes the container,
+ * not its terms.
+ */
 const houseEventEnvelope = (kind: string) =>
   popclaw.event.EventEnvelope.encode({
     eventId: 'evt-house',
@@ -55,13 +60,13 @@ describe('envelopeKind — 认得的成员报名字，认不得的报字段号',
   it('HouseEvent（#188 扩展位）→ 取 body 里的坊词汇，不是笼统的 house_event', () => {
     expect(envelopeKind(houseEventEnvelope('world.postcard'))).toBe('house:world.postcard');
     expect(envelopeKind(houseEventEnvelope('world.encounter'))).toBe('house:world.encounter');
-    // kind 空（不合规的坊）→ 退回格子名，仍然不崩。
+    // An empty kind (noncompliant house) falls back to the field name without crashing.
     expect(envelopeKind(houseEventEnvelope(''))).toBe('house_event');
   });
 
   it('本版 proto 不认识的成员 → unknown:<字段号>（字段号就是它的身份）', () => {
     expect(envelopeKind(unknownEnvelope(40))).toBe('unknown:40');
-    expect(envelopeKind(unknownEnvelope(120))).toBe('unknown:120'); // 两字节 key
+    expect(envelopeKind(unknownEnvelope(120))).toBe('unknown:120'); // Two-byte key.
   });
 
   it('没有 envelope / 只有信封头 → ""', () => {
@@ -110,7 +115,7 @@ describe('未知 kind 的事件进缓存', () => {
     const read = cache.recentForReading(10);
     expect(read.map((i) => i.platformPostId)).toEqual(['known-2', 'weird', 'known-1']);
     expect(read.map((i) => i.kind)).toEqual(['post', 'house:legacy-.opaque_kind', 'post']);
-    expect(read[0]!.body).toBe('认得的帖'); // 认得的那条照常解出正文
+    expect(read[0]!.body).toBe('认得的帖'); // The recognized event still decodes its body normally.
   });
 
   it('拒绝未知结构不产生成功 debug，也不影响相邻正常事件', async () => {

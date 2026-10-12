@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import nacl from 'tweetnacl';
@@ -55,6 +55,9 @@ function itemBytes(envelope = post.bytes) { return popclaw.event.WorldFeedItem.e
 const hiddenItem = () => concat(field(22, reservedBody), itemBytes());
 const hiddenDiscovery = () => concat(field(2, reservedBody), field(2, post.bytes));
 const hiddenFrame = () => concat(field(2, reservedBody), popclaw.event.WorldStreamFrame.encode({ seq: 9, kind: 'post', envelope: post.bytes }).finish());
+const publicBaselineVectors = JSON.parse(readFileSync(new URL('../../../../../protocol/packages/contracts/fixtures/public-baseline.json', import.meta.url), 'utf8')) as {
+  signed: Array<{ name: string; cid: string; wire_hex: string }>;
+};
 async function cacheFixture() {
   const db = new LocalHostDb(':memory:'); cleanup.push(() => db.close());
   const cache = new WorldFeedCache({ db }); await cache.start(); return { db, cache };
@@ -69,11 +72,28 @@ class RawEventSource {
   close() { this.closed = true; }
 }
 
-describe('public-envelope-01.3 original wire ingress boundaries', () => {
+describe('public-envelope-02 original wire ingress boundaries', () => {
   it('uses valid signed public controls and an authenticated private control', () => {
     expect(verifyInboundEnvelope(post.bytes, { publicStream: true }).eventId).toBe(post.eventId);
     expect(verifyInboundEnvelope(profile.bytes, { publicStream: true }).eventId).toBe(profile.eventId);
     expect(verifyInboundEnvelope(privateDm.bytes, { recipientPopclawId: recipient }).eventId).toBe(privateDm.eventId);
+  });
+
+  it.each([
+    ['invite_wait_request_house_helper', 'request', { verificationMode: 1 }],
+    ['invite_wait_cancel_signed', 'request', { verificationMode: 1, cancelTaskId: '00000000-0000-4000-8000-000000000001' }],
+    ['invite_wait_dispatch_signed', 'dispatch', { verificationMode: 1 }],
+    ['invite_wait_ready_progress_signed', 'result', { verificationProgress: 2, progressRevision: '1' }],
+  ] as const)('verifies the original signed %s wait envelope and retains its added fields', (name, payload, expected) => {
+    const vector = publicBaselineVectors.signed.find(item => item.name === name)!;
+    const raw = Buffer.from(vector.wire_hex, 'hex');
+    const env = verifyInboundEnvelope(raw, { publicStream: true, isOfficialActor: () => true });
+    expect(env.eventId).toBe(vector.cid);
+    const actual = payload === 'request' ? env.inviteRequest : payload === 'dispatch' ? env.questDispatch?.verifyInvite : env.questResult;
+    for (const [key, value] of Object.entries(expected)) {
+      const received = (actual as Record<string, unknown> | undefined)?.[key];
+      expect(key === 'progressRevision' ? String(received) : received).toEqual(value);
+    }
   });
 
   it.each([['EventEnvelope 29', reservedBody, post.eventId], ['Profile 8', reservedProfile, profile.eventId]] as const)(

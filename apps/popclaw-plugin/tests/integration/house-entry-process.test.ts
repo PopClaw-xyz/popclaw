@@ -82,6 +82,20 @@ function assertNoHouseCommands(box: ReturnType<typeof sandbox>) {
 }
 
 describe('actual source process house entrypoints, isolated and offline', () => {
+  it.each([
+    ['instagram', 'valid_handle', 'unsupported'],
+    ['x', 'bad-handle', 'handle'],
+    ['Twitter', '@', 'handle'],
+    ['x', 'a'.repeat(16), 'handle'],
+  ])('CLI invite %s/%s rejects before storage bootstrap or networking', async (platform, handle, message) => {
+    const box = sandbox(false), run = child('main.ts', ['invite', platform, handle], box);
+    try {
+      expect(await boundedExit(run)).toBe(2);
+      expect(run.stderr().toLowerCase()).toContain(message);
+      expect(readdirSync(box.data)).toEqual(['config']);
+      expect(existsSync(box.attempts) ? readFileSync(box.attempts, 'utf8') : '').toBe('');
+    } finally {await stop(run);}
+  }, 20000);
   it('MCP initialize/tools/list expose house and exact world schemas without runtime, SQLite or network', async () => {
     const box = sandbox(false), run = child('mcp.ts', [], box);
     let seq = 0;
@@ -349,7 +363,7 @@ async function seedFirstReleasePublic(box: ReturnType<typeof sandbox>, origin = 
   const { makeWorldManifestPreparer } = await import('../../src/world/world-capabilities.js');
   const key = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(27));
   const rawBytes = new TextEncoder().encode(JSON.stringify({ world_interaction: { version: 1,
-    public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_1', envelope_baseline: 'public-envelope-01' as const, initial_public_scopes: ['sc_public'] } } }));
+    public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_1', envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: ['sc_public'] } } }));
   const core = { house: { origin, houseKey: bs58.encode(key.publicKey), incarnation: 'first_release_house' }, manifestDigest: cidFromCanonical(rawBytes), signedAt: '1' };
   const bytes = popclaw.world.ManifestProof.encode(stripDefaultKeys(core)).finish(), prefix = new TextEncoder().encode('POPCLAW_WORLD_MANIFEST_PROOF_V1');
   const signing = new Uint8Array(prefix.length + bytes.length); signing.set(prefix); signing.set(bytes, prefix.length);
@@ -438,7 +452,7 @@ it('normal MCP startup uses public-v1 loopback reception while new typed command
   const origin = `http://127.0.0.1:${address.port}`, box = sandbox();
   const signedHouse = mintHouse({ origin, seed: 27, incarnation: 'first_release_house', manifest: { official_ids: [],
     world_interaction: { version: 1, public_stream: { endpoint: '/v1/world-stream', mode: 'public-v1', log_incarnation: 'log_1',
-      envelope_baseline: 'public-envelope-01', initial_public_scopes: ['sc_public'] } } } });
+      envelope_baseline: 'public-envelope-02', initial_public_scopes: ['sc_public'] } } } });
   writeFileSync(join(box.data, 'config/plugin.json'), JSON.stringify({ lore_houses: [origin] }));
   box.env.POPCLAW_WEB_BASE_URL = origin; box.env.POPCLAW_CANVAS_BASE_URL = origin;
   // Allow only this owned loopback fixture and tsx's Unix loader socket.
@@ -550,7 +564,7 @@ syncBuiltinESMExports();`);
             {log_incarnation: 'log_1',lane: 'public',scope_id: '',after_seq: '0',stale: 0,gap_reason: null},
             {log_incarnation: 'log_1',lane: 'scope',scope_id: 'sc_public',after_seq: '0',stale: 0,gap_reason: null}]);
           expect(execution.queryAll('SELECT log_incarnation,envelope_baseline,capability_revision,retired FROM world_public_log_profiles_v1')).toEqual([
-            {log_incarnation: 'log_1',envelope_baseline: 'public-envelope-01',capability_revision: joinedRevision,retired: 0}]);
+            {log_incarnation: 'log_1',envelope_baseline: 'public-envelope-02',capability_revision: joinedRevision,retired: 0}]);
         } finally { execution.close(); }
       }
     } finally { db.close(); }

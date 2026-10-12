@@ -1,5 +1,5 @@
 /**
- * 规格 B 切片①：`lore_houses` 语义翻转 —— 全部连接，[0] 是主坊。
+ * Spec B, slice 1: lore_houses now means connect all; [0] is the primary House.
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';

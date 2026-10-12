@@ -1,19 +1,19 @@
 /**
- * 候选(挑号)层的精确批次 —— picks 归属闸(2026-09-06 r25,主人授权信第 1 条:
- * 「代理选的是哪一批材料里的哪一条,插件必须保持原文/作者/链接对应」)。
+ * Exact candidate batch: picks provenance gate (2026-09-06 r25, owner authorization item 1:
+ * preserve original text, author, and link correspondence for the selected item and batch).
  *
- * r9 已在出版层立起 noProvenance / tokenBasisConflict 两闸;挑号层此前仍是
- * 「candidate_token 缺失/被洗 → 绑本会话最新候选页」—— 同一类别「按范围猜」:
- * 会话里先后铸出 A/B 两份候选页时,按 A 页编号的 picks 会被解析到 B 页,挑中的
- * 就是别人家的条目。本刀把出版的无猜测契约镜像到挑号层:
- *  · candidate_token 真 + basis 同时出现且不一致 → 拒(tokenBasisConflict);
- *  · 两者都没有可靠值 → 拒(noProvenance)—— latestCandidate 回退删除,
- *    「会话内最新」不再是无令牌的答案;
- *  · basis 单独 → 按 basis 精确选定那份候选页(候选页顶部与页脚都印
- *    basis="ctok_…",与成刊 basis 同族 —— 候选令牌本体,以非 token 名的字段携带,
- *    洗 *_token 的信道对它没有规则可施);
- *  · 真 candidate_token 单独 / 两者一致 → 照常(保通四腿,含同页多轮 picks);
- *  · 拒绝不消耗任何账本(候选过期也只拒不销)。
+ * r9 added noProvenance / tokenBasisConflict at publication. Selection still bound missing
+ * or stripped candidate_token to the session's latest candidate page, another scope-based guess.
+ * With pages A and B in one session, picks numbered for A could resolve against B and select
+ * someone else's items. Mirror publication's no-guessing contract at selection:
+ *   · A real candidate_token and basis that disagree → reject with tokenBasisConflict.
+ *   · Neither reliable → reject with noProvenance; remove latestCandidate fallback.
+ *     Latest-in-session is no longer an answer for missing tokens.
+ *   · basis alone → select that exact candidate page. Both header and footer print basis="ctok_…",
+ *     analogous to issue basis: the candidate token itself under a non-token field name,
+ *     outside channels' *_token stripping rules.
+ *   · Real candidate_token alone or both agreeing → normal behavior (all four paths, including repeated picks from one page).
+ *   · Rejection consumes no ledger entry, even for expired candidates.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, existsSync } from 'node:fs';
@@ -105,7 +105,7 @@ describe('picks 归属闸 —— 候选层的无猜测(①冲突 ②无凭证 �
     putIssue('ctok_solo0001', candidateIssue(), dir);
     const r = await makePaper().execute({ picks_flat: [1] });
     expect(r.text).toBe(renderCopy('en', 'newspaper.picks.noProvenance'));
-    expect(getIssue('ctok_solo0001', dir)).toBeDefined(); // 谁的账都没动
+    expect(getIssue('ctok_solo0001', dir)).toBeDefined(); // Neither ledger changed.
   });
 
   it('②b 令牌被洗成 ***(占位形状)、basis 也没带 → 同样拒,绝不回退绑最新', async () => {
@@ -117,10 +117,10 @@ describe('picks 归属闸 —— 候选层的无猜测(①冲突 ②无凭证 �
 
   it('③a 真 token 指向的候选页已过期 → 拒,候选账不销(文件还在)', async () => {
     putIssue('ctok_aged0001', candidateIssue(), dir);
-    _backdateIssueForTest('ctok_aged0001', Date.now() - 3 * 60 * 60 * 1000, dir); // 越过 2h TTL
+    _backdateIssueForTest('ctok_aged0001', Date.now() - 3 * 60 * 60 * 1000, dir); // Exceed the 2h TTL.
     const r = await makePaper().execute({ candidate_token: 'ctok_aged0001', picks_flat: [1] });
     expect(r.text).toContain('candidate set not found or expired');
-    expect(existsSync(join(dir, 'ctok_aged0001.json'))).toBe(true); // 拒绝不销账
+    expect(existsSync(join(dir, 'ctok_aged0001.json'))).toBe(true); // Rejection does not consume receipts.
   });
 
   it('③b basis 指向的候选页已过期 → basisExpired 拒,同样不销账', async () => {
@@ -132,7 +132,7 @@ describe('picks 归属闸 —— 候选层的无猜测(①冲突 ②无凭证 �
   });
 
   it('basis 指到一份成刊(publish token,无 c 前缀)→ 拒:那不是候选页', async () => {
-    putIssue('tok_live00001', candidateIssue(), dir); // 成刊令牌形状
+    putIssue('tok_live00001', candidateIssue(), dir); // Issue-token shape.
     const r = await makePaper().execute({ basis: 'tok_live00001', picks_flat: [1] });
     expect(r.text).toBe(renderCopy('en', 'newspaper.picks.basisNotCandidate', { basis: 'tok_live00001' }));
   });
@@ -142,7 +142,7 @@ describe('picks 保通四腿 —— 收紧不许误伤', () => {
   it('腿① 真 candidate_token 单独 → 照常出素材页(带成刊 basis)', async () => {
     putIssue('ctok_leg00001', candidateIssue(), dir);
     const r = await makePaper().execute({ candidate_token: 'ctok_leg00001', picks_flat: [1] });
-    expect(r.text).toMatch(/"basis": "tok_[a-z0-9]+"/); // 素材页印的是**成刊**的 basis(r7)
+    expect(r.text).toMatch(/"basis": "tok_[a-z0-9]+"/); // The material page prints the issue basis (r7).
     expect(r.text).toContain('候选作者甲');
   });
 
@@ -150,7 +150,7 @@ describe('picks 保通四腿 —— 收紧不许误伤', () => {
     putIssue('ctok_leg00002', candidateIssue(), dir);
     const r = await makePaper().execute({ basis: 'ctok_leg00002', picks_flat: [1] });
     expect(r.text).toMatch(/"basis": "tok_[a-z0-9]+"/);
-    expect(r.text).toContain('ctok_leg00002'); // 回执明说解析依据的是哪页
+    expect(r.text).toContain('ctok_leg00002'); // The receipt explicitly identifies the page used for resolution.
   });
 
   it('腿③ 令牌与 basis 一致 → 照常,不加解析注', async () => {
@@ -172,8 +172,8 @@ describe('picks 保通四腿 —— 收紧不许误伤', () => {
     const t2 = second.text.match(/"basis": "(tok_[a-z0-9]+)"/)![1];
     expect(t1).toBeTruthy();
     expect(t2).toBeTruthy();
-    expect(t1).not.toBe(t2); // 两轮各自铸刊
-    expect(getIssue('ctok_leg00004', dir)).toBeDefined(); // 候选页还在
+    expect(t1).not.toBe(t2); // Each round creates its own issue.
+    expect(getIssue('ctok_leg00004', dir)).toBeDefined(); // The candidate page remains.
   });
 });
 

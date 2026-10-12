@@ -88,7 +88,7 @@ describe('buildPassportBriefing', () => {
     const b = ALL[1]!;
     expect(b.intent).toContain('private key on');
     expect(b.intent).toContain('all they did was recognize it');
-    // 认证在这一幕零出场（挪到 errand 的真实后果触发）。
+    // Verification never appears in this scene; it moved to errand, triggered by an actual consequence.
     expect(b.voice).toContain('Do not bring up verification');
     expect(b.intent).not.toContain('verif');
   });
@@ -133,7 +133,7 @@ describe('buildLanternBriefing', () => {
     });
     expect(b.intent).toContain("It's pretty quiet here right now");
     expect(b.intent).toContain("That's what early days look like");
-    // 「精选/热门」只以**禁令**形式出现，绝不是给 agent 的包装授权。
+    // Curated/popular wording appears only as a prohibition, never as permission for agent promotion.
     expect(b.intent).toContain("Don't dress up an empty room");
   });
 
@@ -185,16 +185,16 @@ describe('buildCadenceBriefing / buildGraduationBriefing', () => {
     expect(b.intent).toContain('2 no');
   });
 
-  // 问句要报出一个**具体时刻**（"这个时刻"或早八），
-  // 而不是含糊的"明早"——主人才有得可点头或改。
+  // The question must give a specific time (the current time or 08:00),
+  // not a vague tomorrow morning, so the owner can accept or change it.
   it('问句报出具体时刻，并明说可以改成别的点', () => {
     const b = buildCadenceBriefing('en', 21);
     expect(b.intent).toContain('21:00');
     expect(b.intent.toLowerCase()).toContain('another time');
   });
 
-  // 答应之后，毕业词得把这个时刻交给 agent —— cron 是 agent 去排的，
-  // 时刻传不到那儿，主人挑了也白挑。
+  // After agreement, graduation copy must pass that time to the agent, which schedules cron.
+  // If the time does not reach it, the owner's choice has no effect.
   it('毕业指示把选定时刻带进排 cron 的那句话', () => {
     const g = buildGraduationBriefing({
       nickname: '白驹', sigil: 'ABCD1234',
@@ -242,7 +242,7 @@ describe('buildCadenceBriefing / buildGraduationBriefing', () => {
     expect(g.intent).toContain('ttl_hours 72');
     expect(g.intent).toContain('only what actually happened this run');
     expect(g.intent).toContain("Lore-houses they're not on get zero words");
-    // material 本身就是可直接念的清单（降级铁律：清单不只活在 72h 链接里）
+    // material itself is a directly readable list: fallback requires the list outside the 72h link too.
     expect(g.material).toContain('关注了 mrbeast#AAAA1111');
     expect(g.material).toContain('还没认证');
     expect(g.material).toContain('常看 AI 论文');
@@ -327,8 +327,8 @@ describe('两个读者，两条车道', () => {
       'zh-CN',
     );
     const all = `${b.intent}\n${b.material ?? ''}`;
-    expect(all).toContain('把护照页的链接给主人。'); // canvasUrl 分支
-    expect(all).toContain('两扇门'); // 两座门才说
+    expect(all).toContain('把护照页的链接给主人。'); // canvasUrl branch.
+    expect(all).toContain('两扇门'); // Say this only with two doors.
     expect(all).toContain('灯坊甲 ✓ 已盖章');
     expect(all).toContain('灯坊乙 ✗ 网络不通');
     expect(all).toContain('护照页：');
@@ -349,7 +349,7 @@ describe('两个读者，两条车道', () => {
     expect(g.intent).toContain('报纸：每天 08:00 送');
     expect(g.material).toContain('这一趟真做过的：');
     expect(g.material).toContain('灯坊甲 怎么玩：');
-    expect(g.material).toContain('身份文件：'); // 备份叮嘱不许省略
+    expect(g.material).toContain('身份文件：'); // Never omit the backup reminder.
     expect(g.material).not.toContain('Actually done on this run');
   });
 

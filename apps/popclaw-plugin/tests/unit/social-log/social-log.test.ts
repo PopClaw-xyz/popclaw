@@ -1,6 +1,5 @@
 /**
- * 社交日志（做梦机制第 1 步）· 写入器 + 读取器。
- * ADR-0023 Revision 2026-07-26.
+ * Social log (dreaming mechanism step 1): writer and reader. ADR-0023 Revision 2026-07-26.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'node:fs';
@@ -17,7 +16,10 @@ import {
 } from '../../../src/social-log/social-log.js';
 import { setOwnerTz } from '../../../src/time/time-context.js';
 
-/** 主人本地时区里的 (y, m, d, h) → epoch ms。月份切分口径必须跟着本地时区走。 */
+/**
+ * Owner-local (year, month, day, hour) to epoch milliseconds. Month partitioning must follow the
+ * local time zone.
+ */
 function localMs(y: number, m: number, d: number, h = 12): number {
   return new Date(y, m - 1, d, h, 0, 0, 0).getTime();
 }
@@ -46,14 +48,14 @@ describe('appendSocialLog', () => {
     const first = JSON.parse(lines[0]!) as SocialLogRecord;
     expect(first.v).toBe(1);
     expect(first.ts).toBe(Math.floor(localMs(2026, 7, 26, 9) / 1000));
-    // tz 与 socialLogMonth 同一口径：都读主人本地时区
+    // tz and socialLogMonth both read the owner's local time zone.
     expect(first.tz).toMatch(/^[+-]\d{2}(:\d{2})?$/);
     expect(first.kind).toBe('post_sent');
     expect(JSON.parse(lines[1]!).text).toBe('二');
   });
 
   it('主人配了时区就以它为准，不再跟着进程时区走（ADR-0045）', () => {
-    // 2026-08-01T02:00Z：纽约还是 7/31 22:00，上海已是 8/1 10:00。
+    // At 2026-08-01T02:00Z, New York is still 7/31 22:00 and Shanghai is already 8/1 10:00.
     const ms = Date.UTC(2026, 7, 1, 2, 0);
     setOwnerTz('America/New_York');
     appendSocialLog(dir, { kind: 'post_sent' }, ms);
@@ -68,7 +70,8 @@ describe('appendSocialLog', () => {
   });
 
   it('本地时区月末最后一刻仍落在本月文件（不按 UTC 切）', () => {
-    // 本地 12/31 23:30 在 UTC+8 下已是 UTC 次年 1/1 —— 按 UTC 切会写错文件。
+    // localMs uses the process time zone: local 12/31 23:30 must stay in the December file.
+    // Whether that instant falls in a different UTC year depends on the process time zone.
     appendSocialLog(dir, { kind: 'post_sent' }, localMs(2026, 12, 31, 23) + 30 * 60_000);
     expect(readdirSync(dir)).toEqual(['2026-12.jsonl']);
     expect(socialLogMonth(new Date(localMs(2026, 12, 31, 23)))).toBe('2026-12');
@@ -115,11 +118,11 @@ describe('readSocialLog', () => {
     writeFileSync(
       file,
       readFileSync(file, 'utf-8') +
-        '{"v":1,"ts":178499,"kind":"post_se\n' + // 半行（append 被撕断）
+        '{"v":1,"ts":178499,"kind":"post_se\n' + // Partial line from a torn append.
         'not json at all\n' +
-        '{"v":1,"kind":"post_sent"}\n' + // 缺 ts
-        `{"v":1,"ts":${Math.floor(localMs(2026, 7, 3) / 1000)}}\n` + // 缺 kind
-        '\n', // 空行
+        '{"v":1,"kind":"post_sent"}\n' + // Missing ts.
+        `{"v":1,"ts":${Math.floor(localMs(2026, 7, 3) / 1000)}}\n` + // Missing kind.
+        '\n', // Empty line.
       'utf-8',
     );
     appendSocialLog(dir, { kind: 'post_sent', text: '好行二' }, localMs(2026, 7, 4));
@@ -204,7 +207,7 @@ describe('SocialLogWriter — _then 上下文', () => {
 
 describe('韧性 — 日志故障绝不影响主流程', () => {
   it('写入失败只 warn，不抛', () => {
-    // 目录位置被一个普通文件占了 → mkdir/append 必失败
+    // A regular file occupies the directory path, so mkdir/append must fail.
     const blocked = join(dir, 'blocked');
     writeFileSync(blocked, 'i am a file, not a dir', 'utf-8');
     const warns: string[] = [];
@@ -224,9 +227,9 @@ describe('韧性 — 日志故障绝不影响主流程', () => {
     expect(() => safeRecord(undefined, { kind: 'post_sent' })).not.toThrow();
   });
 
-  // 已知边界（ADR-0023 Revision）：POSIX append 仅 <4KB 原子，撕裂只可能来自
-  // 多写者。撕裂行会吞掉紧随其后的一条（两者黏成一行 → 一起被跳过），损失到此为止，
-  // 再后面的记录照常可读。不为此加"补换行"修复——那是给单写者违规买单。
+  // Known boundary (ADR-0023 revision): POSIX append is atomic only below 4KB; torn lines can come from
+  // multiple writers. A torn line consumes the immediately following record because they join and are skipped together; loss ends there,
+  // and later records remain readable. Do not add newline repair to compensate for violating the single-writer rule.
   it('撕裂行只连累紧随其后的一条，再后面的照常读得出', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, '2026-07.jsonl'), '{"v":1,"ts":123,"kind":"post_se', 'utf-8');

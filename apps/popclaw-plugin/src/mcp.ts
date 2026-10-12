@@ -1,3 +1,4 @@
+import { currentInviteShareIdentity } from './invite/prepare-invite-share.js';
 // Evaluation-order imports: these modules were evaluated BEFORE the stdout
 // guard below at 2f857931, when this file still assembled the runtime inline.
 // Moving that wiring to runtime/assembly must not shrink or grow the window a
@@ -12,6 +13,7 @@ import './host/execution-store.js';
 import { ownerConfirmedWorldInvoke, worldDeclaredActionParameters } from './runtime/world-runtime.js';
 import './host/mcp-owner-authorization.js';
 import type { McpServerBox } from './host/mcp-owner-authorization.js';
+import { createMcpConfirmationLifecycle, type McpConfirmationLifecycle } from './host/mcp-confirmation-lifecycle.js';
 import { createMcpOwnerApproval, ownerApprovalTimeoutFromEnv } from './host/mcp-owner-approval.js';
 import './world/world-capabilities.js';
 import { createLazyRuntime } from './runtime/lazy-runtime.js';
@@ -95,8 +97,8 @@ function mcpRoot(): string {
  * `node:path` — the data root and the notification consumer.
  */
 async function buildRuntime(logger: ReturnType<typeof pinoHostLogger>, closing: AbortSignal, serverBox: McpServerBox,
-  approvalWindowMs: number | undefined): Promise<McpPluginRuntime> {
-  return buildMcpRuntime({ initialEvidence: () => readMcpSetupEvidence(process.env.POPCLAW_SETUP_RECEIPT,mcpRoot(),resolve(dirname(fileURLToPath(import.meta.url)),'../..')), logger, closing, serverBox, approvalWindowMs, dataRoot: mcpRoot(), consumerId: notificationConsumerId });
+  approvalWindowMs: number | undefined, confirmationLifecycle: McpConfirmationLifecycle): Promise<McpPluginRuntime> {
+  return buildMcpRuntime({ initialEvidence: () => readMcpSetupEvidence(process.env.POPCLAW_SETUP_RECEIPT,mcpRoot(),resolve(dirname(fileURLToPath(import.meta.url)),'../..')), logger, closing, serverBox, approvalWindowMs, confirmationLifecycle, dataRoot: mcpRoot(), consumerId: notificationConsumerId });
 }
 
 async function main(): Promise<void> {
@@ -113,7 +115,8 @@ async function main(): Promise<void> {
   const serverBox: McpServerBox = {};
   // Read once, here, and handed to BOTH owner dialogs so they cannot disagree.
   const approvalWindowMs = ownerApprovalTimeoutFromEnv(process.env, logger);
-  const lifecycle = createLazyRuntime((signal) => buildRuntime(logger, signal, serverBox, approvalWindowMs).catch(error => {
+  const confirmations = createMcpConfirmationLifecycle({ server: serverBox, logger });
+  const lifecycle = createLazyRuntime((signal) => buildRuntime(logger, signal, serverBox, approvalWindowMs, confirmations).catch(error => {
     logger.error({}, `popclaw: bootstrap failed — ${String(error)}`);
     throw error;
   }));
@@ -121,6 +124,7 @@ async function main(): Promise<void> {
   let initialSetup: Promise<void> = Promise.resolve();
   const runtime = () => lifecycle.get();
   const stop = () => {
+    confirmations.stop();
     void lifecycle.stop().then(() => process.exit(0), error => {
       logger.error({}, `popclaw: shutdown failed — ${String(error)}`);
       process.exit(1);
@@ -132,6 +136,7 @@ async function main(): Promise<void> {
 
   const { api, tools } = makeToolCollector((m) => logger.info({}, m));
   registerPopclawTools({
+    getInviteShareIdentity: async () => currentInviteShareIdentity(await lifecycle.peek()),
     // This root is single-owner local stdio. Hosted must use its own caller binding.
     socialSendHost: 'local-stdio',
     durableSocialDrafts: true,
@@ -323,8 +328,9 @@ async function main(): Promise<void> {
   // and ignored). AND `onerror` IS SET for one reason: an answer that arrives
   // after the window closed is otherwise dropped by the SDK without a trace.
   // It is reported, content-free, and never honoured.
-  const approvals = createMcpOwnerApproval({ server: serverBox, logger, elicitTimeoutMs: approvalWindowMs });
-  server.onerror = (error) => approvals.noteProtocolError(error);
+  const approvals = createMcpOwnerApproval({ server: serverBox, lifecycle: confirmations, logger, elicitTimeoutMs: approvalWindowMs });
+  server.onerror = error => confirmations.noteProtocolError(error);
+  server.onclose = () => confirmations.stop();
   // Each entry carries its MCP ToolAnnotations (src/tools/tool-annotations.ts),
   // which is what a host's permission heuristics read before a call.
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: tools.map(toMcpToolListing) }));
@@ -337,20 +343,15 @@ async function main(): Promise<void> {
     try {
       const rt = await runtime();
       agentRuntime = rt;
-      // ONE call identity, derived once and used by both halves. The tool body
-      // is given its id by `dispatchMcpCall`, which rebuilds it from
-      // `requestId`; handing that call the id we already derived is what makes
-      // the two provably the same string. Deriving it twice would diverge the
-      // moment a host sends an id the sanitiser rejects, because the fallback
-      // is a timestamp — and every approval would then fail to be found.
+      // One opaque identity per invocation, independent of a client's repeated
+      // or malformed wire id. Both approval and execution receive it unchanged.
       const callRef = approvals.callRef(extra);
-      const requestId = callRef.slice('mcp_'.length);
       const dispatch = async () => {
         // Asks only if this tool registered a subject, then dispatches; a tool
         // with no subject is dispatched with no prompt at all. The ORDER lives
         // inside `aroundDispatch` because no test can import this file.
         const result = await approvals.aroundDispatch(tool.name, req.params.arguments, callRef, extra.signal,
-          () => dispatchMcpCall(tool, req.params.arguments, { requestId, signal: extra.signal }));
+          () => dispatchMcpCall(tool, req.params.arguments, extra, callRef));
         const response = toMcpToolResult(result);
         return decorateToolNotice(tool.name, response, () => offerToolNotice(runtimeToolNoticeContext(rt, notificationConsumerId(), extra.signal)));
       };

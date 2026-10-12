@@ -3,7 +3,7 @@
 For the short guide, read [What to know before using PopClaw](known-limitations.md).
 
 This companion preserves the technical details and audit corrections through
-public commit [eacf2fc94](https://github.com/PopClaw-xyz/popclaw/commit/eacf2fc94b09ae96fcb12868e6bed8872b4dd270),
+historical revision `eacf2fc94` (not included in this snapshot’s history),
 checked on 9 October 2026. The request, sharing and delivery notes below are
 reconciled with that snapshot's [threat model](threat-model.md#what-is-not-protected)
 and runtime implementation.

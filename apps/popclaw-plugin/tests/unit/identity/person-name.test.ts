@@ -66,8 +66,8 @@ describe('name chain: remark > nickname > server > handle', () => {
     expect(nameOf(ID)).toBe('elonmusk');
   });
 
-  // 真机 2026-07-31（host-c）：明信片通知是 `#6q0w4z7r 给你发了私信`——坊官方不发
-  // 名片，前面三级对它永远是空的，主人认不出这是世界寄来的信。
+  // Real host-c run, 2026-07-31: the postcard said `#6q0w4z7r sent you a DM`. The official house account publishes no
+  // profile, so the first three name-resolution levels are always empty and the owner cannot recognize the world sender.
   it('坊官方名号：三级全空 → 报坊名（链末一级）', () => {
     const nameOf = makeNameChain({ houseOfficialName: () => 'popclaw.world' });
     expect(nameOf(ID)).toBe('popclaw.world');

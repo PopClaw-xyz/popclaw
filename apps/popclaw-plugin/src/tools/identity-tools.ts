@@ -108,6 +108,7 @@ export function registerStatusTool(ctx: ToolsCtx, dreamCron: DreamCron): void {
       'verified accounts, follow/bond-book/DM counts, notify channel, and what is still missing. ' +
       'If the tool fails, tell the owner it failed — never make up a result. ' +
       'The result carries its own instructions for how to lay it out; follow them. ' +
+      renderCopy(ownerLang(), 'status.tool.readEfficiency') + ' ' +
       renderCopy(ownerLang(), 'namecard.tool.snapshotGuidance'),
     parameters: EmptySchema,
     execute: async () => {
@@ -129,7 +130,7 @@ export function registerStatusTool(ctx: ToolsCtx, dreamCron: DreamCron): void {
       // instruction, and `read-tools.ts`'s old description-side "relay verbatim" line was
       // already observed being ignored on a real host: a description is read once when the
       // model picks a tool, while the result sits in context next to the material it governs.
-      return { type: 'text' as const, text: `${logger.lines.join('\n')}\n\n${renderDirective()}\n${renderCopy(ownerLang(), 'namecard.tool.snapshotGuidance')}`,
+      return { type: 'text' as const, text: `${logger.lines.join('\n')}\n\n${renderDirective()}\n${renderCopy(ownerLang(), 'namecard.tool.snapshotGuidance')}\n${renderCopy(ownerLang(), 'status.tool.readEfficiency')}`,
         details: {popclaw_id: status.popclawId, sigil: status.sigil, profiles: status.verifiedProfiles} };
     },
   });

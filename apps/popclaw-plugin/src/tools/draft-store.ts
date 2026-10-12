@@ -3,8 +3,8 @@
  * it, and hand it back out exactly once when the owner confirms.
  *
  * Short independent protocols still use this volatile table. Installed local
- * ordinary social manuscripts use durable-social-drafts.ts; their closures
- * exist here only while drafting or executing a current send invocation.
+ * ordinary social manuscripts use social-draft-lifecycle.ts and never enter
+ * this table. Compatibility contexts retain their existing closure semantics.
  */
 
 import nacl from 'tweetnacl';
@@ -196,7 +196,7 @@ function dropReviewCopy(entry: DraftEntry | undefined): void {
   if (path) reviewHolder().files?.remove(path);
 }
 
-function contentDigest(snapshot: DraftSnapshot): string {
+export function draftSnapshotDigest(snapshot: DraftSnapshot): string {
   return draftDigest(JSON.stringify({kind: snapshot.kind, recipientId: snapshot.recipientId,
     recipientLabel: snapshot.recipientLabel, house: snapshot.house, target: snapshot.target,
     body: snapshot.body, binding: snapshot.binding, sendPlan: snapshot.sendPlan,
@@ -205,12 +205,12 @@ function contentDigest(snapshot: DraftSnapshot): string {
 /** Read-only integrity check on the frozen material, including actual bytes. */
 export function draftContentIsCurrent(token: string): boolean {
   const entry = draftStore().get(token);
-  return !!entry?.snapshot && entry.contentDigest === contentDigest(entry.snapshot);
+  return !!entry?.snapshot && entry.contentDigest === draftSnapshotDigest(entry.snapshot);
 }
 
 /** Deep-frozen so neither the tool that built it nor anything downstream can
  *  edit what the owner approved. */
-function freezeSnapshot(snapshot: DraftSnapshot): DraftSnapshot {
+export function freezeDraftSnapshot(snapshot: DraftSnapshot): DraftSnapshot {
   const freezePlan = (value: unknown): void => {
     if (!value || typeof value !== 'object' || value instanceof Uint8Array) return;
     for (const child of Object.values(value)) freezePlan(child);
@@ -350,9 +350,6 @@ export function makeDraftToken(kind: DraftKind): string {
   sweepExpired(drafts, Date.now());
   return `${kind}-${++draftSeq().n}`;
 }
-/** Drop a disposable closure, retaining its persisted review copy. */
-export function forgetDraft(token: string): void { draftStore().delete(token); }
-
 /**
  * Park a draft. `snapshot` is what the owner will be asked to approve, and it
  * is optional only because the two narrow doors that do NOT go through
@@ -370,8 +367,8 @@ export function putDraft(
   drafts.set(token, {
     fn: captureActionContext(fn),
     at: now,
-    snapshot: snapshot ? freezeSnapshot(snapshot) : null,
-    contentDigest: snapshot ? contentDigest(snapshot) : undefined,
+    snapshot: snapshot ? freezeDraftSnapshot(snapshot) : null,
+    contentDigest: snapshot ? draftSnapshotDigest(snapshot) : undefined,
   });
   sweepExpired(drafts, now);
   evictOverflow(drafts, kindOf(token));
@@ -390,7 +387,7 @@ export function noteDraftPreview(
 ): void {
   const entry = draftStore().get(token);
   if (!entry?.snapshot) return;
-  entry.snapshot = freezeSnapshot({
+  entry.snapshot = freezeDraftSnapshot({
     ...entry.snapshot,
     preview: { digest: draftDigest(preview), status, at: Date.now() },
   });
@@ -421,7 +418,7 @@ export function noteDraftToolOutput(token: string, output: string): void {
   if (!entry?.snapshot) return;
   if (entry.snapshot.body.trim() === '') return;
   if (!output.includes(entry.snapshot.body)) return;
-  entry.snapshot = freezeSnapshot({
+  entry.snapshot = freezeDraftSnapshot({
     ...entry.snapshot,
     output: { digest: draftDigest(output), at: Date.now() },
   });
@@ -435,7 +432,7 @@ export function noteDraftToolOutput(token: string, output: string): void {
 export function noteDraftReview(token: string, review: DraftReviewSnapshot): void {
   const entry = draftStore().get(token);
   if (!entry?.snapshot || entry.snapshot.review) return;
-  entry.snapshot = freezeSnapshot({ ...entry.snapshot, review });
+  entry.snapshot = freezeDraftSnapshot({ ...entry.snapshot, review });
 }
 
 /**
@@ -445,9 +442,14 @@ export function noteDraftReview(token: string, review: DraftReviewSnapshot): voi
  * content: what is sent always comes from the snapshot.
  */
 export function verifyDraftReview(token: string): 'ok' | 'none' | 'changed' {
-  const review = peekDraftSnapshot(token)?.review;
+  const snapshot = peekDraftSnapshot(token);
+  return snapshot ? verifySnapshotReview(snapshot, reviewHolder().files) : 'none';
+}
+
+/** Check a retained manuscript directly, without adding it to the volatile table. */
+export function verifySnapshotReview(snapshot: DraftSnapshot, files: DraftReviewFiles | null): 'ok' | 'none' | 'changed' {
+  const review = snapshot.review;
   if (!review?.needed) return 'none';
-  const files = reviewHolder().files;
   // An optional copy that could not be written leaves the complete tool-result
   // review available. A copy that existed and is now unverifiable must refuse.
   if (!review.file) return 'none';

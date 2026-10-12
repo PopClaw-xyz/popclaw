@@ -43,7 +43,7 @@ async function scenario(mode: string, empty = false, publicV1 = false) {
     // not a successful public execution journal or a real stream.
     const read = vi.fn(() => ({ items: [], sources: [] }));
     const result = await runPopclawFeedCommand({ positional: [], flags: {} }, catalog,
-      publicV1 ? { publicFeedDisplay: { read } as never } : {});
+      publicV1 ? { publicFeedDisplay: { prepare: async () => ({ read }) } as never } : {});
     expect(result.text).not.toContain('readonly database');
     expect(result.text).not.toContain('failed:');
     if (publicV1) {

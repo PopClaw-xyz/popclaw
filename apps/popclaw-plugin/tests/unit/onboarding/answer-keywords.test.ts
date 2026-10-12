@@ -43,9 +43,10 @@ describe('isYouDecide', () => {
     for (const w of ['你定', '你决定', '都行', '随便']) expect(isYouDecide(w)).toBe(true);
   });
   /**
-   * #422（2026-08-24 真机）：中文主人在 arrival 说「你来挑吧」，这张表里没有，
-   * 于是四个字被当成他亲手取的名号永久签进身份、还盖了双坊章——一张比 en 车道
-   * 窄的表，偏偏漏在代价最高的那一幕。「挑」这一支和各条的「…吧」口语尾巴补齐。
+   * #422 (real host, 2026-08-24): a Chinese owner said "你来挑吧" during arrival, but the table missed it.
+   * The four characters were permanently signed as their chosen nickname and stamped by both Houses.
+   * The narrower-than-English table failed at the most costly stage. Add the selection verb "挑" and
+   * colloquial "...吧" endings.
    */
   it('#422：「你来挑吧」这类口语变体也认', () => {
     for (const w of ['你来挑吧', '你来挑', '你挑吧', '你挑', '你来定吧', '你定吧', '你选吧', '你看着办吧']) {
@@ -92,8 +93,8 @@ describe('isNotSelfDescription', () => {
   });
 });
 
-// 主人可以直接报一个点，而不是只在 1/2 里选。
-// 主人的原话是逐字递进来的（onboarding_continue 传 verbatim），所以解析在这儿。
+// The owner may give a time directly instead of choosing only 1 or 2.
+// The owner's words arrive verbatim (onboarding_continue passes verbatim), so parsing belongs here.
 describe('readCadenceHour', () => {
   it('读得出主人报的点（中英、几种常见写法）', () => {
     expect(readCadenceHour('9')).toBe(9);
@@ -111,8 +112,8 @@ describe('readCadenceHour', () => {
     expect(readCadenceHour('2')).toBeUndefined();
   });
 
-  // 误读的代价不对等：漏读 = 回落到提议时刻，主人一眼看见再改；
-  // 误读 = 给他定了个凌晨两点的闹钟。所以裸数字必须挨着时刻标记，或者整句就是那个数。
+  // Misreading has asymmetric costs: missing a time falls back to the proposed time, visible for owner correction;
+  // a false match schedules a 2am alarm. Bare numbers must adjoin a time marker or constitute the entire utterance.
   it('答应里夹带的数字不是时刻（「行，我有2个问题」≠ 凌晨两点）', () => {
     expect(readCadenceHour('行，我有2个问题')).toBeUndefined();
     expect(readCadenceHour('yes, and I have 3 questions')).toBeUndefined();
@@ -127,8 +128,8 @@ describe('readCadenceHour', () => {
   });
 });
 
-// 主人用中文语音输入，ASR 把口说的时刻转成汉字（「晚上九点」而不是「21:00」）。
-// 只认阿拉伯数字 = 这个功能对他整个不成立。
+// The owner uses Chinese voice input; ASR renders spoken times as Chinese characters ("晚上九点", not "21:00").
+// Accepting only Arabic digits would make the feature entirely unusable for them.
 describe('readCadenceHour · 汉字时刻', () => {
   it('认得汉字点数与时段前缀', () => {
     expect(readCadenceHour('九点')).toBe(9);

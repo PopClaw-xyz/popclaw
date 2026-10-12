@@ -78,6 +78,9 @@ export interface WorldToolsDeps {
 }
 
 export interface RegisterToolsDeps {
+  /** Native-only conversation presence; an absent scope means a fresh/unknown input. */
+  currentGuideReadScope?: () => import('../runtime/read-request-scope.js').GuideReadScope | undefined;
+  getInviteShareIdentity?: () => Promise<import('../invite/prepare-invite-share.js').InviteShareIdentity | null>;
   /** Installed local roots persist ordinary social manuscripts in host.db. */
   durableSocialDrafts?: boolean;
   /** Existing trusted single-owner stdio consumer; not a human chat proof. */
@@ -121,6 +124,8 @@ export interface RegisterToolsDeps {
    * **never saves to disk**); where it's saved is decided by the **host**.
    */
   inboundMediaDirs?: readonly string[];
+  /** Native host outbound copy of an already verified inbox attachment. */
+  stageInboxAttachment?: (path: string) => string | null;
   /**
    * Where long drafts' read-only review copies are written
    * (`draft-review.ts`). Host knowledge like the field above, injected by the

@@ -1,24 +1,26 @@
 /**
- * 批次标记 + 「怀疑短了却找不到说明」那一格(2026-09-13)。
+ * Batch markers and the missing case: suspecting truncation without an explanation (2026-09-13).
  *
- * 那天的车间跑完没有回执:写作端说候选页(155 条)和素材页都被截断了,两次削减选题,
- * 最后交白卷,让主人去调大返回上限。事后量下来什么都没被截 —— 会话自报 256000 token
- * 预算,两页分别约 16k / 23k 加权单位,目标 56320、宿主上限 64000,宿主的会话级截断
- * 日志在那个时段根本没出现过。
+ * That workshop run returned no receipt: the writer claimed both the 155-item candidate page
+ * and material page were truncated, reduced its selections twice, then submitted nothing and
+ * asked the owner to raise the return limit. Measurements found no truncation: the session
+ * reported a 256000-token budget; pages weighed about 16k / 23k weighted units, against a
+ * 56320 target and 64000 host ceiling. No session-level truncation log appeared in that interval.
  *
- * 关键在于:它当时手上已经有三条明确指令(素材页的 cut-short、childDirective 的分批
- * 交稿、页面上加粗印着的「完整、未被截断」),三条全被无视了。所以这一刀不是把保证
- * 喊得更响,而是补两样它自己能核的东西:
- *   · 页首说清本页几条、以哪一行收尾;页尾就是那一行 —— 完整性从「听我们保证」变成
- *     「自己数得出来」;
- *   · 真正缺的那一格:既没有截断提示、也没有省略标记、却仍然怀疑短了,该怎么办。
+ * It already had three explicit instructions: the material page's cut-short rule, childDirective's
+ * batch-submission rule, and a bold complete/not-truncated assertion. It ignored all three.
+ * Instead of a stronger guarantee, add two things it can verify itself:
+ *   · A header stating the item count and closing line, matched by that actual footer: integrity
+ *     becomes countable rather than something it must take on trust.
+ *   · The missing instruction: what to do when no truncation notice or omission marker is visible
+ *     but it still suspects missing content.
  *
- * 这两样分处两地,而且必须分处两地。页首/页尾是**这一页的事实**,只有这一页说得出来,
- * 所以印在页上;「该怎么办」是**行为规则**,每页一模一样,所以落在车间会话的系统提示
- * (CHILD_SYSTEM_PROMPT)里 —— 那份提示每会话只发一次,而页面要算进宿主的单条工具返回
- * 上限。把规则印在页上那一版给每一页平添约 2500 加权单位,三条素材的小报就再也塞不进
- * 最小档(16000),而「小报永远塞得下」正是 gather-materials 那条测试存在的理由。
- * 页面上只留一句指路,也是回退到主会话出报时唯一还剩的一句。
+ * These belong in separate places. Header/footer are facts about this page and belong on it.
+ * The response rule is identical across pages and belongs in the workshop session's system
+ * prompt (CHILD_SYSTEM_PROMPT), sent once per session. Each page pays the host's per-tool-result
+ * limit. Putting the rule on each page added about 2500 weighted units; even a three-item paper
+ * no longer fit the smallest 16000 tier, violating the small-paper guarantee tested in gather-materials.
+ * Retain only a one-sentence pointer on the page; that is also what survives main-session fallback.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { buildNewspaperPrompt } from '../../../src/newspaper/build-newspaper-prompt.js';
@@ -72,10 +74,11 @@ const candidates = (lang: Lang, count: number, token = 'ctok_x'): string =>
   );
 
 /**
- * 宿主的保尾判据(openclaw 2026.8.2,`tool-result-truncation-*.js` 的 `hasImportantTail`):
- * 超限时只有当**末尾 2000 字符**命中那张英文词表(error / failed / total / summary /
- * complete / finished / done …,或以 `}` 收束)才保头保尾,否则一律只保头。
- * 所以收尾行必须自带一个这样的词——这正是「收尾行不见 = 真被截过」成立的前提。
+ * Host tail-preservation rule (OpenClaw 2026.8.2, hasImportantTail in tool-result-truncation-*.js):
+ * on overflow, preserve both ends only when the last 2000 characters match its English word list
+ * (error / failed / total / summary / complete / finished / done …) or end with `}`. Otherwise
+ * retain only the beginning. The closing line therefore needs such a word: that is the premise
+ * behind treating a missing closing line as evidence of real truncation.
  */
 const HOST_KEEPS_TAIL =
   /\b(error|exception|failed|fatal|traceback|panic|stack trace|errno|exit code)\b|\b(total|summary|result|complete|finished|done)\b/;
@@ -93,9 +96,9 @@ describe('批次标记:页首报数、页尾收尾', () => {
       });
       expect(p).toContain(renderCopy(lang, 'newspaper.material.batch.head', { count: '7', sentinel }));
       expect(p.endsWith(sentinel)).toBe(true);
-      // 一次,不是两次:页首那句是**引用**收尾行,不是又印一份。
-      expect(p.split(sentinel).length - 1).toBe(2); // 页首引用 + 页尾本体
-      // 数得出来:页首报的条数 = 素材块的条数 = 收尾行里的条数。
+      // Once, not twice: the header quotes the closing line rather than printing another copy.
+      expect(p.split(sentinel).length - 1).toBe(2); // Header quotation + actual footer.
+      // Countable: header count = number of material blocks = footer count.
       expect([...p.matchAll(/^\[\d+\] (?:author|作者): /gm)]).toHaveLength(7);
     });
 
@@ -113,15 +116,16 @@ describe('批次标记:页首报数、页尾收尾', () => {
       for (const key of ['newspaper.material.batch.sentinel', 'newspaper.candidates.batch.sentinel']) {
         expect(renderCopy(lang, key, { count: '3', id: 'x' })).toMatch(HOST_KEEPS_TAIL);
       }
-      // 而且它确实落在末尾 2000 字符之内(宿主只看那一截)。
+      // It also lies within the last 2000 characters, the only region the host checks.
       expect(material(lang, 7).slice(-2000)).toMatch(HOST_KEEPS_TAIL);
       expect(candidates(lang, 9).slice(-2000)).toMatch(HOST_KEEPS_TAIL);
     });
   }
 
   /**
-   * ⚠️ 素材页的编号沿用候选页身份、本来就跳号。绝不能教写作端「条数 = 最后一个编号」,
-   * 也绝不能要求编号连续 —— 那正是 2026-08-27 两台机器跑去 feed「补全」的起点。
+   * ⚠️ Material-page numbers retain candidate identities and may skip. Never teach the writer
+   * that count equals the last number or demand contiguous numbers: that caused both machines
+   * to fetch feed data to fill gaps on 2026-08-27.
    */
   it('素材页页首明说会跳号,且从不把条数等同于最后一个编号', () => {
     const i = issue({
@@ -143,18 +147,18 @@ describe('批次标记:页首报数、页尾收尾', () => {
     });
     expect(head).toContain('跳号');
     expect(p).toContain(head);
-    // 页首报的是条数(2),不是最后一个编号(41)。
+    // The header reports the count (2), not the last item number (41).
     expect(p).toContain('本页有 2 条要你写');
   });
 
   /**
-   * 收尾行在**最终一次裁剪之后**生成,并且照样计入页面重量 —— 否则它自己就可能是
-   * 把一页推过上限的那一根稻草,而一张「证明没被截」的标记被截掉,比没有还坏。
-   * 做法上不是「裁完再追加」:两页都是整页重建 + 重新称重,收尾行天然在每一次称量里。
+   * Generate the closing line after the final trim and include it in page weight. Otherwise
+   * it can push the page over the limit; truncating a marker meant to prove completeness is worse than none.
+   * This is not append-after-trimming: both pages are rebuilt and reweighed in full, so every weighing includes the footer.
    */
   it('裁剪之后收尾行仍在页内,且整页没有因为它超出预算', () => {
     _resetIssuesForTest();
-    // ≥100k → 32000 档,再乘 AIM 0.88 = 28160 加权单位。
+    // ≥100k → 32000 tier, multiplied by AIM 0.88 = 28160 weighted units.
     noteContextTokenBudget('s1', 100_000);
     const budget = pageBudgetNow('s1');
     const long = 'x'.repeat(900);
@@ -192,20 +196,20 @@ describe('批次标记:页首报数、页尾收尾', () => {
 });
 
 /**
- * 真正缺的那一格。
+ * The missing case.
  *
- * 原来的 cut-short 指令的前提是「你**看见**了截断提示或省略标记」;那天的写作端两样
- * 都没看见,却仍然认定页面短了 —— 这个状态下没有任何一句话告诉它该怎么办。
+ * The old cut-short instruction assumed a visible truncation notice or omission marker.
+ * That writer saw neither but still concluded the page was short; no instruction covered that state.
  *
- * 规则本体在 CHILD_SYSTEM_PROMPT(英文,系统提示在本仓是英文单一来源);页面上只剩
- * 一句指路。下面两组断言按这条分界走。
+ * The rule lives in CHILD_SYSTEM_PROMPT (English, the repository's single language for system prompts).
+ * The page retains only a pointer. The two assertion groups below follow that boundary.
  *
- * 措辞红线(两条独立评审共同的结论,勿「加强」):
- *  · 说「本会话改不了宿主设置」,不说「没有上限可调」—— 预算环境变量确实存在,那是假话;
- *  · 说「解释送不到主人手上」,不说「没人读你」「停下来就今天没有报纸」—— 逼单会把模型
- *    推去交空壳稿,而渲染器认标题即算写过,那个失败模式是真的;
- *  · 不给「绝无例外」式的完整性承诺;
- *  · 交不出可用的一批时,允许老实收场 —— 不能把「交一批部分稿」做成唯一出口。
+ * Wording constraints agreed by two independent reviews; do not strengthen them:
+ *   · Say this session cannot change host settings, not that no adjustable limit exists; budget environment variables exist.
+ *   · Say the explanation cannot reach the owner, not that nobody reads it or stopping means no paper today.
+ *     Pressure can produce empty submissions, and the renderer counts a title as written: this failure mode is real.
+ *   · Do not promise unconditional completeness.
+ *   · Allow an honest stop when no usable batch can be submitted; partial submission must not be the only exit.
  */
 describe('「怀疑短了却找不到说明」这一格', () => {
   beforeAll(() => setOwnerLang('zh-CN', 'config'));
@@ -219,8 +223,8 @@ describe('「怀疑短了却找不到说明」这一格', () => {
   });
 
   /**
-   * 这一页要付宿主的单条返回上限,所以指路只能是一句。上限定在 200 加权单位:
-   * 够写一句,不够把规则再抄一遍回来。
+   * The page pays the host's per-result limit, so the pointer must be one sentence.
+   * Cap it at 200 weighted units: enough for a sentence, not a duplicate of the rule.
    */
   it('那一句必须一直是一句 —— 行为规则不许再按页计费', () => {
     for (const lang of LANGS) {
@@ -257,8 +261,8 @@ describe('「怀疑短了却找不到说明」这一格', () => {
     });
 
     /**
-     * 那条出路本来就存在,只是从没跟写作端讲过:`q` 是**逐条**锚,不是整页锚,
-     * 所以读得到正文的那几条,不管其余出了什么事都交得上去。
+     * This exit already existed but the writer was never told: q anchors individual items, not whole pages.
+     * Items whose bodies are readable can therefore be submitted regardless of what happened to the rest.
      */
     it('把已有的补救讲明白:逐条锚、交得动的先交', () => {
       expect(CHILD_SYSTEM_PROMPT).toContain('`q` is checked per item');
@@ -278,7 +282,7 @@ describe('「怀疑短了却找不到说明」这一格', () => {
       expect(CHILD_SYSTEM_PROMPT).toContain('cannot change host settings');
       expect(CHILD_SYSTEM_PROMPT).toContain('cannot wait for the owner to answer here');
       expect(CHILD_SYSTEM_PROMPT).toContain('your explanation does not reach him');
-      // 假话与逼单,一个都不许回来。
+      // Neither false claims nor submission pressure may return.
       expect(CHILD_SYSTEM_PROMPT).not.toMatch(/no limit (that )?can be raised/i);
       expect(CHILD_SYSTEM_PROMPT).not.toMatch(/nobody reads/i);
       expect(CHILD_SYSTEM_PROMPT).not.toMatch(/there is no paper today/i);

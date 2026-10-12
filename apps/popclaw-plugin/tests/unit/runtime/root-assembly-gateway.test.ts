@@ -326,7 +326,7 @@ describe('gateway root — runtime bag shape', () => {
     await root.stop();
     expect(keys).toEqual([
       'bondsStore', 'boot', 'cadenceLoader', 'drainNotifications', 'egress', 'followerSync', 'guideClient',
-      'host', 'houseRuntime', 'houseStarted', 'houses', 'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers',
+      'host', 'houseFeedReader', 'houseRuntime', 'houseStarted', 'houses', 'inboxStore', 'initiator', 'inviteWatch', 'knownFollowers',
       'llmComplete', 'markService', 'marksStore', 'nameOf', 'nativeWorldExecution', 'notifier', 'notifyBacklog',
       'onboardingState', 'orchestrator', 'ownerNotifier', 'ownerNotifyTargetStore', 'ownerSession', 'paths',
       'pendingFollows', 'pendingInvites', 'proposalsStore', 'publicFeedDisplay', 'replyPings', 'retryDmNotifications', 'scoreCache',

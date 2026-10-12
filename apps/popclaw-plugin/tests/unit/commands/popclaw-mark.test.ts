@@ -318,7 +318,7 @@ describe('runPopclawMarksCommand', () => {
     expect(lines[2]).toContain('@alice');
   });
 
-  // 镜像帖的 `@handle` vs 主人给的备注名 —— 主人赢（唯一名字链）。
+  // A mirrored post's `@handle` versus the owner's alias: the owner wins (single name chain).
   it('备注名盖过镜像帖的 @handle', async () => {
     const store = freshStore();
     store.upsert({
@@ -334,7 +334,7 @@ describe('runPopclawMarksCommand', () => {
     expect(r.text).not.toContain('@elonmusk');
   });
 
-  // 交情本一个字都没有 → 链算出来就是 handle 本身 → 保留 `@handle`（信息量最大）。
+  // An empty bond book resolves to the handle itself; retain `@handle` for the most informative display.
   it('没有备注名/自报名号时保留 @handle', async () => {
     const store = freshStore();
     store.upsert({

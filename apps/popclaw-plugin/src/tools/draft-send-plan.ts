@@ -1,3 +1,4 @@
+import type {EventEgress} from '../egress/event-egress.js';
 import type {PluginRuntime} from '../runtime/plugin-runtime.js';
 import type {DraftSnapshot} from './draft-store.js';
 import {runPopclawMessageCommand, type PopclawMessageDeps} from '../commands/popclaw-message.js';
@@ -6,7 +7,9 @@ import {runPopclawPostCommand} from '../commands/popclaw-post.js';
 import {assertHouseActionActive} from '../runtime/house-lifecycle/action-context.js';
 
 export interface DraftSendPlan {
-  readonly nickname: string;
+  /** Durable plans retain the drafting nickname. Compatibility reads the
+   * current runtime nickname only when its captured sender executes. */
+  readonly nickname?: string;
   readonly origin?: string;
   readonly participation?: Readonly<{opSeq: number; sessionId: string; installationId: string}> | null;
   readonly person?: PopclawMessageDeps['approvedRecipient'];
@@ -29,9 +32,9 @@ export function pinSocialSendPlan(rt: PluginRuntime, house: string | undefined):
 }
 /** Rebuild only the send operation using this process's signer and current
  * invocation. Pinned routing cannot silently follow a new home or rejoined House. */
-export async function sendSocialDraft(snapshot: DraftSnapshot, rt: PluginRuntime): Promise<{text: string}> {
+export async function sendSocialDraft(snapshot: DraftSnapshot, rt: PluginRuntime, captured?: {egress: EventEgress; recipientRef?: string}): Promise<{text: string; isError?: true}> {
   const plan = snapshot.sendPlan!;
-  if (plan.origin) {
+  if (!captured && plan.origin) {
     const target = rt.egress.capturePlan().targets.find(t => t.slug === snapshot.house);
     if (target?.origin !== plan.origin) throw new Error('SOCIAL_DRAFT_HOUSE_CHANGED');
     assertHouseActionActive(plan.origin);
@@ -39,20 +42,23 @@ export async function sendSocialDraft(snapshot: DraftSnapshot, rt: PluginRuntime
     // durable op_seq/session generation instead, never a callback or lease.
     if (JSON.stringify(participation(rt, plan.origin)) !== JSON.stringify(plan.participation)) throw new Error('SOCIAL_DRAFT_HOUSE_CHANGED');
   }
-  const egress = {
+  const egress = captured?.egress ?? {
     push: (bytes: Uint8Array) => rt.egress.pushTo(snapshot.house, bytes),
     pushTo: (_house: string | undefined, bytes: Uint8Array) => rt.egress.pushTo(snapshot.house, bytes),
   };
-  const common = {signer: rt.boot.signer, nickname: plan.nickname, egress, socialLog: rt.socialLog};
-  if (snapshot.kind === 'reply') return runPopclawReplyCommand({positional: [snapshot.target!, snapshot.body]},
-    {...common, cache: {lookup: () => plan.replySource ?? null}});
+  const common = {signer: rt.boot.signer, nickname: captured ? rt.boot.nickname : plan.nickname!, egress, socialLog: rt.socialLog};
+  if (snapshot.kind === 'reply') {
+    const args = {positional: [snapshot.target!, snapshot.body], ...(captured ? {flags: {}} : {})};
+    return runPopclawReplyCommand(args, {...common, cache: {lookup: () => plan.replySource ?? null}});
+  }
   if (snapshot.kind === 'post') return runPopclawPostCommand({positional: [snapshot.body], flags: {
     ...(plan.replyTo ? {reply: plan.replyTo} : {}), ...(plan.quoteOf ? {quote: plan.quoteOf} : {}),
   }}, {...common, webBaseUrl: rt.boot.webBaseUrl, cache: {
     findByEventIdPrefix: () => ({item: plan.postSource ?? null, ambiguous: []}),
   } as unknown as Parameters<typeof runPopclawPostCommand>[1]['cache']});
   const media = snapshot.attachments[0];
-  const reply = await runPopclawMessageCommand({positional: snapshot.body ? [snapshot.recipientId!, snapshot.body] : [snapshot.recipientId!], flags: {}},
+  const recipient = captured?.recipientRef ?? snapshot.recipientId!;
+  const reply = await runPopclawMessageCommand({positional: snapshot.body ? [recipient, snapshot.body] : [recipient], flags: {}},
     {...common, approvedRecipient: plan.person, resolveRecipient: async () => ({kind: 'resolved' as const, ...plan.person!}),
       houseOfRecipient: () => snapshot.house, replyToEventId: snapshot.target,
       ...(media ? {media: {bytes: media.bytes, mime: media.mime, name: media.name}} : {})});

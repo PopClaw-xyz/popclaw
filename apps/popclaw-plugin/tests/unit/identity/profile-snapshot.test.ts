@@ -16,10 +16,10 @@ describe('public verified profile snapshots', () => {
 
   it('distinguishes observed zero, historical zero and an absent follower snapshot', () => {
     const row = { platform: 'x', handle: 'owner', verified_at: '' };
-    expect(renderVerifiedProfileSummary({ ...row, follower_count: 0, follower_count_observed: true }, 'en')).toContain('Followers at verification: 0');
-    expect(renderVerifiedProfileSummary({ ...row, follower_count: 0 }, 'en')).toContain('Followers at verification: unconfirmed');
-    expect(renderVerifiedProfileSummary(row, 'en')).toContain('Followers at verification: unconfirmed');
-    expect(renderVerifiedProfileSummary({ ...row, follower_count: 1300000 }, 'en')).toContain('Followers at verification: about 1.3m');
+    expect(renderVerifiedProfileSummary({ ...row, follower_count: 0, follower_count_observed: true }, 'en')).toContain('X followers at verification: 0');
+    expect(renderVerifiedProfileSummary({ ...row, follower_count: 0 }, 'en')).toContain('X followers at verification: unconfirmed');
+    expect(renderVerifiedProfileSummary(row, 'en')).toContain('X followers at verification: unconfirmed');
+    expect(renderVerifiedProfileSummary({ ...row, follower_count: 1300000 }, 'en')).toContain('X followers at verification: about 1.3m');
   });
 
   it('ignores malformed rows and refuses invalid follower or avatar evidence', () => {

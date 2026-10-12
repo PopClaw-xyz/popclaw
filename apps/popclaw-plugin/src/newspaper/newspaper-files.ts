@@ -169,7 +169,7 @@ export const TEMPLATE_VERSION = 'v11';
  * The comment on each entry = that fingerprint's provenance (constant name · TEMPLATE_VERSION at the time · the commit it first appeared in).
  */
 const HISTORICAL_SEEDS: readonly string[] = [
-  // DEFAULT_CONTENT · v10 · c65a31fc (2026-08-27, v0.3 挑选阶梯前的最后一版)
+  // DEFAULT_CONTENT · v10 · c65a31fc (2026-08-27, last version before the v0.3 selection ladder)
   'f25ef944c3e0badbcadd34758b89b60fea5dacd1f954cf94999b26fe21e71e72',
   // DEFAULT_CONTENT_EN · v10 · c65a31fc (2026-08-27)
   'e2d0d0f4ab3c833c7f6e52e61e560ddb2c7b5ac501b41f7609053f41d30b9e9a',

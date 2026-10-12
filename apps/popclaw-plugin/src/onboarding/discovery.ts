@@ -19,9 +19,13 @@ import { displayPerson } from '../identity/person-resolver.js';
 import { appendCorePrivate } from '../taste/taste-writer.js';
 import type { LearnedPick, LearnedSignal } from '../taste/learned-writer.js';
 import { renderLanternPage, uploadOnboardingPage, type OnboardingCanvasDeps } from './canvas-pages.js';
-import { parseGuideFrontmatter, summaryDeclaration, type HouseEntry } from '../world/guide.js';
-import type { GuideTextResult } from '../world/guide-client.js';
-import { formatHouseReadFailure, houseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
+import { parseGuideFrontmatter, type HouseEntry } from '../world/guide.js';
+import {
+  prepareDeclaredSummaryRead,
+  type SummaryGuideReader as GuideClientLike,
+  type SummaryReader as SummaryClientLike,
+} from '../world/declared-summary-read.js';
+import { formatHouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
 import {
   formatHotPostLine,
   formatNotablePersonLine,
@@ -32,19 +36,11 @@ import {
 } from '../world/summary-format.js';
 import { rankBySummaryTaste } from '../world/summary-ranker.js';
 import { aggregateNotableAuthors, type AuthorSource } from '../world/notable-authors.js';
-import type { HotPost, WorldSummaryResponse, WorldSummaryResult } from '../world/world-summary-client.js';
+import type { HotPost, WorldSummaryResponse } from '../world/world-summary-client.js';
 import type { SessionContextIndex } from './context-index.js';
 
-export interface GuideClientLike {
-  /** Full text of guide.md; failure → null (GuideClient contract). */
-  fetchGuideText(): Promise<string | null>;
-  fetchGuideResult?(): Promise<GuideTextResult>;
-}
-
-export interface SummaryClientLike {
-  fetchSummary(windowHours?: number): Promise<WorldSummaryResponse | null>;
-  fetchSummaryResult?(windowHours?: number): Promise<WorldSummaryResult>;
-}
+// Preserve the existing onboarding ports; their shared read contract belongs to world.
+export type { GuideClientLike, SummaryClientLike };
 
 /** Minimal projection of a WorldFeedClient.fetchSnapshot entry (compatible with pbjs IWorldFeedItem). */
 export interface SnapshotItemLike {
@@ -185,19 +181,11 @@ export class OnboardingDiscovery {
 
   async presentLantern(): Promise<{ text: string }> {
     const lang = ownerLang();
-    let guide: GuideTextResult;
-    try {
-      if (this.deps.guideClient.fetchGuideResult) guide = await this.deps.guideClient.fetchGuideResult();
-      else {
-        const text = await this.deps.guideClient.fetchGuideText();
-        guide = text === null ? { ok: false, failure: { code: 'HOUSE_REMOTE_UNKNOWN' } } : { ok: true, text };
-      }
-    } catch (error) { guide = { ok: false, failure: houseReadFailure(error) }; }
-    const declaration = guide.ok ? summaryDeclaration(guide.text) : 'unknown';
-    if (declaration !== 'supported') {
-      if (declaration === 'unsupported') {
+    const prepared = await prepareDeclaredSummaryRead(this.deps.guideClient, this.deps.summaryClient);
+    if (prepared.status !== 'supported') {
+      if (prepared.status === 'unsupported') {
         const houseLines = this.houses().map(h => {
-          const say = h.entry?.headline ?? houseBlurb(h, () => this.houses(), guide.ok ? guide.text : null);
+          const say = h.entry?.headline ?? houseBlurb(h, () => this.houses(), prepared.guideText);
           return h.name + (say ? ` — ${say}` : '');
         });
         const text = [t('world.summary.unsupported'), ...houseLines, t('onboarding.lantern.unsupportedContinue')].join('\n\n');
@@ -208,17 +196,14 @@ export class OnboardingDiscovery {
         return this.presentCard({ blocks: [{ kind: 'text', text }] });
       }
       this.deps.setDrafts({ lantern: 'degraded' });
-      const reason = guide.ok ? '' : ` ${formatHouseReadFailure(lang, guide.failure)}`;
+      const reason = prepared.failure ? ` ${formatHouseReadFailure(lang, prepared.failure)}` : '';
       const text = t('world.summary.availabilityUnknown') + reason + '\n\n' + t('onboarding.lantern.readRetry');
       this.cachedLanternNotice = this.cachedLantern ? null : text;
       return this.presentCard({ blocks: [{ kind: 'text', text }] });
     }
-    const guideText = guide.ok ? guide.text : null;
+    const guideText = prepared.guideText;
     const [summaryResult, snapshot] = await Promise.all([
-      (this.deps.summaryClient.fetchSummaryResult ? this.deps.summaryClient.fetchSummaryResult(SUMMARY_WINDOW_HOURS)
-        : this.deps.summaryClient.fetchSummary(SUMMARY_WINDOW_HOURS).then((summary): WorldSummaryResult => summary
-          ? { ok: true, summary } : { ok: false, failure: { code: 'HOUSE_REMOTE_UNKNOWN' } }))
-        .catch((error): WorldSummaryResult => ({ ok: false, failure: houseReadFailure(error) })),
+      prepared.read(SUMMARY_WINDOW_HOURS),
       this.deps.snapshotClient
         .fetchSnapshot({ limit: SNAPSHOT_LIMIT })
         .catch(() => [] as SnapshotItemLike[]),

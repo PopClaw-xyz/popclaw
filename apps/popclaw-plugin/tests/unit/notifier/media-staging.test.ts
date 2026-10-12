@@ -23,7 +23,7 @@ describe('stageMediaForSend', () => {
 
     expect(out).toBe(join(dir, 'src.png'));
     expect(readFileSync(out!, 'utf8')).toBe('PNGBYTES');
-    expect(readFileSync(src, 'utf8')).toBe('PNGBYTES'); // 正本还在 data/dm-media
+    expect(readFileSync(src, 'utf8')).toBe('PNGBYTES'); // The master copy remains in data/dm-media.
   });
 
   it('同名重复 staging 覆盖而不是堆一地（文件名是确定性的）', () => {
@@ -53,7 +53,7 @@ describe('stageMediaForSend', () => {
     writeFileSync(src, 'x');
     const blocked = join(root, 'blocked');
     mkdirSync(blocked);
-    chmodSync(blocked, 0o500); // 只读目录：mkdir/copy 都进不去
+    chmodSync(blocked, 0o500); // Read-only directory: neither mkdir nor copy can succeed.
 
     expect(stageMediaForSend(src, join(blocked, 'staged'))).toBeNull();
   });

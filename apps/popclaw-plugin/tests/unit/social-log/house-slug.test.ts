@@ -1,12 +1,10 @@
 /**
- * ADR-0037 总法则「坊是事实的维度」落到社交日志：凡记录**发生了什么**的都必须带坊。
- * 这些采集点本地本来就算出了坊（路由用的就是它），只是没写进日志 —— 出处丢了不可回填。
- *
- * 判据两条：算得出就带；算不出就**省略**（不填 'popclaw' 之类的假默认 ——
- * social-log 的诚实空缺纪律，见 social-log.ts 头注三条硬要求）。
- *
- * 另含 `mark_removed`：unmark 此前全流程零 safeRecord —— P-004 立法动机
- *（「UI 选择信号没家」）的原样复现。
+ * ADR-0037's rule, "House is a dimension of facts", applies to social logs: every record of what
+ * happened must include its House. These collection points already compute the House for routing but
+ * omitted it from logs; lost provenance cannot be backfilled. Two criteria: include it when known;
+ * omit it when unknown, never supply a fake default such as 'popclaw' (social-log.ts's header defines
+ * three honest-absence requirements). Also covers mark_removed: unmark previously had no safeRecord
+ * anywhere, reproducing P-004's motivation that UI-selection signals lacked a home.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import nacl from 'tweetnacl';
@@ -48,8 +46,8 @@ function makeSigner(): MasterKeySigner {
 }
 
 // ---------------------------------------------------------------------------
-// follow_added / follow_removed —— 坊由 SocialGraph 解出（declare 时查缓存，
-// revoke 时回本地账本），命令层拿它的返回值。
+// follow_added / follow_removed: SocialGraph determines the House from cache on declare,
+// and from the local ledger on revoke; the command uses its returned value.
 // ---------------------------------------------------------------------------
 
 describe('follow_added / follow_removed 带坊', () => {
@@ -84,10 +82,10 @@ describe('follow_added / follow_removed 带坊', () => {
 });
 
 // ---------------------------------------------------------------------------
-// dm_sent —— 回信沿原路返回，那条路就是坊。
+// dm_sent: replies follow the original route, whose House is the source.
 // ---------------------------------------------------------------------------
 
-// #227: 收件人 id 必须是**真公钥**（正文加密到它）；随手编的 base58 串不是曲线上的点。
+// #227: recipient ID must be a real public key because the body is encrypted to it; an arbitrary base58 string need not be a curve point.
 const RECIPIENT = bs58.encode(nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(9)).publicKey);
 
 const msgDeps = (houseOfRecipient?: () => string | undefined) =>
@@ -113,7 +111,7 @@ describe('dm_sent 带坊', () => {
 });
 
 // ---------------------------------------------------------------------------
-// post_sent / reply_sent —— 原创发主坊；--reply/--quote 落被回那条的来源坊。
+// post_sent / reply_sent: originals use the primary House; --reply/--quote use the referenced post's source House.
 // ---------------------------------------------------------------------------
 
 const postDeps = (targetHouse?: string) =>
@@ -236,7 +234,7 @@ describe('mark_removed —— unmark 此前零记录（P-004 补课）', () => {
     expect(e.event_id).toBe('abcdef123456');
     expect(e.text).toBe('本地快照原文');
     expect(e.actor?.id).toBe('THEM');
-    expect('house_slug' in e).toBe(false); // 缓存没了 → 坊不可考，省略
+    expect('house_slug' in e).toBe(false); // Cache missing: the House is unknown, so omit it.
   });
 
   it('目标解析失败 → 不记', async () => {

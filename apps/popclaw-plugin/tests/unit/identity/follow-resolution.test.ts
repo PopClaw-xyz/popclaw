@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import bs58 from 'bs58';
+import { deriveSigil } from '../../../src/invite/sigil';
 import {
   parseFollowTarget,
   resolveFollowTarget,
@@ -47,6 +48,35 @@ describe('parseFollowTarget', () => {
 });
 
 describe('resolveFollowTarget', () => {
+  it('verifies a full ID and retains its exact candidate with one lookup', async () => {
+    const sigil = deriveSigil(ID32);
+    const other = cand('Other person', sigil, bs58.encode(new Uint8Array(32).fill(8)));
+    const expected = {
+      ...cand('Exact recipient', sigil, ID32),
+      profiles: [{ platform: 'x', handle: 'synthetic-recipient', followerCount: 5 }],
+    };
+    const resolve = vi.fn().mockResolvedValueOnce([other, expected]).mockResolvedValue([]);
+
+    const result = await resolveFollowTarget(ID32, resolve);
+
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(resolve).toHaveBeenCalledWith({ sigil });
+    expect(result).toEqual({ kind: 'follow', popclawId: ID32, candidate: expected });
+  });
+
+  it.each([
+    ['unknown', []],
+    ['offline', null],
+    ['unknown', [cand('Different ID', deriveSigil(ID32), bs58.encode(new Uint8Array(32).fill(8)))]],
+  ] as const)('preserves %s verification after one full-ID lookup', async (status, candidates) => {
+    const resolve = vi.fn().mockResolvedValue(candidates);
+
+    expect(await resolveFollowTarget(ID32, resolve)).toEqual({
+      kind: 'follow', popclawId: ID32, unverified: status, sigil: deriveSigil(ID32),
+    });
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
   it('full popclaw_id → follow, but now existence-checked via derived sigil', async () => {
     // A raw id is verified by resolving its derived sigil; an unverifiable id
     // is still followed (warn-but-allow) but carries `unverified`.

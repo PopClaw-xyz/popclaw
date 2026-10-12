@@ -39,8 +39,8 @@ describe('runPopclawUnfollowCommand', () => {
     expect(fakeSG.revokeFollow).toHaveBeenCalledWith('BBB');
   });
 
-  // 卫生债 (spec 2026-07-26): unfollow 必须回写 bonds.followed=false — follow.ts
-  // 出手即建档的对称面，之前只在 follow 侧做，unfollow 侧一直没补。
+  // Hygiene debt (spec 2026-07-26): unfollow must write bonds.followed=false, symmetric with follow.ts
+  // creating a record immediately. Previously only the follow side implemented this.
   it('writes bondsStore.setFollowed(id, false) on success', async () => {
     fakeSG.following.mockReturnValueOnce([]);
     const setFollowed = vi.fn();

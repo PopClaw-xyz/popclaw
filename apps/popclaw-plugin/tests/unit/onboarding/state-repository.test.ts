@@ -76,7 +76,7 @@ describe('OnboardingStateRepository', () => {
     const state = repo.get('pid-legacy');
     expect(state?.stage).toBe('idle');
     expect(state?.drafts_json).toBeNull();
-    // 真验写回：绕过 DAO 读裸行（区分"持久化修正"与"每次读都重新归一化"）
+    // Verify writeback by reading raw rows outside the DAO, distinguishing persisted correction from normalization on every read.
     // pending_card_id column kept (NULL) but no longer exposed on OnboardingState.
     const raw = db.queryOne<{ stage: string; drafts_json: string | null; pending_card_id: string | null }>(
       'SELECT stage, drafts_json, pending_card_id FROM onboarding_state WHERE popclaw_id = ?',
@@ -93,7 +93,7 @@ describe('OnboardingStateRepository', () => {
     expect(repo.get('pid-done')?.stage).toBe('completed');
   });
 
-  // spec §1 7 天兜底：判定挂在读路径上（零新定时器，ADR-0035）。
+  // Spec section 1: seven-day fallback is checked on reads (no new timer, ADR-0035).
   describe('7 天兜底', () => {
     const WEEK = 7 * 24 * 60 * 60;
 
@@ -125,7 +125,7 @@ describe('OnboardingStateRepository', () => {
     });
   });
 
-  // S3-T4: drafts_json as 幕内子状态 — write without touching stage.
+  // S3-T4: drafts_json is within-stage substate; write without changing stage.
   describe('setDrafts', () => {
     it('writes drafts_json leaving stage untouched', () => {
       repo.create(POPCLAW_ID);

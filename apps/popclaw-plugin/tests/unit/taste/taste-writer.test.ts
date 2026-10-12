@@ -86,7 +86,7 @@ describe('appendCorePrivate', () => {
 });
 
 // ---------------------------------------------------------------------------
-// P-002 形态（spec 附录 A.3）：frontmatter 给机器、正文给人
+// P-002 shape (spec appendix A.3): frontmatter for machines, body for people.
 // ---------------------------------------------------------------------------
 
 describe('appendCorePrivate — P-002 frontmatter 形态', () => {
@@ -97,7 +97,7 @@ describe('appendCorePrivate — P-002 frontmatter 形态', () => {
     const md = await readFile(join(tasteRoot, 'core/private.md'), 'utf-8');
     expect(md.startsWith('---\n')).toBe(true);
     expect(md).toMatch(/^---\ntags: \[\]\nmute: \[\]\n---\n/);
-    // 正文照实存主人原话，不自作聪明抽标签
+    // Store the owner's words verbatim in the body; do not infer tags.
     expect(md).toContain('我关心航天工程的实现细节');
   });
 
@@ -125,11 +125,11 @@ describe('appendCorePrivate — P-002 frontmatter 形态', () => {
     await appendCorePrivate({ tasteRoot }, '再补一句');
 
     const md = await readFile(join(tasteRoot, 'core/private.md'), 'utf-8');
-    // frontmatter 不被 tags: [] 冲掉
+    // tags: [] must not overwrite frontmatter.
     expect(md).toContain('tags: [航天, 开源治理]');
     expect(md).toContain('mute: [币圈喊单]');
     expect(md).not.toContain('tags: []');
-    // 只有一份 frontmatter，没有重复围栏
+    // Exactly one frontmatter block, no duplicate fences.
     expect(md.match(/^---$/gm)).toHaveLength(2);
     expect(md).toMatch(/主人的老自述\n\n再补一句/);
   });

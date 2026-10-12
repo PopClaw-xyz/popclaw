@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { formatInviteResult } from '../../../src/invite/format-invite-result.js';
 import type { InviteInitiateResult } from '../../../src/invite/invite-initiator.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
@@ -6,6 +6,7 @@ import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 // S13 slice: formatInviteResult now renders in `ownerLang()` (default en-US)
 // instead of hardcoded zh — pin zh-CN so the assertions below stay meaningful.
 beforeAll(() => setOwnerLang('zh-CN', 'config'));
+afterEach(() => setOwnerLang('zh-CN', 'config'));
 
 function result(push: InviteInitiateResult['push']): InviteInitiateResult {
   return { expectedSigil: 'aabb11', pushedEventId: 'deadbeef', push };
@@ -14,9 +15,28 @@ function result(push: InviteInitiateResult['push']): InviteInitiateResult {
 const WEB = 'http://localhost:3000';
 
 describe('formatInviteResult', () => {
-  // 主人拍板 2026-08-26：灯坊确实留着核验当时那条帖的记录（evidence_sample =
-  // 抓取响应前 16KB，含帖子正文）。这件事在**请他去发帖之前**就说，且必须和
-  // 「随时可删、✓ 不掉」同一口气说 —— 分开说，前一句就成了我们食言的承诺。
+  it.each(['en', 'zh-CN'] as const)('states the bounded online watch and natural-chat status fallback in %s', lang => {
+    setOwnerLang(lang, 'config');
+    for (const proof of [undefined, 'https://x.com/example/status/123']) {
+      const out = formatInviteResult(result({ status: 200, taskId: 'tracking-1' }), 'x', 'example', WEB, proof);
+      expect(out).toMatch(lang === 'en' ? /10 minutes/ : /10 分钟/);
+      expect(out).toMatch(lang === 'en' ? /restart/ : /重启/);
+      expect(out).toMatch(lang === 'en' ? /ask me.*progress/i : /问我.*进度/);
+      expect(out).not.toContain('/popclaw status');
+      expect(out).not.toMatch(/come find you right away|第一时间来找你|几十秒内出结果/);
+    }
+  });
+  it.each(['en', 'zh-CN'] as const)('does not promise tracking or a new query capability without a task receipt in %s', lang => {
+    setOwnerLang(lang, 'config');
+    for (const proof of [undefined, 'https://x.com/example/status/123']) {
+      const out = formatInviteResult(result({ status: 200 }), 'x', 'example', WEB, proof);
+      expect(out).toMatch(lang === 'en' ? /can't follow.*not confirmed/ : /无法后台跟进.*尚未确认/);
+      expect(out).not.toMatch(/10 minutes|10 分钟|ask me.*progress|问我.*进度/);
+    }
+  });
+  // Owner ruling, 2026-08-26: the House retains the post evidence at verification (evidence_sample =
+  // the first 16KB of the fetched response, including the post body). Disclose this before asking them to post,
+  // alongside permission to delete the post without losing the checkmark; separating them makes the earlier promise misleading.
   it('发起认证时就说清楚：帖可随时删，而核验记录会留存', () => {
     const out = formatInviteResult(result({ status: 200 }), 'x', 'example', WEB);
     expect(out).toContain('随时可以删掉那条帖');

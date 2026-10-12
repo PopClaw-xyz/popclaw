@@ -71,11 +71,17 @@ function harness(s: Scenario = {}) {
   const runtime = async () => { trace.push('runtime'); return rt; };
   const slash = buildSubcommands({ runtime, warn: (m: string) => trace.push(['warn', m]) } as unknown as SubcommandWiring).invite;
   let execute!: (id: string, params: unknown) => Promise<{ type: string; text: string }>;
-  registerInviteTools({ api: {
-    registerTool: (tool: unknown) => { execute = (tool as { execute: typeof execute }).execute; },
-    logger: { info: (m: string) => trace.push(['info', m]) },
-  }, runtime } as unknown as ToolsCtx);
-  const params = { platform: 'Twitter', handle: '@blackfeather', proof_url: s.proof,
+  // This characterization retains the explicit stdio preview/confirm lane;
+  // Native acknowledgement behavior is covered separately by its SDK binding tests.
+  const api = {
+    registerTool: (tool: unknown) => {
+      const resolved = typeof tool === 'function' ? tool({}) : tool;
+      execute = (resolved as {execute: typeof execute}).execute;
+    },
+    logger: {info: (m: string) => trace.push(['info', m])},
+  };
+  registerInviteTools({api, runtime, deps:{api, runtime, socialSendHost:'local-stdio'}, total:1} as unknown as ToolsCtx);
+  const params = { posted:true, platform: 'Twitter', handle: '@blackfeather', proof_url: s.proof,
     sync: s.sync, replace: s.replace, nickname: s.nickname };
   const flags: Record<string, string> = {};
   if (s.proof !== undefined) flags.proof = s.proof;
@@ -103,6 +109,24 @@ const scenarios: Array<[string, Scenario]> = [
 ];
 
 describe('invite entry behavior before submission extraction', () => {
+  it.each([
+    ['instagram', 'blackfeather', /unsupported/i],
+    ['x', 'bad-handle', /handle/i],
+    ['Twitter', '@', /handle/i],
+    ['x', 'a'.repeat(16), /handle/i],
+  ])('slash refuses %s/%s before runtime, signing or task creation', async (platform, handle, message) => {
+    const h = harness({ taskId: 'task-1' });
+    expect((await h.slash([platform, handle])).text).toMatch(message);
+    expect(h.trace).toEqual([]);
+  });
+  it.each(['x', 'X', 'Twitter', ' twitter '])('slash normalizes supported %s and preserves explicit sync/replace', async platform => {
+    const h = harness({ taskId: 'task-1' });
+    await h.slash([platform, ' @blackfeather '], { sync: 'true', replace: 'true' });
+    expect(h.trace).toContainEqual(['initiate', expect.objectContaining({
+      platform: 'x', handle: 'blackfeather', mirrorOptin: true, replace: true,
+    })]);
+    expect(h.trace.filter(entry => Array.isArray(entry) && entry[0] === 'initiate')).toHaveLength(1);
+  });
   for (const [name, scenario] of scenarios) {
     it(`slash: ${name}`, async () => {
       const h = harness(scenario);
@@ -121,8 +145,8 @@ describe('invite entry behavior before submission extraction', () => {
   it('preflight outputs and zero runtime on both entries', async () => {
     const h = harness();
     const output = [await h.slash([]), await h.slash(undefined, { proof: '' }),
-      await h.execute('missing', { platform: 'x' }),
-      await h.execute('bad-proof', { platform: 'x', handle: 'blackfeather', proof_url: '' })];
+      await h.execute('missing', { posted:true, platform: 'x' }),
+      await h.execute('bad-proof', { posted:true, platform: 'x', handle: 'blackfeather', proof_url: '' })];
     expect({ output, trace: h.trace }).toMatchSnapshot();
   });
   it('concurrent confirms consume before awaiting runtime, then refuse reuse', async () => {

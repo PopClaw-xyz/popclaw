@@ -1,22 +1,20 @@
 /**
- * 2026-09-06 真机 P1(内容错配)的回归 —— 编号稳定性,经 r7(basis 闸)到 r9(无猜测)收口。
- *
- * Codex 三端验收(乙机 01:42 / 丙机 01:44 轮)抓到的形态:成刊把别人家的摘要戴在
- * Rainmaker1973 头上(一致的整体错位),丙机回执明说「publish_token=nothing → 回绑
- * 最新成刊」且 edit 引用 [18][22][25] 不存在被忽略。
- *
- * 根因(见 .superpowers/numbering-fix-report.md):编辑稿的编号基准与实际绑定那份
- * 成刊的编号可以合法分叉 —— 稿子自己不声明编号属于哪页,而「最新 / 会话范围内
- * 恰一期」全是猜。r9 裁定(无猜测):publish 只按字段实际指名的那一期绑定 ——
- *  · `edit.basis`(素材页印出、指令教写作端原样带回)= 批次选择器:带了就按它
- *    选定,更新的成刊在后也不抢;那期没了 → 响亮拒绝(basisExpired),绝不退回绑最新;
- *  · publish_token 照旧是最强凭证,完全不受影响;与 basis 同现且一致 → 照常,
- *    不一致 → 上传/落稿/销账之前响亮拒绝(tokenBasisConflict),绝不静默任选;
- *  · 两个字段都没有可靠值 → 一律拒绝(noProvenance)。「范围内恰一期」不再是归属
- *    证明:过期 A 被扫走后只剩 B,A 的迟交稿会被「恰一期」绑给 B 出报(Codex
- *    --expired-a 探针)—— 过期不消除歧义,只剩一本账也不行。
- * 不变量(不许回归):真令牌按发出时的快照对位;同期分批续作接得上(保通四腿);
- * 两条新景(--expired-a / --conflict)拒绝时,谁的账本都不许被动。
+ * Real-host P1 content mismatch regression, 2026-09-06: stable numbering, from r7's basis gate to r9's
+ * no-guess contract. Codex acceptance on hosts B (01:42) and C (01:44) found whole-issue displacement:
+ * other people's summaries appeared under Rainmaker1973. Host C's receipt explicitly rebound
+ * `publish_token=nothing` to the latest issue and ignored nonexistent edit references [18][22][25].
+ * Root cause (see .superpowers/numbering-fix-report.md): an edit's number basis could legitimately
+ * diverge from the bound issue; the edit did not name its material page, and "latest" or "exactly one
+ * in scope" guessed. The r9 no-guess ruling binds publish only to the issue explicitly named by a
+ * field. `edit.basis`, printed on the material page and copied verbatim by the writer, selects that
+ * batch; newer issues cannot steal it, and a missing issue is loudly refused (basisExpired), never
+ * rebound to latest. A real publish_token remains strongest; matching token and basis proceed
+ * normally, while conflict is refused before upload, saving or settlement (tokenBasisConflict), never
+ * silently chosen. No reliable provenance in either field always yields noProvenance. A sole issue in
+ * scope is not proof: once expired A is swept, A's late edit could bind to surviving B (Codex
+ * --expired-a probe). Expiry does not eliminate ambiguity. Invariants: real tokens align with their
+ * original snapshot; same-issue batches continue through all four valid paths; --expired-a and
+ * --conflict failures must leave every ledger unchanged.
  */
 import { createLocalNewspaperIssueArchive } from '../../../src/host/local-newspaper-artifacts.js';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -56,11 +54,15 @@ function deps(
   };
 }
 
-/** dateLabel 是今天的成刊 —— 同日守则下唯一可绑的那种。 */
+/**
+ * dateLabel describes today's issue: the only issue the same-day rule can bind.
+ */
 const todaysIssue = (over: Parameters<typeof issue>[0] = {}): ReturnType<typeof issue> =>
   issue({ dateLabel: todayDateLabel(), ...over });
 
-/** 夹具条目正文里原样抄下的一段 —— 每条稿子的 `q`(copy-anchor.ts 要核的锚)。 */
+/**
+ * A verbatim passage from each fixture item's body: the edit's `q` anchor checked by copy-anchor.ts.
+ */
 const Q = 'the booster landed on the pad';
 
 const edit = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
@@ -81,11 +83,11 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// 无猜测的第一条(2026-09-06 r9):两个字段都没有可靠值 → 一律拒绝。「范围内恰一
-// 期才绑」的回退被整段删除 —— 一本幸存的账不是归属证明:为 A 写的稿子迟交时 A
-// 刚好过期,「恰一期」会把 A 的摘要配到 B 的作者名下出报(Codex --expired-a 探针
-// 复现)。拒绝是响亮的、不消耗任何账本:写作端把素材页印的 basis 抄回 edit 再交
-// 即可,素材页没了就重取重写。
+// First no-guess rule (r9, 2026-09-06): no reliable value in either field always means refusal. Remove the
+// "exactly one issue in scope" fallback: a surviving ledger does not prove provenance. A late edit for A,
+// which just expired, must not place A's summaries under B's authors (Codex --expired-a reproduction).
+// Refusal is explicit and consumes no ledger. Copy the material page's basis into edit and submit again;
+// if the material page is gone, gather and write again.
 // ---------------------------------------------------------------------------
 describe('无令牌无 basis —— 一律拒发(无猜测,r9)', () => {
   it('别的会话有同日成刊在场 → 拒发 noProvenance,谁的账都不动', async () => {
@@ -102,9 +104,9 @@ describe('无令牌无 basis —— 一律拒发(无猜测,r9)', () => {
     };
     const r = await publishNewspaper(deps(upload), { edit: edit() });
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.noProvenance'));
-    expect(r.landed).toBeUndefined(); // 没出报,也没上传
+    expect(r.landed).toBeUndefined(); // No publication or upload.
     expect(uploads).toBe(0);
-    expect(getIssue('tok_other_session', dir)).toBeDefined(); // 别人的账不许被销
+    expect(getIssue('tok_other_session', dir)).toBeDefined(); // Do not settle someone else's ledger.
   });
 
   it('本会话恰一份成刊在场 → 同样拒发:「只剩一本账」不是归属证明(过期不消除歧义)', async () => {
@@ -131,13 +133,13 @@ describe('无令牌无 basis —— 一律拒发(无猜测,r9)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// TTL 在 basis 路径上照算:r6 补上内存快路径的 2 小时 TTL 后,同日 8 小时前的旧账
-// 在内存里也活不成 —— basis 指名它时同样响亮拒绝,而不是「好歹有一期就绑」。
+// TTL also applies to basis: r6 added a two-hour TTL to the memory fast path, so an eight-hour-old
+// same-day ledger is expired in memory too. Naming it by basis is refused, not bound merely because one issue exists.
 // ---------------------------------------------------------------------------
 describe('内存快路径的 TTL —— 过期的同日旧账,basis 指名也绑不得', () => {
   it('同日但 8 小时前铸的成刊还留在内存里,basis 指名它 → basisExpired 响亮拒绝', async () => {
     putIssue('tok_aged', todaysIssue(), dir, 'agent:workshop:本轮');
-    _backdateIssueForTest('tok_aged', Date.now() - 8 * 60 * 60 * 1000, dir); // 内存与盘一起拨回 8 小时前
+    _backdateIssueForTest('tok_aged', Date.now() - 8 * 60 * 60 * 1000, dir); // Move both memory and disk eight hours into the past.
     const upload = async () => ({ url: 'https://canvas/v/3?t=k' });
     const r = await publishNewspaper(deps(upload), { edit: edit({ basis: 'tok_aged' }) });
     expect(r.landed).toBeUndefined();
@@ -146,8 +148,8 @@ describe('内存快路径的 TTL —— 过期的同日旧账,basis 指名也绑
 });
 
 // ---------------------------------------------------------------------------
-// 同期分批续作:第二批只交 items,但按素材页的吩咐带上 basis(r9 后这是续作的
-// 唯一无令牌通路)。存稿的填空式合并、两批同版不变。
+// Same-issue batches: the second submits only items plus basis as the material page requires (r9's
+// only tokenless continuation path). Fill-only saved-edit merging and the shared issue layout remain intact.
 // ---------------------------------------------------------------------------
 describe('分批续作 —— 第二批带 basis 接回压着存稿的那期', () => {
   it('第一批存稿在 tok_1 上,第二批 items+basis → 接回 tok_1,两批都在版上', async () => {
@@ -162,7 +164,7 @@ describe('分批续作 —— 第二批带 basis 接回压着存稿的那期', (
       dir,
       'agent:workshop:本轮',
     );
-    // 第一批的真实形状:checkEdit 在首批强制 masthead+teaser,存下来的稿子必然带着。
+    // Actual first-batch shape: checkEdit requires masthead+teaser; a stored first edit necessarily has both.
     putEdit(
       'tok_1',
       { basis: 'tok_1', masthead: '云舟江湖报', teaser: '第一批的导读', items: { '1': { h: '第一批的标题', s: '第一批的正文。' } } },
@@ -173,7 +175,7 @@ describe('分批续作 —— 第二批带 basis 接回压着存稿的那期', (
       sent.push(a.html);
       return { url: 'https://canvas/v/4?t=k' };
     };
-    // 续稿的形状:只有 items 加 basis(素材页原话「a later batch needs only items」+「basis 每批都带」)。
+    // Continuation shape: items plus basis (material instructions require only items later, with basis in every batch).
     const r = await publishNewspaper(deps(upload), {
       edit: { basis: 'tok_1', items: { '2': { q: Q, h: '第二批的标题', s: '第二批的正文,接着第一批的编号。' } } },
     });
@@ -181,8 +183,8 @@ describe('分批续作 —— 第二批带 basis 接回压着存稿的那期', (
     expect(r.text).toContain(
       renderCopy('en', 'newspaper.publish.basisBoundNote', { token: 'tok_1' }),
     );
-    // 第一批的稿子还在(填空式合并),第二批落在 tok_1 的第 2 条上 —— 版面两批都验。
-    // (夹具条目是 brief 档,排成一行正文、不带标题,所以验正文。)
+    // The first batch remains through fill-only merging; the second writes tok_1 item 2. Verify both batches' layout.
+    // Fixture items are briefs, rendered as body-only lines without headlines, so check the body.
     expect(sent[0]).toContain('第一批的正文。');
     expect(sent[0]).toContain('第二批的正文,接着第一批的编号。');
   });
@@ -194,25 +196,25 @@ describe('分批续作 —— 第二批带 basis 接回压着存稿的那期', (
       dir,
       'agent:workshop:本轮',
     );
-    _backdateIssueForTest('tok_older_mint', Date.now() - 1000, dir); // 真的先铸一秒(同毫秒铸造在真机上不存在)
+    _backdateIssueForTest('tok_older_mint', Date.now() - 1000, dir); // Backdate issue creation by one second; same-millisecond creation does not occur in the real-host scenario.
     putIssue(
       'tok_newer_mint',
       todaysIssue({ pulse: [item({ eventId: 'q1', author: '后铸的作者', sigil: 'dddd0005' })] }),
       dir,
       'agent:workshop:本轮',
     );
-    // 之后旧刊上落了一批存稿:putEdit 重写文件,mtime 反超后来铸的那份。
+    // A later saved batch on the older issue makes putEdit rewrite its file, giving it a newer mtime than the later issue.
     putEdit('tok_older_mint', { basis: 'tok_older_mint', masthead: '云舟江湖报', teaser: '导读', items: { '1': { h: '旧标题', s: '旧正文。' } } }, dir);
-    // 排序语义在账本层直接钉(publish 不再走这条排序 —— 绑定只认 token/basis):
+    // Pin sorting at the ledger layer; publish no longer uses that order, binding only by token/basis.
     const { latestPickedIssue } = await import('../../../src/newspaper/issue-store.js');
     expect(latestPickedIssue(dir, todayDateLabel(), 'agent:workshop:本轮')?.token).toBe('tok_newer_mint');
   });
 });
 
 // ---------------------------------------------------------------------------
-// 会话族与无键方:r6 曾给「无会话键的一方(MCP 宿主)」保留不设限的宽容、给子代理
-// 开父会话的继承 —— 那都是给「猜」划的范围。r9 之后 publish 根本不猜:任何身份
-// 形状,无 token 无 basis 一律同一句拒绝。会话戳自 r25 起只作诊断,不再门任何绑定。
+// Session families and missing keys: r6 allowed unrestricted no-key callers (MCP hosts) and child
+// inheritance of parent sessions. Those bounded guessing. After r9, publish never guesses: any identity
+// shape without token or basis gets the same refusal. Since r25, session stamps are diagnostic, never binding gates.
 // ---------------------------------------------------------------------------
 describe('会话族与无键方 —— 无猜测闸面前没有特权身份(r9)', () => {
   it('子代理无 basis 交稿(父会话恰一份成刊在场) → 同样拒发 noProvenance', async () => {
@@ -235,9 +237,9 @@ describe('会话族与无键方 —— 无猜测闸面前没有特权身份(r9)'
 });
 
 // ---------------------------------------------------------------------------
-// 不变量 A:真令牌发布 = 编号冻结。素材页发出之后,账本世界怎么翻腾(别的账
-// 被删、新候选集铸出、清扫跑过),这份令牌的编辑稿永远按**发出时的那份快照**
-// 对位 —— 第 1 条的摘要必须落在第 1 条的作者/原帖名下。
+// Invariant A: publishing with a real token freezes numbering. Regardless of subsequent ledger changes
+// (deletions, new candidate sets or sweeps), its edit always aligns with the snapshot originally issued.
+// Item 1's summary must appear under item 1's author/original post.
 // ---------------------------------------------------------------------------
 describe('编号冻结 —— 真令牌按发出时的快照对位,不受账本世界翻腾影响', () => {
   it('中途删账/铸新候选/清扫 → 真令牌照常出报,摘要与作者一一对应', async () => {
@@ -248,7 +250,7 @@ describe('编号冻结 —— 真令牌按发出时的快照对位,不受账本�
       ],
     });
     putIssue('tok_frozen', mine, dir, 'agent:workshop:本轮');
-    // 世界翻腾:另一份账来了又走、新候选集铸出、同日清扫跑过。
+    // Change the ledger world: another ledger arrives and leaves, a new candidate set appears, and same-day sweeping runs.
     putIssue('tok_distract', todaysIssue(), dir, 'agent:workshop:别的轮次');
     putIssue('ctok_newer', todaysIssue(), dir, 'agent:workshop:本轮');
     const { sweepStaleIssues, deleteIssue } = await import('../../../src/newspaper/issue-store.js');
@@ -280,18 +282,21 @@ describe('编号冻结 —— 真令牌按发出时的快照对位,不受账本�
     const upload = async () => ({ url: 'https://canvas/v/6?t=k' });
     const r = await publishNewspaper(deps(upload), { publishToken: 'tok_subagent', edit: edit() });
     expect(r.landed).toBe(true);
-    expect(r.text).not.toContain('basis named'); // 令牌有效,没有回绑一说
+    expect(r.text).not.toContain('basis named'); // The token is valid; no rebinding is needed.
   });
 });
 
 // ---------------------------------------------------------------------------
-// edit 内嵌 basis —— 批次选择器(2026-09-06 r7 定案,r9 收口)。同会话先铸 A
-// (编号1=Voyager)再铸 B(编号1=Kremlin),两期同在 TTL 内:为 A 写的编号1摘要
-// 迟交 → 只要有 basis 就按 basis 选 A,B 更新也不抢;没有 basis 一律拒(见上)。
-// Codex 两条新景(--expired-a / --conflict)的等价回归也钉在这里。
+// Embedded edit.basis selects the batch (r7 decision, 2026-09-06; finalized r9). In one session create A
+// (item 1 = Voyager), then B (item 1 = Kremlin), both within TTL. A's late item-1 summary
+// selects A by basis; newer B cannot steal it. Without basis, always refuse (above).
+// Equivalent regressions for the two Codex probes (--expired-a / --conflict) are pinned here too.
 // ---------------------------------------------------------------------------
 describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最新」猜', () => {
-  /** Codex 探针的形态:A 期编号1=Voyager,B 期编号1=Kremlin,同会话先后铸出。 */
+  /**
+   * Codex probe shape: A item 1 = Voyager, B item 1 = Kremlin; create both sequentially in one
+   * session.
+   */
   const putAB = (): void => {
     putIssue(
       'tok_a',
@@ -313,7 +318,7 @@ describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最
     const r = await publishNewspaper(deps(upload), {
       edit: edit({ items: { '1': { q: '旅行者一号还在飞。', h: '旅行者一号', s: 'A 期的 Voyager 摘要。' } } }),
     });
-    expect(r.landed).toBeUndefined(); // 没出报 —— 这正是此前 landed=true 的 P1 复现位
+    expect(r.landed).toBeUndefined(); // No publication: this is the P1 reproduction point that previously returned landed=true.
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.noProvenance'));
     expect(getIssue('tok_a', dir)).toBeDefined();
     expect(getIssue('tok_b', dir)).toBeDefined();
@@ -332,7 +337,7 @@ describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最
     expect(r.landed).toBe(true);
     expect(sent[0]).toContain('Rainmaker1973#aaaa0001');
     expect(sent[0]).toContain('A 期的 Voyager 摘要。');
-    expect(sent[0]).not.toContain('KremlinWatcher'); // B 的素材一个字都不许上版
+    expect(sent[0]).not.toContain('KremlinWatcher'); // No B material may enter the layout.
   });
 
   it('basis 查无此期 → 响亮拒绝,不退回「绑最新」(退回就是串位引擎)', async () => {
@@ -342,12 +347,12 @@ describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最
       edit: edit({ basis: 'tok_gone9999', items: { '1': { h: 'x', s: 'y.' } } }),
     });
     expect(r.landed).toBeUndefined();
-    expect(getIssue('tok_b', dir)).toBeDefined(); // 没有任何人被这次失败销账
+    expect(getIssue('tok_b', dir)).toBeDefined(); // This failure must not settle anyone's ledger.
   });
 
   it('--expired-a:过期 A 被扫走只剩 B,A 的无 basis 迟交稿 → 拒发,B 的账分毫不动', async () => {
     putAB();
-    _backdateIssueForTest('tok_a', Date.now() - 3 * 60 * 60 * 1000, dir); // A 越过 2h TTL,内存与盘都视为过期
+    _backdateIssueForTest('tok_a', Date.now() - 3 * 60 * 60 * 1000, dir); // A exceeds the two-hour TTL and is expired in memory and on disk.
     let uploads = 0;
     const upload = async () => {
       uploads += 1;
@@ -356,11 +361,11 @@ describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最
     const r = await publishNewspaper(deps(upload), {
       edit: edit({ items: { '1': { q: '旅行者一号还在飞。', h: '旅行者一号', s: 'A 期的 Voyager 摘要。' } } }),
     });
-    expect(r.landed).toBeUndefined(); // r7 的「恰一期」回退在这里把 A 稿绑给 B 出报 —— 必须死
+    expect(r.landed).toBeUndefined(); // r7's single-issue fallback bound A's edit to B here; that behavior must disappear.
     expect(uploads).toBe(0);
     expect(r.text).toBe(renderCopy('en', 'newspaper.publish.noProvenance'));
-    expect(getIssue('tok_a', dir)).toBeUndefined(); // A 确已过期
-    expect(getIssue('tok_b', dir)).toBeDefined(); // B 的账不许被这次失败消耗
+    expect(getIssue('tok_a', dir)).toBeUndefined(); // A is genuinely expired.
+    expect(getIssue('tok_b', dir)).toBeDefined(); // The failure must not consume B's ledger.
   });
 
   it('--expired-a、稿子还带着 A 的 basis → basisExpired 拒发,同样不退回绑 B', async () => {
@@ -386,7 +391,7 @@ describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最
       publishToken: 'tok_b',
       edit: edit({ basis: 'tok_a', items: { '1': { q: '旅行者一号还在飞。', h: 'x', s: 'A 期的摘要。' } } }),
     });
-    expect(r.landed).toBeUndefined(); // 此前令牌静默获胜、A 稿配 B 版 —— 双字段矛盾必须响亮拒
+    expect(r.landed).toBeUndefined(); // Previously the token silently won, putting A's copy in B's issue. Conflicting fields must be loudly refused.
     expect(uploads).toBe(0);
     expect(r.text).toBe(
       renderCopy('en', 'newspaper.publish.tokenBasisConflict', { basis: 'tok_a', token: 'tok_b' }),
@@ -406,7 +411,7 @@ describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最
   });
 
   it('② 子代理带着 basis 选对父会话的旧期(父会话 A/B 并存,basis=tok_a → 选 A)', async () => {
-    putAB(); // 父会话 'agent:workshop:本轮' 铸的两期
+    putAB(); // Two issues created by parent session 'agent:workshop:本轮'.
     const upload = async (a: { html: string }) => {
       lastHtml = a.html;
       return { url: 'https://canvas/v/14?t=k' };
@@ -421,7 +426,7 @@ describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最
   });
 
   it('③ 无会话键(MCP)无 basis 且多期并存 → 同样拒绝,不因旧行为宽松就放行', async () => {
-    putIssue('tok_mcp_a', todaysIssue(), dir); // 无戳:无会话键路径的两期
+    putIssue('tok_mcp_a', todaysIssue(), dir); // No stamp: two issues on the session-key-free path.
     putIssue('tok_mcp_b', todaysIssue(), dir);
     const upload = async () => ({ url: 'https://canvas/v/15?t=k' });
     const r = await publishNewspaper(deps(upload), { edit: edit() });
@@ -441,8 +446,8 @@ describe('edit.basis —— 批次选择器,同会话多期并存不再靠「最
 });
 
 // ---------------------------------------------------------------------------
-// 保通四腿(常驻回归):无猜测收紧不许误伤的四条正路 —— 真令牌单独 / basis 单独 /
-// 两者一致 / 同期分批续作。任何一条腿红了,收紧就收过头了。
+// Four valid paths that no-guess tightening must preserve: real token alone, basis alone,
+// matching token+basis, and same-issue batch continuation. Failure in any means the tightening went too far.
 // ---------------------------------------------------------------------------
 describe('保通四腿 —— 无猜测收紧不许误伤', () => {
   const putLeg = (): void => {
@@ -484,7 +489,7 @@ describe('保通四腿 —— 无猜测收紧不许误伤', () => {
       edit: edit({ basis: 'tok_leg', items: { '1': { q: Q, h: 'x', s: '腿③的正文。' } } }),
     });
     expect(r.landed).toBe(true);
-    expect(r.text).not.toContain('basis named'); // 一致不是回绑,不该出现绑定注
+    expect(r.text).not.toContain('basis named'); // Agreement is not rebinding; no binding note should appear.
   });
 
   it('腿④ 同期分批续作 → 第一批 moreToWrite,第二批带 basis 接得上,两批都在版上', async () => {
@@ -507,7 +512,7 @@ describe('保通四腿 —— 无猜测收紧不许误伤', () => {
     const first = await publishNewspaper(deps(upload), {
       edit: edit({ basis: 'tok_leg4', items: { '1': { q: Q, h: 'x', s: '腿④第一批。' } } }),
     });
-    expect(first.landed).toBeUndefined(); // 没写完,这批本来就不算落地
+    expect(first.landed).toBeUndefined(); // This unfinished batch is not a landed paper.
     expect(first.text).toContain(renderCopy('en', 'newspaper.publish.moreToWrite', { count: '1', numbers: '[2]' }));
     const second = await publishNewspaper(deps(upload), {
       edit: { basis: 'tok_leg4', items: { '2': { q: Q, h: 'y', s: '腿④第二批。' } } },
@@ -519,8 +524,8 @@ describe('保通四腿 —— 无猜测收紧不许误伤', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 夹具自检:会话戳确实随账落盘 —— r25 起它是诊断字段(谁被发过哪页),不再门任何绑定
-// 在它上面。
+// Fixture self-check: the session stamp is persisted with the ledger. Since r25 it is diagnostic (who received which page),
+// and no binding is gated on it.
 // ---------------------------------------------------------------------------
 describe('夹具自检 —— 这些用例真的搭出了错配的前置条件', () => {
   it('会话戳随账落盘', () => {

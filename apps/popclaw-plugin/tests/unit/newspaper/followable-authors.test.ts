@@ -1,9 +1,9 @@
 /**
- * 门铃 §5(Task 7):一期报纸落地时,把当期「可关注的作者集」落进社交库。
+ * Doorbell §5 (Task 7): persist the issue's followable-author set in the social DB when the paper is published.
  *
- * followableAuthorsOf 是纯的一半 —— 过滤 / 去重 / descriptor / 48 小时有效期,
- * 全部从已存的 issue + 版面印出来的标题决定;publish 一半只在纸真落桌了才写
- * (P7 同款闸门:画布挂了走本地降级,那不算发布,不许写)。
+ * followableAuthorsOf is the pure half: filtering, deduplication, descriptors, and 48-hour expiry
+ * derive from the stored issue and printed headlines. The publication half writes only after
+ * actual publication (same gate as P7: Canvas failure with local fallback is not publication and must not write).
  */
 import { createLocalNewspaperIssueArchive } from '../../../src/host/local-newspaper-artifacts.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -33,9 +33,9 @@ describe('followableAuthorsOf —— 当期可关注作者集(纯函数)', () =>
   it('只收既有 popclaw_id 又有名字的条目', () => {
     const i = issue({
       pulse: [
-        item(), // levelsio / pid-levelsio —— 收
-        item({ eventId: 'e2', authorPopclawId: '' }), // 没有 id —— 不收
-        item({ eventId: 'e3', author: '' }), // 没有名字 —— 不收
+        item(), // levelsio / pid-levelsio: include.
+        item({ eventId: 'e2', authorPopclawId: '' }), // No ID: exclude.
+        item({ eventId: 'e3', author: '' }), // No name: exclude.
       ],
     });
     const rows = followableAuthorsOf(i, new Map(), NOW);
@@ -43,7 +43,7 @@ describe('followableAuthorsOf —— 当期可关注作者集(纯函数)', () =>
   });
 
   it('同人去重,以第一次出现的条目为准', () => {
-    const twice = item({ eventId: 'e2' }); // 同 pid-levelsio
+    const twice = item({ eventId: 'e2' }); // Same pid-levelsio.
     const i = issue({ pulse: [item(), twice, item({ eventId: 'e3', author: 'linabot', sigil: 'bbbb1111', authorPopclawId: 'pid-lina' })] });
     const rows = followableAuthorsOf(
       i,
@@ -54,7 +54,7 @@ describe('followableAuthorsOf —— 当期可关注作者集(纯函数)', () =>
       NOW,
     );
     expect(rows.map((r) => r.popclaw_id)).toEqual(['pid-levelsio', 'pid-lina']);
-    expect(rows[0]!.descriptor).toBe('第一条的标题'); // 第一次出现的,不是后一条
+    expect(rows[0]!.descriptor).toBe('第一条的标题'); // First occurrence, not the later one.
   });
 
   it('descriptor 取该条标题截 12 字符;该期没这条标题 → null', () => {
@@ -64,8 +64,8 @@ describe('followableAuthorsOf —— 当期可关注作者集(纯函数)', () =>
       new Map([[1, '零一二三四五六七八九十一二三四个字']]),
       NOW,
     );
-    expect(rows[0]!.descriptor).toBe('零一二三四五六七八九十一'); // 恰 12 字,不多的一个也不带
-    expect(rows[1]!.descriptor).toBeNull(); // heads 里没有 2 号 → null,不许编
+    expect(rows[0]!.descriptor).toBe('零一二三四五六七八九十一'); // Exactly 12 characters, no extra one.
+    expect(rows[1]!.descriptor).toBeNull(); // No item 2 in heads → null; never invent one.
   });
 
   it('expires_at = now + 48h;issue_date / display_name 如实带过', () => {
@@ -84,7 +84,7 @@ describe('followableAuthorsOf —— 当期可关注作者集(纯函数)', () =>
   it('display_name 合成印信:有 sigil 拼「名#印信」,空 sigil 就是裸名', () => {
     const i = issue({
       pulse: [
-        item(), // 默认带 sigil '65v29fn1'
+        item(), // Includes sigil '65v29fn1' by default.
         item({ eventId: 'e2', sigil: '', author: 'anon', authorPopclawId: 'pid-anon' }),
       ],
     });
@@ -113,9 +113,9 @@ function deps(
   };
 }
 
-/** 一份两作者、三条目的成刊(第二条没有 popclaw_id,不该进作者集)。 */
-// 无猜测契约(2026-09-06 r9)后,无令牌交稿必须带 basis 才绑得到成刊——夹具盖上
-// 今天的戳,edit 里带上该期的 basis。
+/** An issue with two authors and three items; the second item has no popclaw_id and must not enter the author set. */
+// Since the no-guessing contract (2026-09-06 r9), tokenless submissions need basis to bind an issue; stamp the fixture
+// with today's date and include that issue's basis in edit.
 const authorIssue = () =>
   issue({
     dateLabel: todayDateLabel(),
@@ -126,7 +126,7 @@ const authorIssue = () =>
     ],
   });
 
-/** 夹具条目正文里原样抄下的一段 —— 每条稿子的 `q`(copy-anchor.ts 要核的锚)。 */
+/** A verbatim passage from the fixture item body: each draft's q anchor, checked by copy-anchor.ts. */
 const Q = 'the booster landed on the pad';
 
 const fullEdit = {
@@ -188,7 +188,7 @@ describe('publish 落库 —— 纸真落桌了才写', () => {
       deps(undefined, { recordFollowable: record }),
       { edit: { ...fullEdit, items: { '1': fullEdit.items['1']! } } },
     );
-    expect(r.text).not.toContain('https://canvas/x/1?t=tok'); // 没上传,就没有链接
+    expect(r.text).not.toContain('https://canvas/x/1?t=tok'); // No upload means no link.
     expect(record).not.toHaveBeenCalled();
   });
 
@@ -208,7 +208,7 @@ describe('migration 023 —— 两张表随迁移通道落地', () => {
       .map((t) => t.name);
     expect(tables.sort()).toEqual(['followable_authors', 'pending_follows']);
 
-    // 装配点(read-tools)写这张表用的就是这条语句:同键重发一期是刷新,不是撞键。
+    // The assembly point (read-tools) writes this table with this statement: resending an issue under the same key refreshes it rather than colliding.
     const insert =
       'INSERT OR REPLACE INTO followable_authors (issue_date, popclaw_id, display_name, descriptor, expires_at) VALUES (?, ?, ?, ?, ?)';
     db.execute(insert, ['2026年8月25日', 'pid-levelsio', 'levelsio', '猎鹰落回了发射台', NOW]);

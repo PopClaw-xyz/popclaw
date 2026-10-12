@@ -14,7 +14,7 @@ function context(allowed: ActionAttachment[] = [], required: ActionAttachment[] 
   const row = {kind:'test.act',schema_version:1,transport:'house',signer:'user',description:'Test',params_schema:{type:'object'},result_schema:schema,result_attachments:{allowed,required_on_success:required},consistency};
   const manifest = {house_session:{version:1,endpoint:'/v1/house-session',ack_pubkey:Buffer.from(key.publicKey).toString('hex'),operations:['enter']},
     world_interaction:{version:1,actions:{status_endpoint:'/v1/world-actions/status',result_authority_pubkey:keyId,kinds:['test.act'],attachments:allowed},guide:{path:'/v1/guide.md',sha256:cidFromCanonical(guideBytes),revision:'g1'},
-      ...(consistency !== 'none' ? {public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',log_incarnation:'log1',envelope_baseline: 'public-envelope-01' as const, initial_public_scopes:[]}} : {})},
+      ...(consistency !== 'none' ? {public_stream:{endpoint:'/v1/world-stream',mode:'public-v1',log_incarnation:'log1',envelope_baseline: 'public-envelope-02' as const, initial_public_scopes:[]}} : {})},
     intent_kinds:[row,{kind:'unrelated.legacy',uninterpreted:true}],event_kinds:[{kind:'test.state',schema_version:1,body_schema:{type:'object'}}]};
   const manifestBytes = utf8.encode(JSON.stringify(manifest)), capabilityRevision = cidFromCanonical(manifestBytes);
   const core = {house,manifestDigest:capabilityRevision,signedAt:900};

@@ -19,8 +19,8 @@ function fresh() {
 }
 
 describe('proposeTierChanges', () => {
-  // 理由句是纯机械计数。做梦每晚已经写下了
-  // 这个人最近在干什么 —— 用它，主人读到的才是一个人，不是一个计数器。
+  // The reason sentence is a mechanical count. Dreaming already records
+  // what this person has been doing each night; use that so the owner sees a person, not a counter.
   it('理由句捎上做梦写下的近况；没有就退回纯计数', () => {
     const { bonds, proposals } = fresh();
     bonds.ensure('A');
@@ -44,7 +44,7 @@ describe('proposeTierChanges', () => {
     for (let i = 0; i < 3; i++) bonds.recordInteraction('A', NOW - 1000 * (i + 1));
     const n = proposeTierChanges({ bondsStore: bonds, proposalsStore: proposals, now: () => NOW });
     expect(n).toHaveLength(1);
-    // 明细而非计数：做梦要能告诉主人「是谁」，只给个数字就只能沉默。
+    // Details, not counts: dreaming must identify who is involved; a number alone leaves it unable to explain.
     expect(n[0]).toMatchObject({ toTier: 'friend' });
     expect(typeof n[0]!.popclawId).toBe('string');
     expect(n[0]!.rationale.length).toBeGreaterThan(0);

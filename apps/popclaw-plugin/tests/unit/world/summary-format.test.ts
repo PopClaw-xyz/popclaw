@@ -1,9 +1,9 @@
 /**
- * S4.1-T1: 共享速览行渲染（summary-format）单测。
+ * S4.1-T1: shared world-preview line renderer (summary-format) tests.
  *
- * formatHotPostLine 断言自 act2-cards.test.ts 移植（同源同口径——
- * act2 卡与世界工具共同消费）；行长 60 → 120（owner 可读性反馈，
- * server preview 上限 200 余量够）。
+ * formatHotPostLine assertions moved from act2-cards.test.ts: act2 cards and world tools
+ * share the same implementation and conventions. Line length increased from 60 to 120
+ * after owner readability feedback; the server's 200-character preview limit leaves room.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {

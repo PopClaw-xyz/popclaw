@@ -545,7 +545,7 @@ function checkedPreparation(o:PublicJournalPreparation) {
   policy.officialActorIds.forEach(text);
   if (new Set(policy.officialActorIds).size!==policy.officialActorIds.length) throw new Error('PUBLIC_PRODUCER_POLICY_INVALID');
   if (capability.publicStream.mode!=='public-v1'||capability.publicStream.endpoint!=='/v1/world-stream') throw new Error('PUBLIC_CAPABILITY_INVALID');
-  if (capability.publicStream.envelope_baseline!=='public-envelope-01') throw new Error('PUBLIC_BASELINE_UNSUPPORTED');
+  if (capability.publicStream.envelope_baseline!=='public-envelope-02') throw new Error('PUBLIC_BASELINE_UNSUPPORTED');
   logLabel(capability.publicStream.log_incarnation);
   if (digest(mapping)!==o.approvedConsumerMappingDigest) throw new Error('PUBLIC_CONSUMER_MAPPING_DIGEST_MISMATCH');
   return {binding,selection,mapping};

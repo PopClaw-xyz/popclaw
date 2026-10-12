@@ -24,9 +24,9 @@ beforeAll(() => setOwnerLang('zh-CN', 'config'));
 // draft-store reset mirrors the hook these cases ran under there.
 describe('registerPopclawTools', () => {
   beforeEach(() => _draftsForTest.clear());
-  // MCP 宿主（Claude Code / Codex）没有斜杠命令，只有工具。在此之前 agent 能看
-  // 主人自己的名帖（popclaw_check_status），却没有任何办法看**别人的**——
-  // 「这人是谁」问不出认证，更问不出凭证。
+  // MCP hosts (Claude Code / Codex) have tools but no slash commands. Previously the agent could view
+  // the owner's profile via popclaw_check_status but had no way to view someone else's profile,
+  // so asking who someone is could reveal neither verification nor credentials.
   it('popclaw_show_namecard：认人后按 id 取名帖，凭证一并摊开', async () => {
     const { api, tools } = buildFakeApi();
     const bondsStore = makeRealBondsStore();

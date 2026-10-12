@@ -108,21 +108,12 @@ export async function readJoinedHouseGuide(db: HostDb, origin: string, ports: Ho
   return readHouseGuideContext(db,origin,ports.documentFetch(),ports.active);
 }
 
-export async function pendingHouseGuides(db: HostDb, readGuide: (origin: string) => Promise<HouseGuideResult>): Promise<HouseGuideContext[]> {
-  const result: HouseGuideContext[] = [];
-  for (const {origin} of db.queryAll<{origin:string}>(`SELECT origin FROM house_guide_context WHERE delivered_digest IS NULL OR delivered_digest!=guide_digest`)) {
-    const context = await readGuide(origin);
-    if (context.status === 'available' && !context.delivered) result.push(context);
-  }
-  return result;
+/** Identity of complete source-bound knowledge, never action authority. */
+export function houseGuideContextKey(context: Pick<HouseGuideContext, 'origin' | 'bindingDigest' | 'opSeq' | 'guideDigest' | 'guide'>): string {
+  return JSON.stringify([context.origin, context.bindingDigest, context.opSeq, context.guideDigest, entryDigest(context.guide)]);
 }
 
-/** Actual host output/LLM-input observer; never claim a prepared or truncated body was delivered. */
-export function markGuidesInAgentInput(db: HostDb, serialized: string): void {
-  const rows = db.queryAll<{origin:string;guide_body:string;guide_digest:string;binding_digest:string;op_seq:number}>(
-    `SELECT * FROM house_guide_context WHERE guide_body IS NOT NULL AND (delivered_digest IS NULL OR delivered_digest!=guide_digest)`);
-  // MCP serializes JSON context inside a text result; native history wraps
-  // the same text in messages. Inspect those actual emitted values.
+function visitGuideContexts(serialized: unknown, visit: (context: Record<string, unknown>) => void): void {
   const inspect = (value: unknown, depth: number): void => {
     if (depth > 8) return;
     if (typeof value === 'string') {
@@ -132,15 +123,53 @@ export function markGuidesInAgentInput(db: HostDb, serialized: string): void {
       }
     } else if (value && typeof value === 'object') {
       const context = value as Record<string, unknown>;
-      for (const row of rows) {
-        if (context.status !== 'available' || context.origin !== row.origin || context.opSeq !== row.op_seq
-          || context.guide !== row.guide_body || context.guideDigest !== row.guide_digest
-          || context.bindingDigest !== row.binding_digest) continue;
-        markHouseGuideDelivered(db,{status:'available',origin:row.origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,
-          guideUrl:'',guideDigest:row.guide_digest,guide:row.guide_body,delivered:false});
-      }
+      visit(context);
       for (const child of Object.values(context)) inspect(child, depth + 1);
     }
   };
   inspect(serialized, 0);
+}
+
+/** Extract only complete guide identities from the actual input. No history is retained.
+ * A claimed digest without its matching body is not proof of presence. */
+export function observedHouseGuideKeys(serialized: unknown): ReadonlySet<string> {
+  const keys = new Set<string>();
+  visitGuideContexts(serialized, context => {
+    if (context.status !== 'available' || typeof context.origin !== 'string'
+      || typeof context.bindingDigest !== 'string' || !Number.isSafeInteger(context.opSeq)
+      || typeof context.guideDigest !== 'string' || typeof context.guide !== 'string'
+      || !context.guide || context.guide.length > 256 * 1024 || entryDigest(context.guide) !== context.guideDigest) return;
+    keys.add(houseGuideContextKey(context as unknown as HouseGuideContext));
+  });
+  return keys;
+}
+
+/** Native callers supply the current input's presence set, including an empty
+ * set for an unknown/new context. Other hosts keep their delivery receipts. */
+export async function pendingHouseGuides(db: HostDb, readGuide: (origin: string) => Promise<HouseGuideResult>,
+  present?: ReadonlySet<string>): Promise<HouseGuideContext[]> {
+  const result: HouseGuideContext[] = [];
+  const query = present === undefined
+    ? 'SELECT origin FROM house_guide_context WHERE delivered_digest IS NULL OR delivered_digest!=guide_digest'
+    : 'SELECT origin FROM house_guide_context';
+  for (const {origin} of db.queryAll<{origin:string}>(query)) {
+    const context = await readGuide(origin);
+    if (context.status === 'available' && (present === undefined ? !context.delivered : !present.has(houseGuideContextKey(context)))) result.push(context);
+  }
+  return result;
+}
+
+/** Actual host output/LLM-input observer; never claim a prepared or truncated body was delivered. */
+export function markGuidesInAgentInput(db: HostDb, serialized: string): void {
+  const rows = db.queryAll<{origin:string;guide_body:string;guide_digest:string;binding_digest:string;op_seq:number}>(
+    `SELECT * FROM house_guide_context WHERE guide_body IS NOT NULL AND (delivered_digest IS NULL OR delivered_digest!=guide_digest)`);
+  visitGuideContexts(serialized, context => {
+    for (const row of rows) {
+      if (context.status !== 'available' || context.origin !== row.origin || context.opSeq !== row.op_seq
+        || context.guide !== row.guide_body || context.guideDigest !== row.guide_digest
+        || context.bindingDigest !== row.binding_digest) continue;
+      markHouseGuideDelivered(db,{status:'available',origin:row.origin,bindingDigest:row.binding_digest,opSeq:row.op_seq,
+        guideUrl:'',guideDigest:row.guide_digest,guide:row.guide_body,delivered:false});
+    }
+  });
 }

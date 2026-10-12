@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { InMemoryHostDb } from '../../../src/host/in-memory-host-db.js';
@@ -377,6 +377,96 @@ describe('createDoorbellService.tick — tiering and cursor', () => {
     expect(h.warns.length).toBeGreaterThan(0);
     h.pulls.push({ after: 0, rows: [] });
     expect(await h.svc.tick()).toBe(DOORBELL_HOT_TICK_MS);
+  });
+
+  it.each([undefined, null, 'bad-time', String(MS), NaN, Infinity, -Infinity, Number.MAX_VALUE, 1e100, MS + 0.5])(
+    'rejects a mixed batch with latest_ts=%s without absorbing or advancing its cursor', async (latestTs) => {
+      const h = makeShell();
+      h.authorRows = [authorRow('B'), authorRow('C'), authorRow('D')];
+      const previous = MS - 25 * MIN;
+      h.pulls.push({ after: 0, rows: [intent('B', previous)] });
+      await h.svc.tick();
+      const pending = intent('C', MS - MIN);
+      const invalid = { ...intent('D', MS - MIN), latest_ts: latestTs } as unknown as FollowIntentRow;
+      h.pulls.push({ after: previous, rows: [pending, invalid] });
+      expect(await h.svc.tick()).toBe(2 * DOORBELL_HOT_TICK_MS);
+      expect(h.svc.backingOff()).toBe(true);
+      expect(h.store.listPending().map((row) => row.followee_popclaw_id)).toEqual(['B']);
+      expect(h.enqueued).toHaveLength(1);
+      expect(h.delivered).toEqual([]);
+
+      h.pulls.push({ after: previous, rows: [pending, intent('D', MS - MIN)] });
+      expect(await h.svc.tick()).toBe(DOORBELL_HOT_TICK_MS);
+      expect(h.svc.backingOff()).toBe(false);
+      h.pulls.push({ after: MS - MIN, rows: [] });
+      await h.svc.tick();
+      expect(h.pullCalls).toEqual([0, previous, previous, MS - MIN]);
+      expect(h.store.listPending().map((row) => row.followee_popclaw_id)).toEqual(['B', 'C', 'D']);
+      expect(h.enqueued).toHaveLength(2);
+    },
+  );
+
+  it.each([Number.MAX_SAFE_INTEGER + 1, MS + 0.5])('rejects invalid first_ts=%s before changing the batch', async (firstTs) => {
+    const h = makeShell();
+    h.authorRows = [authorRow('B')];
+    h.pulls.push({ after: 0, rows: [intent('B', firstTs, MS)] });
+    expect(await h.svc.tick()).toBe(2 * DOORBELL_HOT_TICK_MS);
+    expect(h.store.listPending()).toEqual([]);
+    expect(h.enqueued).toEqual([]);
+    h.pulls.push({ after: 0, rows: [intent('B', MS)] });
+    expect(await h.svc.tick()).toBe(DOORBELL_HOT_TICK_MS);
+    expect(h.pullCalls).toEqual([0, 0]);
+    expect(h.store.listPending()).toHaveLength(1);
+  });
+
+  it('keeps the initial cursor at zero after a missing timestamp instead of sending NaN on later pulls', async () => {
+    const h = makeShell();
+    h.authorRows = [authorRow('B')];
+    const invalid: Partial<FollowIntentRow> = intent('B', MS - MIN);
+    delete invalid.latest_ts;
+    h.pulls.push({ after: 0, rows: [invalid as FollowIntentRow] });
+    await h.svc.tick();
+    h.pulls.push({ after: 0, rows: [intent('B', MS - MIN)] });
+    await h.svc.tick();
+    await h.svc.tick();
+    expect(h.pullCalls).toEqual([0, 0, MS - MIN]);
+    expect(h.store.listPending()).toHaveLength(1);
+  });
+
+  it('still advances over well-formed refused intents without adding pending rows', async () => {
+    const h = makeShell();
+    h.pulls.push({ after: 0, rows: [intent('self', MS - 2 * MIN), intent('invalid-id', MS - MIN)] });
+    await h.svc.tick();
+    await h.svc.tick();
+    expect(h.pullCalls).toEqual([0, MS - MIN]);
+    expect(h.store.listPending()).toEqual([]);
+    expect(h.svc.backingOff()).toBe(false);
+  });
+
+  it('keeps the cursor when absorption rolls back and retries the valid batch once', async () => {
+    const h = makeShell();
+    h.authorRows = [authorRow('B'), authorRow('C')];
+    const rows = [intent('B', MS - 2 * MIN), intent('C', MS - MIN)];
+    const followsIn = vi.spyOn(h.store, 'absorb').mockImplementationOnce((intents, opts) => {
+      return PendingFollowStore.prototype.absorb.call(h.store, intents, {
+        ...opts,
+        followsIn: (id) => {
+          if (id === 'C') throw new Error('absorption failed on second row');
+          return false;
+        },
+      });
+    });
+    h.pulls.push({ after: 0, rows });
+    expect(await h.svc.tick()).toBe(2 * DOORBELL_HOT_TICK_MS);
+    expect(h.store.listPending()).toEqual([]);
+    expect(h.enqueued).toEqual([]);
+    h.pulls.push({ after: 0, rows });
+    expect(await h.svc.tick()).toBe(DOORBELL_HOT_TICK_MS);
+    await h.svc.tick();
+    expect(h.pullCalls).toEqual([0, 0, MS - MIN]);
+    expect(h.store.listPending().map((row) => row.followee_popclaw_id)).toEqual(['B', 'C']);
+    expect(h.enqueued).toEqual([{ level: 'L2', kind: 'follow_intent', payload: { count: 2 } }]);
+    followsIn.mockRestore();
   });
 });
 

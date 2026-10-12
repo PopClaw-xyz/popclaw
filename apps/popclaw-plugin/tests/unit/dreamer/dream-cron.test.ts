@@ -1,5 +1,6 @@
 /**
- * 「还没排上」和「排了但一直没跑」是两种病 —— 认出做梦那个 cron 任务是分辨的前提。
+ * "Not scheduled" and "scheduled but never runs" are different failures. Identifying the dream cron
+ * job is necessary to distinguish them.
  */
 import { describe, expect, it } from 'vitest';
 import { findDreamJob, readDreamCronState, DREAM_JOB_NAME, type CronJobLike } from '../../../src/dreamer/dream-cron.js';
@@ -35,7 +36,7 @@ describe('readDreamCronState', () => {
     expect(await readDreamCronState(async () => ({ jobs: [job({ name: DREAM_JOB_NAME })] }))).toEqual({ scheduled: true });
   });
 
-  // B8：cron 的时区不受插件控制，但得可观测 —— 带了就报，没带就是宿主机本地。
+  // B8: the plugin cannot control cron's timezone, but must expose it; report it when present, otherwise host-local time.
   it('任务带 tz 就带出来；没带就省略（status 那边替它说 host-local）', async () => {
     const withTz = { jobs: [job({ name: DREAM_JOB_NAME, schedule: { kind: 'cron', tz: 'Asia/Shanghai' } })] };
     expect(await readDreamCronState(async () => withTz)).toEqual({ scheduled: true, tz: 'Asia/Shanghai' });
@@ -47,7 +48,7 @@ describe('readDreamCronState', () => {
     expect(await readDreamCronState(async () => ({ jobs: [] }))).toEqual({ scheduled: false });
   });
 
-  // 查不到 ≠ 没排：读不着就闭嘴，别拿一个锦上添花的信号去误导主人。
+  // Unable to query does not mean unscheduled: omit the optional signal instead of misleading the owner.
   it('读不着 / 形状不对 → null，绝不抛', async () => {
     expect(await readDreamCronState(async () => { throw new Error('ENOENT'); })).toBeNull();
     expect(await readDreamCronState(async () => null)).toBeNull();
@@ -55,8 +56,8 @@ describe('readDreamCronState', () => {
   });
 });
 
-// 真机验收当场撞出来的：用 `--at +1m` 触发一次做梦，工具反手把这个探针认成
-// "已经排好了"，于是该问的话没问。「排上了」的语义只能是**会再来一次**。
+// Found during real-host acceptance: a one-off dream triggered with `--at +1m` was mistaken
+// for "already scheduled", skipping a required question. Scheduled means it will recur.
 describe('findDreamJob — 一次性任务不算排期', () => {
   it('--at 的一次性任务被忽略（它跑完就删）', () => {
     expect(findDreamJob([job({ name: DREAM_JOB_NAME, schedule: { kind: 'at' } })])).toBeNull();

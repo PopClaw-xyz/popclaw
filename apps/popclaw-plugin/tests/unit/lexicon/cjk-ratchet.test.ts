@@ -5,21 +5,16 @@ import { describe, expect, it } from 'vitest';
 const exempt: string[] = JSON.parse(readFileSync(join(__dirname, 'cjk-exempt.json'), 'utf8'));
 
 /**
- * CJK-leak ratchet (S0, decision doc §一 裁决⑥ / §二.6): the whole point of
- * the lexicon is that new user-facing Chinese text lives in
- * `src/lexicon/zh-CN.ts`, not scattered as string literals through the rest
- * of `src/`. This test doesn't try to fix the scatter that already exists —
- * `cjk-exempt.json` grandfathers it in — it only stops the pile from
- * growing: a NEW file with CJK characters that isn't on the exempt list
- * fails the build.
- *
- * Ratchet rule: the exempt list only ever shrinks. If you clean CJK out of
- * a file, delete its entry (the test below warns you when one is stale, but
- * won't fail on it — removing entries is opt-in cleanup, not mandatory).
- * If you add CJK to a NEW file, put the words in `src/lexicon/zh-CN.ts`
- * instead of inline; if that's genuinely not possible, get the addition
- * reviewed and add the file to `cjk-exempt.json` explicitly (don't just
- * regenerate the whole list — that defeats the ratchet).
+ * CJK-leak ratchet (S0, decision doc section 1 ruling 6 / section 2.6): the whole point of the lexicon
+ * is that new user-facing Chinese text lives in `src/lexicon/zh-CN.ts`, not scattered as string
+ * literals through the rest of `src/`. This test doesn't try to fix the scatter that already exists:
+ * `cjk-exempt.json` grandfathers it in. It only stops the pile from growing: a NEW file with CJK
+ * characters that isn't on the exempt list fails the build. Ratchet rule: the exempt list only ever
+ * shrinks. If you clean CJK out of a file, delete its entry (the test below warns when one is stale
+ * but does not fail; removal is opt-in cleanup). If you add CJK to a NEW file, put the words in
+ * `src/lexicon/zh-CN.ts` instead of inline. If that is genuinely impossible, get the addition reviewed
+ * and explicitly add the file to `cjk-exempt.json`; do not regenerate the whole list and defeat the
+ * ratchet.
  */
 
 const SRC_ROOT = join(__dirname, '../../../src');

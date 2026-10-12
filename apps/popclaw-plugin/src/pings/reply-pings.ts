@@ -84,6 +84,19 @@ export class ReplyPingsStore {
     );
   }
 
+  /** Arrival, first-reply claim and notification enqueue commit together.
+   *  The enqueue callback must write to this store's HostDb synchronously.
+   *  null = duplicate; otherwise the result identifies the first reply.
+   *  A failure rolls back all three writes so replay can route the reply. */
+  claimAndEnqueue(replyEventId: string, targetPostId: string, enqueue: (isFirst: boolean) => void): boolean | null {
+    return this.db.transaction(() => {
+      if (!this.claimArrival(replyEventId, targetPostId)) return null;
+      const isFirst = this.claimFirstReply(targetPostId);
+      enqueue(isFirst);
+      return isFirst;
+    });
+  }
+
   /** Unread count (for the tool's trailer). */
   unreadCount(): number {
     return (
@@ -175,6 +188,7 @@ export interface ReplyPingDeps {
   readonly ownerPopclawId: string;
   readonly cache: { lookup(platform: string, id: string): CachedFeedItem | null };
   readonly pings: ReplyPingsStore;
+  /** Enqueues synchronously into the same HostDb as pings (the runtime's shared queue). */
   readonly notifier: Pick<Notifier, 'enqueue'>;
   /** wall-clock SECONDS seam (house convention); defaults to Date.now()/1000. */
   readonly now?: () => number;
@@ -218,17 +232,38 @@ export function routeReplyPing(deps: ReplyPingDeps, incoming: IncomingItemLike):
   const target = deps.cache.lookup(incoming.replyToPlatform || 'popclaw', targetId);
   if (!target || target.authorPopclawId !== deps.ownerPopclawId) return 'not-mine';
 
-  if (!deps.pings.claimArrival(pingIdOf(incoming), targetId)) return 'duplicate';
+  let stale = false;
+  const isFirst = deps.pings.claimAndEnqueue(pingIdOf(incoming), targetId, (first) => {
+    // Freshness gate: an SSE disconnect/reconnect or a reinstall backfills
+    // history all at once — without this gate, one reconnect in the middle of
+    // the night could shout three months' worth of first-replies out as L1.
+    // A single stateless comparison, no timer, no queue.
+    const createdAt = numberOrZero(incoming.platformPostCreatedAt);
+    const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
+    stale = createdAt > 0 && now - createdAt > PING_FRESH_WINDOW_SECONDS;
+    // Bond context: this reply itself isn't in the inbox, so there's no need to
+    // exclude "the current entry" — just look straight through to now.
+    const bondLine = deps.bondContext?.(author) ?? '';
+    deps.notifier.enqueue({
+      level: first && !stale ? 'L1' : 'L2',
+      kind: 'reply',
+      payload: {
+        replyEventId: pingIdOf(incoming),
+        fromPopclawId: author,
+        fromName: incoming.actorNickname || incoming.handle || '',
+        body: (incoming.textPreview ?? '').slice(0, BODY_CHARS),
+        targetPostId: targetId,
+        targetPreview: target.textPreview,
+        ...(bondLine ? { bondLine } : {}),
+      },
+    });
+  });
+  if (isFirst === null) return 'duplicate';
 
-  // Social log `reply_received` (spec 2026-07-26 §4). Hooked in **after**
-  // the idempotency gate — an SSE disconnect/reconnect will resend the same
-  // reply N times, and recording before the gate would record one
-  // interaction as N, directly poisoning dreaming's raw material. Before
-  // the freshness gate: that gate decides "should we interrupt the owner",
-  // whereas this reply happened for real regardless of whether it's new or
-  // old. Both original texts are carried (a hard self-containment
-  // requirement): the world_feed cache gets pruned after a year, so storing
-  // only the id would leave a dangling pointer.
+  // JSONL is outside the SQL transaction. Append only after commit so a
+  // failed enqueue and its replay cannot record the same interaction twice.
+  // Fresh and stale replies both happened for real and are both recorded.
+  // Keep both original texts: the world-feed cache is pruned after a year.
   safeRecord(deps.socialLog, {
     kind: 'reply_received',
     actor: {
@@ -241,30 +276,6 @@ export function routeReplyPing(deps: ReplyPingDeps, incoming: IncomingItemLike):
     event_id: pingIdOf(incoming),
   });
 
-  const isFirst = deps.pings.claimFirstReply(targetId);
-  // Freshness gate: an SSE disconnect/reconnect or a reinstall backfills
-  // history all at once — without this gate, one reconnect in the middle of
-  // the night could shout three months' worth of first-replies out as L1.
-  // A single stateless comparison, no timer, no queue.
-  const createdAt = numberOrZero(incoming.platformPostCreatedAt);
-  const now = deps.now?.() ?? Math.floor(Date.now() / 1000);
-  const stale = createdAt > 0 && now - createdAt > PING_FRESH_WINDOW_SECONDS;
-  // Bond context: this reply itself isn't in the inbox, so there's no need to
-  // exclude "the current entry" — just look straight through to now.
-  const bondLine = deps.bondContext?.(author) ?? '';
-  deps.notifier.enqueue({
-    level: isFirst && !stale ? 'L1' : 'L2',
-    kind: 'reply',
-    payload: {
-      replyEventId: pingIdOf(incoming),
-      fromPopclawId: author,
-      fromName: incoming.actorNickname || incoming.handle || '',
-      body: (incoming.textPreview ?? '').slice(0, BODY_CHARS),
-      targetPostId: targetId,
-      targetPreview: target.textPreview,
-      ...(bondLine ? { bondLine } : {}),
-    },
-  });
   if (!isFirst) return 'more';
   return stale ? 'first-stale' : 'first';
 }
