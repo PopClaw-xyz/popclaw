@@ -316,6 +316,14 @@ describe('popclaw_world_guide', () => {
 // ---------------------------------------------------------------------------
 
 describe('popclaw_world_summary', () => {
+  it('preserves a synchronous summary throw before invoking snapshot', async () => {
+    const h = setup();
+    h.fetchSummary.mockImplementation(() => { throw new Error('synchronous summary failure'); });
+    await expect(findTool(h.tools, 'popclaw_world_summary').execute('sync-summary', {}))
+      .rejects.toThrow('synchronous summary failure');
+    expect(h.fetchSnapshot).not.toHaveBeenCalled();
+  });
+
   it('renders stats line + numbered hot-post lines + notable authors', async () => {
     const { tools } = setup();
     const tool = findTool(tools, 'popclaw_world_summary');
