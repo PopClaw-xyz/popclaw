@@ -74,7 +74,7 @@ function renderSnapshot(s: WorldSummarySnapshot, opts: SummaryFormatOptions & { 
       ? copy('baselineUnknown')
       : copy(w.follow_coverage_start_ms > w.starts_at_ms ? 'partialCoverage' : 'fullCoverage', { start: date(w.follow_coverage_start_ms), end: date(s.cutoff_at_ms), net: String(w.public_follow_net) });
     blocks.push(copy('peopleHeading', { window: label }) + '\n' + coverage + '\n' +
-      (w.people_growth.length ? w.people_growth.map((p, i) => `${i + 1}. ${person(p.person_id)} · ${copy('growth', { count: String(p.net_followers) })}`).join('\n') : copy('emptyPeople')));
+      (w.people_growth.length ? w.people_growth.map((p, i) => `${i + 1}. ${person(p.person_id)} · ${copy('growth', { count: p.net_followers === null ? unknown : `${p.net_followers > 0 ? '+' : ''}${p.net_followers}` })}`).join('\n') : copy('emptyPeople')));
     blocks.push(copy('postsHeading', { window: label }) + '\n' +
       (w.top_posts.length ? w.top_posts.map((rank, i) => {
         const c = s.contents[rank.event_id]!;

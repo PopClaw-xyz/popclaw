@@ -7,6 +7,8 @@ import { WorldSummaryClient, type WorldSummaryResponse } from '../../../src/worl
 import { _observedPostIdsForTest, rememberObservedPostIds, resolvePostRef } from '../../../src/world/post-ref.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 import { _observedPeopleForTest } from '../../../src/identity/observed-people.js';
+import { parseWorldSummary } from '../../../src/world/summary-validation.js';
+import { renderWorldSummary } from '../../../src/world/summary-snapshot-format.js';
 import { deriveSigil } from '../../../src/invite/sigil.js';
 import { setOwnerTz } from '../../../src/time/time-context.js';
 
@@ -86,7 +88,7 @@ describe('complete on-demand summary', () => {
     for (const w of s.windows) { w.follow_coverage_start_ms = null; w.public_follow_net = null; w.people_growth = []; w.top_posts = []; }
     const { text } = await setup(response(s)).tool.execute('x', {});
     expect(text).toContain('not yet observed');
-    expect(text).toContain('No qualifying');
+    expect(text).toContain('No public people available.');
     expect(text).not.toContain('net 0');
   });
 
@@ -190,5 +192,24 @@ describe('people shown by a summary remain addressable', () => {
     expect(declareFollow).not.toHaveBeenCalled();
     expect(text).toContain(deriveSigil('11111111111111111111111111111111'));
     expect(text).toContain(deriveSigil('22222222222222222222222222222222222222222222'));
+  });
+});
+
+describe('low-activity ranking contract', () => {
+  it.each([0, -2, null])('accepts and renders real people with growth %s', growth => {
+    const s = fixture();
+    for (const w of s.windows) {
+      w.people_growth[0].net_followers = growth;
+      w.top_posts[0].new_replies = 0;
+      if (growth === null) { w.follow_coverage_start_ms = null; w.public_follow_net = null; }
+    }
+    const parsed = parseWorldSummary(response(s));
+    expect(parsed).not.toBeNull();
+    const text = renderWorldSummary(parsed!, {lang:'en'});
+    expect(text).toContain('River');
+    expect(text).toContain('Builds tools for public conversation.');
+    expect(text).toContain(growth === null ? 'net unknown' : `net ${growth > 0 ? '+' : ''}${growth}`);
+    expect(text).not.toContain('+-');
+    expect(text).not.toContain('net +null');
   });
 });

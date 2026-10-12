@@ -55,7 +55,7 @@ export interface SnapshotActivity {
 
 export interface SnapshotPersonRank {
   readonly person_id: string;
-  readonly net_followers: number;
+  readonly net_followers: number | null;
 }
 
 export interface SnapshotContentRank {
