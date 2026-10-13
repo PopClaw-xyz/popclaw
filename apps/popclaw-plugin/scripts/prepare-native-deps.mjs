@@ -121,9 +121,9 @@ const LOCAL_BUILD_ARCHES = ['arm64', 'x64'];
  * `better_sqlite3-<platform>-<arch>-node<major>.node`. Every supported matrix
  * entry ships under this name — including the packer's own platform+arch (the
  * historical unprefixed name caused the packer's own platform to install a
- * binding setup would refuse to load). The unsuffixed build/Release default is
- * still written below, but only as the better-sqlite3 `bindings` fallback for
- * host auto-rebuilds and tests loading straight from node_modules.
+ * binding setup would refuse to load). The derived default loader selects the
+ * same named matrix; the duplicate unsuffixed binary is not shipped. Source
+ * rebuilds and development installs still use upstream bindings defaults.
  */
 function bindingName(platform, arch, major) {
   return `better_sqlite3-${platform}-${arch}-node${major}.node`;
@@ -176,17 +176,12 @@ function buildAbiPrebuilds() {
   for (const name of built) cpSync(join(stage, name), join(relDir, name));
   rmSync(stage, { recursive: true, force: true });
 
-  // Restore the unsuffixed default to the packer's Node major. better-sqlite3's
-  // `bindings` loader uses it as the fallback when the host runs an UNcovered
-  // major (local-host-db.ts then surfaces a clear rebuild hint). Also what
-  // tests-from-node_modules / in-memory-host-db load.
+  // Validate the packer's named cell directly. The runtime default loader also
+  // selects this cell, so the unsuffixed duplicate can be removed after packing.
   const packerMajor = Number(process.versions.node.split('.')[0]);
   const packerNamed = join(relDir, bindingName(process.platform, process.arch, packerMajor));
-  if (existsSync(packerNamed)) cpSync(packerNamed, defaultBin);
-  if (!loadsUnderPackerNode(defaultBin)) {
-    throw new Error(
-      `default better_sqlite3.node failed to load under packer Node ${process.version} (major ${packerMajor}).`,
-    );
+  if (!loadsUnderPackerNode(packerNamed)) {
+    throw new Error(`named native binding failed to load under packer Node ${process.version}: ${packerNamed}`);
   }
 
   // Build junk (.a static lib, test_extension, .o/.deps intermediates) is
@@ -195,7 +190,7 @@ function buildAbiPrebuilds() {
   // config.gypi, etc. left by node-gyp at the package-root build/ level).
 
   console.log(
-    `  → local prebuilds ready: ${built.join(', ')} (default = packer Node ${packerMajor})`,
+    `  → local prebuilds ready: ${built.join(', ')} (packer Node ${packerMajor})`,
   );
 }
 
@@ -270,7 +265,7 @@ function verifyPackedMatrix(tgz) {
   const prefix = 'package/dist/native-deps/better-sqlite3/build/Release/';
   const entries = execFileSync('tar', ['-tzf', tgz], { encoding: 'utf8' }).trim().split('\n');
   const rows = coverageMatrix();
-  const binaries = new Map();
+  if (entries.includes(prefix + 'better_sqlite3.node')) throw new Error('duplicate default better_sqlite3.node must not be shipped');
   const read = (file) => {
     const entry = prefix + file;
     if (entries.filter(name => name === entry).length !== 1) {
@@ -281,14 +276,12 @@ function verifyPackedMatrix(tgz) {
   for (const row of rows) {
     const bytes = read(row.file);
     assertNativeBinary(bytes, row);
-    binaries.set(row.file, bytes);
     console.log(`  ✓ ${row.platform}-${row.arch} node${row.major} ABI ${row.abi} (${bytes.length} bytes)`);
   }
-  const fallback = read('better_sqlite3.node');
-  if (!rows.some(row => row.platform === 'darwin' && fallback.equals(binaries.get(row.file)))) {
-    throw new Error('better_sqlite3.node: fallback must equal one of the declared Darwin bindings');
-  }
-  console.log(`verified ${rows.length} native matrix cells and the packer fallback in ${tgz}`);
+  const unexpected = entries.filter(name => name.startsWith(prefix) && name.endsWith('.node') &&
+    !rows.some(row => prefix + row.file === name));
+  if (unexpected.length) throw new Error(`undeclared native bindings: ${unexpected.join(', ')}`);
+  console.log(`verified ${rows.length} native matrix cells without a duplicate default in ${tgz}`);
 }
 
 function downloadHostPrebuilds() {
@@ -419,6 +412,7 @@ buildAbiPrebuilds();
 downloadHostPrebuilds();
 assertMatrixComplete();
 pruneBuildTree();
+rmSync(join(outDir, 'better-sqlite3/build/Release/better_sqlite3.node'), { force: true });
 
 console.log(`native deps ready at ${outDir}`);
 console.log(

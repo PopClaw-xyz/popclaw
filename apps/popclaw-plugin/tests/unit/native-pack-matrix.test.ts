@@ -39,7 +39,6 @@ const fixture = (change?: (files: Map<string, Buffer>) => void): string => {
       files.set(`better_sqlite3-${target}-node${major}.node`, binary(target, ABIS[major]!));
     }
   }
-  files.set('better_sqlite3.node', binary('darwin-arm64', 137));
   change?.(files);
   const dir = mkdtempSync(join(scratch, 'fixture-'));
   mkdirSync(join(dir, PREFIX), { recursive: true });
@@ -65,11 +64,19 @@ beforeAll(() => { scratch = mkdtempSync(join(tmpdir(), 'popclaw-native-matrix-')
 afterAll(() => { rmSync(scratch, { recursive: true, force: true }); });
 
 describe('pack-plugin verifies named platform, architecture and ABI cells in the archive', () => {
-  it('accepts the complete declared matrix and packer fallback', () => {
+  it('accepts the complete declared matrix without a duplicate default', () => {
     expect(guard(fixture()).status).toBe(0);
   });
 
-  it('rejects a missing Darwin cell even when another addon keeps the count at eleven', () => {
+  it('rejects a duplicate default even when it matches a declared native cell', () => {
+    const result = guard(fixture(files => {
+      files.set('better_sqlite3.node', binary('darwin-arm64', 137));
+    }));
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('duplicate default');
+  });
+
+  it('rejects a missing Darwin cell even when another addon keeps the count at ten', () => {
     const result = guard(fixture(files => {
       files.delete('better_sqlite3-darwin-x64-node26.node');
       files.set('unrelated.node', binary('linux-x64', 147));
