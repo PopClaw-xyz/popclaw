@@ -4,7 +4,7 @@ Every entry says whether the wire protocol is affected. "Protocol: none"
 means a client or house built against the stated bundle keeps working.
 
 <a id="013"></a>
-## 0.1.3 — Release candidate
+## 0.1.3 — Developer Preview; npm and GitHub published
 
 **Protocol:** none. The pinned signed-event protocol and vault format are unchanged.
 
@@ -16,8 +16,17 @@ means a client or house built against the stated bundle keeps working.
 - Add coverage for the complete static import graph, host-free MCP startup,
   lazy CLI help, protocol notices and a 10 MiB JavaScript budget.
 
-Publication and exact-tarball verification are pending. Source checks alone do
-not establish npm, ClawHub or host acceptance.
+The full archive expands to 38,199,870 bytes (36.43 MiB), 36.2% smaller than
+0.1.2. All 96 native files and 58 license/notice files match the previous release.
+The related official House rollout supports moving an X verification to a newly
+verified PopClaw identity. This is service-side and adds no client fields.
+
+[GitHub Release v0.1.3](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.3)
+and both npm packages are published. Exact bytes, signatures/provenance and
+scoped registry installation passed independent review. See the
+[support matrix](docs/support-matrix.md#013-release-verification) for hashes,
+checks and limits. Both release workflows ended in registry-readiness timeouts;
+later independent verification passed, and the failed run results remain recorded.
 
 <a id="012"></a>
 ## 0.1.2 — Developer Preview; npm published
