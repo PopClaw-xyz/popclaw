@@ -40,20 +40,25 @@ function regular(path, directory = false, capturedBinding = false) {
  */
 function platformBindings(root) {
   const markerPath = join(root, MARKER);
-  if (!bindingExists(markerPath)) return null;
-  regular(markerPath);
+  try { regular(markerPath); }
+  catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return null;
+    throw error;
+  }
   const marker = json(markerPath);
-  if (marker.format !== 1 || marker.distribution !== 'clawhub-platform-dependencies'
+  if (!marker || typeof marker !== 'object' || marker.format !== 1 || marker.distribution !== 'clawhub-platform-dependencies'
     || typeof marker.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(marker.version)
-    || !Array.isArray(marker.packages) || marker.packages.length !== PLATFORMS.length) throw invalid('unrecognized platform manifest');
+    || !Array.isArray(marker.packages) || marker.packages.length !== PLATFORMS.length
+    || marker.packages.some(row => !row || typeof row !== 'object')) throw invalid('unrecognized platform manifest');
   const nativeManifest = json(join(root, 'package.json'));
   for (const [platform, arch] of PLATFORMS) {
     const rows = marker.packages.filter(row => row.platform === platform && row.arch === arch);
     const row = rows[0];
     if (rows.length !== 1 || row.name !== packageName(platform, arch) || row.version !== marker.version
       || (platform === 'linux' ? row.libc !== 'glibc' : row.libc !== undefined)
-      || nativeManifest.optionalDependencies?.[row.name] !== row.version
-      || !Array.isArray(row.bindings) || row.bindings.length !== 2) throw invalid('inconsistent platform dependency declaration');
+      || nativeManifest?.optionalDependencies?.[row.name] !== row.version
+      || !Array.isArray(row.bindings) || row.bindings.length !== 2
+      || row.bindings.some(binding => !binding || typeof binding !== 'object')) throw invalid('inconsistent platform dependency declaration');
     for (const major of [24, 26]) {
       const bindings = row.bindings.filter(binding => binding.nodeMajor === major);
       const binding = bindings[0];
@@ -73,7 +78,7 @@ function platformBindings(root) {
   }
   regular(manifestPath);
   const dependency = json(manifestPath);
-  if (dependency.name !== entry.name || dependency.version !== entry.version
+  if (!dependency || typeof dependency !== 'object' || dependency.name !== entry.name || dependency.version !== entry.version
     || JSON.stringify(dependency.os) !== JSON.stringify([entry.platform])
     || JSON.stringify(dependency.cpu) !== JSON.stringify([entry.arch])
     || (entry.libc ? JSON.stringify(dependency.libc) !== JSON.stringify([entry.libc]) : dependency.libc !== undefined)) throw invalid(`incorrect package metadata for ${entry.name}`);

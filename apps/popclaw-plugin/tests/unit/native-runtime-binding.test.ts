@@ -220,6 +220,19 @@ describe('ClawHub platform dependencies', () => {
     expect(result.status).toBe(1);
     expect(JSON.parse(result.stderr).code).toBe(kind === 'missing' ? 'POPCLAW_PLATFORM_DEPENDENCY_MISSING' : 'POPCLAW_PLATFORM_DEPENDENCY_INVALID');
   });
+  it.each(['dangling-link', 'null', 'null-row', 'null-binding'])('rejects a %s marker as an invalid profile without entering full-package fallback', kind => {
+    const {root} = platformFixture();
+    const path = join(root, 'POPCLAW-PLATFORM-DEPS.json');
+    const marker = JSON.parse(readFileSync(path, 'utf8'));
+    if (kind === 'dangling-link') {rmSync(path); symlinkSync(join(root, 'absent-marker'), path);}
+    else {
+      if (kind === 'null-row') marker.packages[0] = null;
+      if (kind === 'null-binding') marker.packages[0].bindings[0] = null;
+      writeFileSync(path, JSON.stringify(kind === 'null' ? null : marker));
+    }
+    const result = probe(root); expect(result.status).toBe(1);
+    expect(JSON.parse(result.stderr).code).toBe('POPCLAW_PLATFORM_DEPENDENCY_INVALID');
+  });
   it('preflights LocalHostDb before opening a database, and supports a read-only reopen', () => {
     const {root} = platformFixture();
     const source = fileURLToPath(new URL('../../src/host/local-host-db.ts', import.meta.url));
