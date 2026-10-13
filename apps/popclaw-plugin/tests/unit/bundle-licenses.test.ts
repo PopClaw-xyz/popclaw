@@ -12,9 +12,9 @@ const mocks = vi.hoisted(() => ({
   distWrites: [] as Array<[string, ...unknown[]]>,
 }));
 vi.mock('esbuild', () => ({
-  build: vi.fn(async (options: { entryPoints: string[] }) => ({
+  build: vi.fn(async (options: { entryPoints: string[] | Record<string, string> }) => ({
     outputFiles: [{ text: '' }],
-    metafile: { inputs: Object.fromEntries((mocks.inputsByEntry.get(options.entryPoints[0]!) ?? []).map((i) => [i, {}])) },
+    metafile: { inputs: Object.fromEntries(Object.values(options.entryPoints).flatMap((entry) => (mocks.inputsByEntry.get(entry) ?? []).map((i) => [i, {}]))) },
   })),
 }));
 vi.mock('node:child_process', () => ({ execSync: vi.fn(() => Buffer.from('test')) }));
@@ -55,12 +55,12 @@ function fixturePackage(name: string, withLicense: boolean): { base: string; inp
 
 describe('third-party license collection for the distributed bundles', () => {
   // Every metafile source of a distributed file: the five bundle entries and
-  // the schema worker embedded into all of them. Each inlines one fixture
+  // both embedded workers. Each inlines one fixture
   // package no other source does, so dropping any source from the closure
   // loses exactly that package's license.
   const sources = [
     'src/index.ts', 'src/mcp.ts', 'src/mcp-hook.ts', 'src/main.ts',
-    'scripts/prepare-native-world.ts', 'src/host/schema-validator-worker.ts',
+    'scripts/prepare-native-world.ts', 'src/host/schema-validator-worker.ts', 'src/host/integrity-worker.ts',
   ];
   const onlyDeps = new Map<string, ReturnType<typeof fixturePackage>>();
   beforeAll(async () => {
