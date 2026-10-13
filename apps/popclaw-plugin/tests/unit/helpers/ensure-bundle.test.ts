@@ -127,6 +127,7 @@ describe('ensureBundle staleness decision', () => {
     'prepare-native-deps.mjs',
     'native-runtime-manifest.mjs',
     'native-binding-loader.cjs',
+    'native-binding-path.cjs',
   ])('rebuilds when scripts/%s changes', async (input) => {
     const pkgRoot = makeFakePackage();
     const artefact = makeArtefact(pkgRoot);

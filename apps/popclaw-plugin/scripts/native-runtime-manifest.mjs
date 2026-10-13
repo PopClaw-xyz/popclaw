@@ -27,6 +27,7 @@ export function deriveNativeRuntimeManifest(root) {
   }
   const derivedLoader = loaderText.replace(UPSTREAM_DEFAULT_LOAD, RUNTIME_DEFAULT_LOAD);
   const helper = readFileSync(new URL('./native-binding-loader.cjs', import.meta.url));
+  const resolver = readFileSync(new URL('./native-binding-path.cjs', import.meta.url));
   const runtime = { ...upstream, dependencies: { bindings: upstream.dependencies.bindings } };
   delete runtime.scripts;
   delete runtime.devDependencies;
@@ -42,11 +43,13 @@ export function deriveNativeRuntimeManifest(root) {
       path: 'lib/database.js', upstreamSha256: UPSTREAM_LOADER_SHA256,
       derivedSha256: sha256(derivedLoader),
       helperPath: 'lib/popclaw-native-binding.cjs', helperSha256: sha256(helper),
+      resolverPath: 'lib/popclaw-native-path.cjs', resolverSha256: sha256(resolver),
       change: 'Only the default addon lookup selects a named platform/architecture/Node binding before upstream source-rebuild paths; explicit nativeBinding options are unchanged.',
     },
     license: 'Upstream LICENSE remains unchanged beside this record.',
   }, null, 2) + '\n');
   writeFileSync(loaderPath, derivedLoader);
   writeFileSync(join(root, 'lib/popclaw-native-binding.cjs'), helper);
+  writeFileSync(join(root, 'lib/popclaw-native-path.cjs'), resolver);
   writeFileSync(path, JSON.stringify(runtime, null, 2) + '\n');
 }

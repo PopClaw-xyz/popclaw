@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join, basename, resolve as resolvePath } from 'node:path';
 import type { Database as DatabaseType, Options as DatabaseOptions, Statement } from 'better-sqlite3';
 import type { HostDb, Params } from './host-db.js';
+import { resolveNativeBinding as resolveNativeBindingPath } from '../../scripts/native-binding-path.cjs';
 import { ensureSentinelTable } from './sentinels.js';
 
 const __cjsRequire = createRequire(import.meta.url);
@@ -28,29 +29,11 @@ function nativePkgRoot(): string | undefined {
   }
 }
 
-// Native binary selection (paired with scripts/prepare-native-deps.mjs).
-// prepare-native-deps ships, per Node major:
-//   - `better_sqlite3-<platform>-<arch>-node<major>.node` — the matrix build
-//     (dev-host darwin builds + DOWNLOADED official Linux prebuilts). This is
-//     why a clean linux/arm64 install loads instantly with NO host node-gyp.
-//   - `better_sqlite3-node<major>.node` — legacy ABI-only name (back-compat +
-//     where a host auto-rebuild caches its result).
-// Prefer the platform+arch-specific name, then the legacy name. Returns
-// undefined when neither exists (e.g. tests run from node_modules) → better-
-// sqlite3's default loader (unsuffixed better_sqlite3.node) takes over.
+// Shared with the default driver loader, integrity worker, and setup. The
+// ClawHub profile performs only filesystem preflight here, before registration.
 function resolveNativeBinding(): string | undefined {
-  const pkgRoot = nativePkgRoot();
-  if (!pkgRoot) return undefined;
-  const major = process.versions.node.split('.')[0];
-  const rel = join(pkgRoot, 'build', 'Release');
-  for (const name of [
-    `better_sqlite3-${process.platform}-${process.arch}-node${major}.node`,
-    `better_sqlite3-node${major}.node`,
-  ]) {
-    const candidate = join(rel, name);
-    if (existsSync(candidate)) return candidate;
-  }
-  return undefined;
+  const root = nativePkgRoot();
+  return root ? resolveNativeBindingPath(root) : undefined;
 }
 
 const NATIVE_BINDING = resolveNativeBinding();
@@ -65,6 +48,7 @@ const NATIVE_BINDING = resolveNativeBinding();
  * See bug report "host-c dispatch chain ①".
  */
 export function isNativeLoadError(err: Error): boolean {
+  if ('code' in err && String(err.code).startsWith('POPCLAW_PLATFORM_')) return false;
   if (('code' in err && (err.code === 'EACCES' || err.code === 'EPERM'))
     || /permission denied|operation not permitted/i.test(err.message)) return false;
   if ('code' in err && err.code === 'POPCLAW_NATIVE_BINDING_MISSING') return true;

@@ -158,3 +158,102 @@ describe('shipped native loader without a duplicate default binary', () => {
     expect(readFileSync(join(root, 'package.json'))).toEqual(manifest);
   });
 });
+
+
+// These fixtures use real SQLite bytes. Unselected platforms are never loaded.
+function platformFixture() {
+  const root = fixture([]);
+  deriveNativeRuntimeManifest(root);
+  const version = '0.1.4';
+  const packages = [['darwin', 'arm64'], ['darwin', 'x64'], ['linux', 'arm64'], ['linux', 'x64'], ['win32', 'x64']].map(([platform, arch]) => ({
+    name: `popclaw-native-sqlite-${platform}-${arch}`, version, platform, arch,
+    ...(platform === 'linux' ? {libc: 'glibc'} : {}),
+    bindings: [24, 26].map(nodeMajor => ({nodeMajor, abi: nodeMajor === 24 ? '137' : '147',
+      file: `better_sqlite3-${platform}-${arch}-node${nodeMajor}.node`, sha256: sha(readFileSync(binding)), size: statSync(binding).size})),
+  }));
+  const selected = packages.find(row => row.platform === process.platform && row.arch === process.arch)!;
+  const dependencyRoot = join(root, 'node_modules', selected.name);
+  mkdirSync(join(dependencyRoot, 'build/Release'), {recursive: true});
+  writeFileSync(join(dependencyRoot, 'package.json'), JSON.stringify({name: selected.name, version,
+    os: [selected.platform], cpu: [selected.arch], ...(selected.libc ? {libc: [selected.libc]} : {})}));
+  for (const row of selected.bindings) cpSync(binding, join(dependencyRoot, 'build/Release', row.file));
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  manifest.optionalDependencies = Object.fromEntries(packages.map(row => [row.name, row.version]));
+  writeFileSync(join(root, 'package.json'), JSON.stringify(manifest));
+  writeFileSync(join(root, 'POPCLAW-PLATFORM-DEPS.json'), JSON.stringify({format: 1,
+    distribution: 'clawhub-platform-dependencies', version, packages}));
+  return {root, dependencyRoot, selected};
+}
+
+describe('ClawHub platform dependencies', () => {
+  it('loads a real database from the selected optional package with no local addon', () => {
+    const {root} = platformFixture();
+    const result = probe(root);
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({ok: true, value: 'same-driver'});
+  });
+  it.each(['missing', 'version', 'current-bytes', 'other-abi-bytes', 'metadata'])('rejects %s without falling through to the compiler path', kind => {
+    const {root, dependencyRoot, selected} = platformFixture();
+    if (kind === 'missing') rmSync(dependencyRoot, {recursive: true});
+    if (kind === 'version' || kind === 'metadata') {
+      const path = join(dependencyRoot, 'package.json');
+      const manifest = JSON.parse(readFileSync(path, 'utf8'));
+      if (kind === 'version') manifest.version = '0.0.0'; else manifest.cpu = ['invalid'];
+      writeFileSync(path, JSON.stringify(manifest));
+    }
+    if (kind.includes('bytes')) {
+      const row = selected.bindings.find(row => (row.nodeMajor === Number(process.versions.node.split('.')[0])) === (kind === 'current-bytes'))!;
+      writeFileSync(join(dependencyRoot, 'build/Release', row.file), 'corrupt');
+    }
+    const result = probe(root);
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stderr).code).toBe(kind === 'missing' ? 'POPCLAW_PLATFORM_DEPENDENCY_MISSING' : 'POPCLAW_PLATFORM_DEPENDENCY_INVALID');
+  });
+  it('preflights LocalHostDb before opening a database, and supports a read-only reopen', () => {
+    const {root} = platformFixture();
+    const source = fileURLToPath(new URL('../../src/host/local-host-db.ts', import.meta.url));
+    const bin = join(root, 'blocked-compiler'); mkdirSync(bin);
+    writeFileSync(join(bin, 'npx'), '#!/bin/sh\necho unexpected-compiler >&2\nexit 97\n'); chmodSync(join(bin, 'npx'), 0o755);
+    const result = spawnSync(process.execPath, ['--import', require.resolve('tsx'), '--input-type=module', '-e', `
+      import { registerHooks } from 'node:module';
+      import { pathToFileURL } from 'node:url';
+      registerHooks({resolve(specifier, context, next) { return next(specifier === 'better-sqlite3' ? process.env.TEST_NATIVE_MAIN : specifier, context); }});
+      const { LocalHostDb } = await import(pathToFileURL(process.env.TEST_LOCAL_DB_SOURCE));
+      const db = new LocalHostDb(process.env.TEST_DB);
+      db.execute('CREATE TABLE proof(value TEXT)'); db.execute("INSERT INTO proof VALUES('platform')"); db.close();
+      const read = new LocalHostDb(process.env.TEST_DB, {readOnly:true});
+      console.log(JSON.stringify(read.queryOne('SELECT value FROM proof'))); read.close();
+    `], {encoding:'utf8', timeout: 10_000, env: {...process.env, PATH: `${bin}:${process.env.PATH}`, TEST_NATIVE_MAIN: join(root, 'lib/index.js'), TEST_LOCAL_DB_SOURCE: source, TEST_DB: join(root, 'proof.db')}});
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe('{"value":"platform"}\n');
+  });
+});
+
+
+describe('pure native path preflight', () => {
+  it.each(['valid', 'missing'])('handles %s without opening SQLite or allowing a dependency error to trigger compilation', kind => {
+    const {root, dependencyRoot} = platformFixture();
+    if (kind === 'missing') rmSync(dependencyRoot, {recursive:true});
+    const source = fileURLToPath(new URL('../../src/host/local-host-db.ts', import.meta.url));
+    const result = spawnSync(process.execPath, ['--import', require.resolve('tsx'), '--input-type=module', '-e', `
+      import { registerHooks, createRequire } from 'node:module';
+      import { pathToFileURL } from 'node:url';
+      const require = createRequire(import.meta.url);
+      registerHooks({resolve(specifier, context, next) { return next(specifier === 'better-sqlite3' ? process.env.TEST_NATIVE_MAIN : specifier, context); }});
+      try {
+        await import(pathToFileURL(process.env.TEST_LOCAL_DB_SOURCE));
+        if (Object.keys(require.cache).some(path => path.endsWith('.node'))) throw new Error('preflight loaded an addon');
+        console.log('preflight-only');
+      } catch (error) { console.error(JSON.stringify({code:error.code})); process.exitCode=1; }
+    `], {encoding:'utf8', timeout:10_000, env:{...process.env, TEST_NATIVE_MAIN:join(root, 'lib/index.js'), TEST_LOCAL_DB_SOURCE:source}});
+    expect(result.status, result.stderr).toBe(kind === 'valid' ? 0 : 1);
+    if (kind === 'valid') expect(result.stdout).toBe('preflight-only\n');
+    else expect(JSON.parse(result.stderr).code).toBe('POPCLAW_PLATFORM_DEPENDENCY_MISSING');
+  });
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)('preserves dependency access errors', () => {
+    const {root, dependencyRoot} = platformFixture();
+    chmodSync(join(dependencyRoot, 'build'), 0);
+    try {const result = probe(root); expect(result.status).toBe(1); expect(JSON.parse(result.stderr).code).toBe('EACCES');}
+    finally {chmodSync(join(dependencyRoot, 'build'), 0o755);}
+  });
+});

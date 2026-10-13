@@ -86,6 +86,7 @@ export function bundleInputPaths(pkgRoot: string): string[] {
     join(pkgRoot, 'scripts/prepare-native-deps.mjs'),
     join(pkgRoot, 'scripts/native-runtime-manifest.mjs'),
     join(pkgRoot, 'scripts/native-binding-loader.cjs'),
+    join(pkgRoot, 'scripts/native-binding-path.cjs'),
     join(pkgRoot, 'scripts/prepare-native-world.ts'),
     join(pkgRoot, 'scripts/bundle-licenses.mjs'),
     join(pkgRoot, 'package.json'),
