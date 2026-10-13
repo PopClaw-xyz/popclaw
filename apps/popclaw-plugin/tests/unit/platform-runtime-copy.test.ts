@@ -51,6 +51,9 @@ describe('ClawHub portable setup runtime',()=>{
     const plan=runtimePlan(f.source,join(f.base,'stable'));
     const dest=copyRuntime(plan);
     expect(copyRuntime(plan)).toBe(dest);
+    const repeated = runtimePlan(dest, join(f.base, 'stable'));
+    expect(repeated.digest).toBe(plan.digest);
+    expect(repeated.target).toBe(dest);
     expect(existsSync(join(dest,'node_modules'))).toBe(false);
     expect(existsSync(join(dest,'package-lock.json'))).toBe(false);
     const native=join(dest,'dist/native-deps/better-sqlite3');

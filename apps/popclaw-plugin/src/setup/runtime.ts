@@ -83,7 +83,17 @@ function runtimeInputs(source: string) {
       package: platform.entry,
     });
   }
-  return {files: platform ? Object.fromEntries(Object.entries(files).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : files, inputs};
+  // Match inventory's depth-first, sorted directory entries. Sorting whole
+  // paths would put sqlite3.gyp before the sqlite3/ directory and change the
+  // digest when setup is run again from the materialized, marker-free copy.
+  const compare = (a: string, b: string) => {
+    const left = a.split('/'), right = b.split('/');
+    for (let i = 0; i < Math.min(left.length, right.length); i++) {
+      if (left[i] !== right[i]) return left[i]! < right[i]! ? -1 : 1;
+    }
+    return left.length - right.length;
+  };
+  return {files: platform ? Object.fromEntries(Object.entries(files).sort(([a], [b]) => compare(a, b))) : files, inputs};
 }
 // Generated platform files have a deterministic order; compare by content.
 function sameFiles(a: Record<string, string>, b: Record<string, string>) {
