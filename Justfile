@@ -20,23 +20,37 @@ build:
 
 test:
     python3 scripts/test-release-retained-both.py
+    python3 -m unittest discover -s scripts/tests -p 'test_verify_retained_clawhub.py'
+    node --test scripts/tests/publish-clawhub-native.test.mjs
+    node --test apps/popclaw-plugin/scripts/tests/clawhub-platform-package.fixture.mjs
     pnpm --filter popclaw test
 
 lint:
     pnpm --filter popclaw lint
 
-pack-plugin:
+pack-plugin $PROFILE="full" $FULL_TARBALL="" $DEST="/tmp/popclaw":
     #!/usr/bin/env bash
     set -euo pipefail
+    case "$PROFILE" in
+      clawhub)
+        node apps/popclaw-plugin/scripts/clawhub-platform-package.mjs --full-tarball "$FULL_TARBALL" --dest "$DEST"
+        exit
+        ;;
+      full)
+        [ -z "$FULL_TARBALL" ] || { echo "pack aborted: FULL_TARBALL is only valid with the clawhub profile." >&2; exit 1; }
+        ;;
+      *) echo "pack aborted: PROFILE must be full or clawhub." >&2; exit 1 ;;
+    esac
+    mkdir -p "$DEST"
+    dest=$(cd "$DEST" && pwd)
     cd apps/popclaw-plugin
-    mkdir -p /tmp/popclaw
-    pnpm pack --pack-destination /tmp/popclaw >/dev/null   # runs prepack → build:bundle
+    pnpm pack --pack-destination "$dest" >/dev/null   # runs prepack → build:bundle
     version=$(node -p "require('./package.json').version")
     sha=$(git rev-parse --short HEAD)
     ts=$(TZ='Asia/Shanghai' date +%Y-%m-%d-%H%M)   # owner tz UTC+8 (Beijing)
     dirty=""; [ -z "$(git status --porcelain)" ] || dirty="-dirty"
-    src="/tmp/popclaw/popclaw-${version}.tgz"
-    dst="/tmp/popclaw/popclaw-plugin-${version}+${ts}-${sha}${dirty}.tgz"
+    src="$dest/popclaw-${version}.tgz"
+    dst="$dest/popclaw-plugin-${version}+${ts}-${sha}${dirty}.tgz"
     mv "$src" "$dst"
     # A tarball missing prebuilt bindings installs fine on the packer's own
     # machine and dies on everyone else's — the failure surfaces days later, on

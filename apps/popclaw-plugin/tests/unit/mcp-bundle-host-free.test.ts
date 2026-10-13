@@ -99,11 +99,11 @@ describe('the artifacts that run where openclaw is not installed', () => {
     }
   });
 
-  it('keeps all distributed JavaScript below 10 MiB to leave registry headroom', () => {
+  it('keeps all distributed JavaScript below 4.5 MiB to retain the minification savings', () => {
     const files = readdirSync(BUNDLED, { recursive: true, withFileTypes: true })
       .filter((file) => file.isFile() && file.name.endsWith('.js'));
     const bytes = files.reduce((total, file) => total + statSync(join(file.parentPath, file.name)).size, 0);
-    expect(bytes, 'total JavaScript bytes across entries and shared chunks').toBeLessThanOrEqual(10 * 1024 * 1024);
+    expect(bytes, 'total JavaScript bytes across entries and shared chunks').toBeLessThanOrEqual(4.5 * 1024 * 1024);
   });
 
   /**
