@@ -65,6 +65,8 @@ const NATIVE_BINDING = resolveNativeBinding();
  * See bug report "host-c dispatch chain ①".
  */
 export function isNativeLoadError(err: Error): boolean {
+  if (('code' in err && (err.code === 'EACCES' || err.code === 'EPERM'))
+    || /permission denied|operation not permitted/i.test(err.message)) return false;
   if ('code' in err && err.code === 'POPCLAW_NATIVE_BINDING_MISSING') return true;
   return /invalid ELF header|NODE_MODULE_VERSION|wrong ELF class|incompatible architecture|wrong architecture|not a valid Win32 application|Module did not self-register|undefined symbol|cannot open shared object/i.test(
     err.message,

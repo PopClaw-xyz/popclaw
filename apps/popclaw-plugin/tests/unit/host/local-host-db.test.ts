@@ -25,6 +25,12 @@ describe('isNativeLoadError (native rebuild gate — bug host-c 派发链 ①)',
     expect(isNativeLoadError(Object.assign(new Error('Permission denied'), {code: 'EACCES'}))).toBe(false);
   });
 
+  it('keeps loader permission refusals out of ABI rebuild handling', () => {
+    expect(isNativeLoadError(Object.assign(new Error('cannot open shared object file: Permission denied'), {code: 'ERR_DLOPEN_FAILED'}))).toBe(false);
+    expect(isNativeLoadError(Object.assign(new Error('cannot open shared object file'), {code: 'EACCES'}))).toBe(false);
+    expect(isNativeLoadError(Object.assign(new Error('cannot open shared object file: Operation not permitted'), {code: 'EPERM'}))).toBe(false);
+  });
+
   it('does NOT flag ordinary SQLite open errors → no pointless rebuild', () => {
     for (const m of [
       'SQLITE_CANTOPEN: unable to open database file',
