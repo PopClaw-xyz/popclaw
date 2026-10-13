@@ -28,8 +28,10 @@ function json(path) {
   const bytes = readFileSync(path, 'utf8');
   try { return JSON.parse(bytes); } catch { throw invalid(`invalid JSON at ${path}`); }
 }
-function regular(path, directory = false) {
-  const stat = lstatSync(path);
+function regular(path, directory = false, capturedBinding = false) {
+  // OpenClaw captures native files as symlinks. Pin the final regular file
+  // by content, while keeping metadata and directory checks strict.
+  const stat = capturedBinding ? statSync(path) : lstatSync(path);
   if (stat.isSymbolicLink() || !(directory ? stat.isDirectory() : stat.isFile())) throw invalid(`unexpected file type at ${path}`);
   return stat;
 }
@@ -80,7 +82,7 @@ function platformBindings(root) {
     regular(join(dependencyRoot, 'build'), true); regular(join(dependencyRoot, 'build/Release'), true);
     const bindings = entry.bindings.map(binding => {
       const path = join(dependencyRoot, 'build/Release', binding.file);
-      const stat = regular(path);
+      const stat = regular(path, false, true);
       if (stat.size !== binding.size || createHash('sha256').update(readFileSync(path)).digest('hex') !== binding.sha256) throw invalid(`incorrect bytes for ${entry.name}/${binding.file}`);
       return {...binding, path};
     });

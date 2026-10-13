@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -191,6 +191,17 @@ describe('ClawHub platform dependencies', () => {
     const result = probe(root);
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({ok: true, value: 'same-driver'});
+  });
+  it('accepts a captured addon symlink only when its final regular-file bytes match the pin', () => {
+    const {root, dependencyRoot, selected} = platformFixture();
+    const row = selected.bindings.find(row => row.nodeMajor === Number(process.versions.node.split('.')[0]))!;
+    const target = join(dependencyRoot, 'build/Release', row.file);
+    rmSync(target); symlinkSync(binding, target);
+    expect(probe(root).status).toBe(0);
+    rmSync(target);
+    const changed = join(root, 'changed.node'); writeFileSync(changed, 'wrong bytes'); symlinkSync(changed, target);
+    const rejected = probe(root); expect(rejected.status).toBe(1);
+    expect(JSON.parse(rejected.stderr).code).toBe('POPCLAW_PLATFORM_DEPENDENCY_INVALID');
   });
   it.each(['missing', 'version', 'current-bytes', 'other-abi-bytes', 'metadata'])('rejects %s without falling through to the compiler path', kind => {
     const {root, dependencyRoot, selected} = platformFixture();
