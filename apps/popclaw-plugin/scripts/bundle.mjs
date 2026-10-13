@@ -1,8 +1,8 @@
 /**
- * Bundle src/index.ts into a single ESM file with all workspace + npm deps
- * inlined. The OpenClaw plugin loader expects a self-contained JS file
- * because pnpm workspace `workspace:*` specifiers don't resolve via npm
- * install inside the plugin's install directory.
+ * Bundle the five entry points into ESM files with shared dependency chunks.
+ * All workspace + npm JavaScript stays inside dist/bundled: workspace:*
+ * specifiers do not resolve in an installed plugin. Distribute the whole
+ * directory, including its shared chunks and third-party licenses.
  *
  * External (not bundled):
  *   - `openclaw` (peer dep; provided by the host)
@@ -13,11 +13,11 @@
  *     `scripts/prepare-native-deps.mjs`; the banner below patches Node's
  *     module resolver to map these names to that vendored directory.
  *
- * Output: dist/bundled/index.js
+ * Output: dist/bundled/*.js and dist/bundled/licenses/
  */
 import { build } from 'esbuild';
 import { execSync } from 'node:child_process';
-import { chmodSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { buildIntegrityWorker } from './build-integrity-worker.mjs';
@@ -58,7 +58,10 @@ const shared = {
   target: 'node22',
   external: ['openclaw', 'openclaw/*', 'better-sqlite3', 'bindings', 'file-uri-to-path'],
   sourcemap: false,
-  minify: false,
+  // Remove whitespace only: preserve identifiers, function names and syntax.
+  minifyWhitespace: true,
+  minifyIdentifiers: false,
+  minifySyntax: false,
   // Third-party license comments (e.g. noble-curves/noble-hashes/scure-base's
   // `/*! ... MIT License ... */` headers) already survive under esbuild's
   // own default for bundle:true ('eof'). Set explicitly anyway so this
@@ -90,8 +93,9 @@ const shared = {
   },
 };
 
-// Same banner for both entries (native-deps resolver + createRequire); the MCP
-// entry additionally gets a shebang because it is the `popclaw-mcp` bin.
+// Every entry and shared chunk stays at the same depth beside native-deps.
+// Each may contain CommonJS dependencies, so each needs the resolver banner.
+// A shebang is valid on imported chunks too; executable bits stay on bins only.
 const bannerLines = [
   // Node.js' ESM import of CommonJS packages needs `createRequire` injected
   // for a few deps (pino, protobufjs) that still ship CJS.
@@ -118,56 +122,36 @@ const bannerLines = [
   `};`,
 ];
 
-// Every distributed entry's result is kept: the license closure below is
-// computed over all of their metafiles, not the plugin entry's alone.
-const entryResults = [];
-entryResults.push(await build({
+// Clear obsolete hashed chunks before writing a complete output graph. Otherwise
+// a second build could silently ship old code and inflate the package again.
+const bundledDir = resolve(root, 'dist/bundled');
+// build:protocol already wrote public-envelope-notices here. Keep that
+// directory intact; the license collector separately refreshes its own output.
+if (existsSync(bundledDir)) {
+  for (const file of readdirSync(bundledDir, { withFileTypes: true })) {
+    if (file.isFile() && file.name.endsWith('.js')) rmSync(resolve(bundledDir, file.name));
+  }
+}
+const entryResult = await build({
   ...shared,
-  entryPoints: [resolve(root, 'src/index.ts')],
-  outfile: resolve(root, 'dist/bundled/index.js'),
-  banner: { js: bannerLines.join('\n') },
-}));
-
-// The `popclaw-mcp` bin: same core, third composition root (stdio MCP server).
-entryResults.push(await build({
-  ...shared,
-  entryPoints: [resolve(root, 'src/mcp.ts')],
-  outfile: resolve(root, 'dist/bundled/mcp.js'),
+  entryPoints: {
+    index: resolve(root, 'src/index.ts'),
+    mcp: resolve(root, 'src/mcp.ts'),
+    'mcp-hook': resolve(root, 'src/mcp-hook.ts'),
+    cli: resolve(root, 'src/main.ts'),
+    'prepare-native-world': resolve(root, 'scripts/prepare-native-world.ts'),
+  },
+  outdir: bundledDir,
+  splitting: true,
+  chunkNames: 'shared-[hash]',
   banner: { js: ['#!/usr/bin/env node', ...bannerLines].join('\n') },
-}));
-// npm sets the exec bit on `bin` targets at install time; do it here too so the
-// bundle is runnable straight out of the build dir.
-chmodSync(resolve(root, 'dist/bundled/mcp.js'), 0o755);
-
-entryResults.push(await build({
-  ...shared,
-  entryPoints: [resolve(root, 'src/mcp-hook.ts')],
-  outfile: resolve(root, 'dist/bundled/mcp-hook.js'),
-  banner: { js: ['#!/usr/bin/env node', ...bannerLines].join('\n') },
-}));
-chmodSync(resolve(root, 'dist/bundled/mcp-hook.js'), 0o755);
-
-// Standalone command entry; the plugin owns `popclaw`, while the MCP package
-// retains its separate `popclaw-mcp` and `popclaw-mcp-hook` names.
-entryResults.push(await build({
-  ...shared,
-  entryPoints: [resolve(root, 'src/main.ts')],
-  outfile: resolve(root, 'dist/bundled/cli.js'),
-  banner: { js: ['#!/usr/bin/env node', ...bannerLines].join('\n') },
-}));
-chmodSync(resolve(root, 'dist/bundled/cli.js'), 0o755);
-
-// Explicit offline maintenance entry, distributed with the same native runtime.
-entryResults.push(await build({
-  ...shared,
-  entryPoints: [resolve(root, 'scripts/prepare-native-world.ts')],
-  outfile: resolve(root, 'dist/bundled/prepare-native-world.js'),
-  banner: { js: ['#!/usr/bin/env node', ...bannerLines].join('\n') },
-}));
-chmodSync(resolve(root, 'dist/bundled/prepare-native-world.js'), 0o755);
+});
+for (const entry of ['mcp', 'mcp-hook', 'cli', 'prepare-native-world']) {
+  chmodSync(resolve(bundledDir, `${entry}.js`), 0o755);
+}
 
 // License closure of the ACTUAL bundle inputs of EVERY distributed file: each
-// entry above plus the schema worker embedded into all of them. Every
+// entry and shared chunk, plus the two embedded workers. Every
 // third-party package whose code was inlined anywhere gets its full LICENSE
 // (and NOTICE, if any) shipped beside the bundle (esbuild's legalComments:eof
 // preserves /*! */ headers, but that alone does not carry a package's full
@@ -175,7 +159,7 @@ chmodSync(resolve(root, 'dist/bundled/prepare-native-world.js'), 0o755);
 // workspace-internal inputs are not part of the closure. The vendored
 // smol-toml license rides along byte-exact.
 const licensed = collectBundleLicenses({
-  metafiles: [schemaWorker.metafile, integrityWorker.metafile, ...entryResults.map((r) => r.metafile)],
+  metafiles: [schemaWorker.metafile, integrityWorker.metafile, entryResult.metafile],
   baseDir: root,
   licensesDir: resolve(root, 'dist/bundled/licenses'),
   vendored: [{ label: 'smol-toml@vendored', file: resolve(root, 'src/setup/vendor/smol-toml.LICENSE') }],
@@ -183,5 +167,5 @@ const licensed = collectBundleLicenses({
 console.log(`bundle licenses: shipped ${licensed.length} npm package licenses + vendored smol-toml`);
 
 console.log(
-  `bundled → dist/bundled/index.js + dist/bundled/mcp.js + dist/bundled/mcp-hook.js + dist/bundled/cli.js + dist/bundled/prepare-native-world.js  [build ${BUILD_STAMP}]`,
+  `bundled → dist/bundled/index.js + dist/bundled/mcp.js + dist/bundled/mcp-hook.js + dist/bundled/cli.js + dist/bundled/prepare-native-world.js + shared chunks  [build ${BUILD_STAMP}]`,
 );

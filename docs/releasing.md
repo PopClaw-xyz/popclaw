@@ -21,6 +21,23 @@ if the shell tarball contains any `dist/`, `native-deps`, `migrations` or
 exact same string as the plugin's version. Neither guard may be loosened to let
 one recipe serve both packages.
 
+The five JavaScript entries share ESM chunks in `dist/bundled/`. Always ship
+that whole directory: copying only an entry file drops required imports. Every
+chunk stays beside the entries so native bindings and resource paths keep their
+existing layout. The build removes obsolete JavaScript chunks, preserves the
+pinned protocol notices, and collects licenses from all entries, shared chunks,
+and both embedded workers. Whitespace is compressed; identifiers and function
+names remain intact. The bundle regression suite enforces a 10 MiB JavaScript
+budget and exercises the CLI and MCP entries outside the source checkout.
+
+ClawHub accepts at most 50 MiB of expanded package files. Before publishing,
+measure the regular-file total in the exact release tarball and keep it below
+40 MiB, leaving at least 10 MiB for growth. Retain every native platform binding
+and the SQLite sources used by the fallback build. After npm verification,
+upload those same tarball bytes to ClawHub; do not repack an existing version.
+Use the public tag and commit as source provenance, run ClawHub validation and a
+publish dry run first, then verify the downloadable package digest after upload.
+
 Full packing requires Darwin. The release job uses GitHub-hosted `macos-15`
 (arm64): clang builds `darwin-arm64` and `darwin-x64`; official better-sqlite3
 release assets supply `linux-arm64`, `linux-x64` and `win32-x64`. Each target

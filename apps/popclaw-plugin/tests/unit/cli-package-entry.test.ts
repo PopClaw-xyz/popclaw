@@ -52,16 +52,18 @@ describe('standalone popclaw CLI source packaging', () => {
       entryPoints: [resolve(root, 'src/host/schema-validator-worker.ts')],
       format: 'cjs', write: false,
     }));
-    for (const entry of ['index', 'mcp', 'mcp-hook', 'cli']) {
-      expect(mocks.build).toHaveBeenCalledWith(expect.objectContaining({
-        outfile: resolve(root, `dist/bundled/${entry}.js`),
-        define: expect.objectContaining({ __POPCLAW_SCHEMA_WORKER_SOURCE__: JSON.stringify(mocks.workerSource) }),
-      }));
-    }
     expect(mocks.build).toHaveBeenCalledWith(expect.objectContaining({
-      entryPoints: [resolve(root, 'src/main.ts')],
-      outfile: resolve(root, 'dist/bundled/cli.js'),
+      entryPoints: {
+        index: resolve(root, 'src/index.ts'),
+        mcp: resolve(root, 'src/mcp.ts'),
+        'mcp-hook': resolve(root, 'src/mcp-hook.ts'),
+        cli: resolve(root, 'src/main.ts'),
+        'prepare-native-world': resolve(root, 'scripts/prepare-native-world.ts'),
+      },
+      outdir: resolve(root, 'dist/bundled'),
+      splitting: true,
       format: 'esm',
+      define: expect.objectContaining({ __POPCLAW_SCHEMA_WORKER_SOURCE__: JSON.stringify(mocks.workerSource) }),
       banner: { js: expect.stringMatching(/^#!\/usr\/bin\/env node\n/) },
     }));
     expect(mocks.chmod).toHaveBeenCalledWith(resolve(root, 'dist/bundled/cli.js'), 0o755);
