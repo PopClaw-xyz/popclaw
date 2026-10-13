@@ -105,11 +105,15 @@ Dispatch a dry run first with these fixed inputs:
 | `dry_run` | `true` for preparation; `false` for native publication |
 | `resume_from_run_id` | Empty initially; the prior native workflow run for exact-byte reuse |
 
-The source run must be complete and have a successful package-smoke step in
-its actual run attempt. A later registry publication failure does not discard
-valid retained bytes. The verifier checks the repository, workflow, tag,
-commit, artifact identity, expiry and retained hashes before deriving anything.
-It separately records the source archive commit and the workflow revision.
+The source run must use event `push` or `workflow_dispatch`, have `head_branch`
+equal to the exact tag and `head_sha` equal to `expected_source_commit`, and
+finish with conclusion `success` or `failure`. Its actual run attempt must have
+a successful package-smoke step. Dispatch the complete release on the tag,
+not on `main`. A later registry publication failure does not discard valid
+retained bytes. The verifier checks the repository, workflow, tag, commit,
+artifact identity, expiry and retained hashes before deriving anything. The
+retained context records the source archive identity; GitHub run metadata
+records the native workflow revision that performed preparation/publication.
 
 Preparation derives all six archives through the explicit ClawHub pack
 profile, independently compares them with the complete archive, and runs real
@@ -131,7 +135,9 @@ and `resume_from_run_id` set to that native run. The workflow downloads those
 same six archives without repacking, rechecks the complete source and both
 Node runtimes, and preflights all five registry names before any publication.
 A missing name stops the run with `BOOTSTRAP_REQUIRED`. Existing versions must
-match the retained SHA-512 and carry an attestation. Only missing versions are
+match the retained archive digest and carry an attestation. The shared verifier
+uses SHA-512 integrity, or its existing SHA-1 shasum fallback when integrity is
+absent. Only missing versions are
 published with OIDC/provenance, and each is verified before the next begins.
 On partial failure, resume from the run retaining those exact bytes; never
 rebuild or replace a published version. The original complete-source artifact
