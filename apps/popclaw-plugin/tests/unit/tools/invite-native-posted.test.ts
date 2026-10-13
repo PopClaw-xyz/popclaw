@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module';
+import { readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { registerPopclawTools } from '../../../src/tools/register-tools.js';
 import { withOpenClawNotifyRoute } from '../../../src/host/openclaw-notify-route.js';
 import { actionFetch, withAction } from '../../../src/runtime/house-lifecycle/action-context.js';
@@ -52,6 +56,16 @@ function fixture() {
     setIdentity: (value: typeof identity | null) => {currentIdentity = value;},
     delay: (fn: () => Promise<void>) => {beforeEgress = fn;} };
 }
+let recordNativeResult: (result: unknown) => unknown;
+beforeAll(async () => {
+  const require = createRequire(import.meta.url);
+  const dist = dirname(dirname(require.resolve('openclaw/plugin-sdk/plugin-entry')));
+  const file = readdirSync(dist).find(name => name.startsWith('nested-tool-activity-') && name.endsWith('.mjs'));
+  if (!file) throw new Error('Pinned OpenClaw nested tool activity schema is unavailable');
+  const { t: createActivity } = await import(/* @vite-ignore */ pathToFileURL(join(dist, file)).href);
+  recordNativeResult = result => createActivity({runId:'run', scopeId:'scope', afterEntryId:null, startOrder:0,
+    toolCallId:'invite', toolName:'popclaw_invite', input:{}, result, isError:false, startedAt:1, timestamp:2});
+});
 const prepare = (tool: Tool, handle = 'first') => tool.execute('prepare', {platform: 'x', handle});
 beforeEach(() => { _draftsForTest.clear(); setOwnerLang('en', 'config'); });
 
@@ -158,5 +172,48 @@ describe('native invitation preparation and owner posting acknowledgement', () =
     expect((await t.execute('bad', {posted:true, proof_url:''})).isError).toBe(true); expect(fx.initiate).not.toHaveBeenCalled();
     await t.execute('good', {posted:true, proof_url:'https://x.com/first/status/123'});
     expect(fx.initiate).toHaveBeenCalledWith(expect.objectContaining({proofUrl:'https://x.com/first/status/123'}));
+  });
+});
+
+
+describe('native invitation result delivery through the pinned host schema', () => {
+  it.each([false, true])('delivers prepared copy without runtime or notices (prepare_only=%s)', async prepareOnly => {
+    const fx = fixture(); const t = fx.tool(fx.context('one'));
+    const result = await t.execute('prepare', {platform:'x', handle:'first', ...(prepareOnly ? {prepare_only:true} : {})});
+    expect(() => recordNativeResult(result)).not.toThrow();
+    expect(result).toMatchObject({content:[{type:'text', text:result.text}]});
+    const copy = JSON.parse(result.text);
+    expect(copy.status).toBe('prepared'); expect(copy.postable_copy).toContain(copy.invite_url);
+    expect(fx.runtime).not.toHaveBeenCalled(); expect(fx.notice).not.toHaveBeenCalled();
+    expect(fx.captureRoute).not.toHaveBeenCalled(); expect(fx.initiate).not.toHaveBeenCalled();
+  });
+  it('delivers input errors without disguising them as host schema errors', async () => {
+    const fx = fixture(); const result = await fx.tool(fx.context('one')).execute('invalid', {platform:'x', handle:'bad handle'});
+    expect(result.isError).toBe(true); expect(() => recordNativeResult(result)).not.toThrow();
+    expect(fx.initiate).not.toHaveBeenCalled(); expect(fx.runtime).not.toHaveBeenCalled();
+  });
+  it.each(['sync', 'replace', 'nickname'])('keeps local %s preview control fields after formatting', async key => {
+    const fx = fixture(); const t = fx.tool(fx.context('one')); await prepare(t);
+    const result = await t.execute('preview', {posted:true, [key]:key === 'nickname' ? 'Other' : true});
+    expect(() => recordNativeResult(result)).not.toThrow();
+    expect(result).toMatchObject({owner_action_required:true, content:[{type:'text', text:result.text}]});
+    expect(fx.runtime).not.toHaveBeenCalled(); expect(fx.notice).not.toHaveBeenCalled();
+    expect(fx.captureRoute).not.toHaveBeenCalled(); expect(fx.initiate).not.toHaveBeenCalled();
+  });
+  it('delivers the posted receipt, submits once, and announces the approved result', async () => {
+    vi.useFakeTimers();
+    try {
+      const fx = fixture(); fx.track(); const t = fx.tool(fx.context('one'));
+      const prepared = await prepare(t); expect(() => recordNativeResult(prepared)).not.toThrow();
+      const receipt = await t.execute('posted', {posted:true});
+      expect(() => recordNativeResult(receipt)).not.toThrow();
+      expect(receipt.text).not.toContain('confirm_token'); expect(fx.initiate).toHaveBeenCalledOnce();
+      expect(fx.captureRoute).toHaveBeenCalledOnce();
+      const duplicate = await t.execute('duplicate', {posted:true});
+      expect(duplicate.isError).toBe(true); expect(() => recordNativeResult(duplicate)).not.toThrow();
+      expect(fx.initiate).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(fx.watchNetwork).toHaveBeenCalledOnce(); expect(fx.notify).toHaveBeenCalledOnce();
+    } finally {vi.clearAllTimers(); vi.useRealTimers();}
   });
 });

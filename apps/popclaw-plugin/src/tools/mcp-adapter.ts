@@ -176,7 +176,12 @@ export function withNativeToolNotice(api: ToolCollector['api'] | {registerTool: 
     if (!t || typeof t.execute !== 'function' || typeof t.name !== 'string') return tool;
     const execute = t.execute;
     return {...t, execute: async (id: string, params: unknown, signal?: AbortSignal, ...rest: unknown[]) => {
-      if (isLocalInviteCall(typeof t.name === 'string' ? t.name : '', params)) return (execute as (...args: unknown[]) => Promise<unknown>)(id, params, signal, ...rest);
+      if (isLocalInviteCall(t.name!, params)) {
+        const result = await (execute as (...args: unknown[]) => Promise<unknown>)(id, params, signal, ...rest);
+        // Skip notices, not the host result contract. Outer route handling still
+        // needs control fields such as owner_action_required for local previews.
+        return {...(result as object), ...toMcpToolResult(result)};
+      }
       const result = await (execute as (...args: unknown[]) => Promise<unknown>)(id, params, signal, ...rest);
       return decorateToolNotice(t.name!, toMcpToolResult(result), async () => offerToolNotice(await context(signal)));
     }};
