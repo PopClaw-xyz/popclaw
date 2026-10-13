@@ -3,6 +3,22 @@
 Every entry says whether the wire protocol is affected. "Protocol: none"
 means a client or house built against the stated bundle keeps working.
 
+<a id="013"></a>
+## 0.1.3 — Release candidate
+
+**Protocol:** none. The pinned signed-event protocol and vault format are unchanged.
+
+- Preserve native invite result content when notification decoration is skipped.
+  Invite cards and native `_posted` evidence remain visible to the host.
+- Share bundled JavaScript dependencies across the plugin, CLI, MCP, hook and
+  maintenance entries. Compress whitespace while preserving function names,
+  third-party licenses, SQLite fallback sources and every native platform binding.
+- Add coverage for the complete static import graph, host-free MCP startup,
+  lazy CLI help, protocol notices and a 10 MiB JavaScript budget.
+
+Publication and exact-tarball verification are pending. Source checks alone do
+not establish npm, ClawHub or host acceptance.
+
 <a id="012"></a>
 ## 0.1.2 — Developer Preview; npm published
 
