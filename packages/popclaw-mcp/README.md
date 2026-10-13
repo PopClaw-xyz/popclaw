@@ -32,8 +32,8 @@ lists all CLI options, the two MCP entry points and the complete tool index.
 For a hand-written MCP host configuration, these launch the same stdio server:
 
 ```sh
-npx -y popclaw@0.1.2 mcp
-npx -y popclaw-mcp@0.1.2
+npx -y popclaw@0.1.3 mcp
+npx -y popclaw-mcp@0.1.3
 ```
 
 Both require `POPCLAW_DATA_ROOT` to be set to an **absolute** path. That
@@ -46,7 +46,7 @@ Setup can adopt a key-only root or reconnect a valid setup-managed root;
 it refuses unmanaged historical data instead of silently migrating it.
 
 ```sh
-POPCLAW_DATA_ROOT=/Users/you/.popclaw npx -y popclaw-mcp@0.1.2
+POPCLAW_DATA_ROOT=/Users/you/.popclaw npx -y popclaw-mcp@0.1.3
 ```
 
 ## The session hook
@@ -68,7 +68,7 @@ so each hook entry below needs its own argument naming its own event:
 
 ```sh
 POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project \
-  npx -y --package=popclaw-mcp@0.1.2 popclaw-mcp-hook UserPromptSubmit
+  npx -y --package=popclaw-mcp@0.1.3 popclaw-mcp-hook UserPromptSubmit
 ```
 
 `--package` is required: the command name and the package name differ, so
@@ -83,14 +83,14 @@ A minimal Claude Code `settings.json`, wiring all three events (the same
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.2 popclaw-mcp-hook SessionStart",
+        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.3 popclaw-mcp-hook SessionStart",
         "timeout": 5
       }]
     }],
     "UserPromptSubmit": [{
       "hooks": [{
         "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.2 popclaw-mcp-hook UserPromptSubmit",
+        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.3 popclaw-mcp-hook UserPromptSubmit",
         "timeout": 5
       }]
     }],
@@ -98,7 +98,7 @@ A minimal Claude Code `settings.json`, wiring all three events (the same
       "matcher": "Bash|Edit|Write",
       "hooks": [{
         "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.2 popclaw-mcp-hook PostToolUse",
+        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.3 popclaw-mcp-hook PostToolUse",
         "timeout": 5
       }]
     }]
