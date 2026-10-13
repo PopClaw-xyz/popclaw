@@ -1,9 +1,10 @@
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { spawnSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { ensureBundle } from '../helpers/ensure-bundle.js';
 
 /**
@@ -38,7 +39,7 @@ import { ensureBundle } from '../helpers/ensure-bundle.js';
  *
  *   1. It reads the artifact and refuses static host-package import SYNTAX in
  *      general, so a fourth specifier is caught without being listed — with a
- *      positive control on `index.js` so a regex that stops matching goes red
+ *      positive control on `index.js` so a parser that stops matching goes red
  *      instead of passing everything.
  *   2. It boots the shipped file in a resolution environment where `openclaw`
  *      genuinely cannot be found, and gets to `tools/list`. That is the
@@ -53,36 +54,62 @@ const MCP_PATH = join(BUNDLED, 'mcp.js');
  *  satisfying any of them — see the file's own header. */
 const PRELOAD = join(PKG_ROOT, 'tests/helpers/openclaw-resolution-preload.mjs');
 
-/**
- * STATIC ESM SYNTAX NAMING THE HOST PACKAGE — the three shapes a bundle can
- * carry, for ANY subpath:
- *
- *   `import … from "openclaw/x"`, `export … from "openclaw/x"`, and the bare
- *   side-effect `import "openclaw/x"`.
- *
- * A dynamic `import("openclaw/x")` is deliberately NOT matched: that is the
- * posture this module wants — resolution attempted at the moment of use, where
- * a failure is a refusal rather than a dead process.
- *
- * Deliberately not a list of known specifiers. The three that broke production
- * were found by diffing two bundles; a test that names them proves only that
- * those three are gone.
+/** Follow static imports and re-exports through the complete shipped graph.
+ * Dynamic host imports stay lazy and are intentionally excluded. Parsing also
+ * recognises minified syntax without mistaking embedded worker strings for imports.
  */
-const STATIC_HOST_IMPORT = /(?:\bfrom\s*|(?:^|[\s;})])import\s*)(["'])openclaw(?:\/[^"']*)?\1/g;
-
-function staticHostImports(file: string): string[] {
-  return readFileSync(file, 'utf8').match(STATIC_HOST_IMPORT)?.map((hit) => hit.trim()) ?? [];
+function staticHostImports(file: string, seen = new Set<string>()): string[] {
+  if (seen.has(file)) return [];
+  seen.add(file);
+  const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, false, ts.ScriptKind.JS);
+  return source.statements.flatMap((statement) => {
+    if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) return [];
+    const specifier = statement.moduleSpecifier;
+    if (!specifier || !ts.isStringLiteral(specifier)) return [];
+    const name = specifier.text;
+    if (name === 'openclaw' || name.startsWith('openclaw/')) return [`${file}: ${name}`];
+    return name.startsWith('.') ? staticHostImports(resolve(dirname(file), name), seen) : [];
+  });
 }
+
+describe('static bundle graph measurement', () => {
+  it('finds a host import behind re-exports and cycles while allowing lazy imports', () => {
+    const root = mkdtempSync(join(tmpdir(), 'popclaw-static-graph-'));
+    try {
+      writeFileSync(join(root, 'entry.js'), 'export * from "./shared.js";');
+      writeFileSync(join(root, 'shared.js'), 'import "./entry.js";import("openclaw/lazy");');
+      expect(staticHostImports(join(root, 'entry.js'))).toEqual([]);
+      writeFileSync(join(root, 'shared.js'), 'import "./entry.js";export{a}from"openclaw/hidden";');
+      expect(staticHostImports(join(root, 'entry.js'))).toEqual([`${join(root, 'shared.js')}: openclaw/hidden`]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('the artifacts that run where openclaw is not installed', () => {
   beforeAll(async () => {
     await ensureBundle(PKG_ROOT, MCP_PATH);
   }, 300_000);
 
+  it('preserves the pinned protocol LICENSE and NOTICE beside the chunks', () => {
+    for (const name of ['LICENSE', 'NOTICE']) {
+      expect(readFileSync(join(BUNDLED, 'public-envelope-notices', name)))
+        .toEqual(readFileSync(resolve(PKG_ROOT, '../../protocol', name)));
+    }
+  });
+
+  it('keeps all distributed JavaScript below 10 MiB to leave registry headroom', () => {
+    const files = readdirSync(BUNDLED, { recursive: true, withFileTypes: true })
+      .filter((file) => file.isFile() && file.name.endsWith('.js'));
+    const bytes = files.reduce((total, file) => total + statSync(join(file.parentPath, file.name)).size, 0);
+    expect(bytes, 'total JavaScript bytes across entries and shared chunks').toBeLessThanOrEqual(10 * 1024 * 1024);
+  });
+
   /**
    * THE MEASURING INSTRUMENT, CHECKED FIRST. `index.js` is the OpenClaw plugin
    * entry — the host loads it, so a static import there is correct and
-   * expected. If the pattern above ever stops recognising the syntax it is
+   * expected. If the parser above ever stops recognising the syntax it is
    * supposed to forbid, this control goes red and the host-free assertion below
    * cannot pass by finding nothing.
    */
@@ -125,10 +152,9 @@ interface JsonRpcFrame {
  * which resolves through the link. The bundle itself is a real copy, because
  * its own location is what Node's ESM resolver walks up from.
  */
-function isolatedRoot(entries: string[]): string {
+function isolatedRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'popclaw-host-free-'));
-  mkdirSync(join(root, 'bundled'));
-  for (const entry of entries) copyFileSync(join(BUNDLED, entry), join(root, 'bundled', entry));
+  cpSync(BUNDLED, join(root, 'bundled'), { recursive: true });
   symlinkSync(join(PKG_ROOT, 'dist/native-deps'), join(root, 'native-deps'));
   mkdirSync(join(root, 'data'));
   return root;
@@ -190,15 +216,24 @@ function frameReader(child: ChildProcessWithoutNullStreams) {
 
 describe('the shipped MCP roots, booted where openclaw cannot be resolved', () => {
   let root: string;
-  const entries = ['mcp.js', 'cli.js'];
 
   beforeAll(async () => {
     await ensureBundle(PKG_ROOT, MCP_PATH);
-    root = isolatedRoot(entries);
+    root = isolatedRoot();
   }, 300_000);
 
   afterAll(() => {
     if (root) rmSync(root, { recursive: true, force: true });
+  });
+
+  it('keeps CLI help on stdout without starting the lazy MCP entry', () => {
+    const result = spawnSync(process.execPath, [join(root, 'bundled/cli.js'), '--help'], {
+      cwd: root, encoding: 'utf8', timeout: 15_000,
+      env: { ...process.env, POPCLAW_DATA_ROOT: join(root, 'data') },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain('popclaw mcp');
+    expect(result.stdout).toContain('popclaw');
   });
 
   it.each([

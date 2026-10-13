@@ -1,7 +1,7 @@
 /**
  * Pre-pack hook: produce a stripped-down package.json for the tarball.
  *
- * The bundle at `dist/bundled/index.js` inlines every runtime dep
+ * The entries and shared chunks in `dist/bundled/` inline every runtime dep
  * (workspace + npm), so the shipped package.json needs zero
  * `dependencies`. Pruning them prevents OpenClaw's post-extract
  * `npm install` from trying to fetch non-existent registry versions
