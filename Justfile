@@ -20,6 +20,8 @@ build:
 
 test:
     python3 scripts/test-release-retained-both.py
+    python3 -m unittest discover -s scripts/tests -p 'test_verify_retained_clawhub.py'
+    node --test scripts/tests/publish-clawhub-native.test.mjs
     node --test apps/popclaw-plugin/scripts/tests/clawhub-platform-package.fixture.mjs
     pnpm --filter popclaw test
 
