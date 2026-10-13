@@ -13,9 +13,17 @@ errors propagate to the entry's existing error handling. Tracking follows the
 receipt's task id independently of HTTP status, matching the existing paths.
 
 Entries own platform/handle/proof validation, nickname defaults and sync or
-replacement flags. The tool also owns its preview, confirmation token, TTL and
-single-use draft flow. Preview must never resolve the runtime; the owner's
-default nickname is read only when confirming.
+replacement flags. Native preparation binds the latest account to the current
+owner conversation. An ordinary posting acknowledgement submits once without
+another preview; sync, replacement and nickname changes retain confirmation.
+Preview must never resolve the runtime; nickname defaults are read at submission.
+
+Native invite results always use the host's `content` array, including local
+preparation, previews, errors and posted receipts. Skipping notice decoration
+must not skip this conversion. Preserve `owner_action_required` until the outer
+notification-route adapter has consumed it so a local preview cannot boot the
+runtime. `invite-native-posted.test.ts` checks the actual pinned OpenClaw result
+schema and the preparation-to-result-notification path with a simulated House.
 
 `commands/invite.ts`, called by the public dev CLI, retains a separate protocol:
 it logs CLI-specific instructions and awaits `/v1/profile` verification or a
@@ -26,7 +34,7 @@ completion timing and argument semantics.
 Focused checks from `apps/popclaw-plugin`:
 
 ```sh
-pnpm exec vitest run --no-cache tests/unit/invite/submit-invite.test.ts tests/unit/invite/submission-characterization.test.ts tests/unit/tools/invite-tools.test.ts tests/unit/commands/invite.test.ts
+pnpm exec vitest run --no-cache tests/unit/invite/submit-invite.test.ts tests/unit/invite/submission-characterization.test.ts tests/unit/tools/invite-tools.test.ts tests/unit/tools/invite-native-posted.test.ts tests/unit/commands/invite.test.ts
 pnpm exec tsc --noEmit -p tsconfig.json
 ```
 
