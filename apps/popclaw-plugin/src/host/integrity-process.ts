@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
+import { resolveNativeBinding } from '../../scripts/native-binding-path.cjs';
 import { fileURLToPath } from 'node:url';
 import { recordIntegrityResults, type IntegrityFinding } from './integrity-check.js';
 import type { inspectIntegrityDatabase } from './integrity-probes.js';
@@ -23,10 +24,7 @@ export async function runIntegrityChecksInProcess(deps: {
  const bindings = require.resolve('bindings', {paths: [dirname(nativeModule)]});
  const nativeModules = {'better-sqlite3': nativeModule, bindings,
   'file-uri-to-path': require.resolve('file-uri-to-path', {paths: [dirname(bindings)]})};
- const nativeDir = join(dirname(dirname(nativeModule)), 'build', 'Release');
- const major = process.versions.node.split('.')[0];
- const nativeBinding = [`better_sqlite3-${process.platform}-${process.arch}-node${major}.node`, `better_sqlite3-node${major}.node`]
-  .map(name => join(nativeDir, name)).find(path => existsSync(path));
+ const nativeBinding = resolveNativeBinding(dirname(dirname(nativeModule)));
  const source = typeof __POPCLAW_INTEGRITY_WORKER_SOURCE__ === 'string' ? __POPCLAW_INTEGRITY_WORKER_SOURCE__ : undefined;
  const worker = new URL('./integrity-worker.js', import.meta.url);
  const args = source ? ['--input-type=commonjs', '-e', source]

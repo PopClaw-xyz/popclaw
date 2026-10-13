@@ -23,6 +23,7 @@ import { dirname, resolve } from 'node:path';
 import { buildIntegrityWorker } from './build-integrity-worker.mjs';
 import { buildSchemaWorker } from './build-schema-worker.mjs';
 import { collectBundleLicenses } from './bundle-licenses.mjs';
+import { bundleMinification } from './bundle-minification.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -58,17 +59,7 @@ const shared = {
   target: 'node22',
   external: ['openclaw', 'openclaw/*', 'better-sqlite3', 'bindings', 'file-uri-to-path'],
   sourcemap: false,
-  // Remove whitespace only: preserve identifiers, function names and syntax.
-  minifyWhitespace: true,
-  minifyIdentifiers: false,
-  minifySyntax: false,
-  // Third-party license comments (e.g. noble-curves/noble-hashes/scure-base's
-  // `/*! ... MIT License ... */` headers) already survive under esbuild's
-  // own default for bundle:true ('eof'). Set explicitly anyway so this
-  // stays true even if `minify` or esbuild's default ever changes — losing
-  // attribution notices we're obligated to ship (exit-review I-F) should
-  // never be a side effect of an unrelated option flip.
-  legalComments: 'eof',
+  ...bundleMinification,
   // The public protocol codec and algorithms resolve to the pinned protocol
   // bundle at the repository root — the same mapping as tsconfig.json paths
   // (kept in sync with

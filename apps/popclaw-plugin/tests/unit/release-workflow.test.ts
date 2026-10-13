@@ -54,7 +54,7 @@ describe('Justfile packs the two packages with two different guards', () => {
   const justfile = readFileSync(JUSTFILE, 'utf8');
 
   it('has a recipe for each package', () => {
-    expect(justfile).toMatch(/^pack-plugin:/m);
+    expect(justfile).toMatch(/^pack-plugin \$PROFILE="full" \$FULL_TARBALL="" \$DEST="\/tmp\/popclaw":$/m);
     expect(justfile).toMatch(/^pack-mcp-shell /m);
   });
 

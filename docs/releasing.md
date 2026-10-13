@@ -3,7 +3,7 @@
 How a release reaches npm, and what only a maintainer with registry access can
 do. The machinery is `.github/workflows/release.yml`.
 
-A release is **two packages**, published in one workflow run, in one order:
+The standard npm release is **two packages**, published in one workflow run, in one order:
 
 | package | what it is | packed by |
 |---|---|---|
@@ -14,8 +14,7 @@ A release is **two packages**, published in one workflow run, in one order:
 version. So `popclaw` goes first, is verified on the registry, and only then
 does the shell go out. The two recipes carry opposite guards on purpose:
 `pack-plugin` checks every declared native binding inside the tarball by name,
-binary platform/architecture header and Node ABI initializer, plus the packer's
-unsuffixed fallback. `pack-mcp-shell` aborts
+binary platform/architecture header and Node ABI initializer. `pack-mcp-shell` aborts
 if the shell tarball contains any `dist/`, `native-deps`, `migrations` or
 `wallet-migrations` — or if its version and its `popclaw` dependency are not the
 exact same string as the plugin's version. Neither guard may be loosened to let
@@ -26,23 +25,58 @@ that whole directory: copying only an entry file drops required imports. Every
 chunk stays beside the entries so native bindings and resource paths keep their
 existing layout. The build removes obsolete JavaScript chunks, preserves the
 pinned protocol notices, and collects licenses from all entries, shared chunks,
-and both embedded workers. Whitespace is compressed; identifiers and function
-names remain intact. The bundle regression suite enforces a 10 MiB JavaScript
-budget and exercises the CLI and MCP entries outside the source checkout.
+and both embedded workers. Whitespace and identifiers are compressed in the entries, shared chunks and
+embedded workers; function names remain intact. The bundle regression suite
+enforces a 4.5 MiB JavaScript budget and exercises the CLI and MCP entries outside the source checkout.
 
-ClawHub accepts at most 50 MiB of expanded package files. Before publishing,
-measure the regular-file total in the exact release tarball and keep it below
-40 MiB, leaving at least 10 MiB for growth. Retain every native platform binding
-and the SQLite sources used by the fallback build. After npm verification,
-upload those same tarball bytes to ClawHub; do not repack an existing version.
-Use the public tag and commit as source provenance, run ClawHub validation and a
-publish dry run first, then verify the downloadable package digest after upload.
+The complete npm/GitHub archive keeps all ten native bindings and the SQLite
+fallback sources. ClawHub has a separate distribution because its hosted upload
+path has rejected archives below the documented 50 MiB expanded-file limit.
+The main ClawHub archive retains the same JavaScript, source fallback and
+notices, and obtains native bindings through five exact-version optional npm
+packages. This profile does not change the standard npm package or MCP shell.
+
+Derive this profile only from a fixed, verified complete archive:
+
+```sh
+just pack-plugin clawhub /absolute/path/popclaw-plugin-VERSION+BUILD.tgz /absolute/output
+```
+
+The output directory contains `popclaw-clawhub-VERSION.tgz`, five
+`popclaw-native-sqlite-PLATFORM-ARCH-VERSION.tgz` archives, and `receipt.json`.
+The directory suffix is the first twelve characters of the complete archive's
+SHA-256, not a Git commit. Existing output directories cannot be overwritten.
+The receipt pins every archive, binding, version and preserved file inventory.
+The builder audits archive paths and types before extraction, reruns the
+complete-package guard, and checks the actual derived archives after packing.
+
+Each platform package carries both Node 24 and Node 26 bindings. The supported
+ClawHub targets are macOS arm64/x64, Linux glibc arm64/x64 and Windows x64.
+This list describes package selection, not runtime acceptance on every target.
+Keep optional dependencies enabled. Missing, incompatible or modified bindings
+fail before plugin registration; they do not silently trigger a download or
+rebuild. The complete distribution keeps its existing source-build fallback.
+
+The package name is `popclaw-clawhub`; the plugin ID remains `popclaw`, so data
+paths, configuration keys, the SQLite driver and migrations stay the same.
+Publish and verify all five native dependencies before uploading the exact
+main archive to ClawHub. Use the public source tag and commit as provenance,
+run validation and a dry run, then verify ClawHub's downloadable digest. A new
+npm package must be bootstrapped before its trusted publisher can be bound;
+the existing two npm bindings do not authorize these five package names.
+
+Before declaring this channel available, install the published
+`clawhub:popclaw-clawhub@VERSION` into a clean, isolated OpenClaw instance.
+Check registration, SQLite write/reopen, identity persistence, and upgrades in
+both directions. An installer exit status alone is insufficient: OpenClaw can
+defer runtime loading until the Gateway starts. As of this candidate, ClawHub
+publication and this final hosted-source installation remain pending.
 
 Full packing requires Darwin. The release job uses GitHub-hosted `macos-15`
 (arm64): clang builds `darwin-arm64` and `darwin-x64`; official better-sqlite3
 release assets supply `linux-arm64`, `linux-x64` and `win32-x64`. Each target
-ships Node 24 (ABI 137) and Node 26 (ABI 147): ten named bindings and one
-fallback. This matrix is fixed, independent of the verification machine.
+ships Node 24 (ABI 137) and Node 26 (ABI 147): ten named bindings. The
+upstream unsuffixed file remains a source-build fallback, not an extra packed copy. This matrix is fixed, independent of the verification machine.
 `POPCLAW_NATIVE_DEPS_MINIMAL=1` is for development bundles only and cannot
 produce a releasable tarball. Do not lower a binding count to accept a missing
 platform.
@@ -53,6 +87,69 @@ It does not support self-hosted runners. The workflow filename, repository,
 environment and `id-token: write` remain the trusted-publisher identity; moving
 the job from Ubuntu to hosted macOS does not change those fields. Checksums use
 `shasum -a 256`, available on macOS, with the same retained checksum format.
+
+## Separate ClawHub native publication
+
+Use `.github/workflows/release-clawhub-native.yml` only for the five native
+packages. It never publishes `popclaw`, `popclaw-mcp` or the ClawHub main
+archive, and does not alter the standard release workflow.
+
+Dispatch a dry run first with these fixed inputs:
+
+| input | required value |
+|---|---|
+| `tag` | The complete release tag, such as `v0.1.4` |
+| `source_run_id` | The `release.yml` run that retained and successfully smoke-tested the complete archive |
+| `expected_source_commit` | Its full 40-character commit, also the tag target |
+| `expected_full_sha256` | The retained complete archive's lowercase SHA-256 |
+| `dry_run` | `true` for preparation; `false` for native publication |
+| `resume_from_run_id` | Empty initially; the prior native workflow run for exact-byte reuse |
+
+The source run must use event `push` or `workflow_dispatch`, have `head_branch`
+equal to the exact tag and `head_sha` equal to `expected_source_commit`, and
+finish with conclusion `success` or `failure`. Its actual run attempt must have
+a successful package-smoke step. Dispatch the complete release on the tag,
+not on `main`. A later registry publication failure does not discard valid
+retained bytes. The verifier checks the repository, workflow, tag, commit,
+artifact identity, expiry and retained hashes before deriving anything. The
+retained context records the source archive identity; GitHub run metadata
+records the native workflow revision that performed preparation/publication.
+
+Preparation derives all six archives through the explicit ClawHub pack
+profile, independently compares them with the complete archive, and runs real
+SQLite write/close/reopen checks on both supported Node lines. The six exact
+archives, derivation receipt, source context and validation result are retained
+for 90 days. A dry run checks registry state and publication requests; it does
+not prove that OIDC bindings work.
+
+Before the first real run, every native package name must already exist and
+have its own trusted publisher bound to repository `PopClaw-xyz/popclaw`,
+workflow `release-clawhub-native.yml`, environment `npm-release`. Creating a
+new package name requires an authorized npm account. Do not manually publish
+the target release version as a bootstrap: later verification requires that
+version's retained bytes and attestation. An exceptional bootstrap version or
+manual provenance path requires the release owner's explicit decision.
+
+After reviewing the retained dry-run artifacts, dispatch with `dry_run: false`
+and `resume_from_run_id` set to that native run. The workflow downloads those
+same six archives without repacking, rechecks the complete source and both
+Node runtimes, and preflights all five registry names before any publication.
+A missing name stops the run with `BOOTSTRAP_REQUIRED`. Existing versions must
+match the retained archive digest and carry an attestation. The shared verifier
+uses SHA-512 integrity, or its existing SHA-1 shasum fallback when integrity is
+absent. Only missing versions are
+published with OIDC/provenance, and each is verified before the next begins.
+On partial failure, resume from the run retaining those exact bytes; never
+rebuild or replace a published version. The original complete-source artifact
+must also remain available and unexpired.
+
+Only after all five native versions are verified may the retained main archive
+be uploaded to ClawHub. Record the hosted download digest and perform the
+clean `clawhub:` installation described above. Optional-dependency failures can
+leave an OpenClaw archive installation in `installed-start-deferred`; a later
+`POPCLAW_PLATFORM_DEPENDENCY_MISSING` error means runtime acceptance failed.
+Restore the verified complete distribution through the normal maintenance
+procedure and verify the same identity and database records after restart.
 
 ## Order on the day
 
