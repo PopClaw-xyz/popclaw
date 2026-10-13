@@ -2,6 +2,60 @@
 
 ## Current verification scope
 
+<a id="013-release-verification"></a>
+### 0.1.3 release verification
+
+[Release v0.1.3](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.3)
+fixes source `3a7ce5843152d1a94dd82244b0f3e267509fcf14`.
+[Source CI](https://github.com/PopClaw-xyz/popclaw/actions/runs/38440928481)
+passed on Node 24.16.0 and 26.1.0, including 624 test files per line,
+10,279 passed tests and five skipped private-monorepo-only checks.
+Build, lint, 42 setup checks and the two native SDK suites passed on each line;
+[CodeQL](https://github.com/PopClaw-xyz/popclaw/actions/runs/38440928476) and
+[publication checks](https://github.com/PopClaw-xyz/popclaw/actions/runs/38440928304)
+also passed. Earlier local full-suite failures remain recorded; the two affected
+files passed a 119-test serial rerun, without establishing their failure cause.
+
+Both [popclaw@0.1.3](https://www.npmjs.com/package/popclaw/v/0.1.3) and
+[popclaw-mcp@0.1.3](https://www.npmjs.com/package/popclaw-mcp/v/0.1.3) were
+downloaded and matched the retained build archives. GitHub Release assets match
+the same bytes. npm signatures and GitHub provenance were cryptographically
+verified, including rejection of modified payloads.
+
+| Archive | SHA-256 |
+| --- | --- |
+| popclaw-plugin-0.1.3+2026-10-14-0157-3a7ce58.tgz | `d18c5b8fae1ac2dfe6ef086d5fb634ac51f4caa95c24b7a108b395f62f1db94e` |
+| popclaw-mcp-0.1.3.tgz | `3d595e59af14212fd2574cc8f43c9468f4bd082717a216b70f0e9fa2a7e1a14a` |
+
+The main archive has 226 files, 15,392,666 compressed bytes and 38,199,870
+expanded bytes (36.43 MiB). All 96 native files, including 11 binaries, and 58
+license/notice files match the 0.1.2 archive. The shared JavaScript import graph
+is complete. Full native-matrix packaging checks passed; this does not mean
+all target platforms were run.
+
+A clean npm installation with npm 11.19.1 verified all 226 main-package and six
+MCP-shell files. CLI, SQLite, OpenClaw 2026.9.8 SDK registration of 55 tools,
+both MCP entries and stable identity across restart passed on macOS arm64 with
+Node 24.16.0 and 26.8.2. Bin symlinks, hook and maintenance entries also passed
+against the exact archives. Independent artifact and registry reviews approved
+these results. Full Gateway, model conversations, real social delivery and other
+operating systems were not tested in this release acceptance.
+
+The [original release run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38440988276)
+published the main package. The [shell recovery](https://github.com/PopClaw-xyz/popclaw/actions/runs/38443366708)
+published the original retained MCP archive without rebuilding. Both runs failed
+when their short registry-readiness checks expired. A subsequent download also
+briefly returned 404 after metadata appeared. Later byte, cryptographic and
+installation verification passed; the workflow failures remain failures.
+
+ClawHub static validation against OpenClaw 2026.10.3 and the publish dry run
+passed. The actual upload reached storage, but the publication endpoint returned
+HTTP 500 without a publish-attempt identifier. ClawHub publication, download and
+installation remain unverified as of October 14, 2026. Use npm or the GitHub
+Release assets; no ClawHub availability is claimed.
+
+### Earlier release evidence
+
 0.1.0 is published: [Release and artifacts](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.0).
 Its recorded registry acceptance covered ordinary installation, exact files,
 signature/attestation audit, SQLite, 55 MCP tools and restart. This does not

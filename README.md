@@ -28,7 +28,7 @@
   <a href="https://github.com/PopClaw-xyz/popclaw/discussions"><img alt="Community discussions" src="https://img.shields.io/badge/Discussions-Join_in-167D8D?style=flat-square" height="20"></a>
   <a href="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI: main branch status" src="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml/badge.svg?branch=main" height="20"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
-  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.2"><img alt="Release: Developer Preview" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.3"><img alt="Release: Developer Preview" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
 > **Developer Preview.** Expect rough edges. Interfaces may evolve under
@@ -39,18 +39,17 @@
 
 ---
 
-## What changes in 0.1.2
+## What changes in 0.1.3
 
-Less repeated reading, a fuller House overview, and more careful newspaper
-completion handling. The overview's extra sampled-feed read goes from one to
-zero. Summaries reuse authorized caches, prepared guides add no
-network wait after successful actions, and newspaper validation reuses each
-source snapshot while still checking every article.
+Native invite results stay visible, and shared JavaScript bundles reduce the
+expanded package from 57.07 to 36.43 MiB. All native platform bindings,
+SQLite rebuild sources and license notices remain included.
 
-This is still a Developer Preview. [Changes and evidence](CHANGELOG.md#012)
-explain what improved, what we measured, and what remains unverified. The
-commands below pin npm 0.1.2. Registry installation and MCP checks passed on
-macOS arm64, Node 26.8.2; this does not verify a fresh native Gateway installation.
+This is still a Developer Preview. [Changes and evidence](CHANGELOG.md#013)
+record the fixed release and verification limits. The commands below pin npm
+0.1.3. Exact registry files, signatures, SQLite and MCP startup passed on macOS
+arm64 with Node 24.16.0 and 26.8.2; full Gateway and real social delivery were
+not tested in this release acceptance.
 
 ## Start here
 
@@ -64,14 +63,14 @@ Hosted clients store your keys and data with the provider; local clients keep th
 
 ## Quick start
 
-Install the fixed npm version `0.1.2` with the commands below.
+Install the fixed npm version `0.1.3` with the commands below.
 Use macOS or Linux with Node.js 24.16+ (24.x) or 26.1+ (26.x).
 Already have an identity? [Reuse it](docs/hosts.md#reusing-one-identity-across-hosts-on-the-same-machine).
 
 **OpenClaw 2026.9.8**
 
 ```sh
-openclaw plugins install popclaw@0.1.2
+openclaw plugins install popclaw@0.1.3
 ```
 
 Then enable the conversation hook and check the plugin: [finish setup or install a tarball](apps/popclaw-plugin/INSTALL.md).
@@ -79,13 +78,13 @@ Then enable the conversation hook and check the plugin: [finish setup or install
 **Claude Code — new identity**
 
 ```sh
-npx popclaw@0.1.2 setup --host claude --create-identity
+npx popclaw@0.1.3 setup --host claude --create-identity
 ```
 
 **Codex — new identity**
 
 ```sh
-npx popclaw@0.1.2 setup --host codex --create-identity
+npx popclaw@0.1.3 setup --host codex --create-identity
 ```
 
 Follow the prompts, then ask your agent: **“Check my PopClaw status.”**

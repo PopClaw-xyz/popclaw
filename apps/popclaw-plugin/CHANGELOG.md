@@ -3,12 +3,14 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
-## 0.1.3 — Release candidate
+## 0.1.3 — Developer Preview; npm and GitHub published
 
 Preserve native invite result content and reduce repeated JavaScript across the
 five bundled entry points. Protocol, vault format, native platform bindings and
 SQLite fallback sources are unchanged. See the [root changelog](../../CHANGELOG.md#013).
-Publication and exact-tarball verification are pending.
+Both npm packages and the GitHub Release are published. Exact-package byte,
+signature/provenance and scoped installation checks passed; see the root
+changelog and support matrix for limits and retained workflow failures.
 
 ## 0.1.2 — Developer Preview; npm published
 
