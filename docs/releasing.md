@@ -88,6 +88,63 @@ environment and `id-token: write` remain the trusted-publisher identity; moving
 the job from Ubuntu to hosted macOS does not change those fields. Checksums use
 `shasum -a 256`, available on macOS, with the same retained checksum format.
 
+## Separate ClawHub native publication
+
+Use `.github/workflows/release-clawhub-native.yml` only for the five native
+packages. It never publishes `popclaw`, `popclaw-mcp` or the ClawHub main
+archive, and does not alter the standard release workflow.
+
+Dispatch a dry run first with these fixed inputs:
+
+| input | required value |
+|---|---|
+| `tag` | The complete release tag, such as `v0.1.4` |
+| `source_run_id` | The `release.yml` run that retained and successfully smoke-tested the complete archive |
+| `expected_source_commit` | Its full 40-character commit, also the tag target |
+| `expected_full_sha256` | The retained complete archive's lowercase SHA-256 |
+| `dry_run` | `true` for preparation; `false` for native publication |
+| `resume_from_run_id` | Empty initially; the prior native workflow run for exact-byte reuse |
+
+The source run must be complete and have a successful package-smoke step in
+its actual run attempt. A later registry publication failure does not discard
+valid retained bytes. The verifier checks the repository, workflow, tag,
+commit, artifact identity, expiry and retained hashes before deriving anything.
+It separately records the source archive commit and the workflow revision.
+
+Preparation derives all six archives through the explicit ClawHub pack
+profile, independently compares them with the complete archive, and runs real
+SQLite write/close/reopen checks on both supported Node lines. The six exact
+archives, derivation receipt, source context and validation result are retained
+for 90 days. A dry run checks registry state and publication requests; it does
+not prove that OIDC bindings work.
+
+Before the first real run, every native package name must already exist and
+have its own trusted publisher bound to repository `PopClaw-xyz/popclaw`,
+workflow `release-clawhub-native.yml`, environment `npm-release`. Creating a
+new package name requires an authorized npm account. Do not manually publish
+the target release version as a bootstrap: later verification requires that
+version's retained bytes and attestation. An exceptional bootstrap version or
+manual provenance path requires the release owner's explicit decision.
+
+After reviewing the retained dry-run artifacts, dispatch with `dry_run: false`
+and `resume_from_run_id` set to that native run. The workflow downloads those
+same six archives without repacking, rechecks the complete source and both
+Node runtimes, and preflights all five registry names before any publication.
+A missing name stops the run with `BOOTSTRAP_REQUIRED`. Existing versions must
+match the retained SHA-512 and carry an attestation. Only missing versions are
+published with OIDC/provenance, and each is verified before the next begins.
+On partial failure, resume from the run retaining those exact bytes; never
+rebuild or replace a published version. The original complete-source artifact
+must also remain available and unexpired.
+
+Only after all five native versions are verified may the retained main archive
+be uploaded to ClawHub. Record the hosted download digest and perform the
+clean `clawhub:` installation described above. Optional-dependency failures can
+leave an OpenClaw archive installation in `installed-start-deferred`; a later
+`POPCLAW_PLATFORM_DEPENDENCY_MISSING` error means runtime acceptance failed.
+Restore the verified complete distribution through the normal maintenance
+procedure and verify the same identity and database records after restart.
+
 ## Order on the day
 
 Least reversible last, with a check between each step.
