@@ -8,6 +8,7 @@ import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createPlatformMetadata, packageClawHub } from '../clawhub-platform-package.mjs';
+import { deriveNativeRuntimeManifest } from '../native-runtime-manifest.mjs';
 
 const require = createRequire(import.meta.url);
 const { MARKER, PLATFORMS, ABI, bindingName, packageName } = require('../native-binding-path.cjs');
@@ -76,21 +77,14 @@ function fixture(name, alter = () => {}, extras = []) {
     repository: { type: 'git', url: 'git+https://github.com/PopClaw-xyz/popclaw.git' },
     main: 'dist/bundled/index.js', engines: { node: '>=24.16.0 <25 || >=26.1.0' },
     openclaw: { extensions: ['./dist/bundled/index.js'] } };
-  const native = { name: 'better-sqlite3', version: '12.11.1', license: 'MIT',
-    main: 'lib/index.js', dependencies: { bindings: '^1.5.0' } };
   put(root, 'package.json', main);
   put(root, 'openclaw.plugin.json', { id: 'popclaw', version: VERSION });
-  put(root, `${NATIVE}/package.json`, native);
-  const database = Buffer.from('fixture database loader; not executable\n');
-  const helper = readFileSync(join(scripts, 'native-binding-loader.cjs'));
-  const resolver = readFileSync(join(scripts, 'native-binding-path.cjs'));
-  put(root, `${NATIVE}/lib/database.js`, database);
-  put(root, `${NATIVE}/lib/popclaw-native-binding.cjs`, helper);
-  put(root, `${NATIVE}/lib/popclaw-native-path.cjs`, resolver);
-  put(root, `${NATIVE}/POPCLAW-RUNTIME-MANIFEST.json`, { format: 1,
-    upstreamManifest: { name: native.name, version: native.version }, upstreamManifestSha256: 'a'.repeat(64), runtimeDependencies: native.dependencies,
-    runtimeLoader: { path: 'lib/database.js', derivedSha256: hash(database), helperPath: 'lib/popclaw-native-binding.cjs', helperSha256: hash(helper),
-      resolverPath: 'lib/popclaw-native-path.cjs', resolverSha256: hash(resolver) } });
+  // Reuse the installed upstream source and the existing pinned derivation.
+  // A fabricated self-hashed loader is not a valid complete-package fixture.
+  const upstream = dirname(require.resolve('better-sqlite3/package.json'));
+  put(root, `${NATIVE}/package.json`, readFileSync(join(upstream, 'package.json')));
+  put(root, `${NATIVE}/lib/database.js`, readFileSync(join(upstream, 'lib/database.js')));
+  deriveNativeRuntimeManifest(join(root, NATIVE));
   for (const path of ['LICENSE', 'NOTICE', `${NATIVE}/LICENSE`, `${NATIVE}/binding.gyp`, `${NATIVE}/src/better_sqlite3.cpp`,
     `${NATIVE}/deps/sqlite3/sqlite3.c`, `${NATIVE}/deps/sqlite3/sqlite3.h`, `${NATIVE}/deps/common.gypi`, `${NATIVE}/deps/sqlite3.gyp`,
     'migrations/001.sql', 'dist/bundled/index.js', 'dist/native-deps/bindings/LICENSE']) put(root, path, `fixture content for ${path}\n`);
@@ -235,6 +229,30 @@ test('rejects changed provenance, unsupported versions, missing source fallback 
   const source = fixture('missing-source', root => rmSync(join(root, NATIVE, 'deps/sqlite3/sqlite3.c')));
   failure(source.archive, 'missing-source', /required license or source fallback file is missing/);
   assert.throws(() => packageClawHub({ fullTarball: source.archive, dest: temporary, fullSha256: '0'.repeat(64) }), /SHA-256 differs/);
+});
+
+test('rejects a changed database loader even when its provenance hash is updated to match', () => {
+  const input = fixture('self-hashed-loader', root => {
+    const path = `${NATIVE}/lib/database.js`;
+    const changed = readFileSync(join(root, path), 'utf8') + '\nthrow new Error("broken loader");\n';
+    put(root, path, changed);
+    const provenance = readJson(join(root, NATIVE, 'POPCLAW-RUNTIME-MANIFEST.json'));
+    provenance.runtimeLoader.derivedSha256 = hash(Buffer.from(changed));
+    put(root, `${NATIVE}/POPCLAW-RUNTIME-MANIFEST.json`, provenance);
+  });
+  failure(input.archive, 'self-hashed-loader', /Unreviewed native database loader/);
+});
+
+test('derives byte-identical archives under umask 022 and 077, preserving executable modes', () => {
+  const input = fixture('umask-input');
+  const originalUmask = process.umask();
+  try {
+    process.umask(0o022);
+    const permissive = packageClawHub({ fullTarball: input.archive, dest: join(temporary, 'umask022') });
+    process.umask(0o077);
+    const restrictive = packageClawHub({ fullTarball: input.archive, dest: join(temporary, 'umask077') });
+    assert.deepEqual(restrictive.packages, permissive.packages);
+  } finally { process.umask(originalUmask); }
 });
 
 test('audits every tar member before extraction and leaves no output on unsafe input', () => {

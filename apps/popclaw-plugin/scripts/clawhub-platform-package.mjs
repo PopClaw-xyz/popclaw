@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { deriveNativeRuntimeManifest } from './native-runtime-manifest.mjs';
 
 const require = createRequire(import.meta.url);
 const { MARKER, PLATFORMS, ABI, bindingName, packageName } = require('./native-binding-path.cjs');
@@ -75,7 +76,7 @@ elif action == 'pack':
                 info = output.gettarinfo(path, arcname=name)
                 info.uid = info.gid = info.mtime = 0
                 info.uname = info.gname = ''
-                info.mode &= 0o777
+                info.mode = 0o755 if info.isdir() else info.mode & 0o777
                 info.pax_headers = {}
                 if info.isfile():
                     with open(path, 'rb') as incoming: output.addfile(info, incoming)
@@ -112,6 +113,23 @@ function write(root, path, bytes, mode = 0o644) {
   chmodSync(destination, mode);
 }
 function nonemptyDependencies(manifest, field) { return Object.keys(manifest[field] ?? {}).length > 0; }
+
+function verifyReviewedDatabase(root, provenance) {
+  const derived = readFileSync(join(root, NATIVE, 'lib/database.js'));
+  const text = derived.toString('utf8');
+  const replacement = "require('./popclaw-native-binding.cjs')()";
+  if (text.split(replacement).length !== 2) fail('Unreviewed native database loader: expected the unique reviewed replacement');
+  // Reconstruct the upstream source, then let the existing derivation enforce
+  // its single pinned source hash and replacement. The archive cannot vouch
+  // for its own altered loader by merely updating a provenance hash.
+  const check = mkdtempSync(join(dirname(root), '.review-loader-'));
+  try {
+    write(check, 'package.json', jsonBytes(provenance.upstreamManifest));
+    write(check, 'lib/database.js', Buffer.from(text.replace(replacement, "require('bindings')('better_sqlite3.node')")));
+    deriveNativeRuntimeManifest(check);
+    if (!readFileSync(join(check, 'lib/database.js')).equals(derived)) fail('Unreviewed native database loader: derivation differs');
+  } finally { rmSync(check, { recursive: true, force: true }); }
+}
 
 /** Both optional dependency declarations and the runtime marker come from this
  * same physical inventory. The inputs are never mutated. */
@@ -168,6 +186,7 @@ function inspectFull(root) {
     if (sha256(bytes) !== loader[hashField]) fail(`native loader hash mismatch: ${expectedPath}`);
     if (reviewedScript && sha256(bytes) !== sha256(readFileSync(join(scripts, reviewedScript)))) fail(`full archive needs the reviewed platform resolver: ${expectedPath}`);
   }
+  verifyReviewedDatabase(root, provenance);
   const inventory = fileInventory(root);
   const nativeFiles = inventory.filter(file => file.path.endsWith('.node'));
   const bindings = nativeFiles.map(file => ({ file: basename(file.path), size: file.size, sha256: file.sha256 }));
@@ -250,6 +269,9 @@ export function packageClawHub({ fullTarball, dest, fullSha256 } = {}) {
     mkdirSync(artifacts);
     const mainRoot = join(stage, 'main/package');
     cpSync(sourceRoot, mainRoot, { recursive: true, preserveTimestamps: true });
+    // cpSync applies the caller's umask. Restore every recorded file mode
+    // explicitly; the archive writer uses a fixed 0755 for all directories.
+    for (const file of full.inventory) chmodSync(join(mainRoot, file.path), file.mode);
     for (const row of full.plan.packages) for (const binding of row.bindings) rmSync(join(mainRoot, RELEASE, binding.file));
     write(mainRoot, 'package.json', jsonBytes(full.plan.main));
     write(mainRoot, `${NATIVE}/package.json`, jsonBytes(full.plan.native));
