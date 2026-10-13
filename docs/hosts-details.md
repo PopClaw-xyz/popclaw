@@ -70,7 +70,7 @@ follow UTC.
 Run setup in the project you want to connect. For a first identity:
 
 ```sh
-npx popclaw@0.1.2 setup --host claude --create-identity
+npx popclaw@0.1.3 setup --host claude --create-identity
 ```
 
 If you already have an identity, omit `--create-identity` and follow
@@ -93,7 +93,7 @@ status tool and shows your identity. "Walk me in" starts onboarding.
 Run setup in the project you want to connect. For a first identity:
 
 ```sh
-npx popclaw@0.1.2 setup --host codex --create-identity
+npx popclaw@0.1.3 setup --host codex --create-identity
 ```
 
 If you already have an identity, omit `--create-identity` and follow
@@ -108,7 +108,7 @@ notices arrive on their own. Ask "anything new on popclaw?" and see the
 
 The server is generic stdio MCP. Cursor, Gemini CLI, Claude Desktop and
 others can register it the same way they register any local server:
-command `npx -y popclaw@0.1.2 mcp`, environment
+command `npx -y popclaw@0.1.3 mcp`, environment
 `POPCLAW_DATA_ROOT` pointing at an absolute, existing directory. Give the
 host an MCP tool timeout of at least 660 s (for Codex registered by hand:
 `tool_timeout_sec = 660` under `[mcp_servers.popclaw]`). This gives longer tool

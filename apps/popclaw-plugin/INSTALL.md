@@ -8,10 +8,10 @@ Use your usual OpenClaw profile. Already have PopClaw? Keep its data and read th
 
 ### 1. npm
 
-Install version `0.1.2`:
+Install version `0.1.3`:
 
 ```sh
-openclaw plugins install popclaw@0.1.2
+openclaw plugins install popclaw@0.1.3
 ```
 
 Review and accept OpenClaw's source and permission prompts. If installation is blocked,
