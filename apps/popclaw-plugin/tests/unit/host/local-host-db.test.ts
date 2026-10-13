@@ -22,6 +22,7 @@ describe('isNativeLoadError (native rebuild gate — bug host-c 派发链 ①)',
   it('rebuilds a missing packaged binding identified by its own code', () => {
     expect(isNativeLoadError(Object.assign(new Error('No packaged native binding'), {code: 'POPCLAW_NATIVE_BINDING_MISSING'}))).toBe(true);
     expect(isNativeLoadError(Object.assign(new Error('No database file'), {code: 'ENOENT'}))).toBe(false);
+    expect(isNativeLoadError(Object.assign(new Error('Permission denied'), {code: 'EACCES'}))).toBe(false);
   });
 
   it('does NOT flag ordinary SQLite open errors → no pointless rebuild', () => {

@@ -90,6 +90,22 @@ Use the resulting exact package with the [tarball procedure](./INSTALL-DETAILS.m
 
 `--link` / plain local-path installs don't work here — pnpm workspace symlinks trip OpenClaw's manifest dependency scan; the packed tarball has resolved, non-symlinked deps.
 
+The development bundle minifies its shared chunks and embedded workers while
+preserving function/class names and license notices. `just pack-plugin` checks
+ten named SQLite bindings: Node 24/26 for macOS arm64/x64, Linux arm64/x64 and
+Windows x64. It rejects an extra default binding. This verifies the archive's
+binary matrix; runtime acceptance still requires the actual target host.
+
+The vendored SQLite package keeps its upstream compilation sources and licenses.
+Its reviewed default loader selects the named binding, then the legacy or
+source-built default path; explicit `nativeBinding` options keep their upstream
+behavior. Missing bindings and known ABI failures can use the existing source
+rebuild and cache path. Permission and ordinary database errors do not authorize
+a rebuild. Compiler diagnostics go to stderr so MCP stdout remains JSON-RPC.
+Changes to this derivative must update its fixed upstream loader hash only after
+review and pass `pnpm --filter popclaw run test:native-runtime-manifest`, focused
+loader tests and an isolated real source rebuild of the exact archive.
+
 ## Storage ownership and recovery candidate
 
 Execution grants, accounting, original requests, unknown outcomes and receipt state are

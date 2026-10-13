@@ -92,7 +92,9 @@ function rebuildNativeBinding(cause: Error): string {
   try {
     execFileSync('npx', ['--yes', 'node-gyp', 'rebuild', '--release'], {
       cwd: pkgRoot,
-      stdio: 'inherit',
+      // MCP reserves stdout for JSON-RPC. Compiler progress is diagnostic
+      // output too, so route both child streams to the parent's stderr.
+      stdio: ['ignore', 2, 2],
     });
   } catch (buildErr) {
     throw new Error(

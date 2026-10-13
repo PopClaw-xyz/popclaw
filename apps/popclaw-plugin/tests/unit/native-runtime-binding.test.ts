@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { deriveNativeRuntimeManifest } from '../../scripts/native-runtime-manifest.mjs';
@@ -66,6 +67,59 @@ describe('shipped native loader without a duplicate default binary', () => {
     const invalid = probe(root);
     expect(invalid.status).not.toBe(0);
     expect(JSON.parse(invalid.stderr).code).not.toBe('POPCLAW_NATIVE_BINDING_MISSING');
+  });
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0).each(['named', 'upstream-default'])('preserves a real access error in %s lookup', kind => {
+    const root = fixture([]);
+    const directory = join(root, 'build', kind === 'named' ? 'Release' : 'Debug');
+    mkdirSync(directory, {recursive: true});
+    const candidate = join(directory, kind === 'named' ? named : 'better_sqlite3.node');
+    cpSync(binding, candidate);
+    deriveNativeRuntimeManifest(root);
+    chmodSync(directory, 0);
+    try {
+      expect(() => statSync(candidate)).toThrowError(expect.objectContaining({code: 'EACCES'}));
+      const result = probe(root);
+      expect(result.status).toBe(1);
+      expect(JSON.parse(result.stderr).code).toBe('EACCES');
+    } finally {chmodSync(directory, 0o755);}
+  });
+
+  it.skipIf(process.platform === 'win32')('keeps compiler diagnostics off the caller protocol stdout', () => {
+    const root = fixture([]);
+    deriveNativeRuntimeManifest(root);
+    const bin = join(root, 'test-bin');
+    mkdirSync(bin);
+    const npx = join(bin, 'npx');
+    writeFileSync(npx, `#!${process.execPath}
+      const assert = require('node:assert/strict');
+      const fs = require('node:fs');
+      assert.deepEqual(process.argv.slice(2), ['--yes', 'node-gyp', 'rebuild', '--release']);
+      fs.copyFileSync(process.env.TEST_COMPILED_BINDING, 'build/Release/better_sqlite3.node');
+      console.log('CXX(target) compiler-output-control');
+      console.error('compiler-stderr-control');
+    `);
+    chmodSync(npx, 0o755);
+    const source = fileURLToPath(new URL('../../src/host/local-host-db.ts', import.meta.url));
+    const result = spawnSync(process.execPath, ['--import', require.resolve('tsx'), '--input-type=module', '-e', `
+      import { registerHooks } from 'node:module';
+      import { pathToFileURL } from 'node:url';
+      registerHooks({resolve(specifier, context, next) {
+        return next(specifier === 'better-sqlite3' ? process.env.TEST_NATIVE_MAIN : specifier, context);
+      }});
+      const { LocalHostDb } = await import(pathToFileURL(process.env.TEST_LOCAL_DB_SOURCE));
+      const db = new LocalHostDb(':memory:');
+      try { console.log(JSON.stringify(db.queryOne('SELECT 42 AS value'))); }
+      finally { db.close(); }
+    `], {encoding: 'utf8', timeout: 10_000, env: {
+      ...process.env, PATH: `${bin}:${process.env.PATH}`, TEST_COMPILED_BINDING: binding,
+      TEST_NATIVE_MAIN: join(root, 'lib/index.js'), TEST_LOCAL_DB_SOURCE: source,
+    }});
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toBe('{"value":42}\n');
+    expect(result.stderr).toContain('CXX(target) compiler-output-control');
+    expect(result.stderr).toContain('compiler-stderr-control');
+    expect(existsSync(join(root, 'build/Release', named))).toBe(true);
   });
 
   it('reports a missing binding with the scoped rebuild code', () => {
