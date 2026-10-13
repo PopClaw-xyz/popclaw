@@ -59,7 +59,10 @@ export function newestInputMtimeMs(paths: string[]): number {
  *     in, and the vendored smol-toml LICENSE it copies into the license
  *     closure all live under here.
  *   - `scripts/bundle.mjs` itself and the local modules it imports,
- *     `scripts/build-schema-worker.mjs` and `scripts/bundle-licenses.mjs`.
+ *     both worker builders, `scripts/bundle-minification.mjs`, and
+ *     `scripts/bundle-licenses.mjs`.
+ *   - native dependency preparation, its runtime manifest, and its binding
+ *     loader: `build:bundle` refreshes native-deps before bundling JavaScript.
  *   - this package's `package.json` — its `version` field is embedded in the
  *     build stamp.
  *   - the `@popclaw/contracts` / `@popclaw/algorithms` sources bundle.mjs
@@ -77,8 +80,12 @@ export function bundleInputPaths(pkgRoot: string): string[] {
   return [
     join(pkgRoot, 'src'),
     join(pkgRoot, 'scripts/bundle.mjs'),
+    join(pkgRoot, 'scripts/bundle-minification.mjs'),
     join(pkgRoot, 'scripts/build-schema-worker.mjs'),
     join(pkgRoot, 'scripts/build-integrity-worker.mjs'),
+    join(pkgRoot, 'scripts/prepare-native-deps.mjs'),
+    join(pkgRoot, 'scripts/native-runtime-manifest.mjs'),
+    join(pkgRoot, 'scripts/native-binding-loader.cjs'),
     join(pkgRoot, 'scripts/prepare-native-world.ts'),
     join(pkgRoot, 'scripts/bundle-licenses.mjs'),
     join(pkgRoot, 'package.json'),

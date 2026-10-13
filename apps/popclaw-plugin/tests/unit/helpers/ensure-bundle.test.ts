@@ -121,6 +121,26 @@ describe('ensureBundle staleness decision', () => {
 
     expect(execSync).toHaveBeenCalledTimes(1);
   });
+
+  it.each([
+    'bundle-minification.mjs',
+    'prepare-native-deps.mjs',
+    'native-runtime-manifest.mjs',
+    'native-binding-loader.cjs',
+  ])('rebuilds when scripts/%s changes', async (input) => {
+    const pkgRoot = makeFakePackage();
+    const artefact = makeArtefact(pkgRoot);
+    const base = new Date('2026-01-01T00:00:00Z');
+    touchAllInputs(pkgRoot, base);
+    touch(artefact, new Date(base.getTime() + 60_000));
+    const config = join(pkgRoot, 'scripts', input);
+    writeFileSync(config, '// changed build input');
+    touch(config, new Date(base.getTime() + 120_000));
+
+    await ensureBundle(pkgRoot, artefact);
+
+    expect(execSync).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ensureBundle waiter logic', () => {
