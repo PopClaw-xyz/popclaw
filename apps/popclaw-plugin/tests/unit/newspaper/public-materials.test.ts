@@ -40,6 +40,7 @@ import { canonicalizeEnvelope } from '../../../src/protocol/public-envelope.js';
 import { WorldFeedCache } from '../../../src/ingress/world-feed-cache.js';
 import { registerPopclawTools } from '../../../src/tools/register-tools.js';
 import { _resetIssuesForTest, getIssue } from '../../../src/newspaper/issue-store.js';
+import * as issueIdentity from '../../../src/newspaper/issue-identity.js';
 import { childSessionKey } from '../../../src/newspaper/dedicated-session.js';
 const instances: HouseRuntime[] = [];
 const displayCleanup: Array<() => void> = [];
@@ -377,6 +378,9 @@ it('off-page observations stay in the complete candidate basis and remain verifi
     f.journal.append(f.generation,popclaw.event.WorldStreamFrame.encode({seq,kind:'post',envelope:raw}).finish());
   }
   noteContextTokenBudget(childSessionKey('public-material-fixture'), 1000);
+  // This checks retained material, not token shape. Keep its page ID valid so
+  // random minting cannot trip the separate provenance gate first.
+  vi.spyOn(issueIdentity, 'mintIssueToken').mockReturnValue('tok_public_material_fixture');
   const c=await gather(f);
   expect(c.issue.pulse.length).toBe(60);
   expect(c.issue.publicMaterials!.references).toHaveLength(c.issue.pulse.length);
