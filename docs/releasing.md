@@ -3,7 +3,7 @@
 How a release reaches npm, and what only a maintainer with registry access can
 do. The machinery is `.github/workflows/release.yml`.
 
-A release is **two packages**, published in one workflow run, in one order:
+The standard npm release is **two packages**, published in one workflow run, in one order:
 
 | package | what it is | packed by |
 |---|---|---|
@@ -14,8 +14,7 @@ A release is **two packages**, published in one workflow run, in one order:
 version. So `popclaw` goes first, is verified on the registry, and only then
 does the shell go out. The two recipes carry opposite guards on purpose:
 `pack-plugin` checks every declared native binding inside the tarball by name,
-binary platform/architecture header and Node ABI initializer, plus the packer's
-unsuffixed fallback. `pack-mcp-shell` aborts
+binary platform/architecture header and Node ABI initializer. `pack-mcp-shell` aborts
 if the shell tarball contains any `dist/`, `native-deps`, `migrations` or
 `wallet-migrations` — or if its version and its `popclaw` dependency are not the
 exact same string as the plugin's version. Neither guard may be loosened to let
@@ -26,23 +25,58 @@ that whole directory: copying only an entry file drops required imports. Every
 chunk stays beside the entries so native bindings and resource paths keep their
 existing layout. The build removes obsolete JavaScript chunks, preserves the
 pinned protocol notices, and collects licenses from all entries, shared chunks,
-and both embedded workers. Whitespace is compressed; identifiers and function
-names remain intact. The bundle regression suite enforces a 10 MiB JavaScript
-budget and exercises the CLI and MCP entries outside the source checkout.
+and both embedded workers. Whitespace and identifiers are compressed in the entries, shared chunks and
+embedded workers; function names remain intact. The bundle regression suite
+enforces a 4.5 MiB JavaScript budget and exercises the CLI and MCP entries outside the source checkout.
 
-ClawHub accepts at most 50 MiB of expanded package files. Before publishing,
-measure the regular-file total in the exact release tarball and keep it below
-40 MiB, leaving at least 10 MiB for growth. Retain every native platform binding
-and the SQLite sources used by the fallback build. After npm verification,
-upload those same tarball bytes to ClawHub; do not repack an existing version.
-Use the public tag and commit as source provenance, run ClawHub validation and a
-publish dry run first, then verify the downloadable package digest after upload.
+The complete npm/GitHub archive keeps all ten native bindings and the SQLite
+fallback sources. ClawHub has a separate distribution because its hosted upload
+path has rejected archives below the documented 50 MiB expanded-file limit.
+The main ClawHub archive retains the same JavaScript, source fallback and
+notices, and obtains native bindings through five exact-version optional npm
+packages. This profile does not change the standard npm package or MCP shell.
+
+Derive this profile only from a fixed, verified complete archive:
+
+```sh
+just pack-plugin clawhub /absolute/path/popclaw-plugin-VERSION+BUILD.tgz /absolute/output
+```
+
+The output directory contains `popclaw-clawhub-VERSION.tgz`, five
+`popclaw-native-sqlite-PLATFORM-ARCH-VERSION.tgz` archives, and `receipt.json`.
+The directory suffix is the first twelve characters of the complete archive's
+SHA-256, not a Git commit. Existing output directories cannot be overwritten.
+The receipt pins every archive, binding, version and preserved file inventory.
+The builder audits archive paths and types before extraction, reruns the
+complete-package guard, and checks the actual derived archives after packing.
+
+Each platform package carries both Node 24 and Node 26 bindings. The supported
+ClawHub targets are macOS arm64/x64, Linux glibc arm64/x64 and Windows x64.
+This list describes package selection, not runtime acceptance on every target.
+Keep optional dependencies enabled. Missing, incompatible or modified bindings
+fail before plugin registration; they do not silently trigger a download or
+rebuild. The complete distribution keeps its existing source-build fallback.
+
+The package name is `popclaw-clawhub`; the plugin ID remains `popclaw`, so data
+paths, configuration keys, the SQLite driver and migrations stay the same.
+Publish and verify all five native dependencies before uploading the exact
+main archive to ClawHub. Use the public source tag and commit as provenance,
+run validation and a dry run, then verify ClawHub's downloadable digest. A new
+npm package must be bootstrapped before its trusted publisher can be bound;
+the existing two npm bindings do not authorize these five package names.
+
+Before declaring this channel available, install the published
+`clawhub:popclaw-clawhub@VERSION` into a clean, isolated OpenClaw instance.
+Check registration, SQLite write/reopen, identity persistence, and upgrades in
+both directions. An installer exit status alone is insufficient: OpenClaw can
+defer runtime loading until the Gateway starts. As of this candidate, ClawHub
+publication and this final hosted-source installation remain pending.
 
 Full packing requires Darwin. The release job uses GitHub-hosted `macos-15`
 (arm64): clang builds `darwin-arm64` and `darwin-x64`; official better-sqlite3
 release assets supply `linux-arm64`, `linux-x64` and `win32-x64`. Each target
-ships Node 24 (ABI 137) and Node 26 (ABI 147): ten named bindings and one
-fallback. This matrix is fixed, independent of the verification machine.
+ships Node 24 (ABI 137) and Node 26 (ABI 147): ten named bindings. The
+upstream unsuffixed file remains a source-build fallback, not an extra packed copy. This matrix is fixed, independent of the verification machine.
 `POPCLAW_NATIVE_DEPS_MINIMAL=1` is for development bundles only and cannot
 produce a releasable tarball. Do not lower a binding count to accept a missing
 platform.

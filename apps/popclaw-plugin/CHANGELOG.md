@@ -3,6 +3,25 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
+## 0.1.4 — Unpublished candidate
+
+**Protocol:** none. The pinned signed-event protocol and vault format are unchanged.
+
+- Minify JavaScript identifiers in entries, shared chunks and embedded workers,
+  while preserving function names for diagnostics.
+- Reduce the complete archive by selecting its existing named SQLite binding
+  instead of shipping a duplicate unsuffixed binary; retain all ten platform/ABI
+  bindings and source fallback.
+- Add a separate ClawHub distribution with exact platform dependency versions
+  and binding hashes. The complete npm package retains the full native matrix;
+  the MCP shell continues to depend on that package at exactly the same version.
+- Validate platform dependencies before registration and preserve them through
+  OpenClaw capture and portable setup. Keep the plugin ID, database driver,
+  identity paths and migrations unchanged.
+
+Publication and hosted ClawHub installation are pending. See the
+[release process](../../docs/releasing.md).
+
 ## 0.1.3 — Developer Preview; npm and GitHub published
 
 Preserve native invite result content and reduce repeated JavaScript across the
