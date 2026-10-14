@@ -31,6 +31,69 @@ import { HeartbeatPublisher, type HeartbeatShape } from '../watch/heartbeat-publ
 import { buildMirrorPost, scrapedMediaToInput } from '../watch/feed-builder.js';
 import { BudgetGuard } from '../observability/budget-guard.js';
 
+/** Build-time distribution capability. The client bundle substitutes ranger-client.ts. */
+export const RANGER_AVAILABLE = true;
+
+export interface ScraperReportLogger {
+  info(message: string): void;
+  warn(message: string): void;
+  error(message: string): void;
+}
+
+/** Operator diagnostics stay with the provider implementation, outside the client graph. */
+export async function reportScrapers(logger: ScraperReportLogger): Promise<void> {
+  // route scrape costs into OpenClaw's structured logger.
+  // surface DegradationDetector failover events via a
+  // pino-shape logger adapter (OpenClaw's logger is single-string-arg).
+  // feed each cost event into BudgetGuard.record() for the
+  // soft daily-budget alarm + auto-throttle.
+  const pinoStyleLogger = {
+    warn: (obj: Record<string, unknown>, msg: string) =>
+      logger.warn(`popclaw: ${msg} ${JSON.stringify(obj)}`),
+    error: (obj: Record<string, unknown>, msg: string) =>
+      logger.error(`popclaw: ${msg} ${JSON.stringify(obj)}`),
+    info: (obj: Record<string, unknown>, msg: string) =>
+      logger.info(`popclaw: ${msg} ${JSON.stringify(obj)}`),
+  };
+  const budgetGuard = BudgetGuard.fromEnv(pinoStyleLogger);
+  const scraperRegistry = await buildScraperRegistry(
+    (event) => {
+      logger.info(
+        `popclaw: cost ${event.providerName} platform=${event.platform} ` +
+        `results=${event.resultsCount} usd=${event.estimatedCostUsd.toFixed(6)} ` +
+        `latency=${event.latencyMs}ms`,
+      );
+      budgetGuard.record(event);
+    },
+    pinoStyleLogger,
+  );
+  // Tell the operator at startup which platforms the
+  // ranger can scrape (drives advertised capabilities + the watch loop).
+  // Env vars must be exported BEFORE `openclaw tui` for the plugin's
+  // register() to see them — exporting after-the-fact requires a TUI
+  // restart. Surfacing this at boot time lets users notice missing creds.
+  const platforms = Array.from(scraperRegistry.keys()).sort();
+  logger.info(
+    `popclaw: scraper registry — ${platforms.length === 0 ? '(empty)' : platforms.join(', ')}`,
+  );
+  const missing: string[] = [];
+  if (!process.env.POPCLAW_TWITTERAPI_IO_KEY && !process.env.POPCLAW_APIFY_TOKEN) {
+    missing.push('X (set POPCLAW_TWITTERAPI_IO_KEY or POPCLAW_APIFY_TOKEN)');
+  }
+  if (!process.env.POPCLAW_APIFY_TOKEN) {
+    missing.push('Instagram + TikTok (set POPCLAW_APIFY_TOKEN)');
+  }
+  if (!process.env.POPCLAW_YOUTUBE_API_KEY) {
+    missing.push('YouTube (set POPCLAW_YOUTUBE_API_KEY)');
+  }
+  if (missing.length > 0) {
+    logger.warn(
+      `popclaw: missing scraper creds for: ${missing.join('; ')}. ` +
+      `Export the env vars BEFORE starting OpenClaw and restart for scraping to work.`,
+    );
+  }
+}
+
 export interface BuildScraperDeps {
   readonly gate?: ActionGate;
   readonly fetch?: typeof globalThis.fetch;

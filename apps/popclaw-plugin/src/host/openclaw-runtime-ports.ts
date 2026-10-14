@@ -34,8 +34,7 @@ import { runIntegrityChecksInProcess } from './integrity-process.js';
 import { recordBuildOnBoot, readLastBuild, markBuildAnnounced } from '../runtime/last-build.js';
 import { decideInstallNotice } from '../runtime/install-notice.js';
 import { appendSocialLog } from '../social-log/social-log.js';
-import { BudgetGuard } from '../observability/budget-guard.js';
-import { buildScraperRegistry } from '../runtime/ranger.js';
+import { RANGER_AVAILABLE, reportScrapers } from '../runtime/ranger.js';
 import { OwnerSession } from '../notifier/owner-session.js';
 import { RuntimeOwnerNotifier, notifyOwnerNow } from '../notifier/owner-notifier.js';
 import { fileDeliveryFailure } from '../notifier/delivery-failure.js';
@@ -289,8 +288,8 @@ export function gatewayRuntimePorts(input: {
       llm: () => (prompt: string) => input.llmComplete(prompt),
       presenter,
     },
-    // A Ranger on every house, always (row 25).
-    ranger: { decide: () => true },
+    // Full distributions retain the legacy Ranger policy; client builds omit it.
+    ranger: { decide: () => RANGER_AVAILABLE },
     lifecycle: {
       loops: 'host-services',
       // A boot that never finished must not leave its slots behind, nor be
@@ -330,58 +329,7 @@ export function gatewayRuntimePorts(input: {
           });
         });
       },
-      reportScrapers: async () => {
-        // route scrape costs into OpenClaw's structured logger.
-        // surface DegradationDetector failover events via a
-        // pino-shape logger adapter (OpenClaw's logger is single-string-arg).
-        // feed each cost event into BudgetGuard.record() for the
-        // soft daily-budget alarm + auto-throttle.
-        const pinoStyleLogger = {
-          warn: (obj: Record<string, unknown>, msg: string) =>
-            api.logger.warn(`popclaw: ${msg} ${JSON.stringify(obj)}`),
-          error: (obj: Record<string, unknown>, msg: string) =>
-            api.logger.error(`popclaw: ${msg} ${JSON.stringify(obj)}`),
-          info: (obj: Record<string, unknown>, msg: string) =>
-            api.logger.info(`popclaw: ${msg} ${JSON.stringify(obj)}`),
-        };
-        const budgetGuard = BudgetGuard.fromEnv(pinoStyleLogger);
-        const scraperRegistry = await buildScraperRegistry(
-          (event) => {
-            api.logger.info(
-              `popclaw: cost ${event.providerName} platform=${event.platform} ` +
-              `results=${event.resultsCount} usd=${event.estimatedCostUsd.toFixed(6)} ` +
-              `latency=${event.latencyMs}ms`,
-            );
-            budgetGuard.record(event);
-          },
-          pinoStyleLogger,
-        );
-        // Tell the operator at startup which platforms the
-        // ranger can scrape (drives advertised capabilities + the watch loop).
-        // Env vars must be exported BEFORE `openclaw tui` for the plugin's
-        // register() to see them — exporting after-the-fact requires a TUI
-        // restart. Surfacing this at boot time lets users notice missing creds.
-        const platforms = Array.from(scraperRegistry.keys()).sort();
-        api.logger.info(
-          `popclaw: scraper registry — ${platforms.length === 0 ? '(empty)' : platforms.join(', ')}`,
-        );
-        const missing: string[] = [];
-        if (!process.env.POPCLAW_TWITTERAPI_IO_KEY && !process.env.POPCLAW_APIFY_TOKEN) {
-          missing.push('X (set POPCLAW_TWITTERAPI_IO_KEY or POPCLAW_APIFY_TOKEN)');
-        }
-        if (!process.env.POPCLAW_APIFY_TOKEN) {
-          missing.push('Instagram + TikTok (set POPCLAW_APIFY_TOKEN)');
-        }
-        if (!process.env.POPCLAW_YOUTUBE_API_KEY) {
-          missing.push('YouTube (set POPCLAW_YOUTUBE_API_KEY)');
-        }
-        if (missing.length > 0) {
-          api.logger.warn(
-            `popclaw: missing scraper creds for: ${missing.join('; ')}. ` +
-            `Export the env vars BEFORE starting OpenClaw and restart for scraping to work.`,
-          );
-        }
-      },
+      reportScrapers: () => reportScrapers(api.logger),
       announceInstall: ({ paths, identityGenerated, onboardingCompleted }) => {
         // Install/upgrade echo (issue #270): follows the install credential
         // (recordBootMarkers); evaluated only once both the owner notifier (can

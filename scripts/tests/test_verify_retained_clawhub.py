@@ -84,7 +84,16 @@ class ArchiveGuards(unittest.TestCase):
              v.NATIVE+'/POPCLAW-RUNTIME-MANIFEST.json':(json_bytes({'upstreamManifestSha256':'c'*64}),0o644)}
   for path in ['LICENSE','NOTICE',v.NATIVE+'/LICENSE',v.NATIVE+'/src/better_sqlite3.cpp',v.NATIVE+'/deps/sqlite3/sqlite3.c',v.NATIVE+'/binding.gyp','migrations/001.sql']:
    self.full[path]=(b'preserved '+path.encode(),0o644)
-  self.full['dist/bundled/cli.js']=(b'#!/usr/bin/env node\n',0o755)
+  self.full['dist/bundled/cli.js']=(b'#!/usr/bin/env node\n// full Ranger graph\n',0o755)
+  client={entry:(("#!/usr/bin/env node\n// prebuilt client "+entry+"\n").encode(),0o644 if entry=='index.js' else 0o755)
+          for entry in ['index.js','mcp.js','mcp-hook.js','cli.js','prepare-native-world.js']}
+  profile={'format':1,'profile':'client','rangerExecution':False,'ownerPersonaFile':False,
+           'entryPoints':list(client),'sourceInputs':['src/runtime/ranger-client.ts'],
+           'files':[{'path':path,'size':len(data),'sha256':v.digest(data),'mode':mode} for path,(data,mode) in client.items()]}
+  client['POPCLAW-BUNDLE-PROFILE.json']=(json_bytes(profile),0o644)
+  for path,value in client.items():self.full['dist/client-bundled/'+path]=value
+  promoted=[{'sourcePath':'dist/client-bundled/'+path,'path':'dist/bundled/'+path,'size':len(data),'sha256':v.digest(data),'mode':mode}
+            for path,(data,mode) in client.items()]
   rows=[]
   for index,((platform,arch),name) in enumerate(zip(v.PLATFORMS,v.NAMES)):
    row={'name':name,'version':self.version,'platform':platform,'arch':arch}
@@ -101,7 +110,9 @@ class ArchiveGuards(unittest.TestCase):
   marker={'format':1,'distribution':'clawhub-platform-dependencies','version':self.version,'packages':rows}
   deps={name:self.version for name in v.NAMES}
   derived_main=copy.deepcopy(main);derived_main.update(name='popclaw-clawhub',optionalDependencies=deps);derived_main['openclaw']['install']={'requiredPlatformPackages':v.NAMES}
-  self.archives={'popclaw-clawhub':{path:value for path,value in self.full.items() if not path.endswith('.node')}}
+  self.archives={'popclaw-clawhub':{path:value for path,value in self.full.items()
+                if not path.endswith('.node') and not path.startswith(('dist/bundled/','dist/client-bundled/'))}}
+  self.archives['popclaw-clawhub'].update({'dist/bundled/'+path:value for path,value in client.items()})
   self.archives['popclaw-clawhub'].update({'package.json':(json_bytes(derived_main),0o644),v.NATIVE+'/package.json':(json_bytes(dict(native,optionalDependencies=deps)),0o644),v.MARKER:(json_bytes(marker),0o644)})
   licenses=['LICENSE','NOTICE',v.NATIVE+'/LICENSE'];source_files=[path for path in self.full if path.endswith(('.cpp','.c','.gyp'))]
   inv=lambda paths:[{'path':path,'size':len(self.full[path][0]),'sha256':v.digest(self.full[path][0])} for path in paths]
@@ -114,7 +125,7 @@ class ArchiveGuards(unittest.TestCase):
    for path in licenses:files[path if path in ('LICENSE','NOTICE') else 'licenses/better-sqlite3/LICENSE']=self.full[path]
    for binding in row['bindings']:files['build/Release/'+binding['file']]=self.full[v.RELEASE+binding['file']]
    self.archives[name]=files
-  self.receipt={'format':1,'profile':'clawhub','source':source,'artifactDirectory':f'popclaw-clawhub-{self.version}-{self.context["fullSha256"][:12]}','marker':marker}
+  self.receipt={'format':1,'profile':'clawhub','source':source,'artifactDirectory':f'popclaw-clawhub-{self.version}-{self.context["fullSha256"][:12]}','marker':marker,'preservation':{'promoted':promoted}}
   self.write_archives()
 
  def write_archives(self):
@@ -125,8 +136,41 @@ class ArchiveGuards(unittest.TestCase):
 
  def verify(self):return v.verify_derived(self.out,self.full_path,self.context)
 
- def test_valid_six_archives_pass_and_preserve_executable_modes(self):
+ def test_valid_client_graph_promotes_exact_source_bytes_and_preserves_modes(self):
   actual,rows=self.verify();self.assertEqual(len(rows),6);self.assertEqual(actual['popclaw-clawhub']['dist/bundled/cli.js'][1],0o755)
+
+ def test_self_resigning_receipt_cannot_hide_modified_client_or_wrong_mapping(self):
+  original=copy.deepcopy(self.archives['popclaw-clawhub'])
+  self.archives['popclaw-clawhub']['dist/bundled/index.js']=(b'operator code',0o644);self.write_archives()
+  with self.assertRaisesRegex(ValueError,'client changed source bytes/mode'):self.verify()
+  self.archives['popclaw-clawhub']=original
+  self.receipt['preservation']['promoted'][0]['sourcePath']='dist/bundled/cli.js';self.write_archives()
+  with self.assertRaisesRegex(ValueError,'promotion mapping mismatch'):self.verify()
+
+ def test_full_graph_and_nested_client_graph_cannot_survive_promotion(self):
+  for path in ['dist/bundled/full-only.js','dist/client-bundled/index.js']:
+   with self.subTest(path=path):
+    self.archives['popclaw-clawhub'][path]=(b'leftover',0o644);self.write_archives()
+    with self.assertRaisesRegex(ValueError,'main file set'):self.verify()
+    del self.archives['popclaw-clawhub'][path]
+
+ def test_historical_full_graph_archives_keep_the_original_verification_contract(self):
+  self.full={path:value for path,value in self.full.items() if not path.startswith('dist/client-bundled/')}
+  files=self.archives['popclaw-clawhub']
+  for path in list(files):
+   if path.startswith('dist/bundled/'):del files[path]
+  files.update({path:value for path,value in self.full.items() if path.startswith('dist/bundled/')})
+  pack(self.full_path,self.full)
+  self.context['fullSha256']=v.digest(self.full_path.read_bytes())
+  source=dict(self.receipt['source'],fullArchiveSha256=self.context['fullSha256'],fullArchiveBytes=self.full_path.stat().st_size)
+  self.receipt.update(source=source,artifactDirectory=f'popclaw-clawhub-{self.version}-{self.context["fullSha256"][:12]}')
+  del self.receipt['preservation']
+  for name in v.NAMES:
+   path='POPCLAW-NATIVE-PROVENANCE.json';provenance=json.loads(self.archives[name][path][0]);provenance['source']=source
+   self.archives[name][path]=(json_bytes(provenance),0o644)
+  self.write_archives();self.verify()
+  files['dist/bundled/cli.js']=(b'changed',0o755);self.write_archives()
+  with self.assertRaisesRegex(ValueError,'main changed source bytes/mode'):self.verify()
 
  def test_self_resigning_receipt_cannot_hide_changed_main_source(self):
   self.archives['popclaw-clawhub']['migrations/001.sql']=(b'changed source',0o644);self.write_archives()

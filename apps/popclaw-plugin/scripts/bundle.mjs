@@ -17,13 +17,14 @@
  */
 import { build } from 'esbuild';
 import { execSync } from 'node:child_process';
-import { chmodSync, existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { buildIntegrityWorker } from './build-integrity-worker.mjs';
 import { buildSchemaWorker } from './build-schema-worker.mjs';
 import { collectBundleLicenses } from './bundle-licenses.mjs';
 import { bundleMinification } from './bundle-minification.mjs';
+import { CLIENT_BUNDLE, clientCapabilityPlugin, writeBundleProfile } from './bundle-profiles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -52,6 +53,7 @@ const schemaWorker = await buildSchemaWorker();
 const integrityWorker = await buildIntegrityWorker();
 
 const shared = {
+  absWorkingDir: root,
   bundle: true,
   metafile: true,
   platform: 'node',
@@ -113,50 +115,46 @@ const bannerLines = [
   `};`,
 ];
 
-// Clear obsolete hashed chunks before writing a complete output graph. Otherwise
-// a second build could silently ship old code and inflate the package again.
-const bundledDir = resolve(root, 'dist/bundled');
-// build:protocol already wrote public-envelope-notices here. Keep that
-// directory intact; the license collector separately refreshes its own output.
-if (existsSync(bundledDir)) {
-  for (const file of readdirSync(bundledDir, { withFileTypes: true })) {
-    if (file.isFile() && file.name.endsWith('.js')) rmSync(resolve(bundledDir, file.name));
+// The complete archive carries both prebuilt graphs. ClawHub derivation only
+// promotes the client graph; it never compiles source or edits JavaScript.
+for (const profile of ['full', 'client']) {
+  const bundledDir = resolve(root, profile === 'full' ? 'dist/bundled' : CLIENT_BUNDLE);
+  if (profile === 'client') {
+    // The private client staging graph has no independently generated files.
+    rmSync(bundledDir, { recursive: true, force: true });
+    mkdirSync(bundledDir, { recursive: true });
+    cpSync(resolve(root, 'dist/bundled/public-envelope-notices'), resolve(bundledDir, 'public-envelope-notices'), { recursive: true });
+  } else if (existsSync(bundledDir)) {
+    // build:protocol wrote the pinned notices; preserve them across refreshes.
+    for (const file of readdirSync(bundledDir, { withFileTypes: true })) {
+      if (file.isFile() && file.name.endsWith('.js')) rmSync(resolve(bundledDir, file.name));
+    }
   }
-}
-const entryResult = await build({
-  ...shared,
-  entryPoints: {
-    index: resolve(root, 'src/index.ts'),
-    mcp: resolve(root, 'src/mcp.ts'),
-    'mcp-hook': resolve(root, 'src/mcp-hook.ts'),
-    cli: resolve(root, 'src/main.ts'),
-    'prepare-native-world': resolve(root, 'scripts/prepare-native-world.ts'),
-  },
-  outdir: bundledDir,
-  splitting: true,
-  chunkNames: 'shared-[hash]',
-  banner: { js: ['#!/usr/bin/env node', ...bannerLines].join('\n') },
-});
-for (const entry of ['mcp', 'mcp-hook', 'cli', 'prepare-native-world']) {
-  chmodSync(resolve(bundledDir, `${entry}.js`), 0o755);
-}
+  const entryResult = await build({
+    ...shared,
+    entryPoints: {
+      index: resolve(root, 'src/index.ts'),
+      mcp: resolve(root, 'src/mcp.ts'),
+      'mcp-hook': resolve(root, 'src/mcp-hook.ts'),
+      cli: resolve(root, 'src/main.ts'),
+      'prepare-native-world': resolve(root, 'scripts/prepare-native-world.ts'),
+    },
+    outdir: bundledDir,
+    splitting: true,
+    chunkNames: 'shared-[hash]',
+    plugins: profile === 'client' ? [clientCapabilityPlugin(root)] : [],
+    banner: { js: ['#!/usr/bin/env node', ...bannerLines].join('\n') },
+  });
+  for (const entry of ['mcp', 'mcp-hook', 'cli', 'prepare-native-world']) chmodSync(resolve(bundledDir, `${entry}.js`), 0o755);
 
-// License closure of the ACTUAL bundle inputs of EVERY distributed file: each
-// entry and shared chunk, plus the two embedded workers. Every
-// third-party package whose code was inlined anywhere gets its full LICENSE
-// (and NOTICE, if any) shipped beside the bundle (esbuild's legalComments:eof
-// preserves /*! */ headers, but that alone does not carry a package's full
-// license text). A package without a license fails the build. Dev-only and
-// workspace-internal inputs are not part of the closure. The vendored
-// smol-toml license rides along byte-exact.
-const licensed = collectBundleLicenses({
-  metafiles: [schemaWorker.metafile, integrityWorker.metafile, entryResult.metafile],
-  baseDir: root,
-  licensesDir: resolve(root, 'dist/bundled/licenses'),
-  vendored: [{ label: 'smol-toml@vendored', file: resolve(root, 'src/setup/vendor/smol-toml.LICENSE') }],
-});
-console.log(`bundle licenses: shipped ${licensed.length} npm package licenses + vendored smol-toml`);
-
-console.log(
-  `bundled → dist/bundled/index.js + dist/bundled/mcp.js + dist/bundled/mcp-hook.js + dist/bundled/cli.js + dist/bundled/prepare-native-world.js + shared chunks  [build ${BUILD_STAMP}]`,
-);
+  // Each graph has its own exact license closure, including the embedded
+  // workers and vendored setup parser. Both are inspectable in the full archive.
+  const licensed = collectBundleLicenses({
+    metafiles: [schemaWorker.metafile, integrityWorker.metafile, entryResult.metafile],
+    baseDir: root,
+    licensesDir: resolve(bundledDir, 'licenses'),
+    vendored: [{ label: 'smol-toml@vendored', file: resolve(root, 'src/setup/vendor/smol-toml.LICENSE') }],
+  });
+  const manifest = writeBundleProfile({ root, directory: bundledDir, profile, metafile: entryResult.metafile });
+  console.log(`bundle ${profile}: ${manifest.files.length} files, ${licensed.length} npm licenses + vendored smol-toml [build ${BUILD_STAMP}]`);
+}
