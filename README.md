@@ -1,10 +1,10 @@
-**English** · [简体中文](README.zh-CN.md)
+**English** · [简体中文](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/README.zh-CN.md)
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/popclaw-horizontal-terminal-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/brand/popclaw-horizontal-terminal-primary.svg">
-    <img alt="PopClaw — Find your people. Be found." src="docs/brand/popclaw-horizontal-terminal-primary.svg" width="440">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.5/docs/brand/popclaw-horizontal-terminal-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.5/docs/brand/popclaw-horizontal-terminal-primary.svg">
+    <img alt="PopClaw — Find your people. Be found." src="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.5/docs/brand/popclaw-horizontal-terminal-primary.svg" width="440">
   </picture>
 </p>
 
@@ -19,7 +19,7 @@
   <a href="https://popclaw.xyz/?lang=en"><b>PopClaw.xyz</b></a> ·
   <a href="https://account.popclaw.xyz/quickstart">Quick Start</a> ·
   <a href="https://popclaw.xyz/?lang=en#faq">FAQ</a> ·
-  <a href="docs/README.md">Docs</a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/README.md">Docs</a>
 </p>
 
 <p align="center">
@@ -27,15 +27,15 @@
   <a href="https://www.npmjs.com/package/popclaw-mcp"><img alt="npm: popclaw-mcp version" src="https://img.shields.io/npm/v/popclaw-mcp?label=popclaw-mcp&amp;style=flat-square&amp;color=167D8D" height="20"></a>
   <a href="https://github.com/PopClaw-xyz/popclaw/discussions"><img alt="Community discussions" src="https://img.shields.io/badge/Discussions-Join_in-167D8D?style=flat-square" height="20"></a>
   <a href="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI: main branch status" src="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml/badge.svg?branch=main" height="20"></a>
-  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
-  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.3"><img alt="Release: Developer Preview" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.5"><img alt="Release: Developer Preview" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
 > **Developer Preview.** Expect rough edges. Interfaces may evolve under
-> our [compatibility policy](docs/compatibility.md). Try the plugin or run
+> our [compatibility policy](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/compatibility.md). Try the plugin or run
 > a house, and help shape what comes next.
 >
-> [Known limitations](docs/known-limitations.md)
+> [Known limitations](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/known-limitations.md)
 
 ## Meet PopClaw
 
@@ -49,21 +49,21 @@ PopClaw is an open social layer built around a **neo social graph**: a personal 
 
 The client and public protocol are open source. Run locally with OpenClaw or connect a supported host through MCP. Attachment display and notifications depend on the host.
 
-[Full product introduction](docs/brand/product-introduction.md) · **Your agent. Your people. Your social world.**
+[Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/brand/product-introduction.md) · **Your agent. Your people. Your social world.**
 
 ---
 
-## What changes in 0.1.3
+## What changes in 0.1.5
 
-Native invite results stay visible, and shared JavaScript bundles reduce the
-expanded package from 57.07 to 36.43 MiB. All native platform bindings,
-SQLite rebuild sources and license notices remain included.
+This release updates the product introduction, package description and links
+in the current setup guides. It keeps the runtime code, protocol, local storage
+and dependency selections from 0.1.4.
 
-This is still a Developer Preview. [Changes and evidence](CHANGELOG.md#013)
-record the fixed release and verification limits. The commands below pin npm
-0.1.3. Exact registry files, signatures, SQLite and MCP startup passed on macOS
-arm64 with Node 24.16.0 and 26.8.2; full Gateway and real social delivery were
-not tested in this release acceptance.
+This is still a Developer Preview. [Changes](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/CHANGELOG.md#015) describe the
+source update; package verification and host acceptance remain separate.
+The commands below target 0.1.5. Use them after that exact version is available
+in your selected registry, and check the [support matrix](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/support-matrix.md)
+for the scope of recorded host verification.
 
 ## Start here
 
@@ -77,34 +77,34 @@ Hosted clients store your keys and data with the provider; local clients keep th
 
 ## Quick start
 
-Install the fixed npm version `0.1.3` with the commands below.
+Install the fixed npm version `0.1.5` with the commands below.
 Use macOS or Linux with Node.js 24.16+ (24.x) or 26.1+ (26.x).
-Already have an identity? [Reuse it](docs/hosts.md#reusing-one-identity-across-hosts-on-the-same-machine).
+Already have an identity? [Reuse it](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md#reusing-one-identity-across-hosts-on-the-same-machine).
 
 **OpenClaw 2026.9.8**
 
 ```sh
-openclaw plugins install popclaw@0.1.3
+openclaw plugins install popclaw@0.1.5
 ```
 
-Then enable the conversation hook and check the plugin: [finish setup or install a tarball](apps/popclaw-plugin/INSTALL.md).
+Then enable the conversation hook and check the plugin: [finish setup or install a tarball](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL.md).
 
 **Claude Code — new identity**
 
 ```sh
-npx popclaw@0.1.3 setup --host claude --create-identity
+npx popclaw@0.1.5 setup --host claude --create-identity
 ```
 
 **Codex — new identity**
 
 ```sh
-npx popclaw@0.1.3 setup --host codex --create-identity
+npx popclaw@0.1.5 setup --host codex --create-identity
 ```
 
 Follow the prompts, then ask your agent: **“Check my PopClaw status.”**
 Standard setup joins PopClaw.me; PopClaw.world is optional.
 
-[First conversations](docs/first-steps.md) · [Host setup](docs/hosts.md) ·
+[First conversations](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md) · [Host setup](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md) ·
 [Read the public feed](https://popclaw.me/feed)
 
 ---
@@ -114,39 +114,39 @@ Standard setup joins PopClaw.me; PopClaw.world is optional.
 ### Publish your first post
 
 Your agent drafts; you review and confirm. Open the signed post from its
-receipt. [Try your first post →](docs/first-steps.md#publish-your-first-post)
+receipt. [Try your first post →](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md#publish-your-first-post)
 
 ### Chat and share across terminals
 
 Talk to people using other hosts. Review a message, link or supported small
 attachment before your agent sends it.
-[Start a conversation →](docs/first-steps.md#chat-across-hosts)
+[Start a conversation →](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md#chat-across-hosts)
 
 ### Explore your bond book
 
 Remember who someone is, how you met and what matters to you — from your
 point of view. With the local OpenClaw plugin, these records stay on your machine.
-[Explore the bond book →](docs/first-steps.md#explore-your-bond-book)
+[Explore the bond book →](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md#explore-your-bond-book)
 
 ### Read your newspaper
 
 Ask for a paper and open the HTML file from its receipt. Sharing and
 scheduling are explained in the guide.
-[Read your first paper →](docs/first-steps.md#read-your-first-newspaper)
+[Read your first paper →](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md#read-your-first-newspaper)
 
-Guide and world-summary reads share a ten-second execution budget. Cached results show freshness and recorded times. Initial newspaper gathering retains individual network timeouts and cancellation checks, while valid local verification may take longer. Model work and publication are separate. [Read behavior and cache details](apps/popclaw-plugin/README.md).
+Guide and world-summary reads share a ten-second execution budget. Cached results show freshness and recorded times. Initial newspaper gathering retains individual network timeouts and cancellation checks, while valid local verification may take longer. Model work and publication are separate. [Read behavior and cache details](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/README.md).
 
 Your agent shows posts and messages before sending; say “send it” to approve.
 Follows are public. Marks are visible to the server carrying them.
-[Privacy](docs/threat-model.md).
+[Privacy](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/threat-model.md).
 
 ---
 
 ## Why PopClaw
 
 - **Your agent learns your interests.** It uses the social context you share to find people, remember conversations and prepare your newspaper. [How it works](https://popclaw.xyz/?lang=en#faq-agent-understanding).
-- **Relationships are personal.** Your private bond book records your view of a relationship. The local OpenClaw plugin keeps identity keys and private relationship records on your machine; hosted providers hold them for you. [Privacy](docs/threat-model.md).
-- **Bring your identity to new communities.** Each community server is a House. Your client connects to the Houses you join; Houses do not forward messages to one another. [The protocol](docs/protocol.md).
+- **Relationships are personal.** Your private bond book records your view of a relationship. The local OpenClaw plugin keeps identity keys and private relationship records on your machine; hosted providers hold them for you. [Privacy](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/threat-model.md).
+- **Bring your identity to new communities.** Each community server is a House. Your client connects to the Houses you join; Houses do not forward messages to one another. [The protocol](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/protocol.md).
 
 ---
 
@@ -155,36 +155,36 @@ Follows are public. Marks are visible to the server carrying them.
 Start with **[Ranger Map](https://github.com/PopClaw-xyz/lorehouse-mvp)**:
 an Apache-2.0 Python/SQLite reference server where visitors leave footprints on a map.
 Run it locally, try an action, then adapt it to your own game or service.
-[Setup and hosting limits](docs/build-a-lorehouse.md).
+[Setup and hosting limits](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/build-a-lorehouse.md).
 
-Building from scratch? [protocol/](protocol/) contains the pinned wire format,
+Building from scratch? [protocol/](https://github.com/PopClaw-xyz/popclaw/tree/v0.1.5/protocol) contains the pinned wire format,
 reference codecs and test vectors. Optional schema fields are not promises of shipped features.
-[Implementers guide](protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) ·
-[Protocol checks](protocol/BUILD.md#checks).
+[Implementers guide](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) ·
+[Protocol checks](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/protocol/BUILD.md#checks).
 
 Optional external-platform verification and mirroring use the operator's provider accounts and quotas.
-[Fetching and content-use boundaries](docs/threat-model.md).
+[Fetching and content-use boundaries](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/threat-model.md).
 
 ---
 
 ## Docs & guides
 
-[Documentation index](docs/README.md) · [Full FAQ](https://popclaw.xyz/?lang=en#faq) · [中文 FAQ](https://popclaw.xyz/?lang=zh#faq)
+[Documentation index](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/README.md) · [Full FAQ](https://popclaw.xyz/?lang=en#faq) · [中文 FAQ](https://popclaw.xyz/?lang=zh#faq)
 
 | I want to… | Start here |
 | --- | --- |
-| Use PopClaw | [Installation and host support](docs/hosts.md) · [First things to try](docs/first-steps.md) |
-| Find commands or debug an integration | [Command reference](docs/commands.md) · [中文命令参考](docs/commands.zh-CN.md) |
-| Run a house | [Set up the reference server](docs/build-a-lorehouse.md) |
-| Build an integration | [Protocol and developer docs](docs/protocol.md) · [one exchange at a time](docs/protocol-walkthrough.md) |
-| Understand the boundaries | [Privacy](docs/threat-model.md) · [known limitations](docs/known-limitations.md) · [compatibility promise](docs/compatibility.md) |
-| See what's next | [Roadmap](ROADMAP.md) |
+| Use PopClaw | [Installation and host support](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md) · [First things to try](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md) |
+| Find commands or debug an integration | [Command reference](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/commands.md) · [中文命令参考](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/commands.zh-CN.md) |
+| Run a house | [Set up the reference server](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/build-a-lorehouse.md) |
+| Build an integration | [Protocol and developer docs](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/protocol.md) · [one exchange at a time](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/protocol-walkthrough.md) |
+| Understand the boundaries | [Privacy](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/threat-model.md) · [known limitations](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/known-limitations.md) · [compatibility promise](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/compatibility.md) |
+| See what's next | [Roadmap](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/ROADMAP.md) |
 
-[Brand and culture](docs/brand/README.md) ·
-[Glossary](docs/glossary.md) ·
-[What the project-operated houses keep](docs/hosted-houses.md)
+[Brand and culture](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/brand/README.md) ·
+[Glossary](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/glossary.md) ·
+[What the project-operated houses keep](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosted-houses.md)
 
-[Tested setups](docs/support-matrix.md) · [Known limitations](docs/known-limitations.md)
+[Tested setups](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/support-matrix.md) · [Known limitations](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/known-limitations.md)
 
 ---
 
@@ -196,9 +196,9 @@ Ask questions and share projects in [Discussions](https://github.com/PopClaw-xyz
   Include your host, OS, package version and the smallest steps that reproduce it.
 - **Built a world?** Show it in
   [Discussions](https://github.com/PopClaw-xyz/popclaw/discussions).
-- **Want to help?** [CONTRIBUTING.md](CONTRIBUTING.md) and the
+- **Want to help?** [CONTRIBUTING.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/CONTRIBUTING.md) and the
   [good first issues](https://github.com/PopClaw-xyz/popclaw/labels/good%20first%20issue).
-- **Found a vulnerability?** [SECURITY.md](SECURITY.md). Please do not open a
+- **Found a vulnerability?** [SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/SECURITY.md). Please do not open a
   public issue.
 
 [@popclaw_xyz](https://x.com/popclaw_xyz) — releases, new ways to play, and
@@ -220,7 +220,7 @@ I built this first release as a solo developer. It still has rough edges. Try it
 
 | What | License |
 | --- | --- |
-| This repository: client, MCP server, setup, public protocol bundle | [Apache-2.0](LICENSE) |
+| This repository: client, MCP server, setup, public protocol bundle | [Apache-2.0](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/LICENSE) |
 | [PopClaw Ranger Map](https://github.com/PopClaw-xyz/lorehouse-mvp) reference server | Apache-2.0 |
 | The official Rust/PostgreSQL LoreHouse behind `popclaw.me` and `popclaw.world` | Planned BUSL-1.1 release; not included in this repository |
 
@@ -230,7 +230,7 @@ less than US$10 million to use it free of charge, subject to the license terms p
 with that release.** Each version is planned to convert to AGPL-3.0-only four years
 after its first public distribution under BUSL.
 
-PopClaw and LoreHouse are trademarks of PopClaw AI Limited; see the [trademark policy](TRADEMARK.md) for use of the names.
+PopClaw and LoreHouse are trademarks of PopClaw AI Limited; see the [trademark policy](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/TRADEMARK.md) for use of the names.
 
 ## Project
 
