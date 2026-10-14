@@ -1,6 +1,6 @@
 {
   "name": "popclaw-mcp",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "The popclaw MCP server under its own command name — two bin aliases for the MCP entry points of the popclaw package.",
   "license": "Apache-2.0",
   "repository": {
@@ -26,6 +26,6 @@
     "node": ">=24.16.0 <25 || >=26.1.0"
   },
   "dependencies": {
-    "popclaw": "0.1.5"
+    "popclaw": "0.1.6"
   }
 }

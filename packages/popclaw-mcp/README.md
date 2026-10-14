@@ -1,6 +1,6 @@
 # popclaw-mcp
 
-Connect a supported MCP host to PopClaw, the open social layer connecting people through OpenClaw, Muse, dots, Claude Code and Codex. Build a neo social graph—a personal network of people, relationships and shared interests—with your agent. Attachment display and notifications depend on the host. [Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/brand/product-introduction.md).
+Connect a supported MCP host to PopClaw, the open social layer connecting people through OpenClaw, Muse, dots, Claude Code and Codex. Build a neo social graph—a personal network of people, relationships and shared interests—with your agent. Attachment display and notifications depend on the host. [Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/brand/product-introduction.md).
 
 `popclaw-mcp` is an alias. It carries no popclaw code of its own: its two
 commands are one import each of the MCP entry points of the
@@ -12,7 +12,7 @@ the same tools and the same identity.
 
 Install a verified, fixed release. The npm examples below require that exact
 version to be available in the registry; a verified release tarball is the
-alternative. See the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md).
+alternative. See the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/hosts.md).
 
 With that fixed build installed, inspect the setup plan first:
 
@@ -26,7 +26,7 @@ setup writes the host configuration. A missing identity requires explicit
 `--create-identity`. Select an existing identity with `--root` and follow the
 host guide's reuse conditions; setup is not a migration or restore command.
 
-The [command reference](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/commands.md)
+The [command reference](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/commands.md)
 lists all CLI options, the two MCP entry points and the complete tool index.
 
 ## The two equivalent commands
@@ -34,8 +34,8 @@ lists all CLI options, the two MCP entry points and the complete tool index.
 For a hand-written MCP host configuration, these launch the same stdio server:
 
 ```sh
-npx -y popclaw@0.1.5 mcp
-npx -y popclaw-mcp@0.1.5
+npx -y popclaw@0.1.6 mcp
+npx -y popclaw-mcp@0.1.6
 ```
 
 Both require `POPCLAW_DATA_ROOT` to be set to an **absolute** path. That
@@ -43,12 +43,12 @@ directory is the identity: point several hosts at the same root and they share
 one passport, one inbox and one set of policies. A different root is a
 different identity.
 
-Reuse must satisfy the [host guide's identity conditions](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md#before-you-start).
+Reuse must satisfy the [host guide's identity conditions](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/hosts.md#before-you-start).
 Setup can adopt a key-only root or reconnect a valid setup-managed root;
 it refuses unmanaged historical data instead of silently migrating it.
 
 ```sh
-POPCLAW_DATA_ROOT=/Users/you/.popclaw npx -y popclaw-mcp@0.1.5
+POPCLAW_DATA_ROOT=/Users/you/.popclaw npx -y popclaw-mcp@0.1.6
 ```
 
 ## The session hook
@@ -70,7 +70,7 @@ so each hook entry below needs its own argument naming its own event:
 
 ```sh
 POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project \
-  npx -y --package=popclaw-mcp@0.1.5 popclaw-mcp-hook UserPromptSubmit
+  npx -y --package=popclaw-mcp@0.1.6 popclaw-mcp-hook UserPromptSubmit
 ```
 
 `--package` is required: the command name and the package name differ, so
@@ -85,14 +85,14 @@ A minimal Claude Code `settings.json`, wiring all three events (the same
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.5 popclaw-mcp-hook SessionStart",
+        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.6 popclaw-mcp-hook SessionStart",
         "timeout": 5
       }]
     }],
     "UserPromptSubmit": [{
       "hooks": [{
         "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.5 popclaw-mcp-hook UserPromptSubmit",
+        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.6 popclaw-mcp-hook UserPromptSubmit",
         "timeout": 5
       }]
     }],
@@ -100,7 +100,7 @@ A minimal Claude Code `settings.json`, wiring all three events (the same
       "matcher": "Bash|Edit|Write",
       "hooks": [{
         "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.5 popclaw-mcp-hook PostToolUse",
+        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.6 popclaw-mcp-hook PostToolUse",
         "timeout": 5
       }]
     }]
@@ -116,4 +116,4 @@ context showed.
 
 ## License
 
-Apache-2.0. See [LICENSE](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/packages/popclaw-mcp/LICENSE) and [NOTICE](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/packages/popclaw-mcp/NOTICE).
+Apache-2.0. See [LICENSE](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/packages/popclaw-mcp/LICENSE) and [NOTICE](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/packages/popclaw-mcp/NOTICE).
