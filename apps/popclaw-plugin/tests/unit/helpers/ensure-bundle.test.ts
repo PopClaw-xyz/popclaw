@@ -124,6 +124,7 @@ describe('ensureBundle staleness decision', () => {
 
   it.each([
     'bundle-minification.mjs',
+    'bundle-profiles.mjs',
     'prepare-native-deps.mjs',
     'native-runtime-manifest.mjs',
     'native-binding-loader.cjs',

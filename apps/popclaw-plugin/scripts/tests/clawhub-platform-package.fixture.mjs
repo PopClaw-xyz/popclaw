@@ -89,6 +89,17 @@ function fixture(name, alter = () => {}, extras = []) {
     `${NATIVE}/deps/sqlite3/sqlite3.c`, `${NATIVE}/deps/sqlite3/sqlite3.h`, `${NATIVE}/deps/common.gypi`, `${NATIVE}/deps/sqlite3.gyp`,
     'migrations/001.sql', 'dist/bundled/index.js', 'dist/native-deps/bindings/LICENSE']) put(root, path, `fixture content for ${path}\n`);
   put(root, 'dist/bundled/cli.js', '#!/usr/bin/env node\n', 0o755);
+  const clientFiles = ['index.js', 'mcp.js', 'mcp-hook.js', 'cli.js', 'prepare-native-world.js'].map(path => {
+    const bytes = Buffer.from(path === 'cli.js' ? '#!/usr/bin/env node\n' : `export const profile = 'client'; // ${path}\n`);
+    const mode = path === 'index.js' ? 0o644 : 0o755;
+    put(root, `dist/client-bundled/${path}`, bytes, mode);
+    return { path, size: bytes.length, sha256: hash(bytes), mode };
+  });
+  put(root, 'dist/client-bundled/POPCLAW-BUNDLE-PROFILE.json', {
+    format: 1, profile: 'client', rangerExecution: false, ownerPersonaFile: false,
+    entryPoints: ['index.js', 'mcp.js', 'mcp-hook.js', 'cli.js', 'prepare-native-world.js'],
+    sourceInputs: ['src/runtime/ranger-client.ts'], files: clientFiles,
+  });
   for (const [platform, arch] of PLATFORMS) for (const major of Object.keys(ABI)) put(root, `${RELEASE}/${bindingName(platform, arch, major)}`, headerFixture(platform, arch, major));
   alter(root);
   const archive = join(temporary, name, 'full-fixture.tgz');
@@ -138,7 +149,8 @@ test('derives six deterministic archives, preserving the source, licenses and so
   assert.equal(receipt.source.fullArchiveSha256, hash(original));
   assert.equal(receipt.source.package.version, VERSION);
   assert.equal(receipt.fullMatrixVerification.cells, 10);
-  assert.equal(receipt.preservation.removed.length, 10);
+  assert.equal(receipt.preservation.removed.filter(path => path.endsWith('.node')).length, 10);
+  assert.equal(receipt.preservation.promoted.length, 6);
   assert.equal(receipt.packages.length, 6);
   assert.equal(readdirSync(output).length, 7);
   const mainPackage = receipt.packages.find(pkg => pkg.name === 'popclaw-clawhub');
@@ -293,4 +305,39 @@ test('validates profile arguments and keeps the full profile matrix guard', () =
   const recipe = execFileSync('just', ['--show', 'pack-plugin'], { cwd: repo, encoding: 'utf8' });
   assert.match(recipe, /\$PROFILE="full"/);
   assert.match(recipe, /--verify-tarball "\$dst"/);
+});
+
+
+test('promotes the prebuilt client graph and removes every full graph file', () => {
+  const full = fixture('client-profile', root => {
+    put(root, 'dist/bundled/shared-full.js', "export const provider = 'full-only';\n");
+  });
+  const result = packageClawHub({ fullTarball: full.archive, dest: join(temporary, 'client-profile-output') });
+  const main = result.packages.find(pkg => pkg.name === 'popclaw-clawhub');
+  const root = unpack(join(result.directory, main.filename), join(temporary, 'client-profile-inspection'));
+  assert.deepEqual(readFileSync(join(root, 'dist/bundled/index.js')), readFileSync(join(full.root, 'dist/client-bundled/index.js')),
+    'ClawHub must execute the exact prebuilt client graph instead of the full Ranger graph');
+  const paths = execFileSync('tar', ['-tzf', join(result.directory, main.filename)], { encoding: 'utf8' }).split('\n');
+  assert.equal(paths.some(path => path.includes('/dist/client-bundled/')), false);
+  assert.equal(paths.some(path => path.endsWith('/shared-full.js')), false);
+  const promoted = result.preservation.promoted.find(file => file.path === 'dist/bundled/index.js');
+  assert.equal(promoted.sourcePath, 'dist/client-bundled/index.js');
+  assert.equal(promoted.sha256, hash(readFileSync(join(full.root, promoted.sourcePath))));
+});
+
+
+test('rejects missing or modified client graphs instead of falling back to full operator code', () => {
+  const missing = fixture('missing-client', root => rmSync(join(root, 'dist/client-bundled'), { recursive: true }));
+  failure(missing.archive, 'missing-client', /no valid prebuilt client profile/);
+  const changed = fixture('changed-client', root => put(root, 'dist/client-bundled/index.js', 'changed client'));
+  failure(changed.archive, 'changed-client', /prebuilt client inventory differs/);
+  const extra = fixture('extra-client', root => put(root, 'dist/client-bundled/unrecorded.js', 'unexpected'));
+  failure(extra.archive, 'extra-client', /prebuilt client inventory differs/);
+  const provider = fixture('provider-client', root => {
+    const path = 'dist/client-bundled/POPCLAW-BUNDLE-PROFILE.json';
+    const profile = readJson(join(root, path));
+    profile.sourceInputs.push('src/scraper/commercial/twitterapi-io-scraper.ts');
+    put(root, path, profile);
+  });
+  failure(provider.archive, 'provider-client', /invalid client capability profile/);
 });

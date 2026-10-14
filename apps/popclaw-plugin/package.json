@@ -19,6 +19,7 @@
   "files": [
     "NOTICE",
     "dist/bundled",
+    "dist/client-bundled",
     "dist/native-deps",
     "migrations",
     "openclaw.plugin.json",
