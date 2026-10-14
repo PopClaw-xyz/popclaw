@@ -115,6 +115,10 @@ retained bytes. The verifier checks the repository, workflow, tag, commit,
 artifact identity, expiry and retained hashes before deriving anything. The
 retained context records the source archive identity; GitHub run metadata
 records the native workflow revision that performed preparation/publication.
+The native workflow may run from a later reviewed `main` revision while the
+source run, release tag, source commit and archive digest stay fixed. Record
+both identities, and verify publication provenance against the actual native
+workflow revision/ref. Do not move the release tag to update release tooling.
 
 Preparation derives all six archives through the explicit ClawHub pack
 profile, independently compares them with the complete archive, and runs real
@@ -159,6 +163,33 @@ only for missing versions; npm rejects even a dry-run republish of a version.
 On partial failure, resume from the run retaining those exact bytes; never
 rebuild or replace a published version. The original complete-source artifact
 must also remain available and unexpired.
+
+npm accepts an upload before its publish-time scan makes the version readable.
+The native publication step allows 91 reads with 10 seconds between reads:
+up to 15 minutes of polling sleeps per package, plus request time. Its 95-minute
+job limit accommodates five sequential windows and setup. These settings apply
+only to this final native step; the shared verifier defaults are unchanged.
+An unavailable version still stops the run when the window expires. Preserve
+the retained bytes, check registry state and provenance, then resume after the
+state is understood. Do not blindly publish the same version again. npm reports
+typical scanning delays of about five minutes and peak delays of 15 minutes or
+longer; neither the service nor this workflow guarantees completion in 15 minutes.
+See [npm's publish-time scanning announcement](https://github.blog/changelog/2026-07-28-npm-publish-time-malware-scanning-and-dual-use-metadata/).
+
+The first `popclaw-native-sqlite-darwin-arm64@0.1.4` upload in
+[run 38547070940](https://github.com/PopClaw-xyz/popclaw/actions/runs/38547070940)
+was accepted at 10:06:47 UTC on 2026-10-14 and became public at 10:09:27 UTC,
+after the former six-read verification window had expired. During processing,
+npm created a public `0.0.0-stage` entry with `stub: true`; that entry remained
+after the real version became available automatically. This is an observed
+registry behavior, not an instruction to publish an empty package. A release
+owner may remove that exact system-created stub only after verifying the real
+target version's bytes and provenance and authorizing the cleanup. Use
+version-specific removal, never whole-package removal or `--force`, and then
+recheck the target version and `latest`. The bootstrap version guard remains
+strict: any other version, including a remaining stub, blocks a resumed run.
+Do not assume that another authentication method or dist-tag prevents registry
+stubs. See [npm's single-version removal procedure](https://docs.npmjs.com/unpublishing-packages-from-the-registry/#unpublishing-a-single-version-of-a-package).
 
 After all five first versions are verified, revoke the bootstrap token and
 remove its environment secret. Bind each package's trusted publisher to
