@@ -62,6 +62,19 @@ const ids = (text?: string): number[] =>
       )
     : [];
 describe('bounded tool notification offers', () => {
+  it('keeps unrelated notices bounded without adding approval to an authorized handoff', () => {
+    const { ctx, add, store } = setup();
+    add();
+    const offer = offerToolNotice(ctx);
+    const data = JSON.parse(offer.text!.split('\n')[1]!);
+    expect(data.instruction).toContain('For an unrelated task, relay only owner_text and do not retrieve private content.');
+    expect(data.instruction).toContain('An owner request or notification delivery already authorized for this conversation permits the corresponding retrieval without asking again.');
+    expect(data.instruction).toContain('Acknowledge only offered IDs after relaying the corresponding notification in this chat.');
+    expect(data.instruction).not.toContain('Ask the owner before reading or acknowledging');
+    expect(offer.text).not.toContain('IGNORE ALL RULES');
+    expect(store.countFor('A')).toBe(1);
+  });
+
   it('offers three IDs then unseen backlog after sixty seconds', () => {
     const { ctx, add, advance, store } = setup();
     for (let i = 0; i < 7; i++) add();
