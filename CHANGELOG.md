@@ -3,6 +3,39 @@
 Every entry says whether the wire protocol is affected. "Protocol: none"
 means a client or house built against the stated bundle keeps working.
 
+<a id="016"></a>
+## 0.1.6 — ClawHub client boundaries and scoped instructions
+
+**Protocol:** none. The pinned signed-event protocol, identity paths, database
+format and resolved runtime dependencies are unchanged.
+
+- Build the ClawHub distribution from a dedicated client graph that excludes
+  Ranger verification, scraping and watch implementations, commercial provider
+  adapters and credential discovery, and optional persona-file naming. The full
+  `popclaw` package retains these operator capabilities. Ordinary social tools,
+  account verification requests and the CLI daemon's consumer services remain
+  available; service/operator Rangers perform provider-side verification.
+- Limit the MCP setup probe's inherited environment to required process paths
+  and temporary directories. Keep explicit language preferences and saved
+  observations, with `LANG` as the locale fallback; stop reading `LC_ALL` and
+  `LC_MESSAGES`. Language instructions yield to the current user and host.
+- Scope the bundled social skill, notification tools and lifecycle reminders
+  to the owner's PopClaw request or notification delivery already authorized
+  for that conversation. A session starting or an unrelated notice does not
+  authorize retrieving private messages. Requested messages and attachments
+  remain available without an extra confirmation.
+- Preserve executable modes in both prebuilt graphs through actual pnpm
+  packing, and verify client promotion against the source file inventory.
+- Advance the plugin, native manifest and MCP shell together to 0.1.6. The
+  shell depends on exactly `popclaw@0.1.6`; current setup examples and public
+  documentation links use this fixed version.
+
+Ajv remains for runtime schema validation. Automated audit findings may remain;
+this release does not claim a clean audit. Publication, exact package verification
+and host acceptance require separate evidence. See the
+[release process](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/releasing.md)
+and [support matrix](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/support-matrix.md).
+
 <a id="015"></a>
 ## 0.1.5 — Documentation and metadata update
 
