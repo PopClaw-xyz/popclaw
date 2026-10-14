@@ -170,6 +170,15 @@ authentication. Record that limit explicitly; do not publish an extra version
 solely to test authentication. The next authorized release that actually
 publishes new versions supplies that evidence.
 
+New trusted-publisher configurations expire unless their first successful
+publish completes within two days. Coordinate new bindings with the next
+authorized release of a new version. Verifying existing versions, running a
+dry run, or saving the configuration does not satisfy this requirement or
+validate the binding. If it expires, delete and recreate it before that
+release, then complete its first publish within two days. Do not report a
+saved configuration as permanently verified. See
+[npm's configuration expiry rules](https://docs.npmjs.com/trusted-publishers/#trusted-publisher-configuration-expiry).
+
 Only after all five native versions are verified may the retained main archive
 be uploaded to ClawHub. Record the hosted download digest and perform the
 clean `clawhub:` installation described above. Optional-dependency failures can
