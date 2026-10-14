@@ -103,6 +103,7 @@ Dispatch a dry run first with these fixed inputs:
 | `expected_source_commit` | Its full 40-character commit, also the tag target |
 | `expected_full_sha256` | The retained complete archive's lowercase SHA-256 |
 | `dry_run` | `true` for preparation; `false` for native publication |
+| `auth_mode` | `oidc` by default; `bootstrap-token` only for the first publication of the five real platform packages |
 | `resume_from_run_id` | Empty initially; the prior native workflow run for exact-byte reuse |
 
 The source run must use event `push` or `workflow_dispatch`, have `head_branch`
@@ -122,26 +123,52 @@ archives, derivation receipt, source context and validation result are retained
 for 90 days. A dry run checks registry state and publication requests; it does
 not prove that OIDC bindings work.
 
-Before the first real run, every native package name must already exist and
-have its own trusted publisher bound to repository `PopClaw-xyz/popclaw`,
-workflow `release-clawhub-native.yml`, environment `npm-release`. Creating a
-new package name requires an authorized npm account. Do not manually publish
-the target release version as a bootstrap: later verification requires that
-version's retained bytes and attestation. An exceptional bootstrap version or
-manual provenance path requires the release owner's explicit decision.
+For a package name's first publication, use `auth_mode: bootstrap-token` to
+publish the real, verified target archive. Do not create an empty placeholder
+or an extra bootstrap version. Prepare a short-lived npm token with only the
+creation/publishing access needed for these five names, and store it as the
+`NPM_BOOTSTRAP_TOKEN` secret in the GitHub `npm-release` environment. The release
+owner must authorize any npm permissions needed to create new names and any
+required non-interactive 2FA setting. Do not place the token in workflow inputs,
+repository files, shared npm configuration, or logs.
+
+The secret is supplied only to the final publication step in explicit
+`bootstrap-token` mode, and only real `npm publish` subprocesses receive it.
+Preparation, builds, SQLite smoke checks, dry runs, and registry verification
+do not receive the token. npm uses isolated configuration, and OIDC mode
+rejects nonempty npm credential environment variables instead of falling back
+to token authentication. Token publication still requests `--provenance` and
+uses the job's `id-token: write` permission to sign it; npm registry
+authentication and provenance signing are separate operations.
 
 After reviewing the retained dry-run artifacts, dispatch with `dry_run: false`
 and `resume_from_run_id` set to that native run. The workflow downloads those
 same six archives without repacking, rechecks the complete source and both
 Node runtimes, and preflights all five registry names before any publication.
-A missing name stops the run with `BOOTSTRAP_REQUIRED`. Existing versions must
+A missing name in default OIDC mode stops the run with `BOOTSTRAP_REQUIRED`.
+Bootstrap mode accepts only a new name or a name whose sole version is the
+target version from a partial first release. A name containing any other
+version, or an unknown registry response, stops the run before publication.
+Every existing target version must first
 match the retained archive digest and carry an attestation. The shared verifier
 uses SHA-512 integrity, or its existing SHA-1 shasum fallback when integrity is
-absent. Only missing versions are
-published with OIDC/provenance, and each is verified before the next begins.
+absent. Only missing versions are published using the selected authentication
+mode with provenance, and each is verified before the next begins.
+Dry runs also verify existing target versions and check publication requests
+only for missing versions; npm rejects even a dry-run republish of a version.
 On partial failure, resume from the run retaining those exact bytes; never
 rebuild or replace a published version. The original complete-source artifact
 must also remain available and unexpired.
+
+After all five first versions are verified, revoke the bootstrap token and
+remove its environment secret. Bind each package's trusted publisher to
+repository `PopClaw-xyz/popclaw`, workflow `release-clawhub-native.yml`, and
+environment `npm-release`, then use the default `oidc` mode for later releases.
+An OIDC run against the already published target versions verifies those bytes
+and attestations without republishing them. It does not exercise OIDC publish
+authentication. Record that limit explicitly; do not publish an extra version
+solely to test authentication. The next authorized release that actually
+publishes new versions supplies that evidence.
 
 Only after all five native versions are verified may the retained main archive
 be uploaded to ClawHub. Record the hosted download digest and perform the
