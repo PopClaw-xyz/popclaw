@@ -27,7 +27,9 @@ existing layout. The build removes obsolete JavaScript chunks, preserves the
 pinned protocol notices, and collects licenses from all entries, shared chunks,
 and both embedded workers. Whitespace and identifiers are compressed in the entries, shared chunks and
 embedded workers; function names remain intact. The bundle regression suite
-enforces a 4.5 MiB JavaScript budget and exercises the CLI and MCP entries outside the source checkout.
+enforces a 4.5 MiB JavaScript budget for the full runtime graph in `dist/bundled/`
+and exercises the CLI and MCP entries outside the source checkout. This budget
+does not include the separately staged client graph or the complete archive size.
 
 The complete npm/GitHub archive keeps all ten native bindings and the SQLite
 fallback sources. ClawHub has a separate distribution because its hosted upload
