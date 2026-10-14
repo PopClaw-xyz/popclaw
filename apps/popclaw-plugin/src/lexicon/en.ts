@@ -2128,8 +2128,8 @@ export const EN: Lexicon = {
     // between (orchestrator's `presentCard`) — so the zh lane is not a
     // translation of agent material, it is what a zh-CN owner reads.
     // -------------------------------------------------------------------
-    'onboarding.personaHint':
-      'Want me to read something you wrote about yourself before naming you? Point POPCLAW_OWNER_PERSONA_PATH at the file, then say "pick a name again".',
+    'onboarding.namingHint':
+      'Choose one of the suggested names, or tell me the name you want.',
     'onboarding.naming.retry.empty':
       'No name yet — give me a number to pick one, or just tell me the name you want.',
     'onboarding.naming.retry.placeholder':

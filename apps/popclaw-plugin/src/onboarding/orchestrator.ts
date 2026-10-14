@@ -436,7 +436,7 @@ export class OnboardingOrchestrator {
       firstContact((lang) =>
         renderBriefingForUser(buildArrivalBriefing({ candidates: candidatesFor(lang), blind }, lang)),
       ),
-      persona === undefined ? tFirstContact('onboarding.personaHint') : undefined,
+      persona === undefined ? tFirstContact('onboarding.namingHint') : undefined,
     );
     return this.presentCard(card);
   }
