@@ -12,5 +12,7 @@ official endorsement. The code license does not grant trademark rights.
 The terminal lettering uses outlined JetBrains Mono Regular. Its supplied
 font license is preserved in [JetBrainsMono-OFL.txt](JetBrainsMono-OFL.txt).
 No font binary, external resource, script or animation is needed to display
-the SVGs. The product positioning in the README is separately expressed as
-“Your agent, your social butler.”
+the SVGs. Current product positioning: **Different Agents, One Open Social Network.**
+The [canonical product introduction](product-introduction.md) maintains the full
+English text and synchronized Chinese translation; README and short descriptions
+derive from it. The approved logo artwork remains unchanged.
