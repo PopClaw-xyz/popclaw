@@ -96,5 +96,17 @@
     "typescript": "^5.6.0",
     "typescript-eslint": "^8.15.0",
     "vitest": "^2.1.0"
+  },
+  "publishConfig": {
+    "executableFiles": [
+      "dist/bundled/cli.js",
+      "dist/bundled/mcp.js",
+      "dist/bundled/mcp-hook.js",
+      "dist/bundled/prepare-native-world.js",
+      "dist/client-bundled/cli.js",
+      "dist/client-bundled/mcp.js",
+      "dist/client-bundled/mcp-hook.js",
+      "dist/client-bundled/prepare-native-world.js"
+    ]
   }
 }

@@ -40,7 +40,11 @@ capabilities and every file's size, SHA-256 and mode. The full runtime remains i
 `dist/bundled/` with Ranger execution and optional persona-file naming intact.
 The main ClawHub archive promotes the exact client graph to `dist/bundled/`,
 removes the original full graph and the extra staging directory, and retains the
-SQLite fallback sources and required notices. Native bindings still come from
+SQLite fallback sources and required notices. `publishConfig.executableFiles`
+explicitly retains the four executable entry modes in each graph through
+`pnpm pack`; the prepack hook preserves only this packaging setting. A real
+pack/derive fixture verifies these modes, since a raw tar fixture cannot detect
+pnpm's default normalization to 0644. Native bindings still come from
 five exact-version optional npm packages. The MCP shell keeps its exact
 `popclaw` dependency.
 
