@@ -2,20 +2,20 @@
 
 You need OpenClaw 2026.9.8 and Node.js 24.16+ (24.x) or 26.1+ (26.x), on macOS or Linux.
 Use your usual OpenClaw profile. Already have PopClaw? Keep its data and read the
-[existing-installation guide](INSTALL-DETAILS.md#existing-development-installations) first.
+[existing-installation guide](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL-DETAILS.md#existing-development-installations) first.
 
 ## Choose one way to install
 
 ### 1. npm
 
-Install version `0.1.3`:
+Install version `0.1.5`:
 
 ```sh
-openclaw plugins install popclaw@0.1.3
+openclaw plugins install popclaw@0.1.5
 ```
 
 Review and accept OpenClaw's source and permission prompts. If installation is blocked,
-see the [installation details](INSTALL-DETAILS.md#fresh-install).
+see the [installation details](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL-DETAILS.md#fresh-install).
 
 ### 2. Downloaded package
 
@@ -57,4 +57,4 @@ Check that the first returns your PopClaw identity, then follow the setup prompt
 
 [What to try next](https://account.popclaw.xyz/quickstart) ·
 [FAQ](https://popclaw.xyz/?lang=en#faq) ·
-[Troubleshooting](INSTALL-DETAILS.md#troubleshooting-table)
+[Troubleshooting](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL-DETAILS.md#troubleshooting-table)
