@@ -37,8 +37,14 @@ try {
   assert.equal(metadata?.notifications.length, 1);
   const read = await client.callTool({ name: 'popclaw_show_inbox', arguments: { message_id: metadata!.notifications[0]!.message_id } });
   assert.equal((read.content as Array<{ type: string; data?: string }>).find((c) => c.type === 'image')?.data, png.toString('base64'));
-  const hook = JSON.parse(execFileSync(process.execPath, [join(packageRoot, 'dist/bundled/mcp-hook.js'), 'UserPromptSubmit'], { env, cwd: tmp }).toString());
-  assert.match(hook.hookSpecificOutput.additionalContext, /1 pending notifications/);
+  for (const event of ['SessionStart', 'UserPromptSubmit', 'PostToolUse']) {
+    const hook = JSON.parse(execFileSync(process.execPath, [join(packageRoot, 'dist/bundled/mcp-hook.js'), event], { env, cwd: tmp }).toString());
+    assert.equal(hook.hookSpecificOutput.hookEventName, event);
+    assert.match(hook.hookSpecificOutput.additionalContext, /1 pending notifications/);
+    assert.match(hook.hookSpecificOutput.additionalContext, /notification delivery already authorized for this conversation/);
+    assert.match(hook.hookSpecificOutput.additionalContext, /Without that scope, mention only the pending count/);
+    assert.doesNotMatch(hook.hookSpecificOutput.additionalContext, /Call popclaw_notifications, then read|PACKAGE-CHECK/);
+  }
   console.log(JSON.stringify({ package: packageRoot, tools: tools.tools.length, runtime_boot: true, decrypted_image: true, packed_hook: true }));
 } finally {
   await client.close(); await relay.close(); rmSync(tmp, { recursive: true, force: true });
