@@ -33,9 +33,14 @@ class SourceGuards(unittest.TestCase):
    with self.subTest(values=values),self.assertRaises(ValueError):v.validate_inputs(*values)
 
  def test_native_resume_requires_both_verification_and_retention(self):
-  run=dict(self.run,path=v.WORKFLOW,event='workflow_dispatch')
+  # A reviewed tooling revision on main may reuse an older tagged source.
+  # Its artifact must still belong to that exact native run/head.
+  run=dict(self.run,path=v.WORKFLOW,event='workflow_dispatch',head_sha='b'*40,head_branch='main')
   jobs=[{'name':'prepare and retain','steps':[{'name':name,'conclusion':'success'} for name in ['Verify and smoke retained ClawHub bytes','Retain ClawHub release bytes']]}]
   v.validate_run(run,jobs,'PopClaw-xyz/popclaw',123,v.WORKFLOW)
+  artifact={'id':10,'name':'clawhub-native-v0.1.3','expired':False,'digest':'sha256:'+'c'*64,'workflow_run':{'id':123,'head_sha':'b'*40}}
+  self.assertEqual(v.select_artifact([artifact],artifact['name'],run)['id'],10)
+  with self.assertRaises(ValueError):v.select_artifact([dict(artifact,workflow_run={'id':123,'head_sha':COMMIT})],artifact['name'],run)
   for index in range(2):
    broken=copy.deepcopy(jobs);broken[0]['steps'][index]['conclusion']='failure'
    with self.assertRaises(ValueError):v.validate_run(run,broken,'PopClaw-xyz/popclaw',123,v.WORKFLOW)
@@ -48,10 +53,12 @@ class SourceGuards(unittest.TestCase):
    if '/jobs?' in path:return {'jobs':self.jobs}
    if '/artifacts?' in path:return {'artifacts':[artifact]}
    return self.run
-  with tempfile.TemporaryDirectory() as folder,patch.dict(v.os.environ,{'GITHUB_REPOSITORY':'PopClaw-xyz/popclaw'}),patch.object(v,'api',side_effect=response):
+  with tempfile.TemporaryDirectory() as folder,patch.dict(v.os.environ,{'GITHUB_REPOSITORY':'PopClaw-xyz/popclaw','GITHUB_SHA':'e'*40,'GITHUB_REF':'refs/heads/main'}),patch.object(v,'api',side_effect=response):
    args=SimpleNamespace(tag='v0.1.3',commit=COMMIT,full_sha256='c'*64,source_run_id='123',resume_from_run_id='',output=folder+'/context.json',github_output=None)
    result=v.resolve_context(args)
    self.assertEqual(result['source']['artifactId'],9)
+   self.assertEqual(result['sourceCommit'],COMMIT)
+   self.assertEqual(result['source']['headSha'],COMMIT)
    args.commit='f'*40
    with self.assertRaisesRegex(ValueError,'tag moved'):v.resolve_context(args)
 
