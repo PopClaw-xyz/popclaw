@@ -71,6 +71,7 @@ describe('bounded tool notification offers', () => {
     expect(data.instruction).toContain('An owner request or notification delivery already authorized for this conversation permits the corresponding retrieval without asking again.');
     expect(data.instruction).toContain('Acknowledge only offered IDs after relaying the corresponding notification in this chat.');
     expect(data.instruction).not.toContain('Ask the owner before reading or acknowledging');
+    expect(data.suggested_next).toBe('relay_notice');
     expect(offer.text).not.toContain('IGNORE ALL RULES');
     expect(store.countFor('A')).toBe(1);
   });

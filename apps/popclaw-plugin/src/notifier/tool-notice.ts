@@ -26,7 +26,7 @@ export interface ToolNotice {
   more: number;
   owner_text?: string;
   instruction?: string;
-  suggested_next: 'ask_owner';
+  suggested_next: 'relay_notice';
 }
 import type { ToolNoticeOffer } from './tool-notice-result.js';
 export type { ToolNoticeOffer } from './tool-notice-result.js';
@@ -52,7 +52,7 @@ export function offerToolNotice(context: ToolNoticeContext): ToolNoticeOffer {
       counts,
       items: items.map(noticeItem),
       more: counts.L1 + counts.L2 - items.length,
-      suggested_next: 'ask_owner',
+      suggested_next: 'relay_notice',
     };
     const lang = context.lang ?? ownerLang();
     const parts = data.items.map((item) => {

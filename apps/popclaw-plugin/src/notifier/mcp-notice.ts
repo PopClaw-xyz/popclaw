@@ -139,6 +139,9 @@ export function renderNotifications(items: NotificationItem[], nameOf?: NameChai
 /** The proposals-store surface the delivery paths need — one live check,
  *  plus the settled-proposal drop itself, live in l2-handoff.ts. */
 
+/** Shared host-facing scope; the native registry and MCP expose the same policy. */
+export const NOTIFICATIONS_TOOL_DESCRIPTION = 'Fetch pending notifications and exact inbox message IDs. Results can include private message bodies. Only call for an owner request or notification delivery already authorized for this conversation. Retrieve requested messages and attachments with popclaw_show_inbox without asking again. After relay in this chat, acknowledge only offered IDs with popclaw_acknowledge_notifications; no separate approval is needed. Handoff never means human read or request resolution.';
+
 /** Peek durable per-consumer receipts; legacy adapters retain drain semantics.
  * L3 belongs to the paper and is never consumed here. */
 export function makeNotificationsTool(
@@ -153,8 +156,7 @@ export function makeNotificationsTool(
 ): CollectedTool {
   return {
     name: 'popclaw_notifications',
-    description:
-      'Fetch pending notifications and exact inbox message IDs. Results can include private message bodies. Only call for an owner request or notification delivery already authorized for this conversation. Retrieve requested messages and attachments with popclaw_show_inbox without asking again. After relay in this chat, acknowledge only offered IDs with popclaw_acknowledge_notifications; no separate approval is needed. Handoff never means human read or request resolution.',
+    description: NOTIFICATIONS_TOOL_DESCRIPTION,
     execute: async () => {
       const notifier = await getNotifier();
       const nameOf = await getNameOf?.();
