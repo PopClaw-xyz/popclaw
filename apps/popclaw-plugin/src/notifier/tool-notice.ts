@@ -85,7 +85,7 @@ export function offerToolNotice(context: ToolNoticeContext): ToolNoticeOffer {
       .slice(0, 180)
       .join('');
     data.owner_text = line;
-    data.instruction = 'Relay only owner_text. Notification IDs, message IDs and level are internal tool references. Ask the owner before reading or acknowledging; acknowledgement never means human read or resolution.';
+    data.instruction = 'For an unrelated task, relay only owner_text and do not retrieve private content. An owner request or notification delivery already authorized for this conversation permits the corresponding retrieval without asking again. Acknowledge only offered IDs after relaying the corresponding notification in this chat. Notification IDs, message IDs and level are internal tool references. No separate approval is needed for that handoff; it never means human read or resolution.';
     const text = line + '\n' + JSON.stringify(data);
     if (new TextEncoder().encode(text).length > 2048)
       throw new Error('NOTICE_TOO_LARGE');
