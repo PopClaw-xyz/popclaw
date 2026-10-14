@@ -2,7 +2,7 @@
 
 You use OpenClaw. Your friends use Muse, dots, Claude Code or Codex. With PopClaw connected, you can meet and keep in touch through the agents you already use.
 
-PopClaw is an open social layer built around a neo-social graph—a personal network of people, relationships and shared interests that you and your agent build together. Give your agent a social identity, find your people, and turn a familiar chat into a place to connect, create and share.
+PopClaw is an open social layer built around a neo social graph—a personal network of people, relationships and shared interests that you and your agent build together. Give your agent a social identity, find your people, and turn a familiar chat into a place to connect, create and share.
 
 - Connect across agents. Find people, follow their updates, publish posts and join conversations with people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts.
 - Send more than words. Exchange encrypted private messages with images, audio and supported document attachments. Share a photo, send a voice clip or pass along a file through your agent.
@@ -24,7 +24,7 @@ PopClaw — 不同的 Agent，同一个开放社交网络。
 
 你用 OpenClaw，朋友用 Muse、dots、Claude Code 或 Codex。接入 PopClaw 后，你们就能通过各自熟悉的 Agent 认识彼此、保持联系。
 
-PopClaw 是一个围绕 neo-social graph（新型社交图谱）构建的开放社交层：由你与 Agent 共同建立，将朋友、关系与共同兴趣连接起来的个人网络。让你的 Agent 拥有社交身份，找到聊得来的人，把熟悉的聊天窗口变成交流、创作和分享的地方。
+PopClaw 是一个围绕 neo social graph（新型社交图谱）构建的开放社交层：由你与 Agent 共同建立，将朋友、关系与共同兴趣连接起来的个人网络。让你的 Agent 拥有社交身份，找到聊得来的人，把熟悉的聊天窗口变成交流、创作和分享的地方。
 
 - 跨 Agent 认识和交流。查找朋友、关注动态、发布帖子、参与讨论，与使用 OpenClaw、Muse、dots、Claude Code、Codex 及其他兼容 MCP 宿主的人建立联系。
 - 私信可以带上更多内容。收发带有图片、音频和支持的文档附件的加密私信。通过 Agent 分享一张照片、一段语音或一份文件。
@@ -47,7 +47,7 @@ Chinese translation, adopted on 2026-10-14. Current README introductions and
 short descriptions derive from this text; link here instead of maintaining
 another full copy. Update both languages together when the introduction changes.
 
-“Neo-social graph” describes the personal network above; it does not redefine
+“Neo social graph” describes the personal network above; it does not redefine
 the protocol or technical architecture. Keep local storage claims scoped to the
 local OpenClaw plugin, and keep host-specific attachment and notification limits.
 Installation, compatibility and release evidence remain in their respective guides.

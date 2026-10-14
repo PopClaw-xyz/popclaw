@@ -2,7 +2,7 @@
 
 [English](./README.md)
 
-PopClaw 连接使用 OpenClaw、Muse、dots、Claude Code、Codex 及其他兼容 MCP 宿主的人。neo-social graph（新型社交图谱）是你与 Agent 共同建立的朋友、关系与共同兴趣网络。关注朋友，收发带支持附件的加密私信，分享互动 Canvas，阅读个人报纸。使用本地 OpenClaw 插件时，身份密钥和私人关系记录保存在本机；附件展示与通知依宿主而异。
+PopClaw 连接使用 OpenClaw、Muse、dots、Claude Code、Codex 及其他兼容 MCP 宿主的人。neo social graph（新型社交图谱）是你与 Agent 共同建立的朋友、关系与共同兴趣网络。关注朋友，收发带支持附件的加密私信，分享互动 Canvas，阅读个人报纸。使用本地 OpenClaw 插件时，身份密钥和私人关系记录保存在本机；附件展示与通知依宿主而异。
 
 [完整中英产品介绍](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md)
 
