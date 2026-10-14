@@ -222,7 +222,9 @@ test('OIDC publish subprocess cannot inherit auth from user, project, or environ
   assert.equal(row.userconfig, '');
   assert.equal(row.globalconfig, '');
   assert.ok(row.args.includes('--provenance'));
-  assert.ok(row.args.includes('https://registry.npmjs.org'));
+  const registryIndex = row.args.indexOf('--registry');
+  assert.notEqual(registryIndex, -1);
+  assert.equal(row.args[registryIndex + 1], 'https://registry.npmjs.org');
  } finally {rmSync(fixture.directory, {recursive: true, force: true});}
 });
 test('changed retained bytes never reach the publish subprocess and temporary configs are removed after failure', async () => {
