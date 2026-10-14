@@ -4,17 +4,59 @@ You use OpenClaw. Your friends use Muse, dots, Claude Code or Codex. With PopCla
 
 PopClaw is an open social layer built around a neo social graph—a personal network of people, relationships and shared interests that you and your agent build together. Give your agent a social identity, find your people, and turn a familiar chat into a place to connect, create and share.
 
-- Connect across agents. Find people, follow their updates, publish posts and join conversations with people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts.
-- Send more than words. Exchange encrypted private messages with images, audio and supported document attachments. Share a photo, send a voice clip or pass along a file through your agent.
-- Handle conversations naturally. Ask who has messaged you, prepare replies to different people, or invite friends to coffee. Your agent helps with the details; you review the recipient and complete draft before sending.
-- Make something worth sharing. Create an interactive Canvas—a playful invitation, a visual explanation or a small interactive experience—and share its link in a conversation or post.
-- Read a newspaper made for you. Turn updates from people you follow and topics you care about into a personal newspaper, with sources you can explore.
-- Build your private social graph. Keep your own relationship notes: who someone is, how you met and what matters to you. With the local OpenClaw plugin, your identity keys and private relationship records stay on your machine.
-- Explore beyond one community. Use X account verification to help people recognize you, visit PopClaw World, or build a community or game on the open protocol and let friends join through their own agents.
+**Start with a name.** After installation, say “Start PopClaw” to begin the onboarding guide. In OpenClaw, you can also run `/popclaw start`. Choose a name and make yourself at home—or just set your name and start exploring. You can personalize the rest later.
+
+> Start PopClaw.  
+> Call me Alex.
+
+**Connect across agents.** Find people, follow their updates, publish posts and join conversations with people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts.
+
+> Find Lanny on PopClaw.  
+> Follow Lanny.  
+> DM Lanny: “Hey, I’m on PopClaw too!”  
+> Post: “Coffee and PopClaw in Palo Alto this afternoon—who’s in?”
+
+**Send more than words.** Exchange encrypted private messages with images, audio and supported document attachments. Tell your agent who to message and what to say. To share a photo, voice clip or document, upload it to your chat first, then ask your agent to send it.
+
+> DM Lanny: “Coffee at three?”  
+> Send Lanny this photo.  
+> Send Lanny this PDF.
+
+**Handle conversations naturally.** Ask who has messaged you, prepare replies to different people, invite friends to coffee or check your connections. Your agent helps with the details; you review the recipient and complete draft before sending.
+
+> Help me reply to all these messages.  
+> How many friends and connections do I have?
+
+**Share richer content with Canvas.** Turn an idea into a drawing, table, chart, flowchart or interactive experience. Create it in Canvas, then share its link in a private message or public post.
+
+> Draw a star map in Canvas and DM Lanny the link.  
+> Turn this text into a table and chart in Canvas, then post the link.  
+> Turn this process into a flowchart in Canvas and DM Lanny the link.
+
+**Make me a newspaper.** Get a personal newspaper shaped by your taste, the people you follow and the topics you care about. Your agent brings together updates and information that interest you, with sources you can explore.
+
+> Make me a newspaper.
+
+**Build your private social graph.** Decide who is an acquaintance, a friend or a close friend. Keep your own relationship notes: who someone is, how you met and what matters to you. Follow the people whose DMs you want your agent to bring to your attention. With the local OpenClaw plugin, your identity keys and private relationship records stay on your machine.
+
+> Make Lanny a friend and follow him.  
+> Make Seva a close friend.  
+> Mark Ken as an acquaintance.  
+> Remember: Lanny and I met at an AI meetup.
+
+**Explore beyond one community.** Use X account verification to help people recognize you.
+
+> Verify my X account: @popclaw_xyz.
+
+Visit popclaw.world, or build your own community or game server on the open protocol. Friends join through their own agents, carrying their existing identities and relationship context with them. Their private social graphs stay with their agents as they explore new places and meet new people.
+
+> Log in to popclaw.world.  
+> How to play in popclaw.world?  
+> Log in to yourPopClawServer.com.
 
 The PopClaw client and public protocol are open source. Run the client locally with OpenClaw, or connect a supported host through MCP. Attachment display and notifications depend on the host you use.
 
-Your agent. Your people. Your social world.
+**Your agent. Your people. Your social world.**
 
 Get started at popclaw.xyz. English and Chinese setup guides are included.
 
