@@ -14,10 +14,16 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('esbuild', () => ({ build: mocks.build }));
 vi.mock('node:child_process', () => ({ execSync: vi.fn(() => Buffer.from('test')) }));
+// Entry-definition tests do not emit files. Real profile inventories and
+// capability rejection are covered by client-bundle-profile/archive fixtures.
+vi.mock('../../scripts/bundle-profiles.mjs', async (original) => ({
+  ...await original<typeof import('../../scripts/bundle-profiles.mjs')>(),
+  writeBundleProfile: vi.fn(() => ({ files: [] })),
+}));
 vi.mock('node:fs', async (original) => ({
-  // rmSync is inert so the licence step's reset cannot wipe a real build's
-  // dist/bundled/licenses while only the entry definitions are under test.
+  // No fixture from this definition-only test may alter either real graph.
   ...await original<typeof import('node:fs')>(), chmodSync: mocks.chmod, rmSync: vi.fn(),
+  mkdirSync: vi.fn(), cpSync: vi.fn(), copyFileSync: vi.fn(), writeFileSync: vi.fn(),
 }));
 
 const root = resolve(__dirname, '../..');
@@ -52,21 +58,23 @@ describe('standalone popclaw CLI source packaging', () => {
       entryPoints: [resolve(root, 'src/host/schema-validator-worker.ts')],
       format: 'cjs', write: false,
     }));
-    expect(mocks.build).toHaveBeenCalledWith(expect.objectContaining({
-      entryPoints: {
-        index: resolve(root, 'src/index.ts'),
-        mcp: resolve(root, 'src/mcp.ts'),
-        'mcp-hook': resolve(root, 'src/mcp-hook.ts'),
-        cli: resolve(root, 'src/main.ts'),
-        'prepare-native-world': resolve(root, 'scripts/prepare-native-world.ts'),
-      },
-      outdir: resolve(root, 'dist/bundled'),
-      splitting: true,
-      format: 'esm',
-      define: expect.objectContaining({ __POPCLAW_SCHEMA_WORKER_SOURCE__: JSON.stringify(mocks.workerSource) }),
-      banner: { js: expect.stringMatching(/^#!\/usr\/bin\/env node\n/) },
-    }));
-    expect(mocks.chmod).toHaveBeenCalledWith(resolve(root, 'dist/bundled/cli.js'), 0o755);
+    for (const profile of ['bundled', 'client-bundled']) {
+      expect(mocks.build).toHaveBeenCalledWith(expect.objectContaining({
+        entryPoints: {
+          index: resolve(root, 'src/index.ts'),
+          mcp: resolve(root, 'src/mcp.ts'),
+          'mcp-hook': resolve(root, 'src/mcp-hook.ts'),
+          cli: resolve(root, 'src/main.ts'),
+          'prepare-native-world': resolve(root, 'scripts/prepare-native-world.ts'),
+        },
+        outdir: resolve(root, `dist/${profile}`),
+        splitting: true,
+        format: 'esm',
+        define: expect.objectContaining({ __POPCLAW_SCHEMA_WORKER_SOURCE__: JSON.stringify(mocks.workerSource) }),
+        banner: { js: expect.stringMatching(/^#!\/usr\/bin\/env node\n/) },
+      }));
+      expect(mocks.chmod).toHaveBeenCalledWith(resolve(root, `dist/${profile}/cli.js`), 0o755);
+    }
   });
 
   it('preserves bin when prepack strips development fields (in-memory simulation)', () => {
