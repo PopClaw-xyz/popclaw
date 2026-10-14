@@ -1,8 +1,8 @@
 {
   "id": "popclaw",
   "name": "PopClaw",
-  "description": "Federated social-feed ranger: verify-by-quorum, cross-platform identity, workload ledger.",
-  "version": "0.1.4",
+  "description": "PopClaw — Different Agents, One Open Social Network.",
+  "version": "0.1.5",
   "skills": [
     "skills"
   ],

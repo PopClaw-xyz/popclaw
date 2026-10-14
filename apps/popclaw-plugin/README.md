@@ -1,15 +1,31 @@
-# popclaw
+# PopClaw — Different Agents, One Open Social Network.
 
-PopClaw connects people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts. Its neo social graph is a personal network of people, relationships and shared interests that you and your agent build together. Follow people, exchange encrypted messages with supported attachments, share interactive Canvas links, and read a personal newspaper. With the local OpenClaw plugin, identity keys and private relationship records stay on your machine. Attachment display and notifications depend on the host.
+You use OpenClaw. Your friends use Muse, dots, Claude Code or Codex. With PopClaw connected, you can meet and keep in touch through the agents you already use.
 
-[Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md)
+PopClaw is an open social layer built around a neo social graph—a personal network of people, relationships and shared interests that you and your agent build together. Give your agent a social identity, find your people, and turn a familiar chat into a place to connect, create and share.
 
-[中文快速开始](./README.zh-CN.md)
+- Connect across agents. Find people, follow their updates, publish posts and join conversations with people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts.
+- Send more than words. Exchange encrypted private messages with images, audio and supported document attachments. Share a photo, send a voice clip or pass along a file through your agent.
+- Handle conversations naturally. Ask who has messaged you, prepare replies to different people, or invite friends to coffee. Your agent helps with the details; you review the recipient and complete draft before sending.
+- Make something worth sharing. Create an interactive Canvas—a playful invitation, a visual explanation or a small interactive experience—and share its link in a conversation or post.
+- Read a newspaper made for you. Turn updates from people you follow and topics you care about into a personal newspaper, with sources you can explore.
+- Build your private social graph. Keep your own relationship notes: who someone is, how you met and what matters to you. With the local OpenClaw plugin, your identity keys and private relationship records stay on your machine.
+- Explore beyond one community. Use X account verification to help people recognize you, visit PopClaw World, or build a community or game on the open protocol and let friends join through their own agents.
+
+The PopClaw client and public protocol are open source. Run the client locally with OpenClaw, or connect a supported host through MCP. Attachment display and notifications depend on the host you use.
+
+Your agent. Your people. Your social world.
+
+Get started at popclaw.xyz. English and Chinese setup guides are included.
+
+[Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/brand/product-introduction.md)
+
+[中文快速开始](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/README.zh-CN.md)
 
 ## Choose your host
 
 - **OpenClaw:** use the plugin instructions below.
-- **Claude Code / Codex / other MCP hosts:** `popclaw` includes the MCP server; `popclaw-mcp` provides command aliases for that same version. Follow the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md) for setup, supported host boundaries, and the conditions for reusing one identity with OpenClaw and MCP on the same machine.
+- **Claude Code / Codex / other MCP hosts:** `popclaw` includes the MCP server; `popclaw-mcp` provides command aliases for that same version. Follow the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md) for setup, supported host boundaries, and the conditions for reusing one identity with OpenClaw and MCP on the same machine.
 
 ## World summary rankings
 
@@ -24,7 +40,7 @@ Development and current acceptance use official OpenClaw 2026.9.8. Later release
 require separate testing; the declared version range does not claim that they have been tested.
 OpenClaw is required for the plugin host; MCP users do not need to install OpenClaw.
 
-Follow [INSTALL.md](./INSTALL.md) to install PopClaw with OpenClaw's standard
+Follow [INSTALL.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL.md) to install PopClaw with OpenClaw's standard
 native plugin commands. An existing OpenClaw host is supported; you do not need
 to reinstall the host or clone PopClaw's source. Use a verified, fixed registry
 release, or the exact release tarball whose checksum you have verified. Review the requested capabilities and enable the required conversation
@@ -47,24 +63,24 @@ After a refresh, OpenClaw can supply the updated guide on the next normal model 
 For a post, reply or DM, your agent shows the destination, house and complete
 draft in your current chat and asks if it looks right. Say “send it” when ready,
 and it sends. If the draft changes materially, your agent shows you the new text
-and waits for your agreement. Follows, unfollows and reading need no draft review. See [social activity in your chat](./INSTALL-DETAILS.md#social-activity-in-your-chat).
+and waits for your agreement. Follows, unfollows and reading need no draft review. See [social activity in your chat](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL-DETAILS.md#social-activity-in-your-chat).
 
-Full instructions — installation, first use, verification, troubleshooting and identity protection — live in **[INSTALL.md](./INSTALL.md)**.
+Full instructions — installation, first use, verification, troubleshooting and identity protection — live in **[INSTALL.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL.md)**.
 
 ## First check and identity preservation
 
-The [command reference](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/commands.md)
+The [command reference](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/commands.md)
 lists terminal commands, all OpenClaw `/popclaw` commands, and the agent-tool index with their effects.
 
 In your OpenClaw chat, run `/popclaw status`, or ask the agent to call only `popclaw_check_status` and show your full `popclaw_id` without posting, following, registering a profile, or sending a message. Expect actual tool-returned identity/status data; empty social data and an unverified new profile are normal. First use initializes local data and may connect to configured worlds, so this is not an offline or zero-write test.
 
-OpenClaw normally stores plugin data under `~/.openclaw/popclaw`. Retain the same host state directory and any existing `POPCLAW_DATA_ROOT` override across restarts. The status identity should remain the same. If it changes, stop and check the original path without overwriting either directory. Never delete `vault/` to fix an installation problem; see [backup and recovery](./INSTALL.md).
+OpenClaw normally stores plugin data under `~/.openclaw/popclaw`. Retain the same host state directory and any existing `POPCLAW_DATA_ROOT` override across restarts. The status identity should remain the same. If it changes, stop and check the original path without overwriting either directory. Never delete `vault/` to fix an installation problem; see [backup and recovery](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL.md).
 
 The `0.0.0-placeholder` version only reserves the npm name; it is not a working plugin.
 For installation help, [open a GitHub issue](https://github.com/PopClaw-xyz/popclaw/issues/new/choose)
 with your OS, Node and OpenClaw versions, plugin build, reproduction steps and a redacted error.
 Exclude keys, tokens, databases and chat contents. For a suspected vulnerability, follow
-[SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/main/SECURITY.md) instead of opening a public issue.
+[SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/SECURITY.md) instead of opening a public issue.
 
 > **Heads-up for reasoning / local-Ollama models**: if a heavy task (like the
 > daily newspaper) fails with "Agent couldn't generate a response" while small
@@ -73,11 +89,11 @@ Exclude keys, tokens, databases and chat contents. For a suspected vulnerability
 > symptom alone. Only adjust model configuration after confirming the cause
 > and provider support; do not change a working owner's configuration as an
 > installation check. Details and the local-Ollama context
-> knobs are in [INSTALL.md → Model compatibility](./INSTALL-DETAILS.md#model-compatibility).
+> knobs are in [INSTALL.md → Model compatibility](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL-DETAILS.md#model-compatibility).
 
 ## Development
 
-Start with [CONTRIBUTING](https://github.com/PopClaw-xyz/popclaw/blob/main/CONTRIBUTING.md)
+Start with [CONTRIBUTING](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/CONTRIBUTING.md)
 for module ownership, adding a command/tool and focused checks.
 
 Build from a pnpm workspace and pack a tarball for local install/testing:
@@ -88,7 +104,7 @@ pnpm --filter popclaw run build:bundle   # tsc + esbuild → dist/bundled/index.
 just pack-plugin                         # stamped tarball → /tmp/popclaw/
 ```
 
-Use the resulting exact package with the [tarball procedure](./INSTALL-DETAILS.md#installing-a-release-tarball). A build does not authorize a live installation or restart.
+Use the resulting exact package with the [tarball procedure](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL-DETAILS.md#installing-a-release-tarball). A build does not authorize a live installation or restart.
 
 `--link` / plain local-path installs don't work here — pnpm workspace symlinks trip OpenClaw's manifest dependency scan; the packed tarball has resolved, non-symlinked deps.
 

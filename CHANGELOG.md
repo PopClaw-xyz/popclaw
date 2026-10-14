@@ -3,6 +3,25 @@
 Every entry says whether the wire protocol is affected. "Protocol: none"
 means a client or house built against the stated bundle keeps working.
 
+<a id="015"></a>
+## 0.1.5 — Documentation and metadata update
+
+**Protocol:** none. Runtime behavior, the signed-event protocol, local storage
+and resolved runtime dependencies are unchanged from 0.1.4.
+
+- Include the approved full English product introduction in the plugin README,
+  retain the Chinese guide and use the same approved title for the native plugin
+  description. Keep local-storage claims scoped to the local OpenClaw plugin
+  and retain host-specific attachment and notification limits.
+- Use public links pinned to `v0.1.5` in packaged READMEs and current setup
+  guides, so registry pages do not resolve them as relative plugin routes.
+- Advance the plugin, native manifest and MCP shell together to 0.1.5, with
+  the shell depending on exactly `popclaw@0.1.5`; update current install examples.
+
+This entry records source changes. Publication, exact package verification and
+host acceptance require their own evidence; the [support matrix](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/support-matrix.md)
+retains the scope of previous checks. See the [release process](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/releasing.md).
+
 <a id="014"></a>
 ## 0.1.4 — Unpublished candidate
 
