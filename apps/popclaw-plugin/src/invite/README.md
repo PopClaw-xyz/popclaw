@@ -14,9 +14,18 @@ receipt's task id independently of HTTP status, matching the existing paths.
 
 Entries own platform/handle/proof validation, nickname defaults and sync or
 replacement flags. Native preparation binds the latest account to the current
-owner conversation. An ordinary posting acknowledgement submits once without
+admitted chat conversation. An ordinary posting acknowledgement submits once without
 another preview; sync, replacement and nickname changes retain confirmation.
 Preview must never resolve the runtime; nickname defaults are read at submission.
+
+A notification destination is a delivery preference, not an input allowlist.
+Native invitation preparation and submission accept the host's current admitted
+chat on any channel, without requiring `senderIsOwner` or `commands.ownerAllowFrom`.
+They still bind the prepared account to that chat and identity, require the
+posting acknowledgement, recheck the active invocation at submission and reject
+duplicate submissions. Using another channel must not replace a pinned
+notification destination. Missing host context is a client integration error,
+not a request for the user to repeat a special phrase or change languages.
 
 Native invite results always use the host's `content` array, including local
 preparation, previews, errors and posted receipts. Skipping notice decoration

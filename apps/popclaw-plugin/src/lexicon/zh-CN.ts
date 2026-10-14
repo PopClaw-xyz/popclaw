@@ -1695,6 +1695,7 @@ export const ZH_CN: Lexicon = {
     'invite.usage': 'usage: /popclaw invite <platform> <handle> [--nickname=X] [--replace] [--proof <帖子链接>] [--sync]',
     'invite.badProofUrl': '⚠️ --proof 链接无效：需要形如 https://x.com/<用户名>/status/<数字> 的帖子链接（收到：{got}）',
     'invite.cli.badProofFlag': '--proof 链接无效：需要 --proof=https://x.com/<用户名>/status/<数字> 形式（收到：{got}）',
+    'invite.tool.contextUnavailable': '客户端没有提供有效的聊天上下文。请检查客户端连接；改用另一种语言或重复特定口令不能解决这个问题。通知设置不限制你从哪个入口认证账号。',
     'invite.tool.usage': '先提供 X 平台和账号，准备邀请。发好后说“发好了”，Native 用 posted:true 核验本聊天最新准备的账号。同步、换号和昵称变更仍需预览确认。',
     'invite.tool.preview':
       '📝 认证申请——还没提交：\n'

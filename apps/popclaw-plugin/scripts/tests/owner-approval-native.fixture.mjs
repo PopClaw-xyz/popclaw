@@ -17,7 +17,7 @@ test('pinned native SDK registers v2 social tools and retains current confirmati
   const {build}=require('esbuild');
   const sdk=realpathSync(join(root,'node_modules/openclaw'));
   assert.equal(JSON.parse(readFileSync(join(sdk,'package.json'))).version,'2026.9.8');
-  const inputFiles=['host/social-send-context.ts','tools/write-tools.ts','tools/register-tools.ts','tools/tool-tail.ts','tools/mcp-adapter.ts','tools/draft-store.ts','runtime/house-lifecycle/action-context.ts'];
+  const inputFiles=['host/social-send-context.ts','tools/invite-tools.ts','tools/write-tools.ts','tools/register-tools.ts','tools/tool-tail.ts','tools/mcp-adapter.ts','tools/draft-store.ts','runtime/house-lifecycle/action-context.ts'];
   const hashInputs=()=>Object.fromEntries(inputFiles.map(file=>[file,createHash('sha256').update(readFileSync(join(root,'src',file))).digest('hex')]));
   const sourceSha256=hashInputs();
   const box=realpathSync(mkdtempSync(join(tmpdir(),'popclaw-social-sdk-')));
@@ -35,9 +35,12 @@ test('pinned native SDK registers v2 social tools and retains current confirmati
     import {assertActionActive} from ${spec('runtime/house-lifecycle/action-context.ts')};
     import {makeToolCollector} from ${spec('tools/mcp-adapter.ts')};
     export {peekDraftSnapshot};
+    // The SDK loader may evaluate another module instance in this process.
+    export const invitations=globalThis[Symbol.for(${JSON.stringify(`popclaw.fixture.invitations:${box}`)})] ??= [];
+    const identity={popclawId:'DNtEiuFHd6MRzVv1PXuzphGzaWqbLu9rAkLpjKLgkcnH',nickname:'Owner',webBaseUrl:'https://example.test'};
     export function register(api) {
-      const runtime=async()=>({egress:{home:{slug:'house-synthetic'},capturePlan:()=>({egress:{},targets:[]})}});
-      return registerPopclawTools({api,runtime,socialSendHost:'native',nativeToolNotices:true,
+      const runtime=async()=>({egress:{home:{slug:'house-synthetic'},capturePlan:()=>({egress:{},targets:[]})},boot:identity,initiator:{initiate:async opts=>{assertActionActive();invitations.push(opts);return {expectedSigil:'abcdef',pushedEventId:'synthetic-invite',push:{status:200}};}}});
+      return registerPopclawTools({api,runtime,socialSendHost:'native',nativeToolNotices:true,getInviteShareIdentity:async()=>identity,
         getToolNoticeContext:async()=>{throw Error('isolated fixture has no notification store');}});
     }
     export function replaceSender(id,beforeEffect,effect) {
@@ -145,6 +148,26 @@ test('pinned native SDK registers v2 social tools and retains current confirmati
     }
     cases.push('same-session sender text cannot reuse a draft across channel/account; session and sender isolation remain');
 
+    for (const channel of ['openclaw-weixin','webchat','telegram','custom-chat-provider']) {
+      for (const ownerMarker of [false,undefined]) {
+        const route={...context,messageChannel:channel,senderIsOwner:ownerMarker};
+        const preparing=guard(),before=b.invitations.length;
+        const invite=tool(resolveTools(()=>preparing.assert(),{context:route}),'popclaw_invite');
+        const copy=await invite.execute('fixture:invite-prepare',{platform:'x',handle:'heiyuneo'});
+        assert.notEqual(copy.isError,true,sentText(copy));
+        assert.equal(JSON.parse(sentText(copy)).status,'prepared');
+        preparing.close();
+        const posted=tool(resolveTools(()=>confirmation.assert(),{context:route}),'popclaw_invite');
+        const receipt=await posted.execute('fixture:invite-posted',{posted:true});
+        assert.notEqual(receipt.isError,true,sentText(receipt));
+        assert.equal(b.invitations.length,before+1,sentText(receipt));
+        assert.equal(b.invitations.at(-1).handle,'heiyuneo');
+        await posted.execute('fixture:invite-repeat',{posted:true});
+        assert.equal(b.invitations.length,before+1,sentText(receipt));
+      }
+    }
+    cases.push('official Native SDK verifies each admitted channel without ownerAllowFrom or owner marker; fresh posted turn submits once');
+
     // Actual SDK continuation issuance, run ownership and caller scope. No
     // handwritten ownerContinuation is passed to the official tool resolver.
     const runs=await sdkImport('agent-run-registry-BDW3IRlF.mjs');
@@ -172,6 +195,6 @@ test('pinned native SDK registers v2 social tools and retains current confirmati
     }));
     runs.C(authority);
     assert.deepEqual(hashInputs(),sourceSha256,'fixture inputs changed during execution; rerun on a fixed candidate');
-    console.log(JSON.stringify({sdk:'2026.9.8',node:process.version,box,syntheticSends:sends,registeredTools:acquisition.registry.tools.length,draftingRegistryTools:acquisitionA.registry.tools.length,sourceSha256,cases,errors,boundaries:['synthetic local host admission/owner facts; no actual channel authentication or human review','synthetic final sender; no product signer/egress/network/real IM','official SDK modules imported unchanged; no descriptor/context logic mocked']}));
+    console.log(JSON.stringify({sdk:'2026.9.8',node:process.version,box,syntheticSends:sends,syntheticInvitations:b.invitations.length,registeredTools:acquisition.registry.tools.length,draftingRegistryTools:acquisitionA.registry.tools.length,sourceSha256,cases,errors,boundaries:['synthetic local host admission/owner facts; no actual channel authentication or human review','synthetic final sender; no product signer/egress/network/real IM','official SDK modules imported unchanged; no descriptor/context logic mocked']}));
   } finally {await acquisitionA.release();await acquisition.release();}
 });
