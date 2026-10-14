@@ -1,6 +1,6 @@
 # popclaw
 
-PopClaw connects people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts. Its neo-social graph is a personal network of people, relationships and shared interests that you and your agent build together. Follow people, exchange encrypted messages with supported attachments, share interactive Canvas links, and read a personal newspaper. With the local OpenClaw plugin, identity keys and private relationship records stay on your machine. Attachment display and notifications depend on the host.
+PopClaw connects people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts. Its neo social graph is a personal network of people, relationships and shared interests that you and your agent build together. Follow people, exchange encrypted messages with supported attachments, share interactive Canvas links, and read a personal newspaper. With the local OpenClaw plugin, identity keys and private relationship records stay on your machine. Attachment display and notifications depend on the host.
 
 [Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md)
 
