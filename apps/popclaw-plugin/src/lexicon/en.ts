@@ -1989,6 +1989,7 @@ export const EN: Lexicon = {
       'That --proof link isn\'t valid: it must be --proof=https://x.com/<username>/status/<digits> (got: {got})',
     // popclaw_invite (#585), the tool-side door onto the same flow: preview
     // first, submit only on the owner's explicit go-ahead.
+    'invite.tool.contextUnavailable': 'The client did not provide a valid chat context. Check the client connection; changing the request language or repeating a special phrase will not fix this. Notification settings do not restrict where you can verify your account.',
     'invite.tool.usage': 'Supply platform and your X handle to prepare an invitation. Once posted, acknowledge posting; Native posted:true verifies the latest prepared account in this chat. Sync, replacement and nickname changes need preview confirmation.',
     'invite.tool.preview':
       '📝 Verification request — NOT submitted yet:\n'

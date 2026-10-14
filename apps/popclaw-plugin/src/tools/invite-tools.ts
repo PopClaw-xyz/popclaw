@@ -1,5 +1,5 @@
 /** Local invitation copy and account verification share the existing submit path.
- * A Native posting acknowledgement uses the current owner invocation and this
+ * A Native posting acknowledgement uses the current chat invocation and this
  * conversation's latest prepared account. Other hosts and sensitive changes
  * retain preview/confirmation. Preparation has no signer or network port. */
 import { PopclawInviteSchema } from './tool-schemas.js';
@@ -31,18 +31,19 @@ export function registerInviteTools(ctx: ToolsCtx): void {
   api.registerTool(socialToolFactory(host, toolContext => {
     const binding = socialDraftBinding(host, toolContext);
     const bindingKey = binding ? JSON.stringify(binding) : null;
-    const ownerAssertion = (signal?: AbortSignal): (() => void) => {
+    const invocationAssertion = (signal?: AbortSignal): (() => void) => {
       const current = socialSendAssertion(host, toolContext, signal);
-      if (!current || (native && (toolContext as {senderIsOwner?: unknown})?.senderIsOwner !== true)) throw new Error('INVITE_OWNER_INVOCATION_REQUIRED');
+      // The host admits the chat; notification/admin owner markers do not
+      // grant or revoke ordinary account-verification access.
+      if (!current) throw new Error(`INVITE_INVOCATION_REQUIRED: ${renderCopy(ownerLang(), 'invite.tool.contextUnavailable')}`);
       return () => {
         current();
-        if (native && (toolContext as {senderIsOwner?: unknown}).senderIsOwner !== true) throw new Error('INVITE_OWNER_INVOCATION_REQUIRED');
         if (!sameSocialDraftBinding(binding, socialDraftBinding(host, toolContext))) throw new Error('INVITE_CONVERSATION_CHANGED');
       };
     };
     return {
       name: 'popclaw_invite',
-      description: 'Prepare editable invitation copy for the owner’s X account, locally. After the owner says posted/done, call posted:true: Native verifies this chat’s most recent successful preparation, using the current owner invocation. Never submit before that acknowledgement. Other hosts, sync, replacement and nickname changes return a preview; confirm only after owner approval, with confirm_token alone. A token is single-use and expires in 30 minutes.',
+      description: 'Prepare editable invitation copy for the owner’s X account, locally. After the owner says posted/done, call posted:true: Native verifies this chat’s most recent successful preparation, using the current chat invocation. Never submit before that acknowledgement. Other hosts, sync, replacement and nickname changes return a preview; confirm only after owner approval, with confirm_token alone. A token is single-use and expires in 30 minutes.',
       parameters: PopclawInviteSchema,
       execute: async (_callId: string, params: unknown, signal?: AbortSignal) => {
         const p = { ...((params && typeof params === 'object' && !Array.isArray(params)) ? params : {}) } as Record<string, unknown>;
@@ -54,7 +55,7 @@ export function registerInviteTools(ctx: ToolsCtx): void {
         if (p.confirm_token !== undefined) {
           if (!token || Object.keys(p).length !== 1) return fail('INVITE_CONFIRM_TOKEN_ALONE');
           try {
-            const assert = native ? ownerAssertion(signal) : undefined;
+            const assert = native ? invocationAssertion(signal) : undefined;
             assert?.();
             const confirmation = confirmations.get(token);
             if (native && !sameSocialDraftBinding(confirmation?.binding, binding)) return fail('INVITE_CONFIRM_CONVERSATION_CHANGED');
@@ -76,9 +77,9 @@ export function registerInviteTools(ctx: ToolsCtx): void {
             const identity = await deps.getInviteShareIdentity?.();
             if (!identity) return fail('INVITE_SHARE_IDENTITY_UNAVAILABLE', renderCopy(lang, 'invite.prepare.unavailable'));
             const share = prepareInviteShare(identity, platform, handle);
-            // Bind only a successful, still-current owner invocation. MCP may prepare copy,
+            // Bind only a successful, still-current chat invocation. MCP may prepare copy,
             // but its posted path continues to require the existing explicit confirmation.
-            if (native) { const assert = ownerAssertion(signal); assert(); }
+            if (native) { const assert = invocationAssertion(signal); assert(); }
             if (bindingKey) prepared.set(bindingKey, {platform:share.platform, handle:share.handle, popclawId:identity.popclawId, consumed:false});
             return {type:'text' as const, text:JSON.stringify({...share, owner_action_required:true})};
           } catch (error) { return fail('INVITE_PREPARE_FAILED', failureText('popclaw_invite', error)); }
@@ -108,7 +109,7 @@ export function registerInviteTools(ctx: ToolsCtx): void {
         const ordinary = !['sync', 'replace', 'nickname'].some(key => p[key] !== undefined);
         if (native && ordinary) {
           try {
-            const invocation = ownerAssertion(signal);
+            const invocation = invocationAssertion(signal);
             const assert = () => { invocation(); if (bindingKey && prepared.get(bindingKey) !== target) throw new Error('INVITE_PREPARED_TARGET_CHANGED'); };
             assert();
             if (!target || target.consumed || target.platform !== platform || target.handle.toLowerCase() !== handle.toLowerCase()) return fail('INVITE_PREPARED_TARGET_CHANGED');
@@ -128,7 +129,7 @@ export function registerInviteTools(ctx: ToolsCtx): void {
         const confirmToken = makeDraftToken('invite');
         const confirmation = native && binding ? {binding, assertCurrent: undefined as (() => void) | undefined} : undefined;
         putDraft(confirmToken, () => {
-          if (native && !confirmation?.assertCurrent) throw new Error('INVITE_OWNER_INVOCATION_REQUIRED');
+          if (native && !confirmation?.assertCurrent) throw new Error(`INVITE_INVOCATION_REQUIRED: ${renderCopy(ownerLang(), 'invite.tool.contextUnavailable')}`);
           return submit(confirmation?.assertCurrent);
         });
         if (confirmation) confirmations.set(confirmToken, confirmation);
