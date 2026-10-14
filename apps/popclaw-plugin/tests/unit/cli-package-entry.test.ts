@@ -89,6 +89,7 @@ describe('standalone popclaw CLI source packaging', () => {
     expect(write).toHaveBeenCalledOnce();
     const stripped = JSON.parse(write.mock.calls[0]![1]);
     expect(stripped.bin).toEqual({ popclaw: 'dist/bundled/cli.js' });
+    expect(stripped.publishConfig).toEqual({ executableFiles: pkg.publishConfig.executableFiles });
     expect(stripped.repository).toEqual(pkg.repository);
     // `popclaw-mcp` resolves `popclaw/mcp` and `popclaw/mcp-hook` out of the
     // INSTALLED manifest — the one prepack writes, not the one in the repo.

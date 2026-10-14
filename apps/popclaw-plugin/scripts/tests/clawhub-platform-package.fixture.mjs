@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createPlatformMetadata, packageClawHub } from '../clawhub-platform-package.mjs';
 import { deriveNativeRuntimeManifest } from '../native-runtime-manifest.mjs';
+import { inspectClientBundle } from '../bundle-profiles.mjs';
 
 const require = createRequire(import.meta.url);
 const { MARKER, PLATFORMS, ABI, bindingName, packageName } = require('../native-binding-path.cjs');
@@ -132,6 +133,33 @@ test('derives the ClawHub name and both exact dependency declarations from one b
   assert.equal(main.name, 'popclaw');
   assert.equal(main.optionalDependencies, undefined);
   assert.equal(native.optionalDependencies, undefined);
+});
+
+test('pnpm pack preserves both executable profiles through the real prepack hook and derivation', () => {
+  const full = fixture('pnpm-executable-modes');
+  const sourcePackage = readJson(resolve(scripts, '../package.json'));
+  put(full.root, 'package.json', { ...sourcePackage, version: VERSION,
+    scripts: { prepack: 'node scripts/prepack.mjs', postpack: 'node scripts/postpack.mjs' } });
+  for (const name of ['prepack.mjs', 'postpack.mjs']) put(full.root, `scripts/${name}`, readFileSync(join(scripts, name)));
+  const executableEntries = ['cli.js', 'mcp.js', 'mcp-hook.js', 'prepare-native-world.js'];
+  for (const entry of executableEntries) put(full.root, `dist/bundled/${entry}`, '#!/usr/bin/env node\n', 0o755);
+  const packedDirectory = join(temporary, 'real-pnpm-pack');
+  const packed = run('pnpm', ['pack', '--pack-destination', packedDirectory], { cwd: full.root });
+  assert.equal(packed.status, 0, packed.stdout + packed.stderr);
+  const archive = join(packedDirectory, `popclaw-${VERSION}.tgz`);
+  const extracted = unpack(archive, join(temporary, 'real-pnpm-inspection'));
+  assert.doesNotThrow(() => inspectClientBundle(extracted), 'pnpm must preserve the recorded client modes');
+  for (const profile of ['bundled', 'client-bundled']) {
+    for (const entry of executableEntries) assert.equal(statSync(join(extracted, 'dist', profile, entry)).mode & 0o777, 0o755, `${profile}/${entry}`);
+    assert.equal(statSync(join(extracted, 'dist', profile, 'index.js')).mode & 0o777, 0o644);
+  }
+  const manifest = readJson(join(extracted, 'package.json'));
+  assert.equal(manifest.scripts, undefined);
+  assert.equal(manifest.dependencies, undefined);
+  assert.deepEqual(readJson(join(full.root, 'package.json')).publishConfig, sourcePackage.publishConfig, 'postpack restores development metadata');
+  const derived = packageClawHub({ fullTarball: archive, dest: join(temporary, 'real-pnpm-derived') });
+  const client = unpack(join(derived.directory, `popclaw-clawhub-${VERSION}.tgz`), join(temporary, 'real-pnpm-client'));
+  for (const entry of executableEntries) assert.equal(statSync(join(client, 'dist/bundled', entry)).mode & 0o777, 0o755, entry);
 });
 
 test('derives six deterministic archives, preserving the source, licenses and source fallback', () => {
