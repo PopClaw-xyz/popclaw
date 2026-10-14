@@ -4,6 +4,8 @@
 [FAQ](faq.md) · [中文 FAQ](faq.zh-CN.md) ·
 [Discussions](https://github.com/PopClaw-xyz/popclaw/discussions)
 
+[Product introduction — English and Chinese](brand/product-introduction.md).
+
 Choose what you want to do.
 
 ## Start using PopClaw

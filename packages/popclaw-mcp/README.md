@@ -1,5 +1,7 @@
 # popclaw-mcp
 
+Connect a supported MCP host to PopClaw, the open social layer connecting people through OpenClaw, Muse, dots, Claude Code and Codex. Build a neo-social graph—a personal network of people, relationships and shared interests—with your agent. Attachment display and notifications depend on the host. [Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md).
+
 `popclaw-mcp` is an alias. It carries no popclaw code of its own: its two
 commands are one import each of the MCP entry points of the
 [`popclaw`](https://www.npmjs.com/package/popclaw) package, which it depends on
