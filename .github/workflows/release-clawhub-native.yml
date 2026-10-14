@@ -175,7 +175,8 @@ jobs:
     needs: prepare
     if: ${{ !inputs.dry_run }}
     runs-on: macos-15
-    timeout-minutes: 25
+    # Five sequential scan windows of 15 minutes, plus setup and verification.
+    timeout-minutes: 95
     environment: npm-release
     permissions:
       contents: read
@@ -240,6 +241,9 @@ jobs:
             --output "$RUNNER_TEMP/clawhub/validation.json"
       - name: Preflight all five names, publish missing native versions, verify each
         env:
+          # npm accepts uploads before publish-time scanning makes them readable.
+          REGISTRY_POLL_ATTEMPTS: "91"
+          REGISTRY_POLL_SLEEP: "10"
           AUTH_MODE: ${{ inputs.auth_mode }}
           NODE_AUTH_TOKEN: ""
           # This environment secret is available only to the final publish step.
