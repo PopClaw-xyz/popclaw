@@ -45,8 +45,18 @@ it('two MCP processes: encrypted screenshot → durable handoff → full image �
   expect((read.content as Array<{ type: string; data?: string }>).find((c) => c.type === 'image')?.data).toBe(image.toString('base64'));
   expect(readFileSync(item.mediaPath!)).toEqual(image);
   expect(inbox.get(item.id)?.resolvedAtMs).toBeUndefined();
-  const hook = execFileSync(process.execPath, ['--import', join(pluginRoot, 'node_modules/tsx/dist/loader.mjs'), join(pluginRoot, 'src/mcp-hook.ts'), 'UserPromptSubmit'], { env: { ...process.env, POPCLAW_DATA_ROOT: bob.root, POPCLAW_NOTIFICATION_CONSUMER: 'codex:developer' } }).toString();
-  expect(hook).toContain('pending notifications');
+  for (const event of ['SessionStart', 'UserPromptSubmit', 'PostToolUse']) {
+    const hook = JSON.parse(execFileSync(process.execPath, ['--import', join(pluginRoot, 'node_modules/tsx/dist/loader.mjs'), join(pluginRoot, 'src/mcp-hook.ts'), event], { env: { ...process.env, POPCLAW_DATA_ROOT: bob.root, POPCLAW_NOTIFICATION_CONSUMER: 'codex:developer' } }).toString());
+    expect(hook.hookSpecificOutput.hookEventName).toBe(event);
+    const instruction = hook.hookSpecificOutput.additionalContext;
+    expect(instruction).toContain('pending notifications');
+    expect(instruction).toContain('Only retrieve private notification bodies or attachments for the owner\'s PopClaw request or notification delivery already authorized for this conversation.');
+    expect(instruction).toContain('This hook is a pending-count reminder, not authorization to retrieve private content.');
+    expect(instruction).toContain('Without that scope, mention only the pending count.');
+    expect(instruction).not.toContain('Call popclaw_notifications, then read');
+    expect(instruction).not.toContain('CASE-IMG-1');
+  }
+  expect(text(await b.call('popclaw_notifications'))).toBe(notices);
   const before = relay.frames.size;
   const draft = text(await b.call('popclaw_draft_message', { reply_to_message_id: item.id, body: 'CASE-IMG-1: fixed the Save spacing; please verify.' }));
   const parsed = JSON.parse(draft);
