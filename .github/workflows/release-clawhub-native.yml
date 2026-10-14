@@ -1,5 +1,5 @@
-# Independent native-only release. Each of the five package names must first
-# exist on npm and bind its trusted publisher to THIS filename / npm-release.
+# Independent native-only release. OIDC is the default; explicit bootstrap-token
+# creates the five real package names before binding THIS filename / npm-release.
 # The ClawHub main archive is retained for review/upload, never npm-published here.
 name: Release ClawHub native packages
 
@@ -27,6 +27,14 @@ on:
         required: true
         type: boolean
         default: true
+      auth_mode:
+        description: "OIDC normally; bootstrap-token only for the five real packages' first publication"
+        required: true
+        type: choice
+        options:
+          - oidc
+          - bootstrap-token
+        default: oidc
       resume_from_run_id:
         description: "Prior run of THIS workflow; reuse its exact six retained archives without repacking"
         required: false
@@ -154,9 +162,13 @@ jobs:
           retention-days: 90
       - name: Check registry names and publication requests without publishing
         if: inputs.dry_run
+        env:
+          AUTH_MODE: ${{ inputs.auth_mode }}
+          # setup-node exports a placeholder; dry runs must receive no credential.
+          NODE_AUTH_TOKEN: ""
         run: |
           node scripts/publish-clawhub-native.mjs --directory "$RUNNER_TEMP/clawhub" \
-            --output "$RUNNER_TEMP/dry-run-result.json" --dry-run
+            --output "$RUNNER_TEMP/dry-run-result.json" --dry-run --auth-mode "$AUTH_MODE"
 
   publish-native:
     name: publish only verified native archives
@@ -227,6 +239,12 @@ jobs:
             --context "$RUNNER_TEMP/context.json" --node "$NODE_24" --node "$(command -v node)" \
             --output "$RUNNER_TEMP/clawhub/validation.json"
       - name: Preflight all five names, publish missing native versions, verify each
+        env:
+          AUTH_MODE: ${{ inputs.auth_mode }}
+          NODE_AUTH_TOKEN: ""
+          # This environment secret is available only to the final publish step.
+          # The publisher forwards it only to real npm publish child processes.
+          NPM_BOOTSTRAP_TOKEN: ${{ inputs.auth_mode == 'bootstrap-token' && secrets.NPM_BOOTSTRAP_TOKEN || '' }}
         run: |
           node scripts/publish-clawhub-native.mjs --directory "$RUNNER_TEMP/clawhub" \
-            --output "$RUNNER_TEMP/publish-result.json" --publish
+            --output "$RUNNER_TEMP/publish-result.json" --publish --auth-mode "$AUTH_MODE"
