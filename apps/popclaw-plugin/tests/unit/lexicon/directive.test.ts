@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { languageDirective, renderDirective } from '../../../src/lexicon/directive.js';
 import { lexiconFor } from '../../../src/lexicon/index.js';
 import { setOwnerLang } from '../../../src/lexicon/owner-language.js';
 
-afterEach(() => setOwnerLang(undefined));
+afterEach(() => { setOwnerLang(undefined); vi.unstubAllEnvs(); });
 
 describe('languageDirective', () => {
   it('names the BCP-47 tag it was given', () => {
@@ -51,8 +51,24 @@ describe('languageDirective', () => {
     expect(d).toMatch(/whatever language they are writing to you in/);
   });
 
-  it('tells the agent not to translate what other people wrote', () => {
-    expect(languageDirective('en', 'en-US')).toMatch(/never translate what someone else wrote/);
+  it('treats every language setting as a default below the current request and host instructions', () => {
+    for (const tag of [undefined, 'zh-CN', 'en-US']) {
+      const directive = languageDirective('en', tag);
+      expect(directive).toContain("The owner's current request and host instructions take precedence");
+      expect(directive).not.toContain('everything you say to them');
+    }
+  });
+
+  it('keeps POPCLAW_LANG as an agent preference below the current request', () => {
+    vi.stubEnv('POPCLAW_LANG', 'ja-JP');
+    setOwnerLang('zh-CN', 'config');
+    const directive = languageDirective();
+    expect(directive).toContain('Speak to the owner in ja-JP by default');
+    expect(directive).toContain("The owner's current request and host instructions take precedence");
+  });
+
+  it('allows the owner to request a translation of quoted content', () => {
+    expect(languageDirective('en', 'en-US')).toContain('unless the owner asks for a translation');
   });
 });
 

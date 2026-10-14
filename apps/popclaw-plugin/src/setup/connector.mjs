@@ -129,7 +129,17 @@ export function probeMcp(pkg, root, node, env, timeout = 10000) {
   return new Promise((resolveProbe, reject) => {
     const child = spawn(node, [join(pkg, 'dist/bundled/mcp.js')], {
       cwd: pkg, stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...env, POPCLAW_DATA_ROOT: root, POPCLAW_NOTIFICATION_CONSUMER: 'setup-probe', POPCLAW_SETUP_RECEIPT: '', POPCLAW_RECEIVE_ON_START: '0', POPCLAW_MCP_ENABLE_RANGER: '0' },
+      // Setup supports macOS/Linux and uses an absolute Node path. This local
+      // handshake needs no credentials, proxy settings or Node preload options.
+      env: {
+        ...Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP']
+          .filter(key => typeof env[key] === 'string').map(key => [key, env[key]])),
+        POPCLAW_DATA_ROOT: root,
+        POPCLAW_NOTIFICATION_CONSUMER: 'setup-probe',
+        POPCLAW_SETUP_RECEIPT: '',
+        POPCLAW_RECEIVE_ON_START: '0',
+        POPCLAW_MCP_ENABLE_RANGER: '0',
+      },
     });
     let done = false, buffer = '', total = 0;
     const finish = (error) => { if (done) return; done = true; clearTimeout(timer); child.kill('SIGKILL'); error ? reject(error) : resolveProbe(); };
