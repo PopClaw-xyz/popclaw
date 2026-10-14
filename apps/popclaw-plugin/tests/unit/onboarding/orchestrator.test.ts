@@ -425,15 +425,22 @@ describe('arrival（取名开局）', () => {
     });
   });
 
-  it('无 persona → 卡上挂 POPCLAW_OWNER_PERSONA_PATH 提示；给了就不挂', async () => {
-    await ctx.orch.handleStartCommand();
+  it.each([
+    ['zh-CN', '选一个候选名号，或者直接告诉我你想用的名字。'],
+    ['en-US', 'Choose one of the suggested names, or tell me the name you want.'],
+  ])('offers usable naming guidance without a file configuration prompt (%s)', async (tag, hint) => {
+    setOwnerLang(undefined);
+    setOwnerLang(tag, 'config');
+    const result = await ctx.orch.handleStartCommand();
     expect(ctx.presenter.delivered.at(-1)!.blocks.some(
-      (b) => 'text' in b && b.text.includes('POPCLAW_OWNER_PERSONA_PATH'),
+      (b) => 'text' in b && b.text.includes(hint),
     )).toBe(true);
+    expect(result.text).not.toContain('POPCLAW_OWNER_PERSONA_PATH');
 
-    const withPersona = makeOrchestrator({ persona: '爱看 AI 论文的摄影师' });
+    // Full-build callers can still pass their explicitly configured material.
+    const withPersona = makeOrchestrator({ persona: 'Synthetic operator naming material' });
     const res = await withPersona.orch.handleStartCommand();
-    expect(withPersona.llmPrompts[0]).toContain('爱看 AI 论文的摄影师');
+    expect(withPersona.llmPrompts[0]).toContain('Synthetic operator naming material');
     expect(res.text).not.toContain('POPCLAW_OWNER_PERSONA_PATH');
   });
 

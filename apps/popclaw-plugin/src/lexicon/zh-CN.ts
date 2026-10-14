@@ -1802,8 +1802,8 @@ export const ZH_CN: Lexicon = {
     // source and the owner reads their own language via briefingCard, delivered directly without the agent.
     // Values match pre-migration production text exactly, including full-width punctuation and spaces.
     // -------------------------------------------------------------------
-    'onboarding.personaHint':
-      '想让我参考你的自述材料想名号？把 POPCLAW_OWNER_PERSONA_PATH 指向任意自述文件，再跟我说一次「重新取名」。',
+    'onboarding.namingHint':
+      '选一个候选名号，或者直接告诉我你想用的名字。',
     'onboarding.naming.retry.empty': '还没有名号——报个编号选一个，或者直接把你想要的名字告诉我（中英文都行）。',
     'onboarding.naming.retry.placeholder':
       '「ranger-xxxxxx」是机器占位名，不能拿它当名号——报个编号，或者自己取一个。',
