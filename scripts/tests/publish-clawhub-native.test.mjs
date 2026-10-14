@@ -4,6 +4,7 @@ import {createHash} from 'node:crypto';
 import {existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {execFileSync} from 'node:child_process';
 import {NAMES,publishNative,getRegistryPackage,withRegistryCommands} from '../publish-clawhub-native.mjs';
 const packages=()=>NAMES.map(name=>({name,version:'0.1.3',filename:name+'-0.1.3.tgz',sha256:'a'.repeat(64)}));
 function harness(states={}){
@@ -247,4 +248,94 @@ test('changed retained bytes never reach the publish subprocess and temporary co
   }), /publish failed/);
   assert.equal(existsSync(session), false);
  } finally {rmSync(fixture.directory, {recursive: true, force: true});}
+});
+
+function nativeWorkflowPolling() {
+ // Read the simple numeric scalars from the actual job/step. The tests below
+ // execute them through the publisher and real bash verifier, not a copy of
+ // the polling loop. actionlint separately validates the complete YAML.
+ const yaml = readFileSync(new URL('../../.github/workflows/release-clawhub-native.yml', import.meta.url), 'utf8');
+ const job = yaml.split('\n  publish-native:\n')[1];
+ assert.ok(job, 'native publication job is present');
+ const step = job.split('      - name: Preflight all five names, publish missing native versions, verify each\n')[1];
+ assert.ok(step, 'final native publication step is present');
+ const environment = Object.fromEntries([...step.matchAll(/^          (REGISTRY_POLL_(?:ATTEMPTS|SLEEP)): ["']?(\d+)["']?\s*$/gm)]
+  .map(([, key, value]) => [key, value]));
+ return {environment, timeoutMinutes: Number(job.match(/^    timeout-minutes: (\d+)$/m)?.[1])};
+}
+
+async function delayedRegistry({environment = {}, readyAt = 7, mismatch = false} = {}) {
+ const fixture = commandFixture();
+ const counter = join(fixture.directory, 'view-count');
+ const sleeps = join(fixture.directory, 'sleep-calls.jsonl');
+ const bin = join(fixture.directory, 'bin');
+ writeFileSync(join(bin, 'npm'), `#!${process.execPath}
+const fs = require('node:fs');
+if (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(['view', process.env.POPCLAW_TEST_PACKAGE, 'dist', '--json'])) process.exit(2);
+const file = process.env.POPCLAW_TEST_COUNTER;
+const count = (fs.existsSync(file) ? Number(fs.readFileSync(file, 'utf8')) : 0) + 1;
+fs.writeFileSync(file, String(count));
+if (count < Number(process.env.POPCLAW_TEST_READY_AT)) process.exit(1);
+console.log(JSON.stringify({integrity: process.env.POPCLAW_TEST_INTEGRITY, attestations: {url: 'https://registry.npmjs.org/test'}}));
+`, {mode: 0o755});
+ writeFileSync(join(bin, 'sleep'), `#!${process.execPath}
+require('node:fs').appendFileSync(process.env.POPCLAW_TEST_SLEEPS, JSON.stringify(process.argv.slice(2)) + '\\n');
+`, {mode: 0o755});
+ let result;
+ try {
+  await withRegistryCommands({...fixture, authMode: 'oidc', environment: {...fixture.environment, ...environment,
+   POPCLAW_TEST_COUNTER: counter, POPCLAW_TEST_SLEEPS: sleeps, POPCLAW_TEST_READY_AT: String(readyAt),
+   POPCLAW_TEST_PACKAGE: `${fixture.pkg.name}@${fixture.pkg.version}`,
+   POPCLAW_TEST_INTEGRITY: mismatch ? 'sha512-not-the-retained-bytes' : fixture.pkg.integrity},
+  execute: (command, args, options) => {
+   assert.equal(command, 'bash');
+   try {
+    result = {status: 0, stdout: execFileSync(command, args, {...options, stdio: 'pipe', encoding: 'utf8', timeout: 20000})};
+   } catch (error) {
+    if (error.status === null) throw error;
+    result = {status: error.status, stdout: error.stdout, stderr: error.stderr};
+   }
+  }}, commands => commands.verify(fixture.pkg));
+  return {...result, attempts: Number(readFileSync(counter, 'utf8')),
+   sleeps: existsSync(sleeps) ? readFileSync(sleeps, 'utf8').trim().split('\n').map(JSON.parse) : []};
+ } finally {rmSync(fixture.directory, {recursive: true, force: true});}
+}
+
+test('the unchanged shared verifier default stops before a seventh readable response', async () => {
+ const result = await delayedRegistry();
+ assert.equal(result.status, 1);
+ assert.equal(result.attempts, 6);
+ assert.equal(result.sleeps.length, 5);
+ assert.match(result.stdout, /is not readable from the registry/);
+});
+
+test('native workflow polling reaches a seventh response and verifies the real retained digest', async () => {
+ const result = await delayedRegistry(nativeWorkflowPolling());
+ assert.equal(result.status, 0, result.stdout + (result.stderr || ''));
+ assert.equal(result.attempts, 7);
+ assert.deepEqual(result.sleeps, Array.from({length: 6}, () => ['10']));
+ assert.match(result.stdout, /attestation present, registry bytes match the tested tarball/);
+});
+
+test('native workflow polling still rejects a real integrity mismatch after registry delay', async () => {
+ const result = await delayedRegistry({...nativeWorkflowPolling(), mismatch: true});
+ assert.equal(result.status, 1);
+ assert.equal(result.attempts, 7);
+ assert.match(result.stderr, /registry is serving bytes that were never tested here/);
+});
+
+test('native workflow polling remains bounded when the registry never becomes readable', async () => {
+ const {environment} = nativeWorkflowPolling();
+ const result = await delayedRegistry({environment, readyAt: Infinity});
+ assert.equal(result.status, 1);
+ assert.equal(result.attempts, Number(environment.REGISTRY_POLL_ATTEMPTS));
+ assert.equal(result.sleeps.length, result.attempts - 1);
+ assert.match(result.stdout, /is not readable from the registry/);
+});
+
+test('native publication job allows all five scan windows and preparation overhead', () => {
+ const {environment, timeoutMinutes} = nativeWorkflowPolling();
+ const oneWindowSeconds = (Number(environment.REGISTRY_POLL_ATTEMPTS) - 1) * Number(environment.REGISTRY_POLL_SLEEP);
+ assert.equal(oneWindowSeconds, 15 * 60);
+ assert.ok(timeoutMinutes * 60 >= NAMES.length * oneWindowSeconds + 10 * 60);
 });
