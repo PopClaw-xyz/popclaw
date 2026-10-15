@@ -22,6 +22,10 @@ format are unchanged.
 - Pin `@modelcontextprotocol/sdk` 1.31.0 and `fast-uri` 3.1.8, with regression
   coverage for issuer-bound OAuth credentials and URI hostname canonicalization.
   Retain Ajv 8.20.0 and the existing schema-validation behavior.
+- Pass only the configured data root to the local second-identity lookup,
+  preserving its existing informational notice.
+- Ignore structurally invalid locale environment values before date rendering.
+  Preserve valid language preferences, saved observations and fallback order.
 - Add GitHub artifact attestations for the retained ClawHub archive, package
   receipt and release context after source/byte verification. This proof does not
   confer OpenClaw official-plugin trust or change ClawHub's provenance metadata.

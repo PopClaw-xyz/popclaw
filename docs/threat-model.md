@@ -153,6 +153,12 @@ observations, consulting `LANG` only as a fallback; it no longer reads `LC_ALL`
 or `LC_MESSAGES`. An installation using only those removed locale variables
 may initially display a different language. Agent-facing language preferences
 yield to the current user request and host instructions.
+Locale inputs are normalized and structurally checked before use in date
+rendering. A valid language tag may appear in model prompts or generated HTML.
+Structural validation does not detect secrets embedded in an otherwise valid
+tag and does not establish the absence of scanner findings. The local
+second-identity lookup receives only the configured data-root value; its existing
+notice reports identity paths without reading the other identity key.
 
 The paper's own file is a separate question: opening it in a browser can
 fetch fonts and article images from the sites they came from. That is
