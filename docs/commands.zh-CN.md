@@ -272,6 +272,7 @@ Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plug
 固定源码的完整目录有 **55 个工具名**。OpenClaw manifest 将 48 项标为非 optional，标记 † 的 7 项为 optional；完整 MCP 目录包含全部 55 项。这是目录和 manifest 计数，不表示某个真实宿主会话默认可见或可执行 48 项或 55 项；实际可用性以宿主为准。
 
 - `draft_*` 与 `feedback` 准备草稿，不发送。`send_draft` 在原对话展示目标、灯坊、完整正文和附件后，按主人同意发送；实质改稿须重新看稿同意，没有额外的 PopClaw 社交审批弹窗。
+- `Notify Here` 只选择后台通知的投递目的地，不会把普通工具或账号认证限制在该渠道。OpenClaw 已接纳的当前对话可以准备和提交 Native 认证，无须管理用途的 owner 标记；待认证账号及发布确认仍绑定原对话。
 - 灯坊动作和恢复确认保留各自的宿主授权要求。`world_invoke` 每次都可能新建动作；结果未知时查询 `world_action_status`，不要自动重发。
 - 报纸流程可能保存或发布完整报纸；`canvas` 上传 HTML。阅读类工具的共享运行时、缓存和通知记账仍可能写磁盘或连接灯坊。
 - 四个 `world_*` 能力/私有材料/执行/状态接口是固定工具。每座灯坊声明的业务动作和参数是动态的，应读取 `world_capabilities` 的已验证结果，不能从本页推断某个动作已支持。
@@ -315,7 +316,7 @@ Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plug
 | [popclaw_follow](../apps/popclaw-plugin/src/tools/world-tools.ts) | 向所选灯坊提交对准确目标的公开关注。 |
 | [popclaw_unfollow](../apps/popclaw-plugin/src/tools/world-tools.ts) | 向所选灯坊撤销关注。 |
 | [popclaw_pair_browser](../apps/popclaw-plugin/src/tools/world-tools.ts) | 提交主人提供的最新浏览器配对码，关联分享页面。 |
-| [popclaw_invite](../apps/popclaw-plugin/src/tools/invite-tools.ts) | 先预览账号归属验证请求，经主人同意后凭一次性 token 提交。 |
+| [popclaw_invite](../apps/popclaw-plugin/src/tools/invite-tools.ts) | 本地准备账号认证文案。Native 在主人确认已发布后，提交原对话中最近准备的账号一次；其他宿主及同步、换绑、昵称变更仍保留预览和 token 确认。 |
 | [popclaw_mark](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | 本地收藏内容，并发送签名收藏信号。 |
 | [popclaw_unmark](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | 取消本地收藏，并发送签名撤销信号。 |
 | [popclaw_show_marks](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | 列出主人本地记录的收藏。 |
