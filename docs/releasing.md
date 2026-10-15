@@ -138,6 +138,59 @@ environment and `id-token: write` remain the trusted-publisher identity; moving
 the job from Ubuntu to hosted macOS does not change those fields. Checksums use
 `shasum -a 256`, available on macOS, with the same retained checksum format.
 
+## Verify the already published 0.1.7 packages
+
+The `Verify published 0.1.7` workflow is a verification-only follow-up to the
+failed post-publication reads in runs `38683082034` and `38685413921`. Both npm
+uploads completed. The old reader discarded npm stderr, so those logs do not
+establish that registry propagation caused the failures. Keep those failed runs;
+a later successful verification does not change their result.
+
+After this workflow is available on the approved default branch, run it from
+Actions, or use:
+
+```sh
+gh workflow run verify-release-017.yml --repo PopClaw-xyz/popclaw --ref main
+```
+
+This entry has no release inputs and no publishing credentials. It reads artifact
+`11949243158` from original run `38683082034`, checks its recorded digest and
+source commit `801f5d76162de7f0a1ff66cdb89780a650586768`, and checks that `v0.1.7`
+still points to that commit. The original metadata, checksum file and both
+archives must match the recorded 0.1.7 bytes. It reuses
+`verify-retained-artefacts.sh` and `verify-published-package.sh`, then downloads
+each fixed npm version and verifies its bytes, registry signatures, npm publish
+attestation and Sigstore provenance. Provenance must identify the original
+source, tag, workflow and respective publication run, not this verification run.
+The verifier uses Sigstore 4.1.1 from npm 11.19.1. Its token only needs
+`contents: read` and `actions: read`; it does not enter `npm-release` or request
+an OIDC signing token.
+
+The workflow performs no build, package publication, tag move, release edit or
+npm label change. It does not invoke installation lifecycle scripts. It retains
+its JSON evidence even when verification fails. A green run proves published
+artifact identity and signatures, not fresh-install or social acceptance.
+
+The shared registry reader now makes up to 24 reads with 10 seconds between
+unsuccessful reads. Each npm request uses the public registry, prefers online
+metadata, disables npm's nested fetch retries and has a 15-second fetch timeout.
+The actual npm exit status and stderr remain visible. Incomplete JSON, missing
+hashes or an attestation that has not appeared can be read again within that
+budget. An archive hash mismatch stops immediately. Exhaustion reports failure
+without asserting an unproven cause or attempting publication again.
+
+Run the focused regression checks locally before changing either verifier:
+
+```sh
+python3 -B scripts/tests/test_published_verification.py
+node --test scripts/tests/verify-release-017.test.mjs
+```
+
+The deterministic tests cover read recovery, retained error details, bounded
+requests, source/run bindings and invalid registry signatures. Their Sigstore
+adapter test checks policy routing; an actual verification run is still required
+to establish the real bundles' cryptographic validity.
+
 ## Separate ClawHub native publication
 
 Use `.github/workflows/release-clawhub-native.yml` to publish the five native
