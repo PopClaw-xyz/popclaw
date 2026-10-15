@@ -1,5 +1,6 @@
 /** Short-lived MCP hook snapshot. The tool still rechecks its captured runtime
- * authority, including in-memory revocation that another process cannot see. */
+ * authority, including in-memory revocation that another process cannot see.
+ * Production MCP uses localParticipationPort, not the static configured-pin lane. */
 import type { HostDb } from '../host/host-db.js';
 import type { NotificationItem } from './types.js';
 import { isQueuedInboxNotification } from '../messaging/inbox-notification-state.js';

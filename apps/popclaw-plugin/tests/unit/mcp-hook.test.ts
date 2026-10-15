@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { localParticipationPort } from '../../src/host/local-participation.js';
 import { LocalHostDb } from '../../src/host/local-host-db.js';
 import { runMigrations } from '../../src/host/migrations.js';
 import { PopclawPaths } from '../../src/host/popclaw-paths.js';
@@ -24,7 +25,7 @@ function fixture() {
   const db = new LocalHostDb(paths.socialDb()); cleanups.push(() => db.close());
   runMigrations(db, join(pkg, 'migrations'));
   const origin = 'https://notification.example';
-  const houses = new HouseRuntime({ db, signer: {} as Signer, origins: [origin], readAuthorityFor: refusingReadAuthorityFor });
+  const houses = new HouseRuntime({ db, signer: {} as Signer, origins: [origin], participation: localParticipationPort(() => undefined), readAuthorityFor: refusingReadAuthorityFor });
   cleanups.push(() => houses.stop());
   db.execute(`INSERT INTO house_participation(house_origin, installation_id, desired, phase, session_id, lease_expires_at)
     VALUES (?, 'installation', 'enabled', 'connected', 'session', ?)`, [origin, Date.now() / 1000 + 90]);
@@ -32,7 +33,7 @@ function fixture() {
   const inbox = new InboxStore(db);
   const hook = () => JSON.parse(execFileSync(process.execPath, ['--import', join(pkg, 'node_modules/tsx/dist/loader.mjs'), join(pkg, 'src/mcp-hook.ts'), 'PostToolUse'],
     { env: { ...process.env, POPCLAW_DATA_ROOT: root, POPCLAW_NOTIFICATION_CONSUMER: 'mcp:hook' } }).toString());
-  return { paths, db, origin, notifier, inbox, hook };
+  return { paths, db, origin, houses, notifier, inbox, hook };
 }
 
 it.each(['unattributed', 'disabled', 'expired', 'resolved', 'sender-mismatch', 'missing-inbox'] as const)('keeps the hook quiet for %s content without consuming it', state => {
@@ -76,6 +77,7 @@ it('projects only routing metadata while preserving absent, null and non-string 
 it('retains the existing sessionless lane and stops after participation is disabled', () => {
   const f = fixture();
   f.db.execute("UPDATE house_participation SET session_id='',lease_expires_at=0");
+  expect(f.houses.publicReadGate(f.origin).isActive()).toBe(true);
   f.notifier.enqueue({ level: 'L2', kind: 'reply', payload: { houseOrigin: f.origin, body: 'PRIVATE-CONTENT' } });
   expect(f.hook().hookSpecificOutput.additionalContext).toContain('1 pending notifications');
   f.db.execute("UPDATE house_participation SET desired='disabled'");
