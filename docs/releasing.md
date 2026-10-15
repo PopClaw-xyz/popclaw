@@ -3,7 +3,7 @@
 How a release reaches npm, and what only a maintainer with registry access can
 do. The machinery is `.github/workflows/release.yml`.
 
-See the [current release verification scope](support-matrix.md#017-release-verification)
+See the [current release verification scope](support-matrix.md#018-release-verification)
 for recorded checks, channel status and remaining acceptance limits.
 
 The standard npm release is **two packages**, published in one workflow run, in one order:
