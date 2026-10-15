@@ -223,11 +223,12 @@ async function main(): Promise<void> {
   });
   // L2 in-code half: a first-class notifications tool. Sourced from the same
   // runtime notifier the piggyback reads, so both agree on "unread".
-  const getNotifier = async (): Promise<Notifier> => {
+  const notificationRuntime = async () => {
     const rt = await runtime();
     if (!rt.houseRuntime.storageAllows('notifications')) throw new Error('STORAGE_RECOVERY_HELD: notifications; local inbox history remains available');
-    return rt.notifier;
+    return rt;
   };
+  const getNotifier = async (): Promise<Notifier> => (await notificationRuntime()).notifier;
   // The single name chain: alias > self-reported name > handle. Notification
   // rendering must use the **current** form of address, not one baked in at
   // the moment it was queued (an alias the owner adds later must also
@@ -252,7 +253,7 @@ async function main(): Promise<void> {
   // MCP owns its per-consumer notification registrations. Native registration
   // exposes the same two tools through notification-tools.ts and the manifest;
   // both surfaces retain explicit acknowledgement after content handoff.
-  tools.push(makeNotificationsTool(getNotifier, getNameOf, getProposals, { id: notificationConsumerId(), store: async () => (await runtime()).notifier, context: async () => runtimeToolNoticeContext(await runtime(), notificationConsumerId()) }));
+  tools.push(makeNotificationsTool(getNotifier, getNameOf, getProposals, { id: notificationConsumerId(), store: async () => (await runtime()).notifier, context: async () => runtimeToolNoticeContext(await notificationRuntime(), notificationConsumerId()) }));
   tools.push({
     name: 'popclaw_acknowledge_notifications',
     description: 'Acknowledge only the notification IDs already handed to this session. This records a host handoff, never human read or request completion.',
