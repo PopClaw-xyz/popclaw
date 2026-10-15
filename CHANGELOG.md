@@ -26,6 +26,10 @@ format and resolved runtime dependencies are unchanged.
   remain available without an extra confirmation.
 - Preserve executable modes in both prebuilt graphs through actual pnpm
   packing, and verify client promotion against the source file inventory.
+- Let X account verification run in any chat admitted by the host. The
+  selected Notify Here destination controls notification delivery only; current
+  invocation, conversation and identity checks, posting acknowledgement, and
+  confirmation for sensitive changes remain required.
 - Advance the plugin, native manifest and MCP shell together to 0.1.6. The
   shell depends on exactly `popclaw@0.1.6`; current setup examples and public
   documentation links use this fixed version.
