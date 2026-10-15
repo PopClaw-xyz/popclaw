@@ -3,6 +3,19 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
+## Unreleased — Public journal read efficiency
+
+**Protocol:** none. Identity data, protected journal schema and stored rows are unchanged.
+
+- Batch selected-lane membership reads per page using the existing complete
+  association primary key. Read decimal sequence lengths in descending order
+  through the existing sequence index, avoiding repeated temporary page sorting.
+- Apply the shared reader improvement to public feed, search, author history
+  and newspaper collection. Preserve exact uint64 ordering, checkpoint snapshots,
+  signature/projection checks, source gates and existing read limits.
+- Source regressions, build and lint were checked. This entry does not claim a
+  released package, installed-host timing or deployed Hosted acceptance.
+
 ## 0.1.7 — Natural notifications and verified release artifacts
 
 **Protocol:** none. The pinned signed-event protocol, identity paths and database
