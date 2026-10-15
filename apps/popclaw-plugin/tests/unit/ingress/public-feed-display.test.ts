@@ -15,6 +15,7 @@ import { WorldFeedCache } from '../../../src/ingress/world-feed-cache.js';
 import type { HouseRuntime } from '../../../src/runtime/house-lifecycle/house-runtime.js';
 import * as capabilities from '../../../src/world/world-capabilities.js';
 import { readPublicJournal } from '../../../src/ingress/public-journal-reader.js';
+import { NewspaperPublicMaterialSource, publicMaterialSource } from '../../../src/newspaper/public-material-source.js';
 
 const clean: Array<() => void> = [];
 afterEach(() => { vi.restoreAllMocks(); for (const close of clean.splice(0).reverse()) close(); });
@@ -24,10 +25,10 @@ function signed(body: popclaw.event.IEventEnvelope, timestamp = 100) {
   const bytes = canonicalizeEnvelope(e), eventId = cidFromCanonical(bytes);
   return { eventId, raw: new Uint8Array(popclaw.event.EventEnvelope.encode({ ...e, eventId, signature: nacl.sign.detached(bytes, signer.secretKey) }).finish()) };
 }
-function fixture(log = 'log_display', highWater = '100') {
+function fixture(log = 'log_display', highWater = '100', origin = 'https://display.invalid') {
   const root = mkdtempSync(join(tmpdir(), 'public-display-')); clean.push(() => rmSync(root, { recursive: true, force: true }));
   const db = new LocalHostDb(join(root, 'journal.db')); clean.push(() => db.close());
-  const capability = { house: { origin: 'https://display.invalid', houseKey: actor, incarnation: 'house_display' }, capabilityRevision: 'a'.repeat(64),
+  const capability = { house: { origin, houseKey: actor, incarnation: 'house_display' }, capabilityRevision: 'a'.repeat(64),
     publicStream: { endpoint: '/v1/world-stream' as const, mode: 'public-v1' as const, log_incarnation: log, envelope_baseline: 'public-envelope-02' as const, initial_public_scopes: [] } };
   const producerPolicy = { house: capability.house, capabilityRevision: capability.capabilityRevision, officialActorIds: [actor] };
   const options = { executionDb: db, capability, producerPolicy, selection: { fullPublic: true, scopes: [] }, consumerContracts: [], approvedConsumerMappingDigest: EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST };
@@ -46,11 +47,196 @@ function fixture(log = 'log_display', highWater = '100') {
   }
   function checkpoint(high: string, phase = 'live') { const c = popclaw.world.PublicStreamCheckpoint.fromObject({ phase, publicThroughSeq: high }); journal.checkpoint(generation, c, popclaw.world.PublicStreamCheckpoint.encode(c).finish()); }
   function live() { checkpoint(highWater, 'replay'); }
-  return { db, capability, display, append, live, checkpoint, capture, setCurrent: (v: boolean) => { current = v; }, setHistory: (v: boolean) => { history = v; } };
+  return { db, dbPath: join(root, 'journal.db'), capability, display, append, live, checkpoint, capture, setCurrent: (v: boolean) => { current = v; }, setHistory: (v: boolean) => { history = v; } };
 }
 function stored(db: LocalHostDb) {
   return db.queryAll<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map(({ name }) => [name, db.queryAll(`SELECT * FROM ${name}`)]);
 }
+
+it('reads only the material window after one reusable history index build', () => {
+  const f = fixture('material_window', '80');
+  for (let seq = 1; seq <= 80; seq++) f.append(seq, signed({ post: { blocks: [{ content: `Window item ${seq}` }] } }, seq <= 76 ? 100 : 2000));
+  f.checkpoint('80', 'replay');
+  const source = { origin: f.capability.house.origin, slug: 'display' };
+  const baseline = readPublicJournal(f.db, f.capture(), source, { completeWindow: true, ownProjection: true });
+  const before = stored(f.db);
+  const query = vi.spyOn(f.db, 'queryAll');
+  const options = { completeWindow: true, ownProjection: true, materialSince: 1000 };
+  const first = readPublicJournal(f.db, f.capture(), source, options);
+  expect(first.items).toEqual(baseline.items.filter(hit => Number(hit.item.platformPostCreatedAt) >= 1000));
+  query.mockClear();
+  const second = readPublicJournal(f.db, f.capture(), source, options);
+  expect(second).toEqual(first);
+  const frameRows = query.mock.calls.reduce((n, [sql], i) => n + (sql.includes('f.frame_bytes') ? (query.mock.results[i]?.value as unknown[]).length : 0), 0);
+  expect(frameRows, 'warm collection must not reread out-of-window frame bodies').toBe(4);
+  const incremental = query.mock.calls.find(([sql]) => sql.includes('popclaw_material_dirty d'));
+  expect(incremental, 'incremental work must start from the dirty queue').toBeDefined();
+  const plan = f.db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${incremental![0]}`, incremental![1]);
+  expect(plan[0]!.detail, 'an empty dirty queue must not traverse the full frame journal').toContain('SEARCH d');
+  expect(stored(f.db)).toEqual(before);
+  // A late arrival is eligible by material time, not arrival time or sequence.
+  f.append(81, signed({ post: { blocks: [{ content: 'Late fresh material' }] } }, 1800));
+  f.append(82, signed({ post: { blocks: [{ content: 'Newly backfilled old material' }] } }, 50));
+  f.checkpoint('82');
+  const updated = readPublicJournal(f.db, f.capture(), source, options);
+  expect(updated.items).toHaveLength(5);
+  expect(updated.items.some(hit => hit.body === 'Late fresh material')).toBe(true);
+  expect(updated.items.some(hit => hit.body === 'Newly backfilled old material')).toBe(false);
+});
+
+it('selects the latest canonical observation before the material-time filter', () => {
+  const f = fixture('window_duplicates', '1');
+  const old = signed({ post: { origin: { platform: 'web', postId: 'same', url: 'https://source.invalid/post', createdAt: 2000 }, blocks: [{ content: 'Earlier observation' }] } }, 1);
+  const latest = signed({ post: { origin: { platform: 'web', postId: 'same', url: 'https://source.invalid/post', createdAt: 2000 }, blocks: [{ content: 'Latest observation' }] } }, 2);
+  f.append(1, old, { platform: 'web', platformPostId: 'same', eventId: old.eventId, platformPostCreatedAt: 2000 });
+  f.checkpoint('1', 'replay');
+  f.append(2, latest, { platform: 'web', platformPostId: 'same', eventId: latest.eventId, platformPostCreatedAt: 100 });
+  const source = { origin: f.capability.house.origin, slug: 'display' }, options = { completeWindow: true, ownProjection: true, materialSince: 1000 };
+  expect(readPublicJournal(f.db, f.capture(), source, options).items.map(hit => hit.item.eventId)).toEqual([old.eventId]);
+  f.checkpoint('2');
+  expect(readPublicJournal(f.db, f.capture(), source, options).items).toEqual([]);
+});
+
+it('rolls material index creation and incremental changes back with the outer transaction', () => {
+  const f = fixture('window_rollback', '1');
+  f.append(1, signed({ post: { blocks: [{ content: 'Committed item' }] } }, 2000)); f.live();
+  const source = { origin: f.capability.house.origin, slug: 'display' }, options = { completeWindow: true, ownProjection: true, materialSince: 1000 };
+  f.db.execute('SAVEPOINT outer_write');
+  expect(readPublicJournal(f.db, f.capture(), source, options).items).toHaveLength(1);
+  f.db.execute('ROLLBACK TO outer_write'); f.db.execute('RELEASE outer_write');
+  expect(readPublicJournal(f.db, f.capture(), source, options).items).toHaveLength(1);
+  f.db.execute('SAVEPOINT outer_write');
+  f.append(2, signed({ post: { blocks: [{ content: 'Rolled-back fresh item' }] } }, 2100)); f.checkpoint('2');
+  expect(readPublicJournal(f.db, f.capture(), source, options).items).toHaveLength(2);
+  f.db.execute('ROLLBACK TO outer_write'); f.db.execute('RELEASE outer_write');
+  expect(readPublicJournal(f.db, f.capture(), source, options).items.map(hit => hit.body)).toEqual(['Committed item']);
+});
+
+it('invalidates the material index on old-row edits, replacement and cross-connection writes', () => {
+  const f = fixture('window_invalidation', '1'), event = signed({ post: { blocks: [{ content: 'Stable body' }] } }, 2000);
+  f.append(1, event); f.live();
+  const source = { origin: f.capability.house.origin, slug: 'display' }, options = { completeWindow: true, ownProjection: true, materialSince: 1000 };
+  expect(readPublicJournal(f.db, f.capture(), source, options).items).toHaveLength(1);
+  const old = f.db.queryOne<{ frame_bytes: Uint8Array }>('SELECT frame_bytes FROM world_public_frames_v1')!.frame_bytes;
+  const frame = popclaw.event.WorldStreamFrame.decode(old);
+  frame.projection = popclaw.event.WorldFeedItem.fromObject({ eventId: event.eventId, platform: 'popclaw', platformPostId: event.eventId, platformPostCreatedAt: 100 });
+  const changed = popclaw.event.WorldStreamFrame.encode(frame).finish();
+  f.db.execute('UPDATE world_public_frames_v1 SET frame_bytes=?', [changed]);
+  expect(readPublicJournal(f.db, f.capture(), source, options).items).toHaveLength(0);
+  const other = new LocalHostDb(f.dbPath); clean.push(() => other.close());
+  other.execute('UPDATE world_public_frames_v1 SET frame_bytes=?', [old]);
+  expect(readPublicJournal(f.db, f.capture(), source, options).items).toHaveLength(1);
+  f.db.execute('INSERT OR REPLACE INTO world_public_frames_v1 SELECT binding_id,log_incarnation,seq,event_id,?,observed_at FROM world_public_frames_v1', [changed]);
+  expect(readPublicJournal(f.db, f.capture(), source, options).items).toHaveLength(0);
+});
+
+it('keeps readonly journals unchanged and falls back safely for query-only connections', () => {
+  const f = fixture('window_readonly', '1'); f.append(1, signed({ post: { blocks: [{ content: 'Readonly material' }] } }, 2000)); f.live();
+  const readonly = new LocalHostDb(f.dbPath, { readOnly: true }); clean.push(() => readonly.close());
+  const capture = { ...f.capture(), executionDb: readonly }, source = { origin: f.capability.house.origin, slug: 'display' };
+  const before = stored(readonly), options = { completeWindow: true, ownProjection: true, materialSince: 1000 };
+  expect(readPublicJournal(readonly, capture, source, options).items).toHaveLength(1);
+  expect(readPublicJournal(readonly, capture, source, options).items).toHaveLength(1);
+  expect(stored(readonly)).toEqual(before);
+  readonly.execute('PRAGMA query_only=ON');
+  expect(readPublicJournal(readonly, capture, source, options).items).toHaveLength(1);
+});
+
+it('bounds material-index growth transactionally without truncating the material set', () => {
+  const f = fixture('window_capacity', '1'); f.append(1, signed({ post: { blocks: [{ content: 'First item' }] } }, 2000)); f.live();
+  const source = { origin: f.capability.house.origin, slug: 'display' }, options = { completeWindow: true, ownProjection: true, materialSince: 1000 };
+  readPublicJournal(f.db, f.capture(), source, options);
+  // Simulate the counter just below capacity; all actual bodies remain valid.
+  f.db.execute('UPDATE temp.popclaw_material_meta SET frame_count=99999');
+  f.append(2, signed({ post: { blocks: [{ content: 'Second item' }] } }, 2000));
+  f.append(3, signed({ post: { blocks: [{ content: 'Third item' }] } }, 2000)); f.checkpoint('3');
+  expect(f.db.queryOne<{ invalid: number }>('SELECT invalid FROM temp.popclaw_material_meta')?.invalid).toBe(2);
+  expect(f.db.queryOne<{ n: number }>('SELECT count(*) AS n FROM temp.popclaw_material_dirty')?.n).toBe(1);
+  expect(readPublicJournal(f.db, f.capture(), source, options).items.map(hit => hit.body)).toEqual(['Third item','Second item','First item']);
+});
+
+it('preserves source priority before time filtering without hiding a later source after revocation', async () => {
+  const a = fixture('shadow_a','1','https://a.invalid'), b = fixture('shadow_b','1','https://b.invalid');
+  const event = signed({ post: { blocks: [{ content: 'Same signed content in two sources' }] } }, 2000);
+  for (const [f,timestamp] of [[a,100],[b,2000]] as const) {
+    f.append(1,event,{ eventId:event.eventId,platform:'popclaw',platformPostId:event.eventId,platformPostCreatedAt:timestamp }); f.live();
+  }
+  const sources = [a,b].map((f,i) => ({origin:f.capability.house.origin,slug:String(i),capture:f.capture}));
+  const display = new PublicFeedDisplay({sources:()=>sources}), options = {completeWindow:true,ownProjection:true,materialSince:1000};
+  expect(display.read(options).items.map(hit=>hit.item.eventId)).toEqual([]);
+  const prepared = await display.prepare(options);
+  expect(prepared.read({completeWindow:true}).items.map(hit=>hit.item.eventId)).toEqual([]);
+  const raw = new NewspaperPublicMaterialSource({publicMaterialSources:()=>sources.map(source=>({...source,capture:()=>({...source.capture(),authority:source.origin})}))} as never).collect({since:1000});
+  expect(raw.items.map(hit=>hit.platformPostCreatedAt)).toEqual([100]);
+  vi.spyOn(capabilities,'readHouseCapabilityView').mockReturnValue({} as never);
+  const houses = {newspaperPublicV1:true,capturePublicDisplay:(store:{baseUrl:string})=>sources.find(s=>s.origin===store.baseUrl)!.capture(),
+    publicMaterialSources:()=>sources.map(source=>({...source,capture:()=>({...source.capture(),authority:source.origin})}))} as unknown as HouseRuntime;
+  const stores = [a,b].map((f,i)=>({baseUrl:f.capability.house.origin,slug:String(i),db:f.db,dbPath:f.dbPath,cache:{} as never}));
+  const reader=new HouseFeedReader({db:a.db,houses,stores:()=>stores});
+  const housePrepared=await reader.prepare(options);
+  expect(housePrepared.read({completeWindow:true}).items.map(hit=>hit.item.eventId)).toEqual([]);
+  const batch=await publicMaterialSource({houseRuntime:houses,houseFeedReader:reader})!.prepareCollect({since:1000});
+  expect(batch.items.map(hit=>hit.platformPostCreatedAt)).toEqual([100]);
+  a.setCurrent(false);
+  expect(prepared.read({completeWindow:true}).items.map(hit=>hit.item.eventId)).toEqual([event.eventId]);
+  expect(housePrepared.read({completeWindow:true}).items.map(hit=>hit.item.eventId)).toEqual([event.eventId]);
+});
+
+it('does not shadow a later-source CID superseded by another canonical observation', () => {
+  const a=fixture('canonical_a','1','https://a.invalid'),b=fixture('canonical_b','1','https://b.invalid');
+  const origin={platform:'web',postId:'shared-post',url:'https://source.invalid/shared',createdAt:2000};
+  const first=signed({post:{origin,blocks:[{content:'First observed content'}]}},1);
+  const newer=signed({post:{origin,blocks:[{content:'Updated observed content'}]}},2);
+  for(const f of [a,b]) {f.append(1,first);f.live();}
+  a.append(2,newer,{eventId:newer.eventId,platform:'web',platformPostId:'shared-post',platformPostCreatedAt:100});a.checkpoint('2');
+  const display=new PublicFeedDisplay({sources:()=>[a,b].map((f,i)=>({origin:f.capability.house.origin,slug:String(i),capture:f.capture}))});
+  const options={completeWindow:true,ownProjection:true,materialSince:1000};
+  expect(display.read(options).items.map(hit=>hit.item.eventId)).toEqual([first.eventId]);
+  expect(display.read(options).items.map(hit=>hit.item.eventId)).toEqual([first.eventId]);
+});
+
+it.each([false, true])('uses indexed pages and batched memberships across decimal sequence lengths (checkpoint=%s)', checkpointed => {
+  const sequences = [...Array.from({ length: 70 }, (_, i) => String(i + 1)), '98', '99', '100', '101', '998', '999', '1000', '18446744073709551614', '18446744073709551615'];
+  const f = fixture('sql_pages', sequences.at(-1)!);
+  for (const seq of sequences) f.append(seq, signed({ post: { blocks: [{ content: `SQL page item ${seq}` }] } }, 1));
+  if (checkpointed) f.live();
+  const before = stored(f.db);
+  const query = vi.spyOn(f.db, 'queryAll');
+  const result = readPublicJournal(f.db, f.capture(), { origin: f.capability.house.origin, slug: 'display' }, { completeWindow: true, ownProjection: true });
+  expect(result.items.map(item => item.source.sequence)).toEqual([...sequences].reverse());
+  expect(result.status).toMatchObject({ unavailable: false, truncated: false, incomplete: !checkpointed });
+  const calls = [...query.mock.calls];
+  const memberships = calls.filter(([sql]) => sql.includes('world_public_associations_v1'));
+  expect(memberships.length, 'membership reads must scale with pages, not individual frames').toBeLessThanOrEqual(8);
+  const pages = calls.filter(([sql]) => sql.includes('FROM world_public_frames_v1 f JOIN'));
+  expect(pages.length).toBeGreaterThan(1);
+  for (const [sql, params] of [...pages, ...memberships]) {
+    const plan = f.db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`, params);
+    expect(plan.map(row => row.detail).join('\n')).not.toContain('USE TEMP B-TREE FOR ORDER BY');
+    if (sql.includes('world_public_associations_v1')) {
+      expect(plan.some(row => row.detail.includes('event_id=?') && row.detail.includes('scope_id=?'))).toBe(true);
+    }
+  }
+  expect(stored(f.db)).toEqual(before);
+});
+
+it.each(['', '01', 'bad', '1\0bad', '18446744073709551616', '100000000000000000000'])('does not hide invalid sequences behind indexed pagination: %j', seq => {
+  const f = fixture(); f.append(1, signed({ post: { blocks: [{ content: 'Corrupt sequence must remain visible to validation.' }] } }));
+  f.db.execute('DELETE FROM world_public_associations_v1');
+  f.db.execute('UPDATE world_public_frames_v1 SET seq=?', [seq]);
+  expect(() => readPublicJournal(f.db, f.capture(), { origin: f.capability.house.origin, slug: 'display' }, { completeWindow: true })).toThrow('PUBLIC_DISPLAY_SEQUENCE_INVALID');
+});
+
+it('keeps event/sequence membership binding and refuses a selected scope absent from the signed frame', () => {
+  const f = fixture(), first = signed({ post: { blocks: [{ content: 'First membership' }] } }, 1), second = signed({ post: { blocks: [{ content: 'Second membership' }] } }, 2);
+  f.append(1, first); f.append(2, second); f.live();
+  f.db.execute('UPDATE world_public_associations_v1 SET seq=? WHERE event_id=?', ['2', first.eventId]);
+  const source = { origin: f.capability.house.origin, slug: 'display' };
+  expect(readPublicJournal(f.db, f.capture(), source).items.map(hit => hit.item.eventId)).toEqual([second.eventId]);
+  f.db.execute('UPDATE world_public_bindings_v1 SET selection_json=?', [JSON.stringify({ fullPublic: true, scopes: ['scope_extra'] })]);
+  f.db.execute("INSERT INTO world_public_associations_v1(binding_id,log_incarnation,lane,scope_id,event_id,seq) SELECT binding_id,log_incarnation,'scope','scope_extra',event_id,seq FROM world_public_associations_v1 WHERE event_id=?", [second.eventId]);
+  expect(() => readPublicJournal(f.db, f.capture(), source)).toThrow('PUBLIC_DISPLAY_FRAME_CONFLICT');
+});
 
 it.each(['intact', 'bad-signature', 'wrong-projection'] as const)('newspaper complete window reads and verifies evidence beyond the former 2048-frame scan: %s', async mode => {
   const f = fixture('log_long_window', '2050');

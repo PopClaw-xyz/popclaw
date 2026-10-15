@@ -558,7 +558,7 @@ describe('child directive — batch mandate copy (flash completion)', () => {
   // material page's printed `basis` verbatim (the batch selector the scrubbing
   // host cannot wash). Both languages re-pinned byte-exact below.
   const ZH_DIRECTIVE =
-    '出一期今天的报纸。流程：先调 popclaw_newspaper（不带参数）拿候选页；挑好属于主人的条目后，' +
+    '出一期近 72 小时的报纸。流程：先调 popclaw_newspaper（不带参数）拿候选页；挑好属于主人的条目后，' +
     '带上 picks 再调一次拿素材页。交稿必须分批：第一批 ≤12 条，且必须带上 masthead、edition、weather、' +
     'leads、teaser 等结构字段；每批都用 popclaw_publish_newspaper 提交，回执说还有未写条目就继续下一批' +
     '（每批同样 ≤12 条），直到回执确认整期完成。一次只写一批是硬要求——单次大输出会在轻量模型上中途失败。' +
@@ -594,7 +594,7 @@ describe('child directive — batch mandate copy (flash completion)', () => {
     const window = renderCopy('en', 'newspaper.dispatch.childDirectiveWindow', { hours: '48' });
     expect(today).toContain(EN_TAIL);
     expect(window).toContain(EN_TAIL);
-    expect(today).toContain("Produce today's paper.");
+    expect(today).toContain('Produce the paper for the last 72 hours.');
     expect(window).toContain('Produce the paper for the last 48 hours.');
   });
 
@@ -1143,4 +1143,22 @@ describe('the dispatch ledger', () => {
     NewspaperStageStore.note(child, 'candidatePage');
     expect(NewspaperStageStore.take(child)?.candidatePage).toBe(true);
   });
+});
+
+
+it('dispatches an explicit calendar-day selection without reverting to the rolling default', async () => {
+  const fx = makeSurface({});
+  const { deps } = makeDeps(fx.surface, { today: true });
+  await runDedicatedNewspaper(deps);
+  expect(fx.runs[0]!.message).toBe(L('childDirectiveToday'));
+  expect(fx.runs[0]!.message).toContain('today=true');
+  expect(renderCopy('en', 'newspaper.dispatch.childDirectiveToday')).toContain('today=true');
+});
+
+
+it('rejects contradictory dispatch selections without starting a child', async () => {
+  const fx = makeSurface({});
+  const { deps } = makeDeps(fx.surface, {today:true,hours:24});
+  await expect(runDedicatedNewspaper(deps)).rejects.toThrow('NEWSPAPER_WINDOW_CONFLICT');
+  expect(fx.runs).toHaveLength(0);
 });

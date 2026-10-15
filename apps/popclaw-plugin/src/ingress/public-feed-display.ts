@@ -50,6 +50,8 @@ export interface PublicDisplayQuery extends WorldFeedQuery {
   /** Internal full candidate acquisition. A later read cannot enlarge a prepared window. */
   readonly completeWindow?: boolean;
   readonly ownProjection?: boolean;
+  readonly materialSince?: number;
+  readonly materialShadowEventIds?: readonly string[];
 }
 export interface PreparedPublicSource {
   readonly origin: string;
@@ -106,7 +108,7 @@ function querySources(sources: readonly PreparedPublicSource[], query: PublicDis
       else merged.set(id, hit);
     }
   }
-  const items = [...merged.values()].sort((a, b) => time(b.item.platformPostCreatedAt) - time(a.item.platformPostCreatedAt)
+  const items = [...merged.values()].filter(hit=>query.materialSince===undefined || time(hit.item.platformPostCreatedAt)>=query.materialSince).sort((a, b) => time(b.item.platformPostCreatedAt) - time(a.item.platformPostCreatedAt)
     || String(a.item.platformPostId).localeCompare(String(b.item.platformPostId)));
   return { items: items.slice(0, limit), sources: sources.map(source => source.status),
     truncated: items.length > limit || sources.some(source => source.status.truncated) };
@@ -118,7 +120,7 @@ export class PublicFeedDisplay {
   /** Only a prepared display exposes an invocation's fixed source evidence. */
   get publicSources(): readonly PreparedPublicSource[] { return []; }
   async prepare(query: PublicDisplayQuery = {}): Promise<PublicFeedDisplay> {
-    return new PreparedPublicFeedDisplay(this.captureSources(query), query.completeWindow === true);
+    return new PreparedPublicFeedDisplay(this.captureSources(query), query.completeWindow === true, query.materialSince);
   }
   read(query: PublicDisplayQuery = {}): PublicDisplayResult {
     return querySources(this.captureSources(query).map(publishSource), query, query.completeWindow === true);
@@ -128,7 +130,10 @@ export class PublicFeedDisplay {
   }
   private captureSources(query: PublicDisplayQuery): PreparedPublicSource[] {
     const houses: PreparedPublicSource[] = [];
-    for (const source of this.options.sources()) {
+    const sources = [...this.options.sources()], shadows = new Set(query.materialShadowEventIds ?? []);
+    // Later candidates identify only the earlier observations that could
+    // shadow them. Retain source order for the existing global deduplication.
+    for (const source of query.materialSince===undefined ? sources : sources.reverse()) {
       let capture: PublicDisplayCapture | undefined;
       try {
         capture = source.capture();
@@ -139,21 +144,22 @@ export class PublicFeedDisplay {
         capture.assertCurrent();
         const captured = capture;
         const result = readPublicJournalSnapshot(captured.executionDb, tx => readPublicJournal(tx, captured, source,
-          { completeWindow: query.completeWindow, ownProjection: query.ownProjection }));
+          { completeWindow: query.completeWindow, ownProjection: query.ownProjection, materialSince: query.materialSince, materialShadowEventIds:[...shadows] }));
         captured.assertCurrent();
         houses.push({ origin: source.origin, slug: source.slug, ...result, assertCurrent: () => captured.assertCurrent() });
+        if(query.materialSince!==undefined) for(const hit of result.items) if(time(hit.item.platformPostCreatedAt)>=query.materialSince) shadows.add(hit.item.eventId!);
       } catch (error) {
         houses.push({ origin: source.origin, slug: source.slug, status: unavailable(source, capture, error), items: [], assertCurrent() {} });
       }
     }
-    return houses;
+    return query.materialSince===undefined ? houses : houses.reverse();
   }
 }
 
 class PreparedPublicFeedDisplay extends PublicFeedDisplay {
-  constructor(private readonly captured: readonly PreparedPublicSource[], private readonly completeWindow: boolean) { super({ sources: () => [] }); }
+  constructor(private readonly captured: readonly PreparedPublicSource[], private readonly completeWindow: boolean, private readonly since?:number) { super({ sources: () => [] }); }
   override get publicSources(): readonly PreparedPublicSource[] { return this.captured.map(publishSource); }
   override async prepare(): Promise<PublicFeedDisplay> { return this; }
-  override read(query: PublicDisplayQuery = {}): PublicDisplayResult { return querySources(this.publicSources, query, this.completeWindow); }
-  override search(query: string, limit = 10): PublicDisplayResult { return querySources(this.publicSources, { limit }, false, query); }
+  override read(query: PublicDisplayQuery = {}): PublicDisplayResult { return querySources(this.publicSources, {...query,materialSince:this.since ?? query.materialSince}, this.completeWindow); }
+  override search(query: string, limit = 10): PublicDisplayResult { return querySources(this.publicSources, { limit, materialSince:this.since }, false, query); }
 }

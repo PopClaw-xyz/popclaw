@@ -83,15 +83,53 @@ restart is repaired by the outcome fallback, and none should be described as a
 delivered newspaper. This mechanism does not persist a recovery task or change
 identity, channel permission or the 40-second inline/12-minute workshop budgets.
 
+## Collection window
+
+An initial newspaper request defaults to the rolling last 72 hours. Use
+`hours` (an integer from 1 to 168) for another rolling window, or `today: true`
+for the owner's local calendar day. Supplying both is refused. The initial
+collection resolves one inclusive epoch-second cutoff, passes it into public
+material preparation and reuses it for all local material filtering. It adds
+no upper time bound. Workshop dispatch forwards the selection; its actual
+initial gather freezes the cutoff. Cursor reads and picks continue the existing
+issue instead of resolving another window. The slash command follows the same
+selection: `/popclaw newspaper` defaults to 72 hours, `/popclaw newspaper N`
+sets the rolling hours, and `/popclaw newspaper --today` selects the local day.
+
+For public journals, a connection-local, disposable SQLite TEMP index derives
+material time from verified frame projections, with the existing signed-event
+fallback. It preserves the latest canonical observation and checkpoint before
+filtering. The first collection verifies existing history; later collections
+process new frames and fetch only eligible originals, plus candidate-related
+observations needed to preserve source priority. Selected originals are still
+verified. Index metadata, change queues and capacity counters share transaction
+rollback. External writes, changed source policy and discontinuities rebuild it;
+restarting the connection also requires a rebuild. This changes neither identity
+assets nor the protected journal's persistent schema. TEMP storage may use
+automatically removed temporary files, rather than only RAM.
+
+The disposable index has a connection-wide 100,000-frame accounting ceiling.
+Crossing it stops incremental caching; a subsequent read rebuilds within that
+ceiling or falls back to complete verification. This cache ceiling never truncates
+materials. Query-only connections also retain complete reads. Normal reads use an
+indexed time lookup once, followed by bounded original-frame point reads. Ordinary
+remote snapshots retain their existing bounded, explicitly partial coverage.
+
+Windowed newspaper equivalence covers candidates, original bodies, primary
+sources and order. A source observation outside the window may be retained only
+to preserve primary-source deduplication; this internal path does not enumerate
+every out-of-window secondary `alsoInHouses` attribution. Normal feed, search and
+author reads without a material window retain their existing behavior.
+
 ## Reading failures before publication
 
-Initial material collection has no fixed aggregate 10-second deadline. Declared
+Initial material collection has a separate one-minute safety ceiling. Declared
 House digests, the optional summary reference (at most 1.5 seconds), and signed
 material acquisition start independently. Normal synchronous local verification
 can finish after ten seconds. Individual network requests retain their transport
-timeouts; a cancellation-only scope preserves action cancellation, explicit
-trusted parent deadlines and abandonment checks. It starts no infinite timer
-and grants no House authority. Writing and publisher upload keep their existing
+timeouts; the reading scope preserves action cancellation, earlier explicit
+trusted parent deadlines and abandonment checks. It grants no House authority.
+Summary and Guide keep their independent policies. Writing and publisher upload keep their existing
 policies; host setup and tool wrappers can add to visible call time.
 
 Cancellation and source-authority checks still apply before a candidate basis is

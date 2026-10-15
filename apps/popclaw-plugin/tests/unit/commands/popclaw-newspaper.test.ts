@@ -17,7 +17,7 @@ describe('runPopclawNewspaperCommand', () => {
     expect(r.continueAgent).toBe(true);
     // LLM-facing handoff, so English is the one source (S12).
     expect(r.text).toMatch(/popclaw_newspaper/);
-    expect(r.text).toContain('today');
+    expect(r.text).toContain('the last 72 hours');
   });
 
   it('includes an owner-specified window hint', async () => {
@@ -45,4 +45,19 @@ describe('runPopclawNewspaperCommand', () => {
     expect(r.continueAgent).toBeUndefined();
     expect(readStyleNotes(styleFile)).toContain('字体大点');
   });
+});
+
+
+it('passes the explicit calendar selection to the tool', async () => {
+  const out = await runPopclawNewspaperCommand({positional:[],flags:{today:''}});
+  expect(out.text).toContain('with today=true');
+});
+it('refuses conflicting or invalid command windows without handoff', async () => {
+  await expect(runPopclawNewspaperCommand({positional:['24'],flags:{today:''}})).rejects.toThrow('NEWSPAPER_WINDOW_CONFLICT');
+  await expect(runPopclawNewspaperCommand({positional:['169']})).rejects.toThrow('NEWSPAPER_WINDOW_INVALID');
+});
+
+
+it('does not silently consume a rolling argument as a today flag value', async () => {
+  await expect(runPopclawNewspaperCommand({positional:[],flags:{today:'24'}})).rejects.toThrow('NEWSPAPER_WINDOW_INVALID');
 });

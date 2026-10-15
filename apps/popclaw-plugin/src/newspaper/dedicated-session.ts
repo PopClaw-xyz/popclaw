@@ -46,6 +46,7 @@ import { pageBudgetDecision, type PageBudgetSource } from './host-budget.js';
 import { formatHouseReadFailure, type HouseReadFailure } from '../runtime/house-lifecycle/read-failure.js';
 import { renderCopy, type Lang } from '../lexicon/index.js';
 import { ownerLang } from '../lexicon/owner-language.js';
+import { validateNewspaperWindow } from './window.js';
 
 /**
  * The marker that names a newspaper workshop session. Matched as a SUBSTRING
@@ -565,9 +566,11 @@ export interface DedicatedDispatchDeps {
    * directive and the window must not contradict each other (review round
    * 2026-09-03: "produce today's paper, call with no arguments" followed by
    * "window: the last N hours" taught the child two different jobs). Undefined
-   * = today, the tool's own default.
+   * = the default rolling 72 hours.
    */
   hours?: number;
+  /** Explicit local calendar day; mutually exclusive with hours. */
+  today?: boolean;
   /**
    * Dispatch-time stale sweep (2026-09-03 night ruling): called once, just
    * before the child runs, to delete every issue-ledger entry stamped another
@@ -619,6 +622,7 @@ async function push(
  * failure belongs to the owner as a receipt, not as a silent retry.
  */
 export async function runDedicatedNewspaper(deps: DedicatedDispatchDeps): Promise<string> {
+  validateNewspaperWindow(deps);
   const lang = ownerLang();
   const log = deps.log ?? (() => {});
   const timeoutMs = deps.timeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS;
@@ -849,11 +853,13 @@ export async function runDedicatedNewspaper(deps: DedicatedDispatchDeps): Promis
     const started = await deps.subagent.run({
       sessionKey: requestedKey,
       // One directive, self-consistent: a rolling window teaches the child to
-      // pass `hours` on its own first call; the default teaches "no arguments".
+      // pass its selected window on the first call; the default teaches "no arguments".
       message:
         deps.hours !== undefined
           ? renderCopy(lang, 'newspaper.dispatch.childDirectiveWindow', { hours: String(deps.hours) })
-          : renderCopy(lang, 'newspaper.dispatch.childDirective'),
+          : deps.today
+            ? renderCopy(lang, 'newspaper.dispatch.childDirectiveToday')
+            : renderCopy(lang, 'newspaper.dispatch.childDirective'),
       // The profile is sent as a key ONLY when set — an empty profile must not
       // trip the host's override-authorization gate (see SubagentSurface.run).
       ...(model ? { model } : {}),
