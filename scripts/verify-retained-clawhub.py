@@ -22,6 +22,10 @@ NATIVE = 'dist/native-deps/better-sqlite3'
 MARKER = NATIVE + '/POPCLAW-PLATFORM-DEPS.json'
 RELEASE = NATIVE + '/build/Release/'
 ABI = {24: '137', 26: '147'}
+FULL_BUNDLE = 'dist/bundled/'
+CLIENT_BUNDLE = 'dist/client-bundled/'
+BUNDLE_PROFILE = 'POPCLAW-BUNDLE-PROFILE.json'
+BUNDLE_ENTRIES = ['index.js', 'mcp.js', 'mcp-hook.js', 'cli.js', 'prepare-native-world.js']
 
 
 def require(condition, message):
@@ -211,6 +215,38 @@ def verify_full(directory, context):
     return main_path
 
 
+
+def client_promotion(full, receipt):
+    """Recompute the only allowed source-to-output graph mapping independently."""
+    client = {path.removeprefix(CLIENT_BUNDLE): value for path, value in full.items() if path.startswith(CLIENT_BUNDLE)}
+    if not client:
+        # Retained releases predating client profiles keep their original exact
+        # preservation contract. They are not relabelled as client-only builds.
+        require(not receipt.get('preservation', {}).get('promoted'), 'legacy source has no client graph to promote')
+        return {}
+    profile = manifest(client, BUNDLE_PROFILE)
+    inputs = profile.get('sourceInputs')
+    require(profile.get('format') == 1 and profile.get('profile') == 'client' and
+            profile.get('rangerExecution') is False and profile.get('ownerPersonaFile') is False and
+            profile.get('entryPoints') == BUNDLE_ENTRIES and isinstance(inputs, list) and
+            'src/runtime/ranger-client.ts' in inputs and
+            all(isinstance(path, str) and path.startswith('src/') and
+                not re.match(r'^src/(?:runtime/ranger\.ts|scraper/(?!platform-scraper\.ts$)|onboarding/owner-persona-file\.ts)', path)
+                for path in inputs), 'invalid client capability profile')
+    expected_files = {path: {'path': path, 'size': len(data), 'sha256': digest(data), 'mode': mode}
+                      for path, (data, mode) in client.items() if path != BUNDLE_PROFILE}
+    files = profile.get('files')
+    require(isinstance(files, list) and len(files) == len(expected_files) and
+            {row['path']: row for row in files} == expected_files and
+            all(entry in expected_files for entry in BUNDLE_ENTRIES), 'client inventory differs from full source bytes/mode')
+    expected = {FULL_BUNDLE + path: {'path': FULL_BUNDLE + path, 'sourcePath': CLIENT_BUNDLE + path,
+                'size': len(data), 'sha256': digest(data), 'mode': mode} for path, (data, mode) in client.items()}
+    promoted = receipt.get('preservation', {}).get('promoted')
+    require(isinstance(promoted, list) and len(promoted) == len(expected) and
+            {row['path']: row for row in promoted} == expected, 'receipt client promotion mapping mismatch')
+    return {FULL_BUNDLE + path: CLIENT_BUNDLE + path for path in client}
+
+
 def verify_derived(directory, full_path, context):
     require(digest(full_path.read_bytes()) == context['fullSha256'], 'full archive differs from fixed SHA-256')
     full = archive_files(full_path)
@@ -250,9 +286,14 @@ def verify_derived(directory, full_path, context):
     removed = {RELEASE + name for name in bindings}
     require({path for path in full if path.endswith('.node')} == removed, 'source matrix is not exactly ten bindings')
     changed = {'package.json', NATIVE + '/package.json'}
-    require(set(main) == (set(full) - removed) | {MARKER}, 'main file set differs from source preservation contract')
+    promoted = client_promotion(full, receipt)
+    if promoted:
+        removed |= {path for path in full if path.startswith((FULL_BUNDLE, CLIENT_BUNDLE))}
+    require(set(main) == (set(full) - removed) | {MARKER} | set(promoted), 'main file set differs from source preservation contract')
     for path in set(full) - removed - changed:
         require(main[path] == full[path], 'main changed source bytes/mode: ' + path)
+    for target, source in promoted.items():
+        require(main[target] == full[source], 'client changed source bytes/mode: ' + source)
     platform_rows = []
     source_provenance = manifest(full, NATIVE + '/POPCLAW-RUNTIME-MANIFEST.json')
     for (platform, arch), name in zip(PLATFORMS, NAMES):

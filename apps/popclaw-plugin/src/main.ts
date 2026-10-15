@@ -24,7 +24,7 @@ import { PopclawPaths } from './host/popclaw-paths.js';
 import { pinoHostLogger } from './runtime/logger.js';
 import { unsupportedNodeReason } from './runtime/node-support.js';
 import { ServerPushEgress } from './egress/server-push-egress.js';
-import { Ranger } from './runtime/ranger.js';
+import { Ranger, RANGER_AVAILABLE } from './runtime/ranger.js';
 import { EventBuilder } from './event/event-builder.js';
 import { InviteInitiator } from './invite/invite-initiator.js';
 import { runInviteCommand } from './commands/invite.js';
@@ -221,8 +221,8 @@ async function runDaemonMode(
     openStore: origin => openWorldFeedStore(origin, paths, undefined, boot.executionStores), onStore: store => { houseStores.push(store); },
     isOfficialActor: (house, id) => readHouseHandshake(paths, house.slug)?.official_ids.includes(id) ?? false,
     onInbox: (house, _gate, dm, bytes, nickname, authenticatedPlain) => onInbox(dm, house.slug, bytes, nickname, authenticatedPlain),
-    createRanger: (house, gate, ingress) => new Ranger({host, config, signer, nickname,
-      houseOrigin: house.baseUrl, gate, ingress, egress: new ServerPushEgress({baseUrl: house.baseUrl, gate})}),
+    ...(RANGER_AVAILABLE ? { createRanger: (house, gate, ingress) => new Ranger({host, config, signer, nickname,
+      houseOrigin: house.baseUrl, gate, ingress, egress: new ServerPushEgress({baseUrl: house.baseUrl, gate})}) } : {}),
     refresh: (house, gate) => refreshHouseHandshake(house.baseUrl, {paths, fetch: houses.houseFetch(house.baseUrl, gate),
       guideFetch: houses.documentFetch(house.baseUrl, gate)}),
     log: message => logger.warn({}, message),
@@ -309,6 +309,10 @@ async function runDaemonMode(
       })
     : undefined;
 
+  // Shared services unref their polling timers so host and one-shot commands
+  // can exit. The daemon owns its residency even while every house is offline
+  // or Ranger execution is absent; signal listeners alone do not keep Node alive.
+  const keepAlive = setInterval(() => {}, 2_147_483_647);
   const shutdown = async (sig: string) => {
     logger.info({ signal: sig }, 'popclaw-plugin shutting down');
     housePinning?.stop();
@@ -319,6 +323,7 @@ async function runDaemonMode(
     for (const house of houseStores) house.db.close();
     boot.executionStores.close(); boot.releaseStorage();
     host.db.close();
+    clearInterval(keepAlive);
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createPlatformMetadata, packageClawHub } from '../clawhub-platform-package.mjs';
 import { deriveNativeRuntimeManifest } from '../native-runtime-manifest.mjs';
+import { inspectClientBundle } from '../bundle-profiles.mjs';
 
 const require = createRequire(import.meta.url);
 const { MARKER, PLATFORMS, ABI, bindingName, packageName } = require('../native-binding-path.cjs');
@@ -89,6 +90,17 @@ function fixture(name, alter = () => {}, extras = []) {
     `${NATIVE}/deps/sqlite3/sqlite3.c`, `${NATIVE}/deps/sqlite3/sqlite3.h`, `${NATIVE}/deps/common.gypi`, `${NATIVE}/deps/sqlite3.gyp`,
     'migrations/001.sql', 'dist/bundled/index.js', 'dist/native-deps/bindings/LICENSE']) put(root, path, `fixture content for ${path}\n`);
   put(root, 'dist/bundled/cli.js', '#!/usr/bin/env node\n', 0o755);
+  const clientFiles = ['index.js', 'mcp.js', 'mcp-hook.js', 'cli.js', 'prepare-native-world.js'].map(path => {
+    const bytes = Buffer.from(path === 'cli.js' ? '#!/usr/bin/env node\n' : `export const profile = 'client'; // ${path}\n`);
+    const mode = path === 'index.js' ? 0o644 : 0o755;
+    put(root, `dist/client-bundled/${path}`, bytes, mode);
+    return { path, size: bytes.length, sha256: hash(bytes), mode };
+  });
+  put(root, 'dist/client-bundled/POPCLAW-BUNDLE-PROFILE.json', {
+    format: 1, profile: 'client', rangerExecution: false, ownerPersonaFile: false,
+    entryPoints: ['index.js', 'mcp.js', 'mcp-hook.js', 'cli.js', 'prepare-native-world.js'],
+    sourceInputs: ['src/runtime/ranger-client.ts'], files: clientFiles,
+  });
   for (const [platform, arch] of PLATFORMS) for (const major of Object.keys(ABI)) put(root, `${RELEASE}/${bindingName(platform, arch, major)}`, headerFixture(platform, arch, major));
   alter(root);
   const archive = join(temporary, name, 'full-fixture.tgz');
@@ -123,6 +135,33 @@ test('derives the ClawHub name and both exact dependency declarations from one b
   assert.equal(native.optionalDependencies, undefined);
 });
 
+test('pnpm pack preserves both executable profiles through the real prepack hook and derivation', () => {
+  const full = fixture('pnpm-executable-modes');
+  const sourcePackage = readJson(resolve(scripts, '../package.json'));
+  put(full.root, 'package.json', { ...sourcePackage, version: VERSION,
+    scripts: { prepack: 'node scripts/prepack.mjs', postpack: 'node scripts/postpack.mjs' } });
+  for (const name of ['prepack.mjs', 'postpack.mjs']) put(full.root, `scripts/${name}`, readFileSync(join(scripts, name)));
+  const executableEntries = ['cli.js', 'mcp.js', 'mcp-hook.js', 'prepare-native-world.js'];
+  for (const entry of executableEntries) put(full.root, `dist/bundled/${entry}`, '#!/usr/bin/env node\n', 0o755);
+  const packedDirectory = join(temporary, 'real-pnpm-pack');
+  const packed = run('pnpm', ['pack', '--pack-destination', packedDirectory], { cwd: full.root });
+  assert.equal(packed.status, 0, packed.stdout + packed.stderr);
+  const archive = join(packedDirectory, `popclaw-${VERSION}.tgz`);
+  const extracted = unpack(archive, join(temporary, 'real-pnpm-inspection'));
+  assert.doesNotThrow(() => inspectClientBundle(extracted), 'pnpm must preserve the recorded client modes');
+  for (const profile of ['bundled', 'client-bundled']) {
+    for (const entry of executableEntries) assert.equal(statSync(join(extracted, 'dist', profile, entry)).mode & 0o777, 0o755, `${profile}/${entry}`);
+    assert.equal(statSync(join(extracted, 'dist', profile, 'index.js')).mode & 0o777, 0o644);
+  }
+  const manifest = readJson(join(extracted, 'package.json'));
+  assert.equal(manifest.scripts, undefined);
+  assert.equal(manifest.dependencies, undefined);
+  assert.deepEqual(readJson(join(full.root, 'package.json')).publishConfig, sourcePackage.publishConfig, 'postpack restores development metadata');
+  const derived = packageClawHub({ fullTarball: archive, dest: join(temporary, 'real-pnpm-derived') });
+  const client = unpack(join(derived.directory, `popclaw-clawhub-${VERSION}.tgz`), join(temporary, 'real-pnpm-client'));
+  for (const entry of executableEntries) assert.equal(statSync(join(client, 'dist/bundled', entry)).mode & 0o777, 0o755, entry);
+});
+
 test('derives six deterministic archives, preserving the source, licenses and source fallback', () => {
   const full = fixture('valid');
   const original = readFileSync(full.archive);
@@ -138,7 +177,8 @@ test('derives six deterministic archives, preserving the source, licenses and so
   assert.equal(receipt.source.fullArchiveSha256, hash(original));
   assert.equal(receipt.source.package.version, VERSION);
   assert.equal(receipt.fullMatrixVerification.cells, 10);
-  assert.equal(receipt.preservation.removed.length, 10);
+  assert.equal(receipt.preservation.removed.filter(path => path.endsWith('.node')).length, 10);
+  assert.equal(receipt.preservation.promoted.length, 6);
   assert.equal(receipt.packages.length, 6);
   assert.equal(readdirSync(output).length, 7);
   const mainPackage = receipt.packages.find(pkg => pkg.name === 'popclaw-clawhub');
@@ -293,4 +333,39 @@ test('validates profile arguments and keeps the full profile matrix guard', () =
   const recipe = execFileSync('just', ['--show', 'pack-plugin'], { cwd: repo, encoding: 'utf8' });
   assert.match(recipe, /\$PROFILE="full"/);
   assert.match(recipe, /--verify-tarball "\$dst"/);
+});
+
+
+test('promotes the prebuilt client graph and removes every full graph file', () => {
+  const full = fixture('client-profile', root => {
+    put(root, 'dist/bundled/shared-full.js', "export const provider = 'full-only';\n");
+  });
+  const result = packageClawHub({ fullTarball: full.archive, dest: join(temporary, 'client-profile-output') });
+  const main = result.packages.find(pkg => pkg.name === 'popclaw-clawhub');
+  const root = unpack(join(result.directory, main.filename), join(temporary, 'client-profile-inspection'));
+  assert.deepEqual(readFileSync(join(root, 'dist/bundled/index.js')), readFileSync(join(full.root, 'dist/client-bundled/index.js')),
+    'ClawHub must execute the exact prebuilt client graph instead of the full Ranger graph');
+  const paths = execFileSync('tar', ['-tzf', join(result.directory, main.filename)], { encoding: 'utf8' }).split('\n');
+  assert.equal(paths.some(path => path.includes('/dist/client-bundled/')), false);
+  assert.equal(paths.some(path => path.endsWith('/shared-full.js')), false);
+  const promoted = result.preservation.promoted.find(file => file.path === 'dist/bundled/index.js');
+  assert.equal(promoted.sourcePath, 'dist/client-bundled/index.js');
+  assert.equal(promoted.sha256, hash(readFileSync(join(full.root, promoted.sourcePath))));
+});
+
+
+test('rejects missing or modified client graphs instead of falling back to full operator code', () => {
+  const missing = fixture('missing-client', root => rmSync(join(root, 'dist/client-bundled'), { recursive: true }));
+  failure(missing.archive, 'missing-client', /no valid prebuilt client profile/);
+  const changed = fixture('changed-client', root => put(root, 'dist/client-bundled/index.js', 'changed client'));
+  failure(changed.archive, 'changed-client', /prebuilt client inventory differs/);
+  const extra = fixture('extra-client', root => put(root, 'dist/client-bundled/unrecorded.js', 'unexpected'));
+  failure(extra.archive, 'extra-client', /prebuilt client inventory differs/);
+  const provider = fixture('provider-client', root => {
+    const path = 'dist/client-bundled/POPCLAW-BUNDLE-PROFILE.json';
+    const profile = readJson(join(root, path));
+    profile.sourceInputs.push('src/scraper/commercial/twitterapi-io-scraper.ts');
+    put(root, path, profile);
+  });
+  failure(provider.archive, 'provider-client', /invalid client capability profile/);
 });

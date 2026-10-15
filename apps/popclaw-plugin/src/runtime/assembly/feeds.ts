@@ -13,7 +13,7 @@ import type { EventIngress } from '../../ingress/event-ingress.js';
 import { openHouseStores, openWorldFeedStore, type HouseStore } from '../../ingress/world-feed-store.js';
 import { WorldFeedClient } from '../../ingress/world-feed-client.js';
 import { WorldFeedCatalog } from '../../ingress/world-feed-catalog.js';
-import { Ranger } from '../ranger.js';
+import { Ranger, RANGER_AVAILABLE } from '../ranger.js';
 import { ServerPushEgress } from '../../egress/server-push-egress.js';
 import { refreshHouseHandshake, readHouseHandshake } from '../../world/house-handshake.js';
 import { loadMyNamecard, signMyNamecard } from '../../messaging/my-namecard.js';
@@ -84,7 +84,7 @@ export function configureHouseResources(input: {
     isOfficialActor: (house, id) => readHouseHandshake(paths, house.slug)?.official_ids.includes(id) ?? false,
     onContent: (house, item) => input.routeReplyPing(house, item),
     onInbox: (house, _gate, dm, bytes, nickname, authenticatedPlain) => onInbox(dm, house.slug, bytes, nickname, authenticatedPlain),
-    ...(input.rangerEnabled ? {createRanger: (house: HouseStore, gate: HouseGate, ingress: EventIngress) =>
+    ...(RANGER_AVAILABLE && input.rangerEnabled ? {createRanger: (house: HouseStore, gate: HouseGate, ingress: EventIngress) =>
       new Ranger({host, config: boot.config, signer: boot.signer, nickname: boot.nickname,
         houseOrigin: house.baseUrl, gate, ingress,
         ...(ports.drift.rangerInviteNotifyAbsent ? {} : { inviteNotify: { get current() {

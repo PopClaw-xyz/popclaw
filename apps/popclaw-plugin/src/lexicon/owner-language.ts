@@ -14,7 +14,7 @@
  *      current language is a live state that follows the conversation, not a
  *      setting that latches. (2026-07-31 live bug: `agent` used to outrank
  *      `guess` forever, so an owner who switched languages was stuck.)
- *   3. `env` — the host's own locale signals (`LC_ALL`/`LC_MESSAGES`/`LANG`),
+ *   3. `env` — the host's `LANG` locale fallback,
  *      read by `useOwnerLangSignals`. Weakest lane on purpose: it fills the
  *      blank on a fresh machine and any observation whatsoever displaces it.
  *      (`talk.speechLocale` and `OPENCLAW_LOCALE` are *not* in this lane — the
@@ -94,10 +94,10 @@ export function setOwnerLang(bcp47: string | null | undefined, source: LangSourc
  * every rendered surface reads.
  *
  * `POPCLAW_LANG` is the escape hatch (S12): set it (typically `POPCLAW_LANG=en`)
- * and everything popclaw says comes out in that language whatever the owner
- * actually writes in — for filing issues, pasting output into docs, and
- * comparing two machines side by side. It deliberately outranks all four lanes
- * above, config included: it is the operator's override, not another signal.
+ * and plugin-rendered copy comes out in that language — for filing issues,
+ * pasting output into docs, and comparing two machines side by side. It deliberately outranks all four lanes
+ * above, config included. Agent-facing language preferences still yield to the
+ * owner's current request and host instructions (see `languageDirective`).
  * Read live rather than latched, so flipping it takes effect without a restart.
  */
 export function ownerLangTag(): string {
@@ -248,22 +248,14 @@ export function normalizeLocale(raw: string | null | undefined): string | undefi
 }
 
 /**
- * Everything the host already knows about the owner's language, applied in
- * priority order — the composition root calls this right after registering an
- * explicit cadence, in place of a bare `useOwnerLangFile`:
+ * Apply the owner's language preferences after the composition root registers
+ * an explicit cadence: speechLocale / OPENCLAW_LOCALE (config), remembered
+ * observation, then LANG (weak fallback). POPCLAW_LANG remains a live override
+ * for plugin-rendered copy in ownerLangTag().
  *
- *   `config.talk.speechLocale` / `OPENCLAW_LOCALE` (the owner configured these
- *   by hand, so `config` tier — an explicit cadence, registered first, still
- *   outranks them) → the remembered observation on disk → `LC_ALL` /
- *   `LC_MESSAGES` / `LANG` (`env` tier, loses to everything, including the
- *   observation restored a line earlier).
- *
- * Same sources and same order the host itself uses to pick a wizard locale
- * (openclaw 7.1 `dist/i18n-CSQb1QYq.js:2964`), so an owner who made the
- * installer speak Chinese does not have to say it twice. One deliberate
- * divergence: the host's own chain treats an *empty* `LC_ALL` as a value (and
- * ends up "en"); here a blank counts as unset and the chain falls through to
- * the next variable — see the comment at the chain itself.
+ * LANG is the only ambient locale read. LC_ALL and LC_MESSAGES do not influence
+ * PopClaw; explicit preferences and conversation observations remain available.
+ * Skip weaker environment reads once an existing preference supplies a value.
  */
 export function useOwnerLangSignals(opts: {
   speechLocale?: string | null | undefined;
@@ -271,18 +263,16 @@ export function useOwnerLangSignals(opts: {
   env?: NodeJS.ProcessEnv;
 }): void {
   const env = opts.env ?? process.env;
-  const configured = normalizeLocale(opts.speechLocale) ?? normalizeLocale(env.OPENCLAW_LOCALE);
-  // Guarded rather than rank-guarded: `config` does not displace `config`.
-  if (configured !== undefined && current === undefined) setOwnerLang(configured, 'config');
+  // Guarded rather than rank-guarded: config does not displace existing state.
+  if (current === undefined) {
+    const configured = normalizeLocale(opts.speechLocale) ?? normalizeLocale(env.OPENCLAW_LOCALE);
+    if (configured !== undefined) setOwnerLang(configured, 'config');
+  }
   useOwnerLangFile(opts.file);
-  // Treat blank values as absent for this locale fallback (without changing
-  // the process environment). Unlike the host wizard's nullish chain, a
-  // blank LC_ALL/LC_MESSAGES does not mask LANG. Preserve the old behavior
-  // for nonblank C/POSIX/invalid overrides: select first, then normalize,
-  // rather than searching lower-priority variables for a supported locale.
-  const hostRaw = [env.LC_ALL, env.LC_MESSAGES, env.LANG].find((v) => (v ?? '').trim() !== '');
-  const host = normalizeLocale(hostRaw);
-  if (host !== undefined) setOwnerLang(host, 'env');
+  if (current === undefined) {
+    const host = normalizeLocale(env.LANG);
+    if (host !== undefined) setOwnerLang(host, 'env');
+  }
 }
 
 function persist(tag: string): void {

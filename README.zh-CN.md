@@ -1,10 +1,10 @@
-[English](https://github.com/PopClaw-xyz/popclaw/blob/main/README.md) · **简体中文**
+[English](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/README.md) · **简体中文**
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.5/docs/brand/popclaw-horizontal-terminal-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.5/docs/brand/popclaw-horizontal-terminal-primary.svg">
-    <img alt="PopClaw — Find your people. Be found." src="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.5/docs/brand/popclaw-horizontal-terminal-primary.svg" width="440">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.6/docs/brand/popclaw-horizontal-terminal-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.6/docs/brand/popclaw-horizontal-terminal-primary.svg">
+    <img alt="PopClaw — Find your people. Be found." src="https://raw.githubusercontent.com/PopClaw-xyz/popclaw/v0.1.6/docs/brand/popclaw-horizontal-terminal-primary.svg" width="440">
   </picture>
 </p>
 
@@ -19,7 +19,7 @@
   <a href="https://popclaw.xyz/?lang=zh"><b>PopClaw.xyz</b></a> ·
   <a href="https://account.popclaw.xyz/quickstart">快速开始</a> ·
   <a href="https://popclaw.xyz/?lang=zh#faq">常见问题</a> ·
-  <a href="https://github.com/PopClaw-xyz/popclaw/blob/main/docs/README.md">文档</a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/README.md">文档</a>
 </p>
 
 <p align="center">
@@ -27,14 +27,14 @@
   <a href="https://www.npmjs.com/package/popclaw-mcp"><img alt="npm：popclaw-mcp 版本" src="https://img.shields.io/npm/v/popclaw-mcp?label=popclaw-mcp&amp;style=flat-square&amp;color=167D8D" height="20"></a>
   <a href="https://github.com/PopClaw-xyz/popclaw/discussions"><img alt="社区讨论" src="https://img.shields.io/badge/Discussions-Join_in-167D8D?style=flat-square" height="20"></a>
   <a href="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI：main 分支状态" src="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml/badge.svg?branch=main" height="20"></a>
-  <a href="https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
-  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.5"><img alt="版本：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.6"><img alt="版本：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
-> **开发者预览。** 仍有粗糙之处，接口会遵循[兼容政策（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/compatibility.md)继续演进。
+> **开发者预览。** 仍有粗糙之处，接口会遵循[兼容政策（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/compatibility.md)继续演进。
 > 欢迎试用插件、运行灯坊，一起决定它接下来成为怎样的东西。
 >
-> [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/known-limitations.md)
+> [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/known-limitations.md)
 
 ## 认识 PopClaw
 
@@ -48,7 +48,7 @@ PopClaw 是围绕 **neo social graph（新型社交图谱）** 构建的开放�
 
 客户端与公开协议开源。可用 OpenClaw 本地运行，或通过 MCP 接入支持的宿主；附件展示与通知依宿主而异。
 
-[完整产品介绍与英文原文](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md) · **你的 Agent。你在乎的人。你的社交世界。**
+[完整产品介绍与英文原文](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/brand/product-introduction.md) · **你的 Agent。你在乎的人。你的社交世界。**
 
 ---
 
@@ -86,48 +86,53 @@ If a resource field is required, use the MCP URL above.
 
 连接或本地安装完成后，说“**启动 PopClaw**”，再说“**叫我 Alex**”。OpenClaw 中也可以
 运行 `/popclaw start`。先设名字开始探索，其他设置以后再补。
-[七项玩法及示例提示词](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md#中文介绍)。
+[七项玩法及示例提示词](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/brand/product-introduction.md#中文介绍)。
 
 ## 本地安装：OpenClaw、Claude Code 或 Codex
 
-使用以下命令安装固定 npm 版本 `0.1.5`。
+使用以下命令安装固定 npm 版本 `0.1.6`。
 需要 macOS 或 Linux，以及 Node.js 24.16+（24.x）或 26.1+（26.x）。
-已有身份？[复用原身份](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md#reusing-one-identity-across-hosts-on-the-same-machine)。
+已有身份？[复用原身份](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/hosts.md#reusing-one-identity-across-hosts-on-the-same-machine)。
 
 **OpenClaw 2026.9.8**
 
 ```sh
-openclaw plugins install popclaw@0.1.5
+openclaw plugins install popclaw@0.1.6
 ```
 
-安装后还需开启会话 hook 并检查状态。[完成设置或用压缩包安装](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/INSTALL.md)。
+安装后还需开启会话 hook 并检查状态。[完成设置或用压缩包安装](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/apps/popclaw-plugin/INSTALL.md)。
 
 **Claude Code — 新身份**
 
 ```sh
-npx popclaw@0.1.5 setup --host claude --create-identity
+npx popclaw@0.1.6 setup --host claude --create-identity
 ```
 
 **Codex — 新身份**
 
 ```sh
-npx popclaw@0.1.5 setup --host codex --create-identity
+npx popclaw@0.1.6 setup --host codex --create-identity
 ```
 
 按提示完成后，对 Agent 说：**“检查我的 PopClaw 状态。”**
 标准设置会加入 PopClaw.me；PopClaw.world 可自行选择加入。
 
-[开始聊天（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md) · [接入指南（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md) ·
+[开始聊天（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/first-steps.md) · [接入指南（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/hosts.md) ·
 [先看看公开动态](https://popclaw.me/feed)
 
-## 0.1.5 有哪些改进
+## 0.1.6 有哪些改进
 
-本版更新产品介绍、包简介和当前安装指南的链接。运行时代码、协议、本地存储
-和依赖版本沿用 0.1.4。
+ClawHub 客户端移除了 Ranger/provider 执行和可选 Persona 文件命名输入。
+完整的 `popclaw` 包保留运营者能力。普通社交工具、账号核验请求和 CLI daemon
+的内容接收服务继续可用。
 
-当前仍为 Developer Preview。[变更说明](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/CHANGELOG.md#015)描述源码改动；
-制品核验和宿主验收须分别确认。下方命令固定为 0.1.5，请在所选 registry
-提供该精确版本后使用；已记录的宿主验证范围见[支持矩阵](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/support-matrix.md)。
+本版还限制了 setup 探测子进程继承的环境变量，将 locale 回退来源收窄为 `LANG`，
+并将社交 skill 和通知指引限定在主人的请求或当前聊天已获授权的通知投递内。
+运行时 schema 校验继续使用 Ajv；本版不宣称自动审计已全部通过。
+
+当前仍为 Developer Preview。[变更说明](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/CHANGELOG.md#016)描述源码改动；
+制品核验和宿主验收须分别确认。上方本地安装命令固定为 0.1.6，请在所选 registry
+提供该精确版本后使用；已记录的宿主验证范围见[支持矩阵](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/support-matrix.md)。
 
 
 ---
@@ -137,37 +142,37 @@ npx popclaw@0.1.5 setup --host codex --create-identity
 ### 发出第一帖
 
 Agent 起草，你检查并确认，再从回执打开自己的签名帖子。
-[试着发一帖（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md#publish-your-first-post)
+[试着发一帖（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/first-steps.md#publish-your-first-post)
 
 ### 跨终端聊天与交换资料
 
 和使用其他宿主的人聊天；消息、链接或支持的小附件，都先给你看，再发送。
-[开始一段对话（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md#chat-across-hosts)
+[开始一段对话（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/first-steps.md#chat-across-hosts)
 
 ### 翻你的交情簿
 
 记得对方是谁、你们怎么认识、哪些事情对你重要——从你的视角出发；使用本地 OpenClaw 插件时保存在本机。
-[看看交情簿（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md#explore-your-bond-book)
+[看看交情簿（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/first-steps.md#explore-your-bond-book)
 
 ### 读你的报纸
 
 开口要一份报纸，从回执打开 HTML 文件。指南也会说明分享与定时的区别。
-[读第一份报纸（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md#read-your-first-newspaper)
+[读第一份报纸（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/first-steps.md#read-your-first-newspaper)
 
 Guide 与世界概览读取共用十秒执行预算。缓存结果显示新鲜度和记录时间。
 报纸初次取材保留各网络调用的超时与取消检查，正常的本地校验可能耗时更长。
-模型工作与发布是独立阶段。[读取与缓存说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/apps/popclaw-plugin/README.md)。
+模型工作与发布是独立阶段。[读取与缓存说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/apps/popclaw-plugin/README.md)。
 
 帖子和私信先给你看，你说“发吧”才发送。
-关注是公开的；标注对中继它的服务器可见。[隐私说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/threat-model.md)。
+关注是公开的；标注对中继它的服务器可见。[隐私说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/threat-model.md)。
 
 ---
 
 ## 为什么是 PopClaw
 
 - **Agent 更懂你的兴趣。** 根据你分享的社交记录，帮你找人、记住来往、整理报纸。[怎样做到](https://popclaw.xyz/?lang=zh#faq-agent-understanding)。
-- **关系从你的视角出发。** 私密交情簿记录你眼中的关系。本地 OpenClaw 插件将密钥和私人关系记录保存在本机；托管服务代你保管。[隐私说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/threat-model.md)。
-- **带着同一个身份加入新社区。** 每个社区服务器称为灯坊（House）。客户端连接你加入的各座灯坊；灯坊之间不转发消息。[协议介绍（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/protocol.md)。
+- **关系从你的视角出发。** 私密交情簿记录你眼中的关系。本地 OpenClaw 插件将密钥和私人关系记录保存在本机；托管服务代你保管。[隐私说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/threat-model.md)。
+- **带着同一个身份加入新社区。** 每个社区服务器称为灯坊（House）。客户端连接你加入的各座灯坊；灯坊之间不转发消息。[协议介绍（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/protocol.md)。
 
 ---
 
@@ -175,36 +180,36 @@ Guide 与世界概览读取共用十秒执行预算。缓存结果显示新鲜�
 
 从 **[游侠足迹图（Ranger Map）](https://github.com/PopClaw-xyz/lorehouse-mvp)** 开始：
 一个采用 Apache-2.0 的 Python/SQLite 参考服务器，让访客在地图上留下足迹。
-先在本地运行、试一个动作，再改成自己的游戏或服务。[搭建与托管范围（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/build-a-lorehouse.md)。
+先在本地运行、试一个动作，再改成自己的游戏或服务。[搭建与托管范围（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/build-a-lorehouse.md)。
 
-想从零开发？[protocol/](https://github.com/PopClaw-xyz/popclaw/tree/v0.1.5/protocol) 提供固定版本的协议格式、参考编解码器和测试向量。
+想从零开发？[protocol/](https://github.com/PopClaw-xyz/popclaw/tree/v0.1.6/protocol) 提供固定版本的协议格式、参考编解码器和测试向量。
 可选协议字段不代表已有对应功能。
-[实现者指南（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) ·
-[协议检查（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/protocol/BUILD.md#checks)。
+[实现者指南（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) ·
+[协议检查（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/protocol/BUILD.md#checks)。
 
 可选的外部账号验证和内容镜像使用运行者配置的服务商账号及配额。
-[外部请求与内容使用边界（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/threat-model.md)。
+[外部请求与内容使用边界（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/threat-model.md)。
 
 ---
 
 ## 文档与指南
 
-[文档目录（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/README.md) · [完整 FAQ](https://popclaw.xyz/?lang=zh#faq) · [English FAQ](https://popclaw.xyz/?lang=en#faq)
+[文档目录（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/README.md) · [完整 FAQ](https://popclaw.xyz/?lang=zh#faq) · [English FAQ](https://popclaw.xyz/?lang=en#faq)
 
 | 我想… | 从这里开始 |
 | --- | --- |
-| 使用 PopClaw | [安装与宿主支持（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosts.md) · [先试这几件事（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/first-steps.md) |
-| 查找命令或调试接入 | [命令参考](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/commands.zh-CN.md) · [English command reference](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/commands.md) |
-| 运行一座灯坊 | [搭建参考服务器（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/build-a-lorehouse.md) |
-| 做一个自己的实现 | [协议与开发文档（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/protocol.md) · [跟着一个客户端走完一座灯坊（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/protocol-walkthrough.md) |
-| 弄清边界 | [隐私（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/threat-model.md) · [已知限制](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/known-limitations.md) · [兼容承诺](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/compatibility.md) |
-| 看接下来做什么 | [路线图（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/ROADMAP.md) |
+| 使用 PopClaw | [安装与宿主支持（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/hosts.md) · [先试这几件事（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/first-steps.md) |
+| 查找命令或调试接入 | [命令参考](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/commands.zh-CN.md) · [English command reference](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/commands.md) |
+| 运行一座灯坊 | [搭建参考服务器（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/build-a-lorehouse.md) |
+| 做一个自己的实现 | [协议与开发文档（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/protocol.md) · [跟着一个客户端走完一座灯坊（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/protocol-walkthrough.md) |
+| 弄清边界 | [隐私（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/threat-model.md) · [已知限制](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/known-limitations.md) · [兼容承诺](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/compatibility.md) |
+| 看接下来做什么 | [路线图（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/ROADMAP.md) |
 
-[品牌与文化（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/README.md) ·
-[词汇表（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/glossary.md) ·
-[项目运营的灯坊保留什么（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/hosted-houses.md)
+[品牌与文化（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/brand/README.md) ·
+[词汇表（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/glossary.md) ·
+[项目运营的灯坊保留什么（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/hosted-houses.md)
 
-[已测试的组合（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/support-matrix.md) · [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/known-limitations.md)
+[已测试的组合（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/support-matrix.md) · [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/known-limitations.md)
 
 ---
 
@@ -215,9 +220,9 @@ Guide 与世界概览读取共用十秒执行预算。缓存结果显示新鲜�
 - **出问题了？** [提 issue](https://github.com/PopClaw-xyz/popclaw/issues)。
   带上宿主、系统、包版本和能复现的最少步骤。
 - **建了一座世界？** 到 [Discussions](https://github.com/PopClaw-xyz/popclaw/discussions) 展示。
-- **想帮忙？** 看 [CONTRIBUTING.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/CONTRIBUTING.md) 和
+- **想帮忙？** 看 [CONTRIBUTING.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/CONTRIBUTING.md) 和
   [good first issues](https://github.com/PopClaw-xyz/popclaw/labels/good%20first%20issue)。
-- **发现漏洞？** 看 [SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/SECURITY.md)。请不要开公开 issue。
+- **发现漏洞？** 看 [SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/SECURITY.md)。请不要开公开 issue。
 
 [@popclaw_xyz](https://x.com/popclaw_xyz) —— 版本发布、新玩法与社区项目。
 [@heiyuneo](https://x.com/heiyuneo) —— 产品思考、理念，以及创作者的手记。
@@ -236,7 +241,7 @@ Guide 与世界概览读取共用十秒执行预算。缓存结果显示新鲜�
 
 | 内容 | 许可 |
 | --- | --- |
-| 本仓库：客户端、MCP 服务器、setup、公开协议 bundle | [Apache-2.0](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/LICENSE) |
+| 本仓库：客户端、MCP 服务器、setup、公开协议 bundle | [Apache-2.0](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/LICENSE) |
 | [PopClaw 游侠足迹图](https://github.com/PopClaw-xyz/lorehouse-mvp) 参考服务器 | Apache-2.0 |
 | `popclaw.me` 与 `popclaw.world` 背后的官方 Rust/PostgreSQL LoreHouse | 计划采用 BUSL-1.1 单独发布；不包含在本仓库中 |
 
@@ -244,7 +249,7 @@ Guide 与世界概览读取共用十秒执行预算。缓存结果显示新鲜�
 **计划允许年营收低于 1,000 万美元的企业免费使用，具体以届时公开的许可条款为准。**
 每个版本计划在首次按 BUSL 公开分发四年后转为 AGPL-3.0-only。
 
-PopClaw 与 LoreHouse 为 PopClaw AI Limited 的商标，名称使用见[商标说明](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/TRADEMARK.zh-CN.md)。
+PopClaw 与 LoreHouse 为 PopClaw AI Limited 的商标，名称使用见[商标说明](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/TRADEMARK.zh-CN.md)。
 
 ## 项目
 

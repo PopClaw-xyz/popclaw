@@ -1,3 +1,4 @@
+import { RANGER_AVAILABLE } from '../runtime/ranger.js';
 import { assertHouseActionActive, assertActionActive } from '../runtime/house-lifecycle/action-context.js';
 /**
  * The MCP root's `RuntimePorts`: what differs about the stdio MCP host,
@@ -172,7 +173,7 @@ export function mcpRuntimePorts(input: {
       // case → enable it with an explicit env var. fail-closed: only the
       // literal 'true' counts.
       decide: () => {
-        const rangerEnabled = process.env['POPCLAW_MCP_ENABLE_RANGER'] === 'true';
+        const rangerEnabled = RANGER_AVAILABLE && process.env['POPCLAW_MCP_ENABLE_RANGER'] === 'true';
         line(rangerEnabled ? 'mode=ranger — house lifecycle owns task resources' : 'mode=citizen (consumer-only)');
         return rangerEnabled;
       },

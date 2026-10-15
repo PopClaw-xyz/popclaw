@@ -7,6 +7,7 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readF
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { deriveNativeRuntimeManifest } from './native-runtime-manifest.mjs';
+import { CLIENT_BUNDLE, FULL_BUNDLE, inspectClientBundle } from './bundle-profiles.mjs';
 
 const require = createRequire(import.meta.url);
 const { MARKER, PLATFORMS, ABI, bindingName, packageName } = require('./native-binding-path.cjs');
@@ -192,7 +193,8 @@ function inspectFull(root) {
   const bindings = nativeFiles.map(file => ({ file: basename(file.path), size: file.size, sha256: file.sha256 }));
   const plan = createPlatformMetadata(main, native, bindings);
   if (nativeFiles.some(file => file.path !== `${RELEASE}/${basename(file.path)}`)) fail('native binding outside the declared matrix directory');
-  return { main, native, provenance, inventory, plan };
+  const promoted = inspectClientBundle(root);
+  return { main, native, provenance, inventory, plan, promoted };
 }
 
 function nativePackage(root, sourceRoot, row, source, full) {
@@ -230,15 +232,22 @@ function verifyMainPreservation(full, mainRoot) {
   const current = fileInventory(mainRoot);
   if (current.some(file => file.path.endsWith('.node'))) fail('ClawHub main package still contains a native binding');
   const rewritten = ['package.json', `${NATIVE}/package.json`];
-  const removed = full.inventory.filter(file => file.path.endsWith('.node')).map(file => file.path);
+  const removed = full.inventory.filter(file => file.path.endsWith('.node') || file.path.startsWith(FULL_BUNDLE + '/')
+    || file.path.startsWith(CLIENT_BUNDLE + '/')).map(file => file.path);
   const preserved = full.inventory.filter(file => !rewritten.includes(file.path) && !removed.includes(file.path));
   for (const file of preserved) {
     const candidate = current.find(entry => entry.path === file.path);
     if (!candidate || candidate.sha256 !== file.sha256 || candidate.mode !== file.mode) fail(`main package did not preserve source file: ${file.path}`);
   }
-  const expected = [...preserved.map(file => file.path), ...rewritten, `${NATIVE}/${MARKER}`].sort();
+  for (const file of full.promoted) {
+    const candidate = current.find(entry => entry.path === file.path);
+    if (!candidate || candidate.sha256 !== file.sha256 || candidate.size !== file.size || candidate.mode !== file.mode) {
+      fail(`client promotion changed source bytes or mode: ${file.sourcePath}`);
+    }
+  }
+  const expected = [...preserved.map(file => file.path), ...full.promoted.map(file => file.path), ...rewritten, `${NATIVE}/${MARKER}`].sort();
   if (JSON.stringify(current.map(file => file.path).sort()) !== JSON.stringify(expected)) fail('unexpected ClawHub main package file set');
-  return { preservedFileCount: preserved.length, preservedFilesSha256: sha256(jsonBytes(preserved)), rewritten, removed, added: [`${NATIVE}/${MARKER}`] };
+  return { preservedFileCount: preserved.length, preservedFilesSha256: sha256(jsonBytes(preserved)), rewritten, removed, promoted: full.promoted, added: [`${NATIVE}/${MARKER}`] };
 }
 
 export function packageClawHub({ fullTarball, dest, fullSha256 } = {}) {
@@ -273,6 +282,8 @@ export function packageClawHub({ fullTarball, dest, fullSha256 } = {}) {
     // explicitly; the archive writer uses a fixed 0755 for all directories.
     for (const file of full.inventory) chmodSync(join(mainRoot, file.path), file.mode);
     for (const row of full.plan.packages) for (const binding of row.bindings) rmSync(join(mainRoot, RELEASE, binding.file));
+    rmSync(join(mainRoot, FULL_BUNDLE), { recursive: true });
+    renameSync(join(mainRoot, CLIENT_BUNDLE), join(mainRoot, FULL_BUNDLE));
     write(mainRoot, 'package.json', jsonBytes(full.plan.main));
     write(mainRoot, `${NATIVE}/package.json`, jsonBytes(full.plan.native));
     write(mainRoot, `${NATIVE}/${MARKER}`, jsonBytes(full.plan.marker));

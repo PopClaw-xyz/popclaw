@@ -27,14 +27,37 @@ existing layout. The build removes obsolete JavaScript chunks, preserves the
 pinned protocol notices, and collects licenses from all entries, shared chunks,
 and both embedded workers. Whitespace and identifiers are compressed in the entries, shared chunks and
 embedded workers; function names remain intact. The bundle regression suite
-enforces a 4.5 MiB JavaScript budget and exercises the CLI and MCP entries outside the source checkout.
+enforces a 4.5 MiB JavaScript budget for the full runtime graph in `dist/bundled/`
+and exercises the CLI and MCP entries outside the source checkout. This budget
+does not include the separately staged client graph or the complete archive size.
 
 The complete npm/GitHub archive keeps all ten native bindings and the SQLite
 fallback sources. ClawHub has a separate distribution because its hosted upload
 path has rejected archives below the documented 50 MiB expanded-file limit.
-The main ClawHub archive retains the same JavaScript, source fallback and
-notices, and obtains native bindings through five exact-version optional npm
-packages. This profile does not change the standard npm package or MCP shell.
+The complete archive now also carries a separately built client graph under
+`dist/client-bundled/`. Its `POPCLAW-BUNDLE-PROFILE.json` records the source inputs,
+capabilities and every file's size, SHA-256 and mode. The full runtime remains in
+`dist/bundled/` with Ranger execution and optional persona-file naming intact.
+The main ClawHub archive promotes the exact client graph to `dist/bundled/`,
+removes the original full graph and the extra staging directory, and retains the
+SQLite fallback sources and required notices. `publishConfig.executableFiles`
+explicitly retains the four executable entry modes in each graph through
+`pnpm pack`; the prepack hook preserves only this packaging setting. A real
+pack/derive fixture verifies these modes, since a raw tar fixture cannot detect
+pnpm's default normalization to 0644. Native bindings still come from
+five exact-version optional npm packages. The MCP shell keeps its exact
+`popclaw` dependency.
+
+The client graph omits Ranger verification/scraping/watch implementations,
+provider-key discovery and missing-provider-credential warnings. It also omits
+local persona-file input for naming. Ordinary social tools, house streams, local
+identity/storage and the CLI daemon's consumer services remain available.
+Verification requests still go to the house and its available Rangers. These
+capabilities are selected at build time, not by an environment setting. Use the
+full `popclaw` package for an operator Ranger.
+
+These changes describe builds from this checkout; publishing and host acceptance
+require their own release evidence.
 
 Derive this profile only from a fixed, verified complete archive:
 
@@ -46,9 +69,28 @@ The output directory contains `popclaw-clawhub-VERSION.tgz`, five
 `popclaw-native-sqlite-PLATFORM-ARCH-VERSION.tgz` archives, and `receipt.json`.
 The directory suffix is the first twelve characters of the complete archive's
 SHA-256, not a Git commit. Existing output directories cannot be overwritten.
-The receipt pins every archive, binding, version and preserved file inventory.
-The builder audits archive paths and types before extraction, reruns the
-complete-package guard, and checks the actual derived archives after packing.
+The receipt pins every archive, binding, version and preserved file inventory,
+including each promoted client file's original path and SHA-256/mode. The builder
+audits archive paths and types before extraction, reruns the complete-package
+guard, verifies the client inventory and checks the actual derived archives after
+packing. Derivation never compiles source. A complete archive without the new
+prebuilt client graph must be rebuilt before deriving this profile. The read-only
+retained-archive verifier still validates older releases against their original
+full-graph preservation contract.
+
+Run the focused distribution regressions before packing:
+
+```sh
+pnpm --filter popclaw exec vitest run tests/unit/client-bundle-profile.test.ts tests/unit/runtime/build-scraper.test.ts tests/unit/quest/verify-invite
+node --test apps/popclaw-plugin/scripts/tests/clawhub-platform-package.fixture.mjs
+python3 -B -m unittest discover -s scripts/tests -p test_verify_retained_clawhub.py
+```
+
+The first command tests actual full/client bundles, including a positive full
+provider control, OpenClaw assembly with synthetic local state and the client
+CLI daemon's clean shutdown. Package fixtures and the independent verifier
+reject changed, extra or incorrectly mapped client files. The native matrix
+checks and final retained-archive SQLite smoke remain separate requirements.
 
 Each platform package carries both Node 24 and Node 26 bindings. The supported
 ClawHub targets are macOS arm64/x64, Linux glibc arm64/x64 and Windows x64.

@@ -52,8 +52,9 @@ vi.mock('../../../src/runtime/plugin-bootstrap.js', async (orig) => {
 vi.mock('../../../src/runtime/ranger.js', async (orig) => {
   const real = await orig<typeof import('../../../src/runtime/ranger.js')>();
   const { gatedAsync: g } = await import('../../helpers/root-order-gate.js');
-  return { ...real, buildScraperRegistry: (...args: Parameters<typeof real.buildScraperRegistry>) =>
-    g('scraper', () => real.buildScraperRegistry(...args)) };
+  // Hold the public diagnostic phase; its registry call is now internal to this module.
+  return { ...real, reportScrapers: (...args: Parameters<typeof real.reportScrapers>) =>
+    g('scraper', () => real.reportScrapers(...args)) };
 });
 vi.mock('../../../src/ingress/world-feed-store.js', async (orig) => {
   const real = await orig<typeof import('../../../src/ingress/world-feed-store.js')>();

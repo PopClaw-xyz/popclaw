@@ -59,6 +59,10 @@ const stripped = {
   type: pkg.type,
   main: pkg.main,
   bin: pkg.bin,
+  // pnpm normalizes non-bin files to 0644 unless explicitly listed here.
+  // Preserve both graphs' executable modes without adding command aliases.
+  publishConfig: pkg.publishConfig?.executableFiles
+    ? { executableFiles: pkg.publishConfig.executableFiles } : undefined,
   exports: pkg.exports,
   // Keep `files` so pnpm pack restricts tarball contents to the bundled
   // output. Without this, pnpm ships the entire package directory.
