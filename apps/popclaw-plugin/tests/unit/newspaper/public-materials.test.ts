@@ -588,7 +588,7 @@ it('revalidates signed material acquired before optional context changes the act
   expect(existsSync(f.paths.newspaperManifestsDir())).toBe(false);
 });
 
-it('allows valid signed collection to finish after ten seconds without a whole-gather deadline', async () => {
+it('allows valid signed collection to finish after ten seconds within the newspaper reading budget', async () => {
   const f = await newspaperFixture();
   const acquire = f.runtime.houseFeedReader.prepare.bind(f.runtime.houseFeedReader);
   vi.spyOn(f.runtime.houseFeedReader, 'prepare').mockImplementation(async query => {
@@ -600,6 +600,20 @@ it('allows valid signed collection to finish after ten seconds without a whole-g
   await vi.advanceTimersByTimeAsync(11001);
   expect((await result).text).toContain('candidate_basis');
   expect(fetch).not.toHaveBeenCalled();
+  expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
+});
+
+it('ends initial collection at the owner-selected one-minute budget without late persistence', async () => {
+  const f=await newspaperFixture(), acquire=f.runtime.houseFeedReader.prepare.bind(f.runtime.houseFeedReader);
+  vi.spyOn(f.runtime.houseFeedReader,'prepare').mockImplementation(async query=>{
+    await new Promise(resolve=>setTimeout(resolve,61000));return acquire(query);
+  });
+  const call=syntheticClockContext(f), pending=call('popclaw_newspaper',{hours:72});
+  await vi.advanceTimersByTimeAsync(61001);
+  const result=await pending;
+  expect(result.text).not.toContain('candidate_basis');
+  expect(NewspaperStageStore.peek(childSessionKey('public-material-fixture'))?.collectionFailure?.diagnostic?.timeoutMs).toBe(60000);
+  expect(existsSync(f.paths.newspaperManifestsDir())).toBe(false);
   expect(f.runtime.uploadCanvas).not.toHaveBeenCalled();
 });
 
@@ -831,4 +845,19 @@ it('last currentness fence detects earlier-source revocation during later-source
   });
   expect(() => source.validate(issue)).toThrow('NEWSPAPER_PUBLIC_AUTHORITY_CHANGED');
   expect(captures).toBe(2);
+});
+
+
+it('the actual gather propagates one frozen cutoff into public preparation', async () => {
+  const f = await newspaperFixture();
+  const prepare = vi.spyOn(f.runtime.houseFeedReader, 'prepare');
+  const now = Date.now();
+  vi.spyOn(Date, 'now').mockReturnValue(now);
+  const result = await f.tools()('popclaw_newspaper', {});
+  expect(result.text).toContain('candidate_basis');
+  expect(prepare).toHaveBeenCalledWith({completeWindow:true,ownProjection:true,materialSince:Math.floor(now/1000)-72*3600});
+  const manifest = readdirSync(f.paths.newspaperManifestsDir()).filter(name=>name.endsWith('.json'));
+  expect(manifest).toHaveLength(1);
+  const stored = JSON.parse(readFileSync(join(f.paths.newspaperManifestsDir(),manifest[0]!), 'utf8'));
+  expect(JSON.stringify(stored)).toContain('in the last 72 hours');
 });

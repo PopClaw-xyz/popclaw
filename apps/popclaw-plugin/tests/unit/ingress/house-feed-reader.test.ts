@@ -15,6 +15,8 @@ import * as capabilities from '../../../src/world/world-capabilities.js';
 import type { HouseStore } from '../../../src/ingress/world-feed-store.js';
 import type { HouseRuntime } from '../../../src/runtime/house-lifecycle/house-runtime.js';
 import { mintHouse } from '../../helpers/signed-manifest.js';
+import { preparePublicStreamJournal, PublicStreamJournal, EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST } from '../../../src/world/scoped-stream-journal.js';
+import { publicMaterialSource } from '../../../src/newspaper/public-material-source.js';
 
 const origin = 'https://ordinary.example.test';
 const actorKey = nacl.sign.keyPair.fromSeed(new Uint8Array(32).fill(23));
@@ -67,8 +69,35 @@ async function fixture(rows: popclaw.event.IWorldFeedItem[], opts: { bytes?: Uin
   const houses = { capturePublicDisplay, captureOrdinaryFeed: () => { const captured = generation; return { authority: 'synthetic-current-source', assertCurrent: () => { assertCurrent(); if (captured !== generation) throw new Error('ORDINARY_FEED_SOURCE_CHANGED'); } }; },
     houseReadFetch: () => fetchMock } as unknown as HouseRuntime;
   const reader = new HouseFeedReader({ db, houses, stores: () => stores, currentReadScope: opts.currentReadScope });
-  return { reader, cacheDb, cache, store, stores, fetchMock, assertCurrent, capturePublicDisplay, advance: () => { generation++; }, revoke: () => { current = false; } };
+  return { reader, db, houses, cacheDb, cache, store, stores, fetchMock, assertCurrent, capturePublicDisplay, advance: () => { generation++; }, revoke: () => { current = false; } };
 }
+
+it.each([false,true])('retains public-first newspaper priority with mixed source order (public first=%s)', async publicFirst=>{
+  const raw=signed({post:{blocks:[{content:'Shared mixed material'}]}},2000), event=popclaw.event.EventEnvelope.decode(raw);
+  const f=await fixture([row(raw)]), db=new InMemoryHostDb();cleanup.push(()=>db.close());
+  const publicOrigin='https://public.example.test';
+  const house={origin:publicOrigin,houseKey:actorId,incarnation:'mixed_house'};
+  const capability={house,capabilityRevision:'a'.repeat(64),publicStream:{endpoint:'/v1/world-stream' as const,mode:'public-v1' as const,log_incarnation:'mixed_log',envelope_baseline:'public-envelope-02' as const,initial_public_scopes:[]}};
+  const producerPolicy={house,capabilityRevision:capability.capabilityRevision,officialActorIds:[]};
+  const input={executionDb:db,capability,producerPolicy,selection:{fullPublic:true,scopes:[]},consumerContracts:[],approvedConsumerMappingDigest:EMPTY_PUBLIC_CONSUMER_MAPPING_DIGEST};
+  preparePublicStreamJournal(input);
+  const journal=new PublicStreamJournal({...input,gate:{origin:publicOrigin,signal:new AbortController().signal,isActive:()=>true}});journal.activate();
+  const boundary=popclaw.world.PublicStreamBoundary.fromObject({logIncarnation:'mixed_log',highWaterSeq:'1',fullPublic:true});
+  const generation=journal.begin(boundary,popclaw.world.PublicStreamBoundary.encode(boundary).finish(),journal.request());
+  journal.append(generation,popclaw.event.WorldStreamFrame.encode({seq:1,kind:'post',envelope:raw,projection:{eventId:event.eventId,platform:'popclaw',platformPostId:event.eventId,platformPostCreatedAt:100}}).finish());
+  const checkpoint=popclaw.world.PublicStreamCheckpoint.fromObject({phase:'replay',publicThroughSeq:'1'});
+  journal.checkpoint(generation,checkpoint,popclaw.world.PublicStreamCheckpoint.encode(checkpoint).finish());
+  const capture=()=>({executionDb:db,capability,producerPolicy,history:false,authority:'public-authority',assertCurrent(){}});
+  f.capturePublicDisplay.mockImplementation(()=>capture() as never);
+  vi.spyOn(capabilities,'readHouseCapabilityView').mockImplementation((_db,url)=>url===publicOrigin ? {} as never : null);
+  const publicStore={slug:'public',baseUrl:publicOrigin,db,dbPath:':memory:',cache:{} as never};
+  if(publicFirst)f.stores.unshift(publicStore);else f.stores.push(publicStore);
+  Object.assign(f.houses,{newspaperPublicV1:true,publicMaterialSources:()=>[{origin:publicOrigin,slug:'public',capture}]});
+  const prepared=await f.reader.prepare({completeWindow:true,ownProjection:true,materialSince:1000});
+  expect(prepared.publicSources[0]!.items.map(hit=>hit.item.eventId)).toEqual([event.eventId]);
+  const batch=await publicMaterialSource({houseRuntime:f.houses,houseFeedReader:f.reader})!.prepareCollect({since:1000});
+  expect(batch.items.map(hit=>hit.platformPostCreatedAt)).toEqual([100]);
+});
 
 describe('ordinary House snapshot verification', () => {
   it('verifies each envelope once while preserving signed content, filtering, ordering and fixed coverage', async () => {

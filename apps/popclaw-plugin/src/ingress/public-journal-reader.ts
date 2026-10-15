@@ -6,6 +6,7 @@ import type { PublicDisplayCapture, PublicDisplayItem, PublicDisplaySource } fro
 import { verifyPublicStreamJournalSchema } from '../world/scoped-stream-journal.js';
 import { decodePublicFrame, inspectPublicCarrier } from './public-stream-wire.js';
 import { decodeEnvelopeBody, numberOrZero } from './feed-item-projection.js';
+import { readMaterialWindow } from './public-material-index.js';
 
 export interface PublicMaterialCapture extends PublicDisplayCapture {
   /** Durable non-secret participation, protected partition and trusted producer identity. */
@@ -25,7 +26,7 @@ export function readPublicJournalSnapshot<T>(db: HostDb, read: (db: HostDb) => T
     throw error;
   }
 }
-interface FrameRow {
+export interface FrameRow {
   seq: string; event_id: string; frame_bytes: Uint8Array; observed_at: number; envelope: Uint8Array;
   current_projection: Uint8Array | null; projection_log: string | null; projection_seq: string | null;
 }
@@ -117,12 +118,27 @@ function canPresentHouseBody(body: Uint8Array | null | undefined): boolean {
     return true;
   } catch { return false; }
 }
-export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, source: { origin: string; slug: string }, options: {
+export interface PublicJournalReadOptions {
   ownProjection?: boolean;
   reference?: { eventId: string; sequence: string };
   /** Newspaper collection needs all locally available evidence. Response pagination happens after selection. */
   completeWindow?: boolean;
-} = {}): { items: PublicDisplayItem[]; status: PublicDisplaySource } {
+  /** Fixed issue cutoff in epoch seconds; never the local receive time. */
+  materialSince?: number;
+  /** Candidate-related cross-source observations retained until global deduplication. */
+  materialShadowEventIds?: readonly string[];
+}
+interface ScanControl {
+  page?: () => FrameRow[];
+  visit?: (frame: FrameRow, hit: PublicDisplayItem | null) => void;
+}
+export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, source: { origin: string; slug: string }, options: PublicJournalReadOptions = {}): { items: PublicDisplayItem[]; status: PublicDisplaySource } {
+  if (options.materialSince === undefined) return scanPublicJournal(db, capture, source, options);
+  if (!Number.isSafeInteger(options.materialSince) || options.materialSince < 0) throw new Error('PUBLIC_MATERIAL_WINDOW_INVALID');
+  return readPublicJournalSnapshot(db, () => readMaterialWindow(db, capture, options,
+    control => scanPublicJournal(db, capture, source, { ...options, materialSince: undefined }, control)));
+}
+function scanPublicJournal(db: HostDb, capture: PublicDisplayCapture, source: { origin: string; slug: string }, options: PublicJournalReadOptions, control: ScanControl = {}): { items: PublicDisplayItem[]; status: PublicDisplaySource } {
   verifyPublicStreamJournalSchema(db);
   const capability = capture.capability, log = capability.publicStream.log_incarnation;
   const binding = JSON.stringify([capability.house.origin, capability.house.houseKey, capability.house.incarnation]);
@@ -148,13 +164,13 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
     return !cursor || cursor.stale !== 0;
   });
   const newest = new Map<string, PublicDisplayItem>();
-  const length = options.reference ? 0 : checkpoint?.length ?? db.queryOne<{ length: number | null }>(
+  const length = options.reference || control.page ? 0 : checkpoint?.length ?? db.queryOne<{ length: number | null }>(
     'SELECT MAX(length(seq)) AS length FROM world_public_frames_v1 WHERE binding_id=? AND log_incarnation=?', [binding, log])?.length ?? -1;
   if (length > 20) throw new Error('PUBLIC_DISPLAY_SEQUENCE_INVALID');
   const cursor: FrameCursor = { length, before: null };
   let scanned = 0, bytes = 0, finished = false;
   while (!finished && (options.completeWindow || (scanned < MAX_FRAMES && bytes < MAX_BYTES))) {
-    const page = options.reference ? db.queryAll<FrameRow>(`${FRAME_SELECT}
+    const page = control.page ? control.page() : options.reference ? db.queryAll<FrameRow>(`${FRAME_SELECT}
        WHERE f.binding_id=? AND f.log_incarnation=? AND f.event_id=? AND f.seq=?
        ${checkpoint === null ? '' : 'AND (length(f.seq) < ? OR (length(f.seq)=? AND f.seq COLLATE BINARY <= ?))'}`,
     [binding, log, options.reference.eventId, options.reference.sequence, ...(checkpoint === null ? [] : [checkpoint.length, checkpoint.length, checkpoint])])
@@ -166,14 +182,14 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
       scanned++; bytes += frame.frame_bytes.length + frame.envelope.length;
       uint64(frame.seq);
       const selected = memberships.get(JSON.stringify([frame.seq, frame.event_id])) ?? [];
-      if (!selected.length) continue;
+      if (!selected.length) { control.visit?.(frame, null); continue; }
       const verified = decodePublicFrame(new Uint8Array(frame.frame_bytes), capture.producerPolicy);
       if (verified.eventId !== frame.event_id || uint64(verified.frame.seq) !== frame.seq || !same(new Uint8Array(verified.frame.envelope), new Uint8Array(frame.envelope))
         || selected.some(member => member.lane === 'scope' && !verified.publicScopes.includes(member.scope_id))) throw new Error('PUBLIC_DISPLAY_FRAME_CONFLICT');
       if (!Number.isSafeInteger(frame.observed_at) || frame.observed_at < 0 || frame.observed_at > 253402300799) throw new Error('PUBLIC_DISPLAY_OBSERVATION_INVALID');
       status.observedAt = Math.max(status.observedAt ?? 0, frame.observed_at);
       const envelope = verified.envelope;
-      if (!envelope.post && !envelope.reply && !envelope.houseEvent) continue;
+      if (!envelope.post && !envelope.reply && !envelope.houseEvent) { control.visit?.(frame, null); continue; }
       let decoded: ReturnType<typeof decodeEnvelopeBody> = null;
       if (!envelope.houseEvent || canPresentHouseBody(envelope.houseEvent.body)) {
         try { decoded = decodeEnvelopeBody(new Uint8Array(frame.envelope)); }
@@ -210,10 +226,12 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
       const id = JSON.stringify([item.platform, item.platformPostId]);
       // Descending sequence chooses the newest checked source observation for
       // this content key; older frames never overwrite it by arrival time.
-      if (!newest.has(id)) newest.set(id, { item, body, kind: verified.kind,
+      const hit: PublicDisplayItem = { item, body, kind: verified.kind,
         relaySnapshot, bodyUnavailable, media: decoded?.media ?? [], mirrorSigner: !!envelope.post?.origin && !relaySnapshot,
         source: { origin: source.origin, slug: source.slug, observedAt: frame.observed_at, sequence: frame.seq, logIncarnation: log,
-          frameDigest: cidFromCanonical(new TextEncoder().encode(JSON.stringify([cidFromCanonical(frame.frame_bytes), frame.observed_at]))) } });
+          frameDigest: cidFromCanonical(new TextEncoder().encode(JSON.stringify([cidFromCanonical(frame.frame_bytes), frame.observed_at]))) } };
+      control.visit?.(frame, hit);
+      if (!newest.has(id)) newest.set(id, hit);
     }
     if (page.length < PAGE_SIZE) finished = true;
   }

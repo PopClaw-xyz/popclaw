@@ -66,7 +66,7 @@ function deps(over: Partial<GatherDeps> = {}): GatherDeps {
  * survive the protocol change. The wrapper preserves those assertions; selection limits and picks
  * validation have separate tests.
  */
-function gatherNewspaperMaterials(d: GatherDeps, o: { hours?: number } = {}): GatherResult {
+function gatherNewspaperMaterials(d: GatherDeps, o: { hours?: number; today?: boolean } = {}): GatherResult {
   const r = gatherRaw(d, o);
   if (r.kind !== 'candidates') return r;
   const all = getIssue(r.candidateToken)!.pulse.map((_, i) => i + 1);
@@ -784,14 +784,14 @@ describe('gatherNewspaperMaterials — 主人本地日切', () => {
     expect(zh.payload).toContain('2026年7月31日');
   });
 
-  it('不传 hours = 真日切：本地 0 点之前的东西不算今天', () => {
+  it('explicit today excludes material before the owner local midnight', () => {
     setOwnerTz('Asia/Shanghai'); // Local 7/31 00:00 equals 2026-07-30T16:00Z.
     const beforeMidnight = Math.floor(Date.UTC(2026, 6, 30, 15, 50) / 1000);
-    expect(gatherNewspaperMaterials(deps(at(beforeMidnight)), {}).kind).toBe('empty');
+    expect(gatherNewspaperMaterials(deps(at(beforeMidnight)), { today: true }).kind).toBe('empty');
 
     _resetIssuesForTest();
     const afterMidnight = Math.floor(Date.UTC(2026, 6, 30, 16, 10) / 1000);
-    expect(gatherNewspaperMaterials(deps(at(afterMidnight)), {}).kind).toBe('ready');
+    expect(gatherNewspaperMaterials(deps(at(afterMidnight)), { today: true }).kind).toBe('ready');
   });
 
   it('显式 hours = 滚动窗逃生门（本地 0 点之前的照样收）', () => {
@@ -805,14 +805,14 @@ describe('gatherNewspaperMaterials — 主人本地日切', () => {
 
   it('日切窗口的措辞才是「今天」', () => {
     setOwnerTz('Asia/Shanghai');
-    const r = gatherNewspaperMaterials(deps(at(NOW - 60)), {});
+    const r = gatherNewspaperMaterials(deps(at(NOW - 60)), { today: true });
     if (r.kind !== 'ready') throw new Error('want ready');
     expect(r.payload).toContain('gathered today');
   });
 
   it('空素材的措辞也跟着窗口走', () => {
     const empty = { cache: { recentForReading: () => [] as never } };
-    const day = gatherNewspaperMaterials(deps(empty), {});
+    const day = gatherNewspaperMaterials(deps(empty), { today: true });
     const roll = gatherNewspaperMaterials(deps(empty), { hours: 48 });
     if (day.kind !== 'empty' || roll.kind !== 'empty') throw new Error('want empty');
     expect(day.message).toBe(renderCopy('en', 'newspaper.empty.today'));

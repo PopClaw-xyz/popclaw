@@ -470,9 +470,10 @@ export const NewspaperToolSchema = Type.Object({
    * ponytail: drop this alias a release after 2026-09-12; nothing mints the old page any more.
    */
   basis: Type.Optional(Type.String({ description: 'deprecated alias for candidate_basis' })),
+  today: Type.Optional(Type.Boolean({ description: "use the owner's local calendar day instead of the default rolling 72 hours; cannot combine with hours" })),
   hours: Type.Optional(
-    Type.Number({
-      description: "how far back to look, in hours. Omit = the owner's local \"today\"",
+    Type.Integer({
+      description: "rolling lookback in whole hours (1–168); omit for 72 hours. Cannot combine with today=true",
       minimum: 1,
       maximum: 168,
     }),

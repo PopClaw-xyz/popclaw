@@ -85,7 +85,7 @@ function fixture(fail?: string) {
   };
   return { deps, trace, rows, homeDigest };
 }
-function observed(deps: GatherDeps, trace: Trace, opts: { hours?: number } = { hours: 24 }) {
+function observed(deps: GatherDeps, trace: Trace, opts: { hours?: number; today?: boolean } = { hours: 24 }) {
   try {
     const result = gatherNewspaperMaterials(deps, opts);
     const issue = getIssue('cbaseline');
@@ -123,7 +123,7 @@ describe('raw gather fixed bugfix baseline', () => {
     expect(trace.at(-1)?.[0]).toBe(fail);
     expect(trace.some(c => c[0] === 'mint')).toBe(['mint', 'voice', 'log'].includes(fail));
   });
-  it.each([{}, { hours: 24 }])('pins the early empty return without inbox/digest/voice/mint (%j)', opts => {
+  it.each([{ today: true }, { hours: 24 }])('pins the early empty return without inbox/digest/voice/mint (%j)', opts => {
     const { deps, trace } = fixture();
     deps.cache.recentForReading = n => { trace.push(['feed', n]); return []; };
     expect(observed(deps, trace, opts)).toMatchSnapshot();

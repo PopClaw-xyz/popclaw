@@ -39,8 +39,8 @@ export function registerNewspaperTools(ctx: ToolsCtx): void {
     description:
       "Use this tool for the owner's daily paper or morning edition; never create one from memory or chat context. " +
       "This is a complete personalized paper with taste, bonds and inbox. Configured Canvas delivery is part of this request; draft-only or no-upload constraints are unsupported. " +
-      "Normally call twice: (1) no arguments returns the day's candidates grouped by author, with taste and bond-book " +
-      "context; read all candidates and choose. (2) pass picks with the printed candidate_basis copied verbatim, or a real " +
+      "Normally call twice: (1) no arguments returns rolling 72-hour candidates grouped by author, with taste and bond-book " +
+      "context; use today=true only for the owner's local calendar day, or hours=1..168 for another rolling window (never both). Read all candidates and choose. (2) pass picks with the printed candidate_basis copied verbatim, or a real " +
       "candidate_token; without either, selection is refused, never guessed. Write only from the returned full material. " +
       "Whenever a returned page or unfinished receipt includes page_cursor, call this tool with ONLY that cursor until the complete-document end marker. Never regather to continue. " +
       "In this same turn submit edits in as many batches as needed to popclaw_publish_newspaper: each item's headline and faithful summary, " +

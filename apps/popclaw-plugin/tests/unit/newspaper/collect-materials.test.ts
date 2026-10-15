@@ -86,8 +86,34 @@ it('cuts the calendar window at local midnight, keeping exact-boundary items', (
   setOwnerTz('Asia/Shanghai');
   const deps = sources([feed(1, { platformPostCreatedAt: start }), feed(2, { platformPostCreatedAt: start - 1 })]);
   deps.now = () => now;
-  const result = collectNewspaperMaterials(deps);
+  const result = collectNewspaperMaterials(deps, { today: true });
   if (result.kind !== 'collected') throw new Error('want collected');
   expect(result.draft.windowLabel).toBe('today');
   expect(result.draft.pulse.map(p => p.eventId)).toStrictEqual(['event-1']);
+});
+
+
+it('defaults to a rolling 72 hour window and preserves its exact boundary', () => {
+  const since = NOW - 72 * 3600;
+  const result = collectNewspaperMaterials(sources([
+    feed(1, { platformPostCreatedAt: since }), feed(2, { platformPostCreatedAt: since - 1 }),
+    feed(3, { platformPostCreatedAt: NOW - 48 * 3600 }), feed(4, {platformPostCreatedAt:NOW+3600}),
+  ]));
+  if (result.kind !== 'collected') throw new Error('want collected');
+  expect(result.draft.windowLabel).toBe('in the last 72 hours');
+  expect(result.draft.pulse.map(p => p.eventId)).toStrictEqual(['event-1', 'event-3', 'event-4']);
+});
+
+it('rejects contradictory calendar and rolling selections', () => {
+  expect(() => collectNewspaperMaterials(sources([feed(1)]), { today: true, hours: 24 })).toThrow('NEWSPAPER_WINDOW_CONFLICT');
+});
+
+
+it('uses the supplied frozen cutoff even when collection starts later', () => {
+  const since = NOW - 72 * 3600;
+  const deps = sources([feed(1,{platformPostCreatedAt:since}),feed(2,{platformPostCreatedAt:since-1})]);
+  deps.now = () => NOW + 3600;
+  const result = collectNewspaperMaterials(deps, { window: {since,hours:72,today:false,windowLabel:'in the last 72 hours'} });
+  if (result.kind !== 'collected') throw new Error('want collected');
+  expect(result.draft.pulse.map(p=>p.eventId)).toStrictEqual(['event-1']);
 });

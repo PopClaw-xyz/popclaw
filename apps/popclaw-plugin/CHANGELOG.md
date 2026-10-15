@@ -3,7 +3,7 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
-## Unreleased — Public journal read efficiency
+## Unreleased — Newspaper material windows and public journal efficiency
 
 **Protocol:** none. Identity data, protected journal schema and stored rows are unchanged.
 
@@ -13,6 +13,14 @@ versioning; dates are UTC.
 - Apply the shared reader improvement to public feed, search, author history
   and newspaper collection. Preserve exact uint64 ordering, checkpoint snapshots,
   signature/projection checks, source gates and existing read limits.
+- Default newspaper collection to the rolling last 72 hours. `today: true` and
+  `/popclaw newspaper --today` explicitly select the owner's local calendar day;
+  rolling hours remain 1–168. Freeze the cutoff once and pass it through material
+  preparation instead of filtering only after historical reads.
+- Reuse a disposable, transaction-bound material index across collections.
+  Incremental reads process newly observed frames; warm reads fetch window
+  originals and only candidate-related cross-source observations. Preserve
+  latest-observation/source priority and retain complete-read recovery.
 - Source regressions, build and lint were checked. This entry does not claim a
   released package, installed-host timing or deployed Hosted acceptance.
 

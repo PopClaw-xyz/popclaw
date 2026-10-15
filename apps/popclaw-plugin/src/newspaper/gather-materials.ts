@@ -10,6 +10,7 @@ import { beginReading, previewReading } from './reading-page.js';
 import type { NewspaperStyle } from './newspaper-style.js';
 import { ownerLangTag } from '../lexicon/owner-language.js';
 import { collectNewspaperMaterials, type MaterialSources } from './collect-materials.js';
+import type { NewspaperCollectionOptions } from './window.js';
 import { weightedChars } from './reading-weight.js';
 export { weightedChars } from './reading-weight.js';
 
@@ -37,7 +38,7 @@ export type GatherResult =
   | { kind: 'empty'; message: string }
   | { kind: 'candidates'; payload: string; candidateToken: string };
 
-export function gatherNewspaperMaterials(deps: GatherDeps, opts: { hours?: number } = {}): GatherResult {
+export function gatherNewspaperMaterials(deps: GatherDeps, opts: NewspaperCollectionOptions = {}): GatherResult {
   assertReadCallActive();
   const collected = collectNewspaperMaterials(deps, opts);
   const coverage = deps.publicBatch ? publicCoverageText(deps.publicBatch.coverage) : '';
