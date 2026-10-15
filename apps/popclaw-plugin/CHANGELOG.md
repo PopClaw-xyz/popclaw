@@ -3,7 +3,7 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
-## Unreleased — Newspaper material windows and public journal efficiency
+## 0.1.8 — Newspaper material windows and public journal efficiency
 
 **Protocol:** none. Identity data, protected journal schema and stored rows are unchanged.
 
@@ -21,8 +21,16 @@ versioning; dates are UTC.
   Incremental reads process newly observed frames; warm reads fetch window
   originals and only candidate-related cross-source observations. Preserve
   latest-observation/source priority and retain complete-read recovery.
-- Source regressions, build and lint were checked. This entry does not claim a
-  released package, installed-host timing or deployed Hosted acceptance.
+- Allow initial newspaper material collection a shared 60-second budget while
+  preserving cancellation and earlier parent deadlines. Guide and summary
+  reads keep their existing 10-second policy.
+- Retain npm registry read errors and retry incomplete publication metadata within
+  a bounded window. Add a read-only verification workflow for the already
+  published 0.1.7 archives; signature, provenance and original-source checks do
+  not republish those packages.
+- Source, artifact and installed-host evidence remain separate. Isolated local
+  journal read improvements do not establish whole-newspaper speed or Hosted
+  pagination performance.
 
 ## 0.1.7 — Natural notifications and verified release artifacts
 
