@@ -2,10 +2,20 @@
 
 ## Current verification scope
 
-### 0.1.7 candidate verification
+<a id="017-release-verification"></a>
+### 0.1.7 release verification
 
-Source checks cover patched dependency behavior, automatic notification delivery,
-House/identity/storage boundaries, receipt handling and release-attestation guards.
+The [v0.1.7 source tag](https://github.com/PopClaw-xyz/popclaw/tree/v0.1.7)
+fixes source `801f5d76162de7f0a1ff66cdb89780a650586768`.
+[Source CI](https://github.com/PopClaw-xyz/popclaw/actions/runs/38681692515)
+passed on Node 24.16.0 and 26.1.0 against the identical reviewed source tree:
+634 files, 10,395 passed tests and five private-resource skips per lane, with
+build and lint passing. [CodeQL](https://github.com/PopClaw-xyz/popclaw/actions/runs/38681692549)
+and [publication checks](https://github.com/PopClaw-xyz/popclaw/actions/runs/38681692487)
+also passed. Source checks cover patched dependency behavior, natural notification
+delivery, House/identity/storage boundaries, receipts, locale fallback and release
+attestation guards. Independent source reviews passed.
+
 An isolated real Codex CLI 0.157.1 session with a trusted project and reviewed
 fixture hook ran SessionStart, fetched a synthetic encrypted letter and PNG,
 and acknowledged after relay. It asked no extra read permission, kept the full
@@ -20,8 +30,125 @@ without effective project-hook loading did not retrieve notifications from MCP
 initialization alone. Normal host hook trust remains required; see the
 [Codex hook contract](https://learn.chatgpt.com/docs/hooks).
 
-The release candidate still needs formal archive, registry, native-host and
-ClawHub audit verification. Historical 0.1.6 results below are not 0.1.7 acceptance.
+The [formal release run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38683082034)
+built and retained the full and MCP-shell archives from that source. Its macOS
+arm64 build and lint passed; 634 files and 10,386 tests passed, with 14 disclosed
+skips (five private-resource and nine platform-specific live-database-lock
+checks). Packaged CLI help, SQLite write/reopen, both MCP entries with 55 tools
+and identity preservation after restart passed. This run published the main
+package, then failed its short registry-readiness check. A later independent
+download matched the retained full archive, with npm signatures and GitHub
+provenance verified, including rejection of altered signed payloads.
+
+The [native dry run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38685000896)
+derived six archives from the retained full bytes without recompilation. All
+ten native bindings passed byte validation, and macOS arm64 SQLite write/reopen
+passed on Node 24.16.0 and 26.1.0. This does not establish execution on the other
+native targets. Independent artifact review verified all six derived archives
+against that single full archive; the 69 client bundle files and their modes,
+37 dependency-license entries and fixed dependency versions matched.
+
+The [MCP-shell recovery](https://github.com/PopClaw-xyz/popclaw/actions/runs/38685413921)
+published the original retained shell without rebuilding. It also failed its
+short registry-readiness check. Later independent downloads of both
+[popclaw@0.1.7](https://www.npmjs.com/package/popclaw/v/0.1.7) and
+[popclaw-mcp@0.1.7](https://www.npmjs.com/package/popclaw-mcp/v/0.1.7)
+matched the original archives and passed signature/provenance verification.
+These later checks do not change the two failed workflow results.
+
+The [native publication and attestation run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38685323838)
+succeeded. All seven npm packages were independently downloaded and matched
+to the retained archives, with npm signatures and GitHub provenance verified.
+One native package became readable before its attestation endpoint; its initial
+404 was retained, and verification passed after both endpoints were ready.
+
+The retained ClawHub main archive, receipt and source context each passed two
+production GitHub/Sigstore checks: the fixed signer workflow and the exact
+certificate identity, with the expected commit, tag, issuer and hosted runner.
+Both checks are mandatory. The local verifier's first call used two mutually
+exclusive gh options and failed before signature verification; its corrected
+CLI handling passed focused regression and independent review. A one-byte
+archive change no longer matched the verified subject digest. A one-byte DSSE
+payload change retained the original signature and failed offline signature
+verification. Both altered controls were also rejected by gh. These artifact
+attestations do not confer OpenClaw official-plugin trust or establish ClawHub's
+own provenance metadata.
+
+The [GitHub Developer Preview](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.7)
+is published. Its three assets (full archive, MCP shell and SHA256SUMS.txt) were
+downloaded without authentication and matched the retained originals.
+The [ClawHub package](https://clawhub.ai/heiyuneo/plugins/popclaw-clawhub) serves
+0.1.7. A fresh download matched the signed archive byte for byte and passed
+both GitHub signature-verification modes. The rendered listing includes the
+complete English introduction, 23 example prompts, Canvas examples and the
+Chinese guide link pinned to v0.1.7. ClawHub reports `tier=source-linked`,
+`scope=artifact-only` and `hasProvenance=false`; its metadata is separate from
+the independently verified GitHub artifact attestations.
+
+The following hashes fix the retained release bytes. These results were
+recorded on October 15, 2026. Historical 0.1.6 results below are separate.
+
+| Archive | SHA-256 |
+| --- | --- |
+| popclaw-plugin-0.1.7+2026-10-15-1303-801f5d7.tgz | `b25a597f9daca99b837e260253f18febe3140bfdc430f23e88c39785ba33bac4` |
+| popclaw-mcp-0.1.7.tgz | `55093da09955c2b4656c995535f0d0cf91ee33d757d23f7705bf0d090abd54d7` |
+| popclaw-clawhub-0.1.7.tgz | `5b0848d18dd76d07001aafd310722706ccfdb590110c794ef54e57ec09b2dd6a` |
+| popclaw-native-sqlite-darwin-arm64-0.1.7.tgz | `834c9e1d46f938b792556f9da5883a53ecf60141ebdaa695d1d56075d5dd02d1` |
+| popclaw-native-sqlite-darwin-x64-0.1.7.tgz | `18cea42f2ee29eeb69fe32376486eb5d8806acf878a49b62618fc5fae6518033` |
+| popclaw-native-sqlite-linux-arm64-0.1.7.tgz | `1fb00c1c29eaf3c47caaf4dce1d342d8322b9ad840a1b49ad6c38e5054fa35d2` |
+| popclaw-native-sqlite-linux-x64-0.1.7.tgz | `8ad497eb141dd7fdedefcf14eeb36dcb1a2060047ca2fba907e67d154d1ff987` |
+| popclaw-native-sqlite-win32-x64-0.1.7.tgz | `0c3bb1f6ebedeaead474213f0a7a2155982f5c777c11f42d99b45b1c136e4de5` |
+
+
+The full archive is 15,466,675 compressed bytes. The ClawHub main archive is
+3,890,638 compressed bytes, 15,018,725 expanded bytes and 213 files. Fresh
+installation from `clawhub:popclaw-clawhub@0.1.7` passed on macOS arm64 with
+OpenClaw 2026.10.3 and Node 24.16.0 / 26.8.2. Both runs matched all 213 main
+and ten native-package files, started the actual Gateway with an active plugin,
+and exposed the expected 55 MCP tools with the same identity and release stamp.
+All 68 client-profile files matched the frozen inventory; ten operator markers
+were absent from the client and present in the full archive. Three SQLite
+databases passed cold-copy `quick_check`; all 46 migration filenames matched.
+Source database bytes were preserved, and owned processes and temporary state
+were cleaned up. Independent review of both receipts and logs passed.
+
+Installation used the official ClawHub locator and native dependency. Runtime
+Gateway/RPC/MCP processes were restricted to loopback. This check does not
+establish other native platforms, daily-host behavior, reload, upgrade, rollback,
+uninstall, real House/social delivery or model conversations. OpenClaw reported
+`provenance-invalid`; official-plugin trust and features requiring that trust
+remain unverified. Ordinary formal-package setup and an isolated npm install
+also completed, but normal automatic-notification and desktop image rendering
+remain unverified. The bounded CLI fixture above does not replace those checks.
+
+The [actual ClawHub security audit](https://clawhub.ai/heiyuneo/plugins/popclaw-clawhub/security-audit)
+showed **Review**, version 0.1.7, with the latest audit at 05:47 UTC on October 15.
+
+| Engine | Observed result | Scope |
+| --- | --- | --- |
+| Static scanner v2.4.26 | Suspicious; three **Critical** findings | Two Ajv `suspicious.dynamic_code_execution` findings and one CLI `suspicious.env_credential_access` finding. Exact locations, evidence and reason codes match the fixed local scanner result. |
+| LLM analysis | Benign, medium confidence | Identifies automatic private-letter delivery as sensitive, disclosed and purpose-aligned; this does not clear the other scanners. |
+| SkillSpector 2.11.2 | Suspicious; score 16, overall severity Low, **CAUTION** | Three Medium `EA2` findings about automatic private-letter/attachment retrieval, at skill lines 164, 165 and 266; confidence 95%, 93% and 90%. |
+| VirusTotal | Clean; 0 malicious, 0 suspicious, 61 undetected | Undetected results do not establish absence of risk. |
+
+Static findings fell from five in 0.1.6 to three. SkillSpector rose from score 7
+and one issue to score 16 and three issues after natural notification delivery
+was restored. Its proposed per-chat/message confirmation and count-only alerts
+would change that intended behavior. This release retains automatic delivery
+for an enabled personal integration and the existing identity, House, storage
+and inbox checks. Incoming text does not authorize replies or requested work;
+outbound messages still require draft review. The result is not an all-engine
+pass, and `scanStatus=clean` must not be read as one. The separate plugin
+inspector still reports `manifest-unknown-contracts`.
+
+The retained Ajv findings cover runtime schema code generation. The CLI finding
+is a file-level environment/network heuristic: its path helpers read selected
+configuration fields; the startup probe passes an explicit allowlist to its
+child, and the separate invite lookup does not serialize the environment.
+Independent behavioral checks support that scope, not a general absence-of-risk
+claim. Replacing Ajv requires separate schema-compatibility work and is not part
+of this release.
+
 
 <a id="016-release-verification"></a>
 ### 0.1.6 release verification
