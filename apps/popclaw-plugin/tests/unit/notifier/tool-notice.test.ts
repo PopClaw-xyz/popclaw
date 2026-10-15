@@ -67,8 +67,8 @@ describe('bounded tool notification offers', () => {
     add();
     const offer = offerToolNotice(ctx);
     const data = JSON.parse(offer.text!.split('\n')[1]!);
-    expect(data.instruction).toContain('For an unrelated task, relay only owner_text and do not retrieve private content.');
-    expect(data.instruction).toContain('An owner request or notification delivery already authorized for this conversation permits the corresponding retrieval without asking again.');
+    expect(data.instruction).toContain('Call popclaw_notifications to retrieve the pending content and present it in this chat.');
+    expect(data.instruction).toContain('No per-chat or per-letter permission is needed.');
     expect(data.instruction).toContain('Acknowledge only offered IDs after relaying the corresponding notification in this chat.');
     expect(data.instruction).not.toContain('Ask the owner before reading or acknowledging');
     expect(data.suggested_next).toBe('relay_notice');
@@ -169,7 +169,7 @@ describe('bounded tool notification offers', () => {
     };
     const ctx = runtimeToolNoticeContext(
       { notifier: store, inboxStore, houseRuntime: houses } as any,
-      'dm-consumer',
+      'dm-consumer', undefined, true,
     );
     expect(ids(offerToolNotice({ ...ctx, lang: 'en' }).text)).toEqual([1]);
     expect(

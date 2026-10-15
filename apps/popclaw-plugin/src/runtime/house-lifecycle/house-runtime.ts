@@ -1,3 +1,5 @@
+import type { CaptureNotificationDeliveryScope } from '../../notifier/notifier.js';
+import { isLocalNotification, notificationOrigin } from './notification-scope.js';
 import { budgetedFetch } from '../read-call-budget.js';
 import { ensureHouseOriginBindingsSchema, ensureHouseRecoveryCursorEvidenceSchema } from './house-runtime-schema.js';
 export { ensureHouseOriginBindingsSchema, ensureHouseRecoveryCursorEvidenceSchema } from './house-runtime-schema.js';
@@ -770,6 +772,26 @@ export class HouseRuntime {
     const gate = this.resident.captureGate(origin);
     return {...gate, isActive: () => { try { return this.storageAllows('execution') && gate.isActive(); } catch { return false; } },
       inactiveReason: () => { try { return this.storageAllows('execution') ? gate.inactiveReason?.() ?? 'HOUSE_ACTION_STALE' : 'HOUSE_STORAGE_UNAVAILABLE'; } catch { return 'HOUSE_STORAGE_UNAVAILABLE'; } }};
+  }
+
+  /** Local pending delivery is available to every MCP reader of this identity.
+   * Stream ownership is deliberately absent: it coordinates receiving, not
+   * displaying already stored content. Capture participation and storage before
+   * any await, so logout, trust changes and restores still invalidate the read. */
+  captureNotificationReadScopes(): CaptureNotificationDeliveryScope {
+    const gates = new Map(this.commands.knownHouseOrigins().map(origin => [origin, {
+      gate: this.publicReadGate(origin), localReadActive: this.manager.captureLocalReadFence(origin),
+    }]));
+    const storageAllowed = this.storageAllows('notifications');
+    const generation = storageDatabaseGeneration(this.opts.db);
+    const active = () => !this.stopped && !this.terminal.signal.aborted && storageAllowed
+      && this.storageAllows('notifications') && generation === storageDatabaseGeneration(this.opts.db);
+    return item => {
+      if (isLocalNotification(item)) return { key: 'local-installation', isActive: active };
+      const origin = notificationOrigin(item, this);
+      const gate = origin ? gates.get(origin) : undefined;
+      return gate ? { key: origin!, isActive: () => active() && gate.localReadActive() && gate.gate.isActive() } : null;
+    };
   }
 
   gateForSlug(slug: string): HouseGate {

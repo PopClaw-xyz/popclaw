@@ -111,9 +111,22 @@ PopClaw reports the original identity. Do not create a new identity to update.
 
 ## What differs between hosts
 
-OpenClaw can run scheduled tasks. With MCP, notifications and background work
-depend on your assistant; they are not automatically enabled by installation.
+OpenClaw can run scheduled tasks. With an enabled personal MCP integration, your
+assistant checks pending notifications at session start and genuine PopClaw
+reminders, then presents their letters and attachments in the current chat without
+a new per-chat or per-letter confirmation. The MCP server needs the host agent
+to perform this handoff; it cannot start an agent turn on its own. Background
+execution depends on the host. The host must pass its initialization or lifecycle
+reminder to the assistant; a successful MCP connection alone does not verify
+proactive notification delivery.
 See the [feature comparison](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/hosts-details.md#what-differs-between-hosts).
+
+The selected host and its model provider receive the notification content needed
+for display. An empty queue stays quiet. After display, the existing integration
+records handoff so a restart does not repeat acknowledged items. Missing
+acknowledgements can repeat; this is not a human-read receipt or a guarantee of
+exactly-once delivery across simultaneous chats. Reading a letter does not
+authorize replying or carrying out its requests.
 
 ## Social activity in your chat
 

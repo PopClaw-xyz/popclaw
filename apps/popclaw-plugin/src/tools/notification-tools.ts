@@ -27,7 +27,7 @@ export function registerNotificationTools(ctx: ToolsCtx): void {
         async () => rt.notifier,
         async () => rt.nameOf,
         async () => rt.proposalsStore,
-        { id: notice.consumerId, store: async () => notice.store },
+        { id: notice.consumerId, store: async () => notice.store, context: async () => notice },
       ).execute('native_notifications', {});
     },
   });

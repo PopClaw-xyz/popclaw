@@ -227,7 +227,8 @@ export class SqliteNotifier implements Notifier {
     });
   }
 
-  peekFor(consumerId: string, level?: NotificationLevel, limit = 50): NotificationItem[] {
+  peekFor(consumerId: string, level?: NotificationLevel, limit = 50, context?: ToolNoticeContext): NotificationItem[] {
+    if (context && !context.active()) return [];
     this.bindConsumer(consumerId);
     return this.db.transaction((tx) => {
       const rows = tx.queryAll<QueueRow>(
@@ -236,15 +237,20 @@ export class SqliteNotifier implements Notifier {
          ON r.notification_id = q.id AND r.consumer_id = ?
          WHERE r.acknowledged_at IS NULL AND q.level IN ('L1','L2')
          AND (r.notification_id IS NOT NULL OR q.id > (SELECT start_after_id FROM notification_consumers WHERE consumer_id = ?))` +
-         (level ? ' AND q.level = ?' : '') + ' ORDER BY q.enqueued_at, q.id LIMIT ?',
-        level ? [consumerId, consumerId, level, limit] : [consumerId, consumerId, limit],
+         (level ? ' AND q.level = ?' : '') +
+         (context?.nativePendingOnly ? ' AND q.delivered_at IS NULL AND (q.delivery_lease_until IS NULL OR q.delivery_lease_until <= ?)' : '') +
+         ' ORDER BY q.enqueued_at, q.id' + (context ? '' : ' LIMIT ?'),
+        [consumerId, consumerId, ...(level ? [level] : []), ...(context?.nativePendingOnly ? [this.nowSeconds()] : []), ...(context ? [] : [limit])],
       );
-      for (const row of rows) tx.execute(
+      // Filter before limiting and recording an offer: an ineligible prefix must
+      // neither starve live notices nor become acknowledgeable as delivered.
+      const offered = context ? rows.filter(row => context.eligible(this.toItem(row))).slice(0, limit) : rows;
+      for (const row of offered) tx.execute(
         `INSERT INTO notification_receipts (consumer_id, notification_id, offered_at) VALUES (?, ?, ?)
          ON CONFLICT(consumer_id, notification_id) DO UPDATE SET offered_at = CASE WHEN offered_at = 0 THEN excluded.offered_at ELSE offered_at END`,
         [consumerId, row.id, this.nowSeconds()],
       );
-      return rows.map(this.toItem);
+      return offered.map(this.toItem);
     });
   }
 
