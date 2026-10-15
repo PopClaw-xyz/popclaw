@@ -29,6 +29,48 @@ interface FrameRow {
   seq: string; event_id: string; frame_bytes: Uint8Array; observed_at: number; envelope: Uint8Array;
   current_projection: Uint8Array | null; projection_log: string | null; projection_seq: string | null;
 }
+const FRAME_SELECT = `SELECT f.seq,f.event_id,f.frame_bytes,f.observed_at,e.envelope,e.current_projection,e.projection_log,e.projection_seq
+       FROM world_public_frames_v1 f JOIN world_public_events_v1 e USING(binding_id,event_id)`;
+interface FrameCursor { length: number; before: string | null }
+/** Canonical uint64 text sorts numerically by decimal length, then by text.
+ * Read each length using the existing (binding,log,seq) primary key. Fill a
+ * logical page across length boundaries so frame/byte accounting is unchanged.
+ * Length zero is included: corrupt empty sequences must still be rejected. */
+function framePage(db: HostDb, binding: string, log: string, checkpoint: string | null, cursor: FrameCursor): FrameRow[] {
+  const page: FrameRow[] = [];
+  while (cursor.length >= 0 && page.length < PAGE_SIZE) {
+    const limit = PAGE_SIZE - page.length;
+    const upper = checkpoint !== null && cursor.length === checkpoint.length;
+    const rows = db.queryAll<FrameRow>(`${FRAME_SELECT}
+       WHERE f.binding_id=? AND f.log_incarnation=? AND length(f.seq)=?
+       ${upper ? 'AND f.seq COLLATE BINARY <= ?' : ''} ${cursor.before === null ? '' : 'AND f.seq COLLATE BINARY < ?'}
+       ORDER BY f.seq COLLATE BINARY DESC LIMIT ?`,
+    [binding, log, cursor.length, ...(upper ? [checkpoint] : []), ...(cursor.before === null ? [] : [cursor.before]), limit]);
+    page.push(...rows);
+    if (rows.length < limit) { cursor.length--; cursor.before = null; }
+    else cursor.before = rows.at(-1)!.seq;
+  }
+  return page;
+}
+interface Membership { seq: string; event_id: string; lane: string; scope_id: string }
+/** Batch by page and point-probe the complete existing association primary key.
+ * CROSS JOIN keeps the small selected-lane/frame sets outside the journal. */
+function pageMemberships(db: HostDb, binding: string, log: string, page: readonly FrameRow[], lanes: readonly { lane: string; scope: string }[]): Map<string, Membership[]> {
+  const result = new Map<string, Membership[]>();
+  if (!page.length || !lanes.length) return result;
+  const rows = db.queryAll<Membership>(`WITH wanted(seq,event_id) AS (VALUES ${page.map(() => '(?,?)').join(',')}),
+       lanes(lane,scope_id) AS (VALUES ${lanes.map(() => '(?,?)').join(',')})
+       SELECT a.seq,a.event_id,a.lane,a.scope_id FROM lanes CROSS JOIN wanted CROSS JOIN world_public_associations_v1 a
+       WHERE a.binding_id=? AND a.log_incarnation=? AND a.lane=lanes.lane AND a.scope_id=lanes.scope_id
+       AND a.event_id=wanted.event_id AND a.seq=wanted.seq`,
+  [...page.flatMap(frame => [frame.seq, frame.event_id]), ...lanes.flatMap(lane => [lane.lane, lane.scope]), binding, log]);
+  for (const row of rows) {
+    const key = JSON.stringify([row.seq, row.event_id]);
+    const members = result.get(key) ?? [];
+    members.push(row); result.set(key, members);
+  }
+  return result;
+}
 const PAGE_SIZE = 32;
 const MAX_FRAMES = 2048;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -106,22 +148,24 @@ export function readPublicJournal(db: HostDb, capture: PublicDisplayCapture, sou
     return !cursor || cursor.stale !== 0;
   });
   const newest = new Map<string, PublicDisplayItem>();
-  let before: string | null = null, scanned = 0, bytes = 0, finished = false;
+  const length = options.reference ? 0 : checkpoint?.length ?? db.queryOne<{ length: number | null }>(
+    'SELECT MAX(length(seq)) AS length FROM world_public_frames_v1 WHERE binding_id=? AND log_incarnation=?', [binding, log])?.length ?? -1;
+  if (length > 20) throw new Error('PUBLIC_DISPLAY_SEQUENCE_INVALID');
+  const cursor: FrameCursor = { length, before: null };
+  let scanned = 0, bytes = 0, finished = false;
   while (!finished && (options.completeWindow || (scanned < MAX_FRAMES && bytes < MAX_BYTES))) {
-    const page: FrameRow[] = db.queryAll<FrameRow>(
-      `SELECT f.seq,f.event_id,f.frame_bytes,f.observed_at,e.envelope,e.current_projection,e.projection_log,e.projection_seq
-       FROM world_public_frames_v1 f JOIN world_public_events_v1 e USING(binding_id,event_id)
-       WHERE f.binding_id=? AND f.log_incarnation=? ${checkpoint === null ? '' : 'AND (length(f.seq) < ? OR (length(f.seq)=? AND f.seq COLLATE BINARY <= ?))'} ${options.reference ? 'AND f.event_id=? AND f.seq=?' : ''} ${before === null ? '' : 'AND (length(f.seq) < ? OR (length(f.seq)=? AND f.seq COLLATE BINARY < ?))'}
-       ORDER BY length(f.seq) DESC,f.seq COLLATE BINARY DESC LIMIT ?`,
-      [binding, log, ...(checkpoint === null ? [] : [checkpoint.length, checkpoint.length, checkpoint]), ...(options.reference ? [options.reference.eventId, options.reference.sequence] : []), ...(before === null ? [] : [before.length, before.length, before]), PAGE_SIZE]);
+    const page = options.reference ? db.queryAll<FrameRow>(`${FRAME_SELECT}
+       WHERE f.binding_id=? AND f.log_incarnation=? AND f.event_id=? AND f.seq=?
+       ${checkpoint === null ? '' : 'AND (length(f.seq) < ? OR (length(f.seq)=? AND f.seq COLLATE BINARY <= ?))'}`,
+    [binding, log, options.reference.eventId, options.reference.sequence, ...(checkpoint === null ? [] : [checkpoint.length, checkpoint.length, checkpoint])])
+      : framePage(db, binding, log, checkpoint, cursor);
     if (!page.length) { finished = true; break; }
+    const memberships = pageMemberships(db, binding, log, page, lanes);
     for (const frame of page) {
       if (!options.completeWindow && (scanned >= MAX_FRAMES || bytes + frame.frame_bytes.length + frame.envelope.length > MAX_BYTES)) { status.truncated = true; finished = true; break; }
       scanned++; bytes += frame.frame_bytes.length + frame.envelope.length;
-      before = uint64(frame.seq);
-      const memberships = db.queryAll<{ lane: string; scope_id: string }>(
-        'SELECT lane,scope_id FROM world_public_associations_v1 WHERE binding_id=? AND log_incarnation=? AND seq=? AND event_id=?', [binding, log, frame.seq, frame.event_id]);
-      const selected = memberships.filter(member => lanes.some(lane => lane.lane === member.lane && lane.scope === member.scope_id));
+      uint64(frame.seq);
+      const selected = memberships.get(JSON.stringify([frame.seq, frame.event_id])) ?? [];
       if (!selected.length) continue;
       const verified = decodePublicFrame(new Uint8Array(frame.frame_bytes), capture.producerPolicy);
       if (verified.eventId !== frame.event_id || uint64(verified.frame.seq) !== frame.seq || !same(new Uint8Array(verified.frame.envelope), new Uint8Array(frame.envelope))

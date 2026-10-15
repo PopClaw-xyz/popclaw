@@ -52,6 +52,49 @@ function stored(db: LocalHostDb) {
   return db.queryAll<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").map(({ name }) => [name, db.queryAll(`SELECT * FROM ${name}`)]);
 }
 
+it.each([false, true])('uses indexed pages and batched memberships across decimal sequence lengths (checkpoint=%s)', checkpointed => {
+  const sequences = [...Array.from({ length: 70 }, (_, i) => String(i + 1)), '98', '99', '100', '101', '998', '999', '1000', '18446744073709551614', '18446744073709551615'];
+  const f = fixture('sql_pages', sequences.at(-1)!);
+  for (const seq of sequences) f.append(seq, signed({ post: { blocks: [{ content: `SQL page item ${seq}` }] } }, 1));
+  if (checkpointed) f.live();
+  const before = stored(f.db);
+  const query = vi.spyOn(f.db, 'queryAll');
+  const result = readPublicJournal(f.db, f.capture(), { origin: f.capability.house.origin, slug: 'display' }, { completeWindow: true, ownProjection: true });
+  expect(result.items.map(item => item.source.sequence)).toEqual([...sequences].reverse());
+  expect(result.status).toMatchObject({ unavailable: false, truncated: false, incomplete: !checkpointed });
+  const calls = [...query.mock.calls];
+  const memberships = calls.filter(([sql]) => sql.includes('world_public_associations_v1'));
+  expect(memberships.length, 'membership reads must scale with pages, not individual frames').toBeLessThanOrEqual(8);
+  const pages = calls.filter(([sql]) => sql.includes('FROM world_public_frames_v1 f JOIN'));
+  expect(pages.length).toBeGreaterThan(1);
+  for (const [sql, params] of [...pages, ...memberships]) {
+    const plan = f.db.queryAll<{ detail: string }>(`EXPLAIN QUERY PLAN ${sql}`, params);
+    expect(plan.map(row => row.detail).join('\n')).not.toContain('USE TEMP B-TREE FOR ORDER BY');
+    if (sql.includes('world_public_associations_v1')) {
+      expect(plan.some(row => row.detail.includes('event_id=?') && row.detail.includes('scope_id=?'))).toBe(true);
+    }
+  }
+  expect(stored(f.db)).toEqual(before);
+});
+
+it.each(['', '01', 'bad', '1\0bad', '18446744073709551616', '100000000000000000000'])('does not hide invalid sequences behind indexed pagination: %j', seq => {
+  const f = fixture(); f.append(1, signed({ post: { blocks: [{ content: 'Corrupt sequence must remain visible to validation.' }] } }));
+  f.db.execute('DELETE FROM world_public_associations_v1');
+  f.db.execute('UPDATE world_public_frames_v1 SET seq=?', [seq]);
+  expect(() => readPublicJournal(f.db, f.capture(), { origin: f.capability.house.origin, slug: 'display' }, { completeWindow: true })).toThrow('PUBLIC_DISPLAY_SEQUENCE_INVALID');
+});
+
+it('keeps event/sequence membership binding and refuses a selected scope absent from the signed frame', () => {
+  const f = fixture(), first = signed({ post: { blocks: [{ content: 'First membership' }] } }, 1), second = signed({ post: { blocks: [{ content: 'Second membership' }] } }, 2);
+  f.append(1, first); f.append(2, second); f.live();
+  f.db.execute('UPDATE world_public_associations_v1 SET seq=? WHERE event_id=?', ['2', first.eventId]);
+  const source = { origin: f.capability.house.origin, slug: 'display' };
+  expect(readPublicJournal(f.db, f.capture(), source).items.map(hit => hit.item.eventId)).toEqual([second.eventId]);
+  f.db.execute('UPDATE world_public_bindings_v1 SET selection_json=?', [JSON.stringify({ fullPublic: true, scopes: ['scope_extra'] })]);
+  f.db.execute("INSERT INTO world_public_associations_v1(binding_id,log_incarnation,lane,scope_id,event_id,seq) SELECT binding_id,log_incarnation,'scope','scope_extra',event_id,seq FROM world_public_associations_v1 WHERE event_id=?", [second.eventId]);
+  expect(() => readPublicJournal(f.db, f.capture(), source)).toThrow('PUBLIC_DISPLAY_FRAME_CONFLICT');
+});
+
 it.each(['intact', 'bad-signature', 'wrong-projection'] as const)('newspaper complete window reads and verifies evidence beyond the former 2048-frame scan: %s', async mode => {
   const f = fixture('log_long_window', '2050');
   const tail = signed({ post: { blocks: [{ content: 'The oldest complete newspaper window item.' }] } }, 1);
