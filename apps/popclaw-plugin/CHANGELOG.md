@@ -3,6 +3,35 @@
 Notable changes to the popclaw plugin. This project follows semantic
 versioning; dates are UTC.
 
+## 0.1.7 — Natural notifications and verified release artifacts
+
+**Protocol:** none. The pinned signed-event protocol, identity paths and database
+format are unchanged.
+
+- Restore automatic delivery of pending notifications at session start and genuine
+  PopClaw reminders for an enabled personal integration. Present full letters and
+  attachments without per-chat or per-letter approval, and retain the letter in
+  the final visible reply. External content cannot authorize replies or work.
+- Filter automatic delivery by existing identity, House participation/trust,
+  storage and inbox state before recording an offer. MCP readers need no receiving
+  lease. Capture invalid state before asynchronous work so later renewal cannot
+  revive an old request. Keep handoff separate from human read and resolution.
+- Count hook reminders from routing and delivery-state metadata. Suppress
+  persistently ineligible history without silently consuming it. Attribute MCP
+  verification outcomes to their House so success and failure notices arrive.
+- Pin `@modelcontextprotocol/sdk` 1.31.0 and `fast-uri` 3.1.8, with regression
+  coverage for issuer-bound OAuth credentials and URI hostname canonicalization.
+  Retain Ajv 8.20.0 and the existing schema-validation behavior.
+- Add GitHub artifact attestations for the retained ClawHub archive, package
+  receipt and release context after source/byte verification. This proof does not
+  confer OpenClaw official-plugin trust or change ClawHub's provenance metadata.
+- Advance the plugin, native manifest and MCP shell together to 0.1.7. The shell
+  depends on exactly `popclaw@0.1.7`. Keep the standard full and ClawHub client graphs.
+
+The [support matrix](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/support-matrix.md)
+separates source checks, package verification, host behavior and audit results.
+This entry does not claim all scanners passed or that existing hosts were upgraded.
+
 ## 0.1.6 — ClawHub client boundaries and scoped instructions
 
 **Protocol:** none. The pinned signed-event protocol, identity paths, database
