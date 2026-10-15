@@ -13,7 +13,11 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 var __commonJS = (cb, mod) => function __require2() {
-  return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
@@ -1649,7 +1653,7 @@ var require_minimal = __commonJS({
         return typeof value !== "object" || (Array.isArray(value) ? value.length : Object.keys(value).length) > 0;
       return false;
     };
-    util.Buffer = function() {
+    util.Buffer = (function() {
       try {
         var Buffer2 = util.global.Buffer;
         return Buffer2.prototype.utf8Write ? Buffer2 : (
@@ -1659,7 +1663,7 @@ var require_minimal = __commonJS({
       } catch (e) {
         return null;
       }
-    }();
+    })();
     util._Buffer_from = null;
     util._Buffer_allocUnsafe = null;
     util.newBuffer = function newBuffer(sizeOrArray) {
@@ -1669,14 +1673,14 @@ var require_minimal = __commonJS({
     util.Long = /* istanbul ignore next */
     util.global.dcodeIO && /* istanbul ignore next */
     util.global.dcodeIO.Long || /* istanbul ignore next */
-    util.global.Long || function() {
+    util.global.Long || (function() {
       try {
         var Long = require_umd();
         return Long && Long.isLong ? Long : null;
       } catch (e) {
         return null;
       }
-    }();
+    })();
     util.key2Re = /^true|false|0|1$/;
     util.key32Re = /^-?(?:0|[1-9][0-9]*)$/;
     util.key64Re = /^(?:[\\x00-\\xff]{8}|-?(?:0|[1-9][0-9]*))$/;
@@ -2092,7 +2096,7 @@ var require_reader = __commonJS({
       }
       throw indexOutOfRange(reader);
     }
-    Reader.prototype.uint32 = /* @__PURE__ */ function read_uint32_setup() {
+    Reader.prototype.uint32 = /* @__PURE__ */ (function read_uint32_setup() {
       var value = 4294967295;
       return function read_uint32() {
         if (this.len - this.pos < 5) {
@@ -2117,7 +2121,7 @@ var require_reader = __commonJS({
         }
         return value;
       };
-    }();
+    })();
     Reader.prototype.int32 = function read_int32() {
       return this.uint32() | 0;
     };
@@ -3165,11 +3169,11 @@ var require_service2 = __commonJS({
       for (var i = 0, method; i < /* initializes */
       this.methodsArray.length; ++i) {
         var methodName = util.lcFirst((method = this._methodsArray[i]).resolve().name).replace(/[^$\w_]/g, "");
-        rpcService[methodName] = /* @__PURE__ */ function(method2, requestType, responseType) {
+        rpcService[methodName] = /* @__PURE__ */ (function(method2, requestType, responseType) {
           return function rpcMethod(request, callback) {
             return rpc.Service.prototype.rpcCall.call(this, method2, requestType, responseType, request, callback);
           };
-        }(method, method.resolvedRequestType.ctor, method.resolvedResponseType.ctor);
+        })(method, method.resolvedRequestType.ctor, method.resolvedResponseType.ctor);
       }
       return rpcService;
     };
@@ -7633,15 +7637,15 @@ var $util = import_minimal.default.util;
 var $root = import_minimal.default.roots["default"] || (import_minimal.default.roots["default"] = {});
 var popclaw = $root.popclaw = (() => {
   const popclaw2 = {};
-  popclaw2.identity = function() {
+  popclaw2.identity = (function() {
     const identity = {};
-    identity.Role = function() {
+    identity.Role = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "RANGER"] = 0;
       values[valuesById[1] = "HOST"] = 1;
       return values;
-    }();
-    identity.ActorInfo = function() {
+    })();
+    identity.ActorInfo = (function() {
       function ActorInfo(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -7842,8 +7846,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.identity.ActorInfo";
       };
       return ActorInfo;
-    }();
-    identity.SignedPayload = function() {
+    })();
+    identity.SignedPayload = (function() {
       function SignedPayload(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -8007,12 +8011,12 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.identity.SignedPayload";
       };
       return SignedPayload;
-    }();
+    })();
     return identity;
-  }();
-  popclaw2.event = function() {
+  })();
+  popclaw2.event = (function() {
     const event = {};
-    event.Recipient = function() {
+    event.Recipient = (function() {
       function Recipient(properties) {
         this.targetIds = [];
         if (properties) {
@@ -8180,17 +8184,17 @@ var popclaw = $root.popclaw = (() => {
         }
         return typeUrlPrefix + "/popclaw.event.Recipient";
       };
-      Recipient.Scope = function() {
+      Recipient.Scope = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "BROADCAST"] = 0;
         values[valuesById[1] = "PRIVATE"] = 1;
         values[valuesById[2] = "GROUP"] = 2;
         values[valuesById[3] = "CONDITIONAL"] = 3;
         return values;
-      }();
+      })();
       return Recipient;
-    }();
-    event.EventEnvelope = function() {
+    })();
+    event.EventEnvelope = (function() {
       function EventEnvelope(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -8822,8 +8826,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.EventEnvelope";
       };
       return EventEnvelope;
-    }();
-    event.ContentBlock = function() {
+    })();
+    event.ContentBlock = (function() {
       function ContentBlock(properties) {
         this.metadata = {};
         if (properties) {
@@ -9032,7 +9036,7 @@ var popclaw = $root.popclaw = (() => {
         }
         return typeUrlPrefix + "/popclaw.event.ContentBlock";
       };
-      ContentBlock.Type = function() {
+      ContentBlock.Type = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "TEXT"] = 0;
         values[valuesById[1] = "IMAGE"] = 1;
@@ -9041,10 +9045,10 @@ var popclaw = $root.popclaw = (() => {
         values[valuesById[4] = "CODE_SNIPPET"] = 4;
         values[valuesById[5] = "LINK_CARD"] = 5;
         return values;
-      }();
+      })();
       return ContentBlock;
-    }();
-    event.MediaAttachment = function() {
+    })();
+    event.MediaAttachment = (function() {
       function MediaAttachment(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -9223,16 +9227,16 @@ var popclaw = $root.popclaw = (() => {
         }
         return typeUrlPrefix + "/popclaw.event.MediaAttachment";
       };
-      MediaAttachment.Kind = function() {
+      MediaAttachment.Kind = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "IMAGE"] = 0;
         values[valuesById[1] = "VIDEO"] = 1;
         values[valuesById[2] = "GIF"] = 2;
         return values;
-      }();
+      })();
       return MediaAttachment;
-    }();
-    event.MetaStats = function() {
+    })();
+    event.MetaStats = (function() {
       function MetaStats(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -9417,8 +9421,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.MetaStats";
       };
       return MetaStats;
-    }();
-    event.DiscoveryFrame = function() {
+    })();
+    event.DiscoveryFrame = (function() {
       function DiscoveryFrame(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -9553,15 +9557,15 @@ var popclaw = $root.popclaw = (() => {
         }
         return typeUrlPrefix + "/popclaw.event.DiscoveryFrame";
       };
-      DiscoveryFrame.FrameType = function() {
+      DiscoveryFrame.FrameType = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "EVENT"] = 0;
         values[valuesById[1] = "HEARTBEAT"] = 1;
         return values;
-      }();
+      })();
       return DiscoveryFrame;
-    }();
-    event.RangerRegistration = function() {
+    })();
+    event.RangerRegistration = (function() {
       function RangerRegistration(properties) {
         this.capabilities = [];
         if (properties) {
@@ -9692,8 +9696,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.RangerRegistration";
       };
       return RangerRegistration;
-    }();
-    event.WatchDispatch = function() {
+    })();
+    event.WatchDispatch = (function() {
       function WatchDispatch(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -9874,8 +9878,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.WatchDispatch";
       };
       return WatchDispatch;
-    }();
-    event.WatchHeartbeat = function() {
+    })();
+    event.WatchHeartbeat = (function() {
       function WatchHeartbeat(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -10026,8 +10030,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.WatchHeartbeat";
       };
       return WatchHeartbeat;
-    }();
-    event.WatchCancel = function() {
+    })();
+    event.WatchCancel = (function() {
       function WatchCancel(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -10146,8 +10150,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.WatchCancel";
       };
       return WatchCancel;
-    }();
-    event.PollDispatch = function() {
+    })();
+    event.PollDispatch = (function() {
       function PollDispatch(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -10328,8 +10332,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.PollDispatch";
       };
       return PollDispatch;
-    }();
-    event.PollReport = function() {
+    })();
+    event.PollReport = (function() {
       function PollReport(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -10512,16 +10516,16 @@ var popclaw = $root.popclaw = (() => {
         }
         return typeUrlPrefix + "/popclaw.event.PollReport";
       };
-      PollReport.Result = function() {
+      PollReport.Result = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "POLL_EMPTY"] = 0;
         values[valuesById[1] = "POLL_HIT"] = 1;
         values[valuesById[2] = "POLL_FAILED"] = 2;
         return values;
-      }();
+      })();
       return PollReport;
-    }();
-    event.WorldFeedItem = function() {
+    })();
+    event.WorldFeedItem = (function() {
       function WorldFeedItem(properties) {
         this.actorVerified = [];
         this.quotedActorVerified = [];
@@ -11081,8 +11085,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.WorldFeedItem";
       };
       return WorldFeedItem;
-    }();
-    event.WorldFeedSnapshot = function() {
+    })();
+    event.WorldFeedSnapshot = (function() {
       function WorldFeedSnapshot(properties) {
         this.items = [];
         if (properties) {
@@ -11200,8 +11204,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.WorldFeedSnapshot";
       };
       return WorldFeedSnapshot;
-    }();
-    event.WorldStreamFrame = function() {
+    })();
+    event.WorldStreamFrame = (function() {
       function WorldStreamFrame(properties) {
         this.scopes = [];
         if (properties) {
@@ -11408,8 +11412,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.WorldStreamFrame";
       };
       return WorldStreamFrame;
-    }();
-    event.VerifiedPlatform = function() {
+    })();
+    event.VerifiedPlatform = (function() {
       function VerifiedPlatform(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -11590,8 +11594,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.VerifiedPlatform";
       };
       return VerifiedPlatform;
-    }();
-    event.RelationOrder = function() {
+    })();
+    event.RelationOrder = (function() {
       function RelationOrder(properties) {
         this.resolves = [];
         if (properties) {
@@ -11755,8 +11759,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.RelationOrder";
       };
       return RelationOrder;
-    }();
-    event.FollowDeclared = function() {
+    })();
+    event.FollowDeclared = (function() {
       function FollowDeclared(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -11950,21 +11954,21 @@ var popclaw = $root.popclaw = (() => {
         }
         return typeUrlPrefix + "/popclaw.event.FollowDeclared";
       };
-      FollowDeclared.FollowType = function() {
+      FollowDeclared.FollowType = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "PUBLIC"] = 0;
         values[valuesById[1] = "PRIVATE"] = 1;
         return values;
-      }();
-      FollowDeclared.SubscriptionVisibility = function() {
+      })();
+      FollowDeclared.SubscriptionVisibility = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "SV_PUBLIC"] = 0;
         values[valuesById[1] = "SV_PRIVATE"] = 1;
         return values;
-      }();
+      })();
       return FollowDeclared;
-    }();
-    event.FollowRevoked = function() {
+    })();
+    event.FollowRevoked = (function() {
       function FollowRevoked(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -12114,15 +12118,15 @@ var popclaw = $root.popclaw = (() => {
         }
         return typeUrlPrefix + "/popclaw.event.FollowRevoked";
       };
-      FollowRevoked.FollowType = function() {
+      FollowRevoked.FollowType = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "PUBLIC"] = 0;
         values[valuesById[1] = "PRIVATE"] = 1;
         return values;
-      }();
+      })();
       return FollowRevoked;
-    }();
-    event.PostRef = function() {
+    })();
+    event.PostRef = (function() {
       function PostRef(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -12256,8 +12260,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.PostRef";
       };
       return PostRef;
-    }();
-    event.Reply = function() {
+    })();
+    event.Reply = (function() {
       function Reply(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -12426,8 +12430,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.Reply";
       };
       return Reply;
-    }();
-    event.DirectMessage = function() {
+    })();
+    event.DirectMessage = (function() {
       function DirectMessage(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -12711,8 +12715,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.DirectMessage";
       };
       return DirectMessage;
-    }();
-    event.Mark = function() {
+    })();
+    event.Mark = (function() {
       function Mark(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -12815,8 +12819,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.Mark";
       };
       return Mark;
-    }();
-    event.MarkRevoked = function() {
+    })();
+    event.MarkRevoked = (function() {
       function MarkRevoked(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -12919,8 +12923,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.MarkRevoked";
       };
       return MarkRevoked;
-    }();
-    event.Origin = function() {
+    })();
+    event.Origin = (function() {
       function Origin(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -13101,8 +13105,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.Origin";
       };
       return Origin;
-    }();
-    event.Post = function() {
+    })();
+    event.Post = (function() {
       function Post(properties) {
         this.blocks = [];
         this.media = [];
@@ -13270,8 +13274,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.Post";
       };
       return Post;
-    }();
-    event.HouseEvent = function() {
+    })();
+    event.HouseEvent = (function() {
       function HouseEvent(properties) {
         this.publicScopes = [];
         if (properties) {
@@ -13443,8 +13447,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.HouseEvent";
       };
       return HouseEvent;
-    }();
-    event.IntentPayload = function() {
+    })();
+    event.IntentPayload = (function() {
       function IntentPayload(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -13606,18 +13610,18 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.event.IntentPayload";
       };
       return IntentPayload;
-    }();
+    })();
     return event;
-  }();
-  popclaw2.invite = function() {
+  })();
+  popclaw2.invite = (function() {
     const invite = {};
-    invite.InviteVerificationMode = function() {
+    invite.InviteVerificationMode = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "INVITE_VERIFICATION_MODE_LOOKUP_ONCE"] = 0;
       values[valuesById[1] = "INVITE_VERIFICATION_MODE_WAIT_NEW_POST"] = 1;
       return values;
-    }();
-    invite.InviteRequest = function() {
+    })();
+    invite.InviteRequest = (function() {
       function InviteRequest(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -13855,8 +13859,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.invite.InviteRequest";
       };
       return InviteRequest;
-    }();
-    invite.InviteVerified = function() {
+    })();
+    invite.InviteVerified = (function() {
       function InviteVerified(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -14092,35 +14096,35 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.invite.InviteVerified";
       };
       return InviteVerified;
-    }();
+    })();
     return invite;
-  }();
-  popclaw2.quest = function() {
+  })();
+  popclaw2.quest = (function() {
     const quest = {};
-    quest.QuestKind = function() {
+    quest.QuestKind = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "QUEST_KIND_UNSPECIFIED"] = 0;
       values[valuesById[1] = "QUEST_KIND_VERIFY_INVITE"] = 1;
       values[valuesById[2] = "QUEST_KIND_SCRAPE_CONTENT"] = 2;
       return values;
-    }();
-    quest.QuestOutcome = function() {
+    })();
+    quest.QuestOutcome = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "QUEST_OUTCOME_UNSPECIFIED"] = 0;
       values[valuesById[1] = "QUEST_OUTCOME_APPROVE"] = 1;
       values[valuesById[2] = "QUEST_OUTCOME_REJECT"] = 2;
       values[valuesById[3] = "QUEST_OUTCOME_ABSTAIN"] = 3;
       return values;
-    }();
-    quest.InviteVerificationProgress = function() {
+    })();
+    quest.InviteVerificationProgress = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "INVITE_VERIFICATION_PROGRESS_UNSPECIFIED"] = 0;
       values[valuesById[1] = "INVITE_VERIFICATION_PROGRESS_PREPARING"] = 1;
       values[valuesById[2] = "INVITE_VERIFICATION_PROGRESS_READY"] = 2;
       values[valuesById[3] = "INVITE_VERIFICATION_PROGRESS_RECOVERING"] = 3;
       return values;
-    }();
-    quest.VerifyInvitePayload = function() {
+    })();
+    quest.VerifyInvitePayload = (function() {
       function VerifyInvitePayload(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -14323,8 +14327,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.quest.VerifyInvitePayload";
       };
       return VerifyInvitePayload;
-    }();
-    quest.ScrapeContentPayload = function() {
+    })();
+    quest.ScrapeContentPayload = (function() {
       function ScrapeContentPayload(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -14490,8 +14494,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.quest.ScrapeContentPayload";
       };
       return ScrapeContentPayload;
-    }();
-    quest.QuestDispatch = function() {
+    })();
+    quest.QuestDispatch = (function() {
       function QuestDispatch(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -14705,8 +14709,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.quest.QuestDispatch";
       };
       return QuestDispatch;
-    }();
-    quest.QuestResult = function() {
+    })();
+    quest.QuestResult = (function() {
       function QuestResult(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -15058,12 +15062,12 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.quest.QuestResult";
       };
       return QuestResult;
-    }();
+    })();
     return quest;
-  }();
-  popclaw2.profile = function() {
+  })();
+  popclaw2.profile = (function() {
     const profile = {};
-    profile.Profile = function() {
+    profile.Profile = (function() {
       function Profile(properties) {
         this.tasteTags = [];
         if (properties) {
@@ -15287,12 +15291,12 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.profile.Profile";
       };
       return Profile;
-    }();
+    })();
     return profile;
-  }();
-  popclaw2.world = function() {
+  })();
+  popclaw2.world = (function() {
     const world = {};
-    world.HouseBinding = function() {
+    world.HouseBinding = (function() {
       function HouseBinding(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -15426,8 +15430,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.HouseBinding";
       };
       return HouseBinding;
-    }();
-    world.IntentContext = function() {
+    })();
+    world.IntentContext = (function() {
       function IntentContext(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -15653,8 +15657,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.IntentContext";
       };
       return IntentContext;
-    }();
-    world.ManifestProof = function() {
+    })();
+    world.ManifestProof = (function() {
       function ManifestProof(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -15833,8 +15837,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ManifestProof";
       };
       return ManifestProof;
-    }();
-    world.ActionStatus = function() {
+    })();
+    world.ActionStatus = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "ACTION_UNSPECIFIED"] = 0;
       values[valuesById[1] = "ACCEPTED"] = 1;
@@ -15843,8 +15847,8 @@ var popclaw = $root.popclaw = (() => {
       values[valuesById[4] = "REJECTED"] = 4;
       values[valuesById[5] = "CANCELLED"] = 5;
       return values;
-    }();
-    world.ActionResult = function() {
+    })();
+    world.ActionResult = (function() {
       function ActionResult(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -16289,8 +16293,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ActionResult";
       };
       return ActionResult;
-    }();
-    world.SignedActionResult = function() {
+    })();
+    world.SignedActionResult = (function() {
       function SignedActionResult(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -16422,8 +16426,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.SignedActionResult";
       };
       return SignedActionResult;
-    }();
-    world.ActionStatusRequest = function() {
+    })();
+    world.ActionStatusRequest = (function() {
       function ActionStatusRequest(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -16664,8 +16668,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ActionStatusRequest";
       };
       return ActionStatusRequest;
-    }();
-    world.ActionStatusResponse = function() {
+    })();
+    world.ActionStatusResponse = (function() {
       function ActionStatusResponse(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -16790,8 +16794,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ActionStatusResponse";
       };
       return ActionStatusResponse;
-    }();
-    world.SubscriptionObservation = function() {
+    })();
+    world.SubscriptionObservation = (function() {
       function SubscriptionObservation(properties) {
         this.publishedThrough = [];
         if (properties) {
@@ -17177,8 +17181,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.SubscriptionObservation";
       };
       return SubscriptionObservation;
-    }();
-    world.SignedSubscriptionObservation = function() {
+    })();
+    world.SignedSubscriptionObservation = (function() {
       function SignedSubscriptionObservation(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -17310,8 +17314,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.SignedSubscriptionObservation";
       };
       return SignedSubscriptionObservation;
-    }();
-    world.ScopeThrough = function() {
+    })();
+    world.ScopeThrough = (function() {
       function ScopeThrough(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -17447,8 +17451,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ScopeThrough";
       };
       return ScopeThrough;
-    }();
-    world.ParticipationDescriptor = function() {
+    })();
+    world.ParticipationDescriptor = (function() {
       function ParticipationDescriptor(properties) {
         this.actionGroups = [];
         this.opportunities = [];
@@ -17818,8 +17822,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ParticipationDescriptor";
       };
       return ParticipationDescriptor;
-    }();
-    world.ActionGroup = function() {
+    })();
+    world.ActionGroup = (function() {
       function ActionGroup(properties) {
         this.intentKinds = [];
         this.channels = [];
@@ -17994,8 +17998,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ActionGroup";
       };
       return ActionGroup;
-    }();
-    world.Opportunity = function() {
+    })();
+    world.Opportunity = (function() {
       function Opportunity(properties) {
         this.channels = [];
         if (properties) {
@@ -18266,8 +18270,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.Opportunity";
       };
       return Opportunity;
-    }();
-    world.Budget = function() {
+    })();
+    world.Budget = (function() {
       function Budget(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -18416,8 +18420,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.Budget";
       };
       return Budget;
-    }();
-    world.WorldStreamBoundary = function() {
+    })();
+    world.WorldStreamBoundary = (function() {
       function WorldStreamBoundary(properties) {
         this.scopes = [];
         if (properties) {
@@ -18581,8 +18585,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.WorldStreamBoundary";
       };
       return WorldStreamBoundary;
-    }();
-    world.WorldStreamCheckpoint = function() {
+    })();
+    world.WorldStreamCheckpoint = (function() {
       function WorldStreamCheckpoint(properties) {
         this.scopes = [];
         if (properties) {
@@ -18716,8 +18720,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.WorldStreamCheckpoint";
       };
       return WorldStreamCheckpoint;
-    }();
-    world.WorldStreamGap = function() {
+    })();
+    world.WorldStreamGap = (function() {
       function WorldStreamGap(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -18854,8 +18858,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.WorldStreamGap";
       };
       return WorldStreamGap;
-    }();
-    world.ScopeCursor = function() {
+    })();
+    world.ScopeCursor = (function() {
       function ScopeCursor(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -18991,8 +18995,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ScopeCursor";
       };
       return ScopeCursor;
-    }();
-    world.SubscriptionDescriptor = function() {
+    })();
+    world.SubscriptionDescriptor = (function() {
       function SubscriptionDescriptor(properties) {
         this.scopes = [];
         if (properties) {
@@ -19219,8 +19223,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.SubscriptionDescriptor";
       };
       return SubscriptionDescriptor;
-    }();
-    world.WorldSnapshot = function() {
+    })();
+    world.WorldSnapshot = (function() {
       function WorldSnapshot(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -19443,8 +19447,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.WorldSnapshot";
       };
       return WorldSnapshot;
-    }();
-    world.SubscriptionBarrier = function() {
+    })();
+    world.SubscriptionBarrier = (function() {
       function SubscriptionBarrier(properties) {
         this.scopes = [];
         this.members = [];
@@ -19781,8 +19785,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.SubscriptionBarrier";
       };
       return SubscriptionBarrier;
-    }();
-    world.BarrierMember = function() {
+    })();
+    world.BarrierMember = (function() {
       function BarrierMember(properties) {
         this.scopes = [];
         if (properties) {
@@ -19929,8 +19933,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.BarrierMember";
       };
       return BarrierMember;
-    }();
-    world.PublicationReceipt = function() {
+    })();
+    world.PublicationReceipt = (function() {
       function PublicationReceipt(properties) {
         this.scopes = [];
         if (properties) {
@@ -20124,8 +20128,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.PublicationReceipt";
       };
       return PublicationReceipt;
-    }();
-    world.SubscriptionReadiness = function() {
+    })();
+    world.SubscriptionReadiness = (function() {
       function SubscriptionReadiness(properties) {
         this.receipts = [];
         if (properties) {
@@ -20354,8 +20358,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.SubscriptionReadiness";
       };
       return SubscriptionReadiness;
-    }();
-    world.ClaimActionsRequest = function() {
+    })();
+    world.ClaimActionsRequest = (function() {
       function ClaimActionsRequest(properties) {
         this.kinds = [];
         if (properties) {
@@ -20535,8 +20539,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ClaimActionsRequest";
       };
       return ClaimActionsRequest;
-    }();
-    world.ClaimActionsResponse = function() {
+    })();
+    world.ClaimActionsResponse = (function() {
       function ClaimActionsResponse(properties) {
         this.permits = [];
         this.requestEnvelopes = [];
@@ -20685,8 +20689,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ClaimActionsResponse";
       };
       return ClaimActionsResponse;
-    }();
-    world.ExecutionPermit = function() {
+    })();
+    world.ExecutionPermit = (function() {
       function ExecutionPermit(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -21037,8 +21041,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ExecutionPermit";
       };
       return ExecutionPermit;
-    }();
-    world.SignedExecutionPermit = function() {
+    })();
+    world.SignedExecutionPermit = (function() {
       function SignedExecutionPermit(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -21170,8 +21174,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.SignedExecutionPermit";
       };
       return SignedExecutionPermit;
-    }();
-    world.WorkerResult = function() {
+    })();
+    world.WorkerResult = (function() {
       function WorkerResult(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -21509,8 +21513,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.WorkerResult";
       };
       return WorkerResult;
-    }();
-    world.SignedWorkerResult = function() {
+    })();
+    world.SignedWorkerResult = (function() {
       function SignedWorkerResult(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -21642,8 +21646,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.SignedWorkerResult";
       };
       return SignedWorkerResult;
-    }();
-    world.CompleteActionsRequest = function() {
+    })();
+    world.CompleteActionsRequest = (function() {
       function CompleteActionsRequest(properties) {
         this.results = [];
         if (properties) {
@@ -21761,8 +21765,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.CompleteActionsRequest";
       };
       return CompleteActionsRequest;
-    }();
-    world.CompleteActionsResponse = function() {
+    })();
+    world.CompleteActionsResponse = (function() {
       function CompleteActionsResponse(properties) {
         this.outcomes = [];
         if (properties) {
@@ -21877,8 +21881,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.CompleteActionsResponse";
       };
       return CompleteActionsResponse;
-    }();
-    world.ReadActionResultRequest = function() {
+    })();
+    world.ReadActionResultRequest = (function() {
       function ReadActionResultRequest(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -21997,8 +22001,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ReadActionResultRequest";
       };
       return ReadActionResultRequest;
-    }();
-    world.ReadActionResultResponse = function() {
+    })();
+    world.ReadActionResultResponse = (function() {
       function ReadActionResultResponse(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -22104,8 +22108,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ReadActionResultResponse";
       };
       return ReadActionResultResponse;
-    }();
-    world.RegisterPublicScopesRequest = function() {
+    })();
+    world.RegisterPublicScopesRequest = (function() {
       function RegisterPublicScopesRequest(properties) {
         this.scopeIds = [];
         if (properties) {
@@ -22255,8 +22259,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.RegisterPublicScopesRequest";
       };
       return RegisterPublicScopesRequest;
-    }();
-    world.RegisterPublicScopesResponse = function() {
+    })();
+    world.RegisterPublicScopesResponse = (function() {
       function RegisterPublicScopesResponse(properties) {
         this.registered = [];
         if (properties) {
@@ -22371,8 +22375,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.RegisterPublicScopesResponse";
       };
       return RegisterPublicScopesResponse;
-    }();
-    world.PublicationStatusRequest = function() {
+    })();
+    world.PublicationStatusRequest = (function() {
       function PublicationStatusRequest(properties) {
         this.eventIds = [];
         if (properties) {
@@ -22503,8 +22507,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.PublicationStatusRequest";
       };
       return PublicationStatusRequest;
-    }();
-    world.PublicationStatusResponse = function() {
+    })();
+    world.PublicationStatusResponse = (function() {
       function PublicationStatusResponse(properties) {
         this.receipts = [];
         if (properties) {
@@ -22622,8 +22626,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.PublicationStatusResponse";
       };
       return PublicationStatusResponse;
-    }();
-    world.RegisterBarrierRequest = function() {
+    })();
+    world.RegisterBarrierRequest = (function() {
       function RegisterBarrierRequest(properties) {
         this.membersPage = [];
         if (properties) {
@@ -22791,8 +22795,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.RegisterBarrierRequest";
       };
       return RegisterBarrierRequest;
-    }();
-    world.RegisterBarrierResponse = function() {
+    })();
+    world.RegisterBarrierResponse = (function() {
       function RegisterBarrierResponse(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -22990,8 +22994,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.RegisterBarrierResponse";
       };
       return RegisterBarrierResponse;
-    }();
-    world.CompleteBarrierRequest = function() {
+    })();
+    world.CompleteBarrierRequest = (function() {
       function CompleteBarrierRequest(properties) {
         this.receipts = [];
         if (properties) {
@@ -23141,8 +23145,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.CompleteBarrierRequest";
       };
       return CompleteBarrierRequest;
-    }();
-    world.CompleteBarrierResponse = function() {
+    })();
+    world.CompleteBarrierResponse = (function() {
       function CompleteBarrierResponse(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -23248,8 +23252,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.CompleteBarrierResponse";
       };
       return CompleteBarrierResponse;
-    }();
-    world.CoveredSession = function() {
+    })();
+    world.CoveredSession = (function() {
       function CoveredSession(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -23400,8 +23404,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.CoveredSession";
       };
       return CoveredSession;
-    }();
-    world.ClosureRecord = function() {
+    })();
+    world.ClosureRecord = (function() {
       function ClosureRecord(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -23565,8 +23569,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ClosureRecord";
       };
       return ClosureRecord;
-    }();
-    world.ExecutionClosure = function() {
+    })();
+    world.ExecutionClosure = (function() {
       function ExecutionClosure(properties) {
         this.coveredSessions = [];
         if (properties) {
@@ -23984,8 +23988,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ExecutionClosure";
       };
       return ExecutionClosure;
-    }();
-    world.ClosureQueryResult = function() {
+    })();
+    world.ClosureQueryResult = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "CLOSURE_QUERY_UNSPECIFIED"] = 0;
       values[valuesById[1] = "CLOSURE_NOT_FOUND"] = 1;
@@ -23994,8 +23998,8 @@ var popclaw = $root.popclaw = (() => {
       values[valuesById[4] = "CLOSURE_CLOSED"] = 4;
       values[valuesById[5] = "CLOSURE_INCARNATION_MISMATCH"] = 5;
       return values;
-    }();
-    world.ClosureQueryRequest = function() {
+    })();
+    world.ClosureQueryRequest = (function() {
       function ClosureQueryRequest(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -24330,8 +24334,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ClosureQueryRequest";
       };
       return ClosureQueryRequest;
-    }();
-    world.ClosureObservation = function() {
+    })();
+    world.ClosureObservation = (function() {
       function ClosureObservation(properties) {
         this.recordsPage = [];
         if (properties) {
@@ -24805,8 +24809,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ClosureObservation";
       };
       return ClosureObservation;
-    }();
-    world.ClosureQueryResponse = function() {
+    })();
+    world.ClosureQueryResponse = (function() {
       function ClosureQueryResponse(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -24991,8 +24995,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.ClosureQueryResponse";
       };
       return ClosureQueryResponse;
-    }();
-    world.PublicStreamBoundary = function() {
+    })();
+    world.PublicStreamBoundary = (function() {
       function PublicStreamBoundary(properties) {
         this.scopes = [];
         if (properties) {
@@ -25171,8 +25175,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.PublicStreamBoundary";
       };
       return PublicStreamBoundary;
-    }();
-    world.PublicStreamCheckpoint = function() {
+    })();
+    world.PublicStreamCheckpoint = (function() {
       function PublicStreamCheckpoint(properties) {
         this.scopes = [];
         if (properties) {
@@ -25341,8 +25345,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.PublicStreamCheckpoint";
       };
       return PublicStreamCheckpoint;
-    }();
-    world.PublicStreamGap = function() {
+    })();
+    world.PublicStreamGap = (function() {
       function PublicStreamGap(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -25494,12 +25498,12 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.world.PublicStreamGap";
       };
       return PublicStreamGap;
-    }();
+    })();
     return world;
-  }();
-  popclaw2.housesession = function() {
+  })();
+  popclaw2.housesession = (function() {
     const housesession = {};
-    housesession.Operation = function() {
+    housesession.Operation = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "OPERATION_UNSPECIFIED"] = 0;
       values[valuesById[1] = "ENTER"] = 1;
@@ -25508,8 +25512,8 @@ var popclaw = $root.popclaw = (() => {
       values[valuesById[4] = "STATUS"] = 4;
       values[valuesById[5] = "ACTION"] = 5;
       return values;
-    }();
-    housesession.Outcome = function() {
+    })();
+    housesession.Outcome = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "OUTCOME_UNSPECIFIED"] = 0;
       values[valuesById[1] = "ENTERED"] = 1;
@@ -25522,8 +25526,8 @@ var popclaw = $root.popclaw = (() => {
       values[valuesById[8] = "REPORTED"] = 8;
       values[valuesById[9] = "COMMITTED"] = 9;
       return values;
-    }();
-    housesession.ErrorCode = function() {
+    })();
+    housesession.ErrorCode = (function() {
       const valuesById = {}, values = Object.create(valuesById);
       values[valuesById[0] = "ERROR_UNSPECIFIED"] = 0;
       values[valuesById[1] = "INVALID_HOUSE"] = 1;
@@ -25539,8 +25543,8 @@ var popclaw = $root.popclaw = (() => {
       values[valuesById[11] = "PERSISTENCE_FAILED"] = 11;
       values[valuesById[12] = "ACTION_RESULT_UNKNOWN"] = 12;
       return values;
-    }();
-    housesession.RequestCore = function() {
+    })();
+    housesession.RequestCore = (function() {
       function RequestCore(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -25939,8 +25943,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.housesession.RequestCore";
       };
       return RequestCore;
-    }();
-    housesession.HouseSessionRequest = function() {
+    })();
+    housesession.HouseSessionRequest = (function() {
       function HouseSessionRequest(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -26097,8 +26101,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.housesession.HouseSessionRequest";
       };
       return HouseSessionRequest;
-    }();
-    housesession.SessionInfo = function() {
+    })();
+    housesession.SessionInfo = (function() {
       function SessionInfo(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -26313,8 +26317,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.housesession.SessionInfo";
       };
       return SessionInfo;
-    }();
-    housesession.AckCore = function() {
+    })();
+    housesession.AckCore = (function() {
       function AckCore(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -26848,8 +26852,8 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.housesession.AckCore";
       };
       return AckCore;
-    }();
-    housesession.HouseSessionAck = function() {
+    })();
+    housesession.HouseSessionAck = (function() {
       function HouseSessionAck(properties) {
         if (properties) {
           for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -27006,9 +27010,9 @@ var popclaw = $root.popclaw = (() => {
         return typeUrlPrefix + "/popclaw.housesession.HouseSessionAck";
       };
       return HouseSessionAck;
-    }();
+    })();
     return housesession;
-  }();
+  })();
   return popclaw2;
 })();
 function $compareUtf8(a, b) {
