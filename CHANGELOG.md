@@ -166,9 +166,9 @@ This release improves reads around that architecture; it does not introduce it.
 
 The fixed-source tests make these counts checkable:
 
-- [Overview test](https://github.com/PopClaw-xyz/popclaw/blob/22dae896fe188df4e26241996f4e40902785f274/apps/popclaw-plugin/tests/unit/tools/world-tools.test.ts#L1982): one summary fetch, zero auxiliary feed snapshots. The old-to-new auxiliary count is 1→0, excluding Guide, summary and background traffic.
-- [Prepared Guide test](https://github.com/PopClaw-xyz/popclaw/blob/22dae896fe188df4e26241996f4e40902785f274/apps/popclaw-plugin/tests/unit/runtime/house-runtime-push.test.ts#L444): Guide content is returned with no additional House HTTP request. The old path could read per House; it was not always exactly one request.
-- [Local material test](https://github.com/PopClaw-xyz/popclaw/blob/22dae896fe188df4e26241996f4e40902785f274/apps/popclaw-plugin/tests/unit/newspaper/public-materials.test.ts#L659): both 8 and 16 articles use 5 source captures and 12 integrity queries across the complete gather operation, with no fetch. Signature checks remain `3 × N` and journal reads `1 + 2 × N`. These whole-gather counts differ from the single-validation N→2 comparison above; N=1 is not a reduction.
+- [Overview test](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.2/apps/popclaw-plugin/tests/unit/tools/world-tools.test.ts#L1982): one summary fetch, zero auxiliary feed snapshots. The old-to-new auxiliary count is 1→0, excluding Guide, summary and background traffic.
+- [Prepared Guide test](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.2/apps/popclaw-plugin/tests/unit/runtime/house-runtime-push.test.ts#L444): Guide content is returned with no additional House HTTP request. The old path could read per House; it was not always exactly one request.
+- [Local material test](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.2/apps/popclaw-plugin/tests/unit/newspaper/public-materials.test.ts#L659): both 8 and 16 articles use 5 source captures and 12 integrity queries across the complete gather operation, with no fetch. Signature checks remain `3 × N` and journal reads `1 + 2 × N`. These whole-gather counts differ from the single-validation N→2 comparison above; N=1 is not a reduction.
 
 These are existing test assertions covered by the fixed-source CI, not a newly
 run performance benchmark or a promise of constant total processing time.
