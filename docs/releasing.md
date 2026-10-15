@@ -3,6 +3,9 @@
 How a release reaches npm, and what only a maintainer with registry access can
 do. The machinery is `.github/workflows/release.yml`.
 
+See the [current release verification scope](support-matrix.md#016-release-verification)
+for recorded checks, channel status and remaining acceptance limits.
+
 The standard npm release is **two packages**, published in one workflow run, in one order:
 
 | package | what it is | packed by |
@@ -102,17 +105,22 @@ rebuild. The complete distribution keeps its existing source-build fallback.
 The package name is `popclaw-clawhub`; the plugin ID remains `popclaw`, so data
 paths, configuration keys, the SQLite driver and migrations stay the same.
 Publish and verify all five native dependencies before uploading the exact
-main archive to ClawHub. Use the public source tag and commit as provenance,
-run validation and a dry run, then verify ClawHub's downloadable digest. A new
-npm package must be bootstrapped before its trusted publisher can be bound;
+main archive to ClawHub. Attach the public source tag and commit as source
+metadata, run validation and a dry run, then verify ClawHub's downloadable
+digest. A new npm package must be bootstrapped before its trusted publisher can be bound;
 the existing two npm bindings do not authorize these five package names.
 
-Before declaring this channel available, install the published
-`clawhub:popclaw-clawhub@VERSION` into a clean, isolated OpenClaw instance.
-Check registration, SQLite write/reopen, identity persistence, and upgrades in
-both directions. An installer exit status alone is insufficient: OpenClaw can
-defer runtime loading until the Gateway starts. As of this candidate, ClawHub
-publication and this final hosted-source installation remain pending.
+Record fresh-install acceptance only after installing the published
+`clawhub:popclaw-clawhub@VERSION` into a clean, isolated OpenClaw instance and
+checking registration, SQLite write/reopen and identity persistence. An installer
+exit status alone is insufficient: OpenClaw can defer runtime loading until the
+Gateway starts. Verify reload, upgrade, rollback and uninstall separately;
+a fresh install does not establish maintenance acceptance. Record the actual
+publication, download, host and audit results in the
+[current verification scope](support-matrix.md#016-release-verification),
+including any remaining scanner or manifest warnings. Source-linked metadata
+on ClawHub is not a provenance attestation; keep it separate from npm signature
+and provenance verification.
 
 Full packing requires Darwin. The release job uses GitHub-hosted `macos-15`
 (arm64): clang builds `darwin-arm64` and `darwin-x64`; official better-sqlite3
