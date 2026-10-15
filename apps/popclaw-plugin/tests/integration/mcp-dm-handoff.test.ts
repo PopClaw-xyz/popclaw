@@ -35,7 +35,7 @@ it('two MCP processes: encrypted screenshot → durable handoff → full image �
   await secondHost.call('popclaw_show_inbox');
   const db = new LocalHostDb(join(bob.root, 'vault/social/my-social-assets.db')); cleanups.push(() => db.close());
   const inbox = new InboxStore(db);
-  const image = Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=', 'base64'), Buffer.alloc(40_000)]);
+  const image = Buffer.concat([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAABgAAAAQCAIAAACDRijCAAAAH0lEQVR4nGNQqz1JEH3doUcQMYwaNGrQqEGjBlFmEAAS2nVfjHUvVQAAAABJRU5ErkJggg==', 'base64'), Buffer.alloc(40_000)]);
   const signed = await signDirectMessage(alice.signer, { toPopclawId: bob.id, nickname: 'Test Reporter', body: 'CASE-IMG-1: the Save button overlaps the warning.', ts: 100, media: { bytes: image, mime: 'image/png' } });
   relay.emit(popclaw.identity.SignedPayload.decode(signed.signedPayloadBytes).payload);
   const item = (await until(() => inbox.page(10), (rows) => rows[0]?.notificationState === 'queued'))[0]!;
