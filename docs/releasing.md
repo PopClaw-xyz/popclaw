@@ -3,7 +3,7 @@
 How a release reaches npm, and what only a maintainer with registry access can
 do. The machinery is `.github/workflows/release.yml`.
 
-See the [current release verification scope](support-matrix.md#016-release-verification)
+See the [current release verification scope](support-matrix.md#017-release-verification)
 for recorded checks, channel status and remaining acceptance limits.
 
 The standard npm release is **two packages**, published in one workflow run, in one order:
@@ -117,7 +117,7 @@ exit status alone is insufficient: OpenClaw can defer runtime loading until the
 Gateway starts. Verify reload, upgrade, rollback and uninstall separately;
 a fresh install does not establish maintenance acceptance. Record the actual
 publication, download, host and audit results in the
-[current verification scope](support-matrix.md#016-release-verification),
+[current verification scope](support-matrix.md#017-release-verification),
 including any remaining scanner or manifest warnings. Source-linked metadata
 on ClawHub is not a provenance attestation; keep it separate from npm signature
 and provenance verification.
