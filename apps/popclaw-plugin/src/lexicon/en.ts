@@ -908,7 +908,18 @@ export const EN: Lexicon = {
     // submission already existed (partial edits + the "more to write" receipt);
     // the directive simply never ordered it. Now it does.
     'newspaper.dispatch.childDirective':
-      "Produce today's paper. The flow: call popclaw_newspaper (no arguments) for the candidate page; " +
+      "Produce the paper for the last 72 hours. The flow: call popclaw_newspaper (no arguments) for the candidate page; " +
+      'choose the items that belong in the paper, then call it again with your picks to get the material page. ' +
+      'Handing in the copy must be batch-wise: the first batch is ≤12 items and must carry the structure ' +
+      'fields (masthead, edition, weather, leads, teaser); submit every batch with popclaw_publish_newspaper, ' +
+      'and while the receipt says items are still unwritten, keep handing in the next batch (each likewise ' +
+      '≤12 items), until the receipt confirms the whole issue is done. One batch per output is a hard ' +
+      'requirement — a single large output dies mid-way on light models. Every edit you hand in must also ' +
+      'carry the `basis` field copied verbatim from the material page — it is how publish binds your item ' +
+      'numbers to the exact materials you saw. The publish receipt (teaser and ' +
+      'link) is your final answer — hand it back verbatim; deliver nothing else yourself.',
+    'newspaper.dispatch.childDirectiveToday':
+      "Produce today's paper. The flow: call popclaw_newspaper (with the parameter today=true) for the candidate page; " +
       'choose the items that belong in the paper, then call it again with your picks to get the material page. ' +
       'Handing in the copy must be batch-wise: the first batch is ≤12 items and must carry the structure ' +
       'fields (masthead, edition, weather, leads, teaser); submit every batch with popclaw_publish_newspaper, ' +
@@ -1206,9 +1217,9 @@ export const EN: Lexicon = {
     'newspaper.candidates.taste.none': '(nothing recorded yet — choose on the bond book and on what is lively)',
     'newspaper.candidates.bonds.head': "[The owner's bond book — {count} people]",
     'newspaper.candidates.bonds.none': '(still empty — nobody is in it yet)',
-    'newspaper.candidates.list.head': "[Today's candidates — {total} of them, grouped by who wrote them]",
-    'newspaper.candidates.author': '== {who} · {count} today ==',
-    'newspaper.candidates.authorBonded': '== {who} · {bond} · {count} today ==',
+    'newspaper.candidates.list.head': "[Issue's candidates — {total} of them, grouped by who wrote them]",
+    'newspaper.candidates.author': '== {who} · {count} items ==',
+    'newspaper.candidates.authorBonded': '== {who} · {bond} · {count} items ==',
     'newspaper.candidates.loose': '== loose pages · {count} from people who wrote once or twice ==',
     'newspaper.candidates.mark.media': '[pic]',
     'newspaper.candidates.mark.replies': '[{count} replies]',
@@ -1265,18 +1276,18 @@ export const EN: Lexicon = {
     'newspaper.source.refused': 'Public material source changed or cannot be verified ({reason}). Gather a fresh candidate page before continuing.',
     'newspaper.source.savedRefused': 'The local paper was saved at {path}. Delivery stopped because its public source changed or could not be verified ({reason}). Do not automatically resend.',
     'newspaper.source.unsupportedDraft': 'This tool creates a complete personalized newspaper, including configured publisher delivery. Draft-only, preview-only or public-only constraints are not supported; no newspaper was started.',
-    'newspaper.page.quietHouse': 'Nothing new from this lore-house today.',
+    'newspaper.page.quietHouse': 'No items from this lore-house in this issue.',
     'newspaper.page.ear.awaiting': 'AWAITING REPLY',
     'newspaper.page.ear.newFaces': 'NEW FACES',
     'newspaper.page.ear.ledger': 'THE COUNT',
     'newspaper.page.noPings': 'Nobody wrote today — nothing awaiting a reply.',
     'newspaper.page.deckTally': '{house} {count}',
-    'newspaper.page.ledgerTotals': '{people} people · {laidOut} items laid out (of {gathered} gathered today) · {front} on the front page',
+    'newspaper.page.ledgerTotals': '{people} people · {laidOut} items laid out (of {gathered} gathered for this issue) · {front} on the front page',
     'newspaper.page.ledgerEchoes': '{replies} replies · {marks} marks across the issue',
     'newspaper.page.ledgerPings': '{pings} awaiting reply · {letters} letters from the world',
     'newspaper.page.ledgerBasis': 'How this is counted: replies are replies, marks are saves; every column counts in items.',
     'newspaper.page.byline': 'edited by popclaw, this paper\'s AI editor',
-    'newspaper.page.weather': '{total} items gathered today · {pings} awaiting reply · {letters} letters from the world · drifts: {drifts}',
+    'newspaper.page.weather': '{total} items gathered for this issue · {pings} awaiting reply · {letters} letters from the world · drifts: {drifts}',
     'newspaper.page.roster': "TODAY'S CAST",
     'newspaper.page.newbies': 'NEW FACES TODAY',
     'newspaper.page.oneDeck': 'The World',
@@ -2104,8 +2115,8 @@ export const EN: Lexicon = {
     'help.brief.summary': '(merged into the paper) forwards to /popclaw newspaper; --feedback still records a layout note',
     'help.brief.usage': '/popclaw brief [--feedback "layout note"]',
     'help.newspaper.summary':
-      "Your daily paper from the world: a teaser + a one-page illustrated canvas link (or pull an issue right now)",
-    'help.newspaper.usage': '/popclaw newspaper [hours] [--feedback "layout note"]',
+      "Your paper from the world (default 72 hours; --today for the local day): a teaser + a one-page illustrated canvas link",
+    'help.newspaper.usage': '/popclaw newspaper [hours | --today] [--feedback "layout note"]',
     'help.notify-here.summary': "Pin the notify channel here — from now on that's where I'll reach you",
     'help.notify-off.summary':
       "Turn the notify channel off — nudges pile up in the inbox and you'll get them next time you're around",

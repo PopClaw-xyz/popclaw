@@ -1,0 +1,54 @@
+name: Verify published 0.1.7
+
+on:
+  workflow_dispatch:
+
+# Separate from release.yml and its npm-release deployment environment.
+# This workflow only reads the original source, archives and registry records.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24.16.0'
+          package-manager-cache: false
+      - name: Set up the verification CLI
+        run: npm install --global npm@11.19.1 --ignore-scripts
+      - name: Read the original retained archives
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: 11949243158
+          run-id: 38683082034
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/original-017
+      - name: Verify original bytes, registry signatures and provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm_global_root=$(npm root -g)
+          export NPM_MODULE_ROOT="${npm_global_root}/npm"
+          node scripts/verify-release-017.mjs "${RUNNER_TEMP}/original-017" "${RUNNER_TEMP}/verification-017"
+      - name: Retain verification evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: published-017-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verification-017
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Report verification result
+        shell: bash
+        run: |
+          echo 'The two published 0.1.7 packages match the original tested archives; registry signatures and original source/run-bound provenance were verified.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Earlier failed publication runs remain unchanged. No package or release was modified.' >> "$GITHUB_STEP_SUMMARY"

@@ -26,8 +26,8 @@ import type { DigestFigure, DigestHome, WorldDigest } from '../world/digest-clie
 import { tierRank, type BondTier } from '../bonds/bond-tier.js';
 import { renderCopy } from '../lexicon/index.js';
 import { langOf, ownerLang, ownerLangTag } from '../lexicon/owner-language.js';
-import { ownerTz, startOfLocalDay } from '../time/time-context.js';
-
+import { ownerTz } from '../time/time-context.js';
+import { resolveNewspaperWindow, type NewspaperCollectionOptions } from './window.js';
 
 const PING_BODY_PREVIEW = 80;
 /** A recommendation reason is one line of small print, not a list: at most 2 taste words + 1 relation path per material item. */
@@ -220,12 +220,12 @@ export type CollectionResult =
   | { kind: 'collected'; candidateToken: string; lang: ReturnType<typeof langOf>; draft: MaterialDraft };
 
 /**
- * No explicit hours means the owner's local calendar day. Token minting happens
+ * The default is a rolling 72 hours; today explicitly selects the owner's calendar day. Token minting happens
  * after all house context is collected, before notice-board voices are read.
  */
 export function collectNewspaperMaterials(
   sources: MaterialSources,
-  opts: { hours?: number } = {},
+  opts: NewspaperCollectionOptions = {},
 ): CollectionResult {
   const tz = ownerTz();
   const lang = sources.language ? langOf(sources.language) : ownerLang();
@@ -235,9 +235,8 @@ export function collectNewspaperMaterials(
   const material = (key: string, vars: Record<string, string> = {}): string =>
     renderCopy(lang, `newspaper.material.${key}`, vars);
   // The wording must track the window: a rolling window calling itself "today" is exactly the self-contradiction bug B2 traced.
-  const windowLabel = opts.hours === undefined ? 'today' : `in the last ${opts.hours} hours`;
-  const start =
-    opts.hours === undefined ? startOfLocalDay(sources.now(), tz) : sources.now() - opts.hours * 3600;
+  const window = opts.window ?? resolveNewspaperWindow(opts, sources.now(), tz);
+  const { windowLabel, since: start } = window;
   const bondOf = (id: string): NewspaperBond | null =>
     (id && sources.bondOf ? sources.bondOf(id) : null) ?? null;
   const inWindow = (sources.publicBatch?.items ?? sources.cache.forReadingSince?.(start) ?? sources.cache.recentForReading(Number.MAX_SAFE_INTEGER))
@@ -250,9 +249,9 @@ export function collectNewspaperMaterials(
     return {
       kind: 'empty',
       message:
-        opts.hours === undefined
+        window.today
           ? renderCopy(lang, 'newspaper.empty.today')
-          : renderCopy(lang, 'newspaper.empty.window', { hours: String(opts.hours) }),
+          : renderCopy(lang, 'newspaper.empty.window', { hours: String(window.hours) }),
     };
   }
 

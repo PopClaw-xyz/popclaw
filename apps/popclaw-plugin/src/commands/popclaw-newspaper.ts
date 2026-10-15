@@ -1,5 +1,5 @@
 /**
- * /popclaw newspaper [hours] — the render happens in the AGENT's own turn (it has
+ * /popclaw newspaper [hours | --today] — the render happens in the AGENT's own turn (it has
  * the host's already-authed model; popclaw never calls an LLM). The command hands
  * off to the agent via continueAgent; the agent calls popclaw_newspaper → renders
  * structured copy → calls popclaw_publish_newspaper; the plugin renders the page.
@@ -11,6 +11,7 @@
  * still returns a useful directive — the owner can ask for the paper in conversation
  * (the natural-language path drives the same two tools).
  */
+import { validateNewspaperWindow } from '../newspaper/window.js';
 import { handleStyleFeedback } from '../visual/style-notes.js';
 
 export interface PopclawNewspaperArgs {
@@ -35,9 +36,13 @@ export async function runPopclawNewspaperCommand(
   // popclaw_newspaper payload (`buildNewspaperPrompt`), and the slash path's next step is to call
   // that tool. Attaching it here would give the slash path two copies, while the tool path (the
   // owner just saying "give me the paper") would get none.
-  const n = Number(args.positional[0]);
-  const window = Number.isInteger(n) && n > 0 && n <= 168 ? `the last ${n} hours` : 'today';
-  const firstCall = window === 'today' ? 'with no arguments' : `with hours=${n}`;
+  const hours = args.positional[0] === undefined ? undefined : Number(args.positional[0]);
+  const todayFlag = args.flags?.today;
+  if (todayFlag !== undefined && !['', 'true', 'false'].includes(todayFlag)) throw new Error('NEWSPAPER_WINDOW_INVALID');
+  const today = todayFlag !== undefined && todayFlag !== 'false';
+  validateNewspaperWindow({hours,today});
+  const window = today ? 'today' : `the last ${hours ?? 72} hours`;
+  const firstCall = today ? 'with today=true' : hours === undefined ? 'with no arguments' : `with hours=${hours}`;
   return {
     continueAgent: true,
     text:

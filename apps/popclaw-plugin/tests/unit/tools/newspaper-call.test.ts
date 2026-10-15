@@ -87,7 +87,7 @@ function newspaperTool(sessionKey: string, extra: Partial<Deps> & { runtime?: De
   return (params: unknown) => execute!('c1', params);
 }
 
-const emptyPage = () => renderCopy(ownerLang(), 'newspaper.empty.today');
+const emptyPage = () => renderCopy(ownerLang(), 'newspaper.empty.window', {hours:'72'});
 
 describe('popclaw_newspaper · dispatch or degrade', () => {
   it('in the owner session, a bare call hands the whole job to the workshop and relays its receipt', async () => {
@@ -160,4 +160,22 @@ describe('popclaw_newspaper · a hand-in whose picks were lost', () => {
     const out = await call({ picks: {} });
     expect(out.text).not.toContain('arrived but the picks did not');
   });
+});
+
+
+it('refuses conflicting windows before dispatch or runtime reads', async () => {
+  const runtime = emptyDayRuntime();
+  const { surface, runs } = landingSurface('unreachable');
+  const out = await newspaperTool(OWNER_SESSION, { runtime: runtime as unknown as Deps['runtime'], getSubagent: () => surface })({ today: true, hours: 24 });
+  expect(out.text).toContain('NEWSPAPER_WINDOW_CONFLICT');
+  expect(runtime).not.toHaveBeenCalled();
+  expect(runs).toHaveLength(0);
+});
+
+
+it('propagates the explicit today selection through the registered tool dispatch', async () => {
+  const run = vi.fn(async (_params: Parameters<SubagentSurface['run']>[0]) => ({ runId: 'today-run' }));
+  const call = newspaperTool(OWNER_SESSION, { getSubagent: () => ({ run, waitForRun: async () => ({status:'ok'}), deleteSession: async () => {} }) });
+  await call({today:true});
+  expect(run.mock.calls[0]![0]).toMatchObject({ message: renderCopy(ownerLang(), 'newspaper.dispatch.childDirectiveToday') });
 });

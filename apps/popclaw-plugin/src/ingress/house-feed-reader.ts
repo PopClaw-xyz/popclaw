@@ -91,8 +91,8 @@ function ordinaryMaterial(raw: Uint8Array, env: popclaw.event.EventEnvelope, sou
 }
 
 class PreparedHouseFeed extends PublicFeedDisplay {
-  constructor(private readonly captured: readonly PreparedSource[], private readonly checkRequest: () => void = () => {}, private readonly completeWindow = false) { super({sources:()=>[]}); }
-  fork(): PreparedHouseFeed { return new PreparedHouseFeed(this.captured, this.checkRequest, this.completeWindow); }
+  constructor(private readonly captured: readonly PreparedSource[], private readonly checkRequest: () => void = () => {}, private readonly completeWindow = false, private readonly since?:number) { super({sources:()=>[]}); }
+  fork(): PreparedHouseFeed { return new PreparedHouseFeed(this.captured, this.checkRequest, this.completeWindow, this.since); }
   reusable(): boolean {
     try {
       this.checkRequest();
@@ -145,7 +145,8 @@ class PreparedHouseFeed extends PublicFeedDisplay {
         else merged.set(id,clonePublicDisplayItem(hit));
       }
     }
-    const items=[...merged.values()].sort((a,b)=>numberOrZero(b.item.platformPostCreatedAt)-numberOrZero(a.item.platformPostCreatedAt)||a.item.eventId!.localeCompare(b.item.eventId!));
+    const since=this.since ?? query.materialSince;
+    const items=[...merged.values()].filter(hit=>since===undefined || numberOrZero(hit.item.platformPostCreatedAt)>=since).sort((a,b)=>numberOrZero(b.item.platformPostCreatedAt)-numberOrZero(a.item.platformPostCreatedAt)||a.item.eventId!.localeCompare(b.item.eventId!));
     const limit=this.completeWindow && query.completeWindow ? Infinity : Number.isSafeInteger(query.limit)&&query.limit!>0 ? Math.min(query.limit!,100) : 20;
     return {items:items.slice(0,limit),sources,truncated:items.length>limit||sources.some(s=>s.truncated)};
   }
@@ -199,7 +200,7 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
     let snapshots = this.requests.get(scope.token);
     if (!snapshots) { snapshots = new Map(); this.requests.set(scope.token, snapshots); }
     // Presentation limits and thread/search filters do not change the fixed 1000-item acquisition.
-    const key = JSON.stringify([query.author || '', query.platform || '', ORDINARY_SNAPSHOT_LIMIT, query.completeWindow === true]);
+    const key = JSON.stringify([query.author || '', query.platform || '', ORDINARY_SNAPSHOT_LIMIT, query.completeWindow === true, query.materialSince ?? null]);
     for (;;) {
       const existing = snapshots.get(key);
       if (!existing || !sameStores(existing.stores, stores)) break;
@@ -222,13 +223,22 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
   }
   private async acquire(query: PublicDisplayQuery, stores: readonly HouseStore[], checkRequest: () => void): Promise<PreparedHouseFeed> {
     const captured: PreparedSource[] = [];
+    const deferredPublic:HouseStore[]=[], order=new Map<PreparedSource,number>();
+    const shadows=new Set(query.materialShadowEventIds ?? []);
+    const retain=(store:HouseStore,source:PreparedSource)=>{
+      captured.push(source);
+      order.set(source,stores.indexOf(store));
+      if(query.materialSince!==undefined) for(const hit of source.items) if(numberOrZero(hit.item.platformPostCreatedAt)>=query.materialSince) shadows.add(hit.item.eventId!);
+    };
     for (const store of stores) {
       let ordinarySelected = false;
       try {
         assertReadCallActive(); checkRequest();
         // Existing verified optional observation retains its selected journal, including history/refusal.
         if (readHouseCapabilityView(this.deps.db,store.baseUrl)) {
-          captured.push(await this.publicSource(store, query)); continue;
+          if(query.materialSince!==undefined)deferredPublic.push(store);
+          else retain(store,await this.publicSource(store,query));
+          continue;
         }
         const before=this.deps.houses.captureOrdinaryFeed(store); before.assertCurrent();
         const trust=await prepareConfirmHouseTrust(this.deps.db,store.baseUrl,{fetch:budgetedFetch(this.deps.houses.houseReadFetch(store.baseUrl)),allowInsecureOrigin:isLoopbackOrigin(store.baseUrl)});
@@ -239,7 +249,11 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
         const committed=commitHouseTrust(this.deps.db,trust.prepared);
         if(!committed.ok)throw new Error(committed.refusal);
         const capture=this.deps.houses.captureOrdinaryFeed(store);capture.assertCurrent();
-        if (Object.hasOwn(document,'world_interaction')) { captured.push(await this.publicSource(store, query)); continue; }
+        if (Object.hasOwn(document,'world_interaction')) {
+          if(query.materialSince!==undefined)deferredPublic.push(store);
+          else retain(store,await this.publicSource(store,query));
+          continue;
+        }
         const evidence={manifest:Buffer.from(rawBytes).toString('base64'),proof:Buffer.from(committed.binding.proofBytes).toString('base64')};
         const verified=verifyOrdinaryFeedManifest(this.deps.db,store.baseUrl,evidence);
         ordinarySelected = true;
@@ -265,11 +279,19 @@ export class HouseFeedReader extends PublicFeedDisplay implements SnapshotSource
         const status:PublicDisplaySource={origin:store.baseUrl,slug:store.slug,protocol:'ordinary-snapshot',capabilityRevision:verified.binding.manifestDigest,
           logIncarnation:'',history:false,incomplete:true,unavailable:false,truncated:rows.length===ORDINARY_SNAPSHOT_LIMIT,observedAt};
         const ordinary:OrdinaryFeedSource={store,authority:capture.authority,evidence,items,status,assertCurrent:check};
-        captured.push({status,items,check,ordinary});
-      } catch (error) { assertReadCallActive(); captured.push({status:{...unavailable(store,error),...(ordinarySelected?{protocol:'ordinary-snapshot' as const}:{})},items:[],check(){}}); }
+        retain(store,{status,items,check,ordinary});
+      } catch (error) { assertReadCallActive(); retain(store,{status:{...unavailable(store,error),...(ordinarySelected?{protocol:'ordinary-snapshot' as const}:{})},items:[],check(){}}); }
+    }
+    // Newspaper collection prioritizes every public source before ordinary
+    // snapshots. Obtain ordinary candidate IDs first, then retain only their
+    // candidate-related public shadows; public readers keep original store order.
+    for(const store of deferredPublic.reverse()) {
+      try {assertReadCallActive();checkRequest();retain(store,await this.publicSource(store,{...query,materialShadowEventIds:[...shadows]}));}
+      catch(error){assertReadCallActive();retain(store,{status:unavailable(store,error),items:[],check(){}});}
     }
     assertReadCallActive();
-    return new PreparedHouseFeed(captured, checkRequest, query.completeWindow === true);
+    captured.sort((a,b)=>order.get(a)!-order.get(b)!);
+    return new PreparedHouseFeed(captured, checkRequest, query.completeWindow === true, query.materialSince);
   }
   private async publicSource(store: HouseStore, query: PublicDisplayQuery): Promise<PreparedSource> {
     const source={origin:store.baseUrl,slug:store.slug}, capture=this.deps.houses.capturePublicDisplay(store);

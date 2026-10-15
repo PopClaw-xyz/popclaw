@@ -57,11 +57,12 @@ export function publicMaterialSource(runtime: { houseRuntime?: HouseRuntime;hous
 
 export class NewspaperPublicMaterialSource {
   constructor(private readonly runtime: Pick<HouseRuntime, 'publicMaterialSources'>) {}
-  async prepareCollect(): Promise<PublicMaterialBatch> { return this.collect(); }
-  collect(): PublicMaterialBatch {
+  async prepareCollect(options: { since?: number } = {}): Promise<PublicMaterialBatch> { return this.collect(options); }
+  collect(options: { since?: number } = {}): PublicMaterialBatch {
     const coverage: PublicMaterialCoverage[] = [], references: PublicMaterialReference[] = [], items: ReadableFeedItem[] = [];
     const houses: Array<{ capture: PublicMaterialCapture; coverage: PublicMaterialCoverage; items: ReadableFeedItem[]; refs: PublicMaterialReference[] }> = [];
-    for (const source of this.runtime.publicMaterialSources()) {
+    const sources = [...this.runtime.publicMaterialSources()], shadows = new Set<string>();
+    for (const source of options.since===undefined ? sources : sources.reverse()) {
       try {
         const capture = source.capture(); capture.assertCurrent();
         if (capture.capability.house.origin !== source.origin || capture.producerPolicy.house.origin !== source.origin
@@ -69,7 +70,7 @@ export class NewspaperPublicMaterialSource {
           || capture.producerPolicy.house.incarnation !== capture.capability.house.incarnation
           || capture.producerPolicy.capabilityRevision !== capture.capability.capabilityRevision) throw new PublicMaterialRefusal('NEWSPAPER_PUBLIC_CAPTURE_MISMATCH');
         const { status, converted, refs } = readPublicJournalSnapshot(capture.executionDb, db => {
-          const result = readPublicJournal(db, capture, source, { ownProjection: true, completeWindow: true });
+          const result = readPublicJournal(db, capture, source, { ownProjection: true, completeWindow: true, materialSince: options.since, materialShadowEventIds:[...shadows] });
           const status: PublicMaterialCoverage = { ...result.status };
           const converted: ReadableFeedItem[] = [], refs: PublicMaterialReference[] = [];
           for (const hit of result.items) {
@@ -82,12 +83,14 @@ export class NewspaperPublicMaterialSource {
           return { status, converted, refs };
         });
         capture.assertCurrent(); houses.push({ capture, coverage: status, items: converted, refs });
+        if(options.since!==undefined) for(const item of converted) if(item.platformPostCreatedAt>=options.since) shadows.add(item.eventId);
       } catch (error) {
         coverage.push({ origin: source.origin, slug: source.slug, incomplete: true, unavailable: true, truncated: false,
           observedAt: null, code: error instanceof Error ? error.message : 'NEWSPAPER_PUBLIC_UNAVAILABLE' });
       }
     }
     const seen = new Set<string>();
+    if(options.since!==undefined) houses.reverse();
     for (const house of houses) {
       try { house.capture.assertCurrent(); }
       catch { house.coverage = { ...house.coverage, unavailable: true, incomplete: true, code: 'NEWSPAPER_PUBLIC_SOURCE_UPDATED' }; house.items = []; house.refs = []; }
@@ -153,8 +156,8 @@ export class NewspaperPublicMaterialSource {
 /** Ordinary evidence remains in its ordinary writable cache, with no log/sequence claims. */
 class HouseNewspaperMaterialSource extends NewspaperPublicMaterialSource {
   constructor(private readonly houses:HouseRuntime,private readonly reader:HouseFeedReader){super(houses);}
-  override async prepareCollect():Promise<PublicMaterialBatch>{
-    const prepared=await this.reader.prepare({completeWindow:true,ownProjection:true}),ordinary=prepared.ordinarySources;
+  override async prepareCollect(options: { since?: number } = {}):Promise<PublicMaterialBatch>{
+    const prepared=await this.reader.prepare({completeWindow:true,ownProjection:true,materialSince:options.since}),ordinary=prepared.ordinarySources;
     const origins=new Set(ordinary.map(s=>s.store.baseUrl));
     const retained=prepared.publicSources;
     const items:ReadableFeedItem[]=[],references:PublicMaterialReference[]=[],coverage:PublicMaterialCoverage[]=[],seen=new Set<string>();

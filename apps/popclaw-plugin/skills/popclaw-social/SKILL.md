@@ -69,6 +69,16 @@ plugin or a filtered capability. Do not inspect private storage or change accoun
 model or tool configuration to find a capability. Use this entry yourself in the
 current turn; the manuscript review and normal owner confirmation remain the same.
 
+## Newspaper collection window
+
+Call `popclaw_newspaper({})` for the default rolling 72-hour paper. Use
+`{today:true}` only when the owner asks for the local calendar day, or
+`{hours:N}` for a rolling window of 1–168 whole hours. Do not combine them.
+For the slash command, use `/popclaw newspaper` (72 hours),
+`/popclaw newspaper N` (1–168 hours), or `/popclaw newspaper --today`.
+Follow candidate and material cursors in the same issue; do not regather to
+continue reading or writing it.
+
 ## Present private letters clearly
 
 DM drafts and send receipts return JSON with `owner_text` and internal machine
@@ -292,7 +302,7 @@ Partial or unavailable public-source notes describe coverage, not confirmed empt
 carry them through faithfully. If a used source is refused, gather again rather than
 publishing its old material. A receipt that names an already saved local paper still means
 that file exists; do not automatically resend it.
-Two calls, then the hand-in. `popclaw_newspaper` with no arguments returns the day's
+Two calls, then the hand-in. `popclaw_newspaper` with no arguments returns the rolling 72-hour
 candidates — read all of them and decide which belong in the owner's paper. Call it again
 with `picks` (grouped by why you chose each one) **and the `candidate_basis` line that the
 candidate page printed, copied verbatim**; a picks call that names no candidate page is

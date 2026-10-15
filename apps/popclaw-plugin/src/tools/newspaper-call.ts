@@ -1,6 +1,8 @@
-import { assertReadCallActive, waitForRead, withReadCallScope } from '../runtime/read-call-budget.js';
+import { assertReadCallActive, waitForRead, withReadCallBudget } from '../runtime/read-call-budget.js';
+import { NEWSPAPER_READ_BUDGET_MS } from '../newspaper/read-policy.js';
 import { RemoteHouseReadError } from '../runtime/house-lifecycle/read-failure.js';
 import { prepareSummaryMaterial } from '../newspaper/summary-material.js';
+import { resolveNewspaperWindow, validateNewspaperWindow, type NewspaperWindowSelection } from '../newspaper/window.js';
 import { readNewspaperPage } from '../newspaper/reading-page.js';
 import type { HouseRuntime } from '../runtime/house-lifecycle/house-runtime.js';
 import { publicMaterialSource, PublicMaterialRefusal } from '../newspaper/public-material-source.js';
@@ -95,6 +97,7 @@ export interface NewspaperCall {
 interface NewspaperParams {
   page_cursor?: string;
   hours?: number;
+  today?: boolean;
   picks?: Picks;
   picks_flat?: readonly number[];
   candidate_token?: string;
@@ -136,6 +139,7 @@ interface NewspaperRuntime {
 interface NewspaperArgs {
   p: NewspaperParams;
   hours: number | undefined;
+  today: boolean | undefined;
   picks: Picks | undefined;
   bothGiven: boolean;
   hasPicks: boolean;
@@ -144,10 +148,8 @@ interface NewspaperArgs {
 
 function readNewspaperArgs(params: unknown): NewspaperArgs {
   const p = params as NewspaperParams;
-  const h = p.hours;
-  // Not providing hours (or providing an out-of-range one) = a true calendar-day cut for "today" (ADR-0045);
-  // providing a valid one honors it as a rolling window — that's the escape hatch for wanting to look back further.
-  const hours = typeof h === 'number' && Number.isInteger(h) && h > 0 && h <= 168 ? h : undefined;
+  validateNewspaperWindow(p);
+  const { hours, today } = p;
 
   // `picks_flat` is the union-free way in for a writer whose numbers keep coming out as a
   // bare array: a top-level field needs no `anyOf`, which is what the host collapses.
@@ -183,7 +185,7 @@ function readNewspaperArgs(params: unknown): NewspaperArgs {
   // into the hand-in and lost two rounds to refusals. The old name stays accepted
   // silently so a page minted before the rename still resolves within its 2h TTL.
   const candidateBasis = p.candidate_basis ?? p.basis;
-  return { p, hours, picks, bothGiven, hasPicks, candidateBasis };
+  return { p, hours, today, picks, bothGiven, hasPicks, candidateBasis };
 }
 
 // A caller carrying a candidate_token OR candidate_basis meant to submit picks. If the picks did not
@@ -226,7 +228,7 @@ function picksLostReply(args: NewspaperArgs): TextResult | undefined {
 async function dispatchToWorkshop(
   call: NewspaperCall,
   rt: NewspaperRuntime,
-  hours: number | undefined,
+  selection: NewspaperWindowSelection,
 ): Promise<{ dispatched: TextResult } | { modelIgnoredNote: string | undefined }> {
   const { api, deps, toolCtx } = call;
   let modelIgnoredNote: string | undefined;
@@ -260,7 +262,7 @@ async function dispatchToWorkshop(
         // guard lives under, so an impatient retry is answered instead of
         // producing a second edition.
         ...(toolCtx.sessionKey ? { parentSessionKey: toolCtx.sessionKey } : {}),
-        ...(hours !== undefined ? { hours } : {}),
+        ...selection,
         // Clean slate per workshop (2026-09-03 night ruling): every ledger
         // entry stamped another day is deleted before the child runs, so a
         // fresh paper is never hijacked by a previous day's leftovers.
@@ -449,11 +451,12 @@ function answerPicks(call: NewspaperCall, rt: NewspaperRuntime, args: NewspaperA
 async function gatherCandidatePage(
   call: NewspaperCall,
   rt: NewspaperRuntime,
-  hours: number | undefined,
+  selection: NewspaperWindowSelection,
   modelIgnoredNote: string | undefined,
 ): Promise<TextResult> {
   const { api, toolCtx } = call;
   const materialSource = publicMaterialSource(rt);
+  const window = resolveNewspaperWindow(selection, Math.floor(Date.now() / 1000));
   // These reads do not depend on each other. Start them in the same bounded
   // scope so optional editorial context cannot spend the signed feed's budget
   // before that feed even starts. Their existing authority and write fences remain.
@@ -464,7 +467,7 @@ async function gatherCandidatePage(
       return worldDeps?.newspaperSummary
         ? prepareSummaryMaterial({ ...worldDeps.newspaperSummary, nameOf: rt.nameOf }) : undefined;
     })(),
-    waitForRead(Promise.resolve(materialSource?.prepareCollect())),
+    waitForRead(Promise.resolve(materialSource?.prepareCollect({ since: window.since }))),
   ]);
   const { bondsStore, houseSlugs, digests, tasteTags, tasteText, bondLines } = paper;
   assertReadCallActive();
@@ -556,7 +559,7 @@ async function gatherCandidatePage(
       // host swallows warn and error entirely.
       ...(api.logger ? { log: (m: string) => api.logger!.info(m) } : {}),
     },
-    hours === undefined ? {} : { hours },
+    { window },
   );
   // The refused-model degrade (if it happened) is said in the same breath
   // as the page the legacy flow returns — a note only the log swallows is
@@ -610,7 +613,7 @@ export async function runNewspaperCall(call: NewspaperCall, params: unknown): Pr
     // degrade with a cause the OWNER can act on must not be log-only.
     let modelIgnoredNote: string | undefined;
     if (!args.hasPicks && !isDedicatedSession(call.toolCtx.sessionKey)) {
-      const dispatch = await dispatchToWorkshop(call, rt, args.hours);
+      const dispatch = await dispatchToWorkshop(call, rt, { hours: args.hours, today: args.today });
       if ('dispatched' in dispatch) return dispatch.dispatched;
       modelIgnoredNote = dispatch.modelIgnoredNote;
     }
@@ -619,7 +622,7 @@ export async function runNewspaperCall(call: NewspaperCall, params: unknown): Pr
     // would let the world move underneath the numbers it is answering with.
     if (args.hasPicks && args.picks) return answerPicks(call, rt, args, args.picks);
     collecting = true;
-    return await withReadCallScope({}, () => gatherCandidatePage(call, rt, args.hours, modelIgnoredNote));
+    return await withReadCallBudget({timeoutMs:NEWSPAPER_READ_BUDGET_MS}, () => gatherCandidatePage(call, rt, { hours: args.hours, today: args.today }, modelIgnoredNote));
   } catch (err) {
     if (collecting && err instanceof RemoteHouseReadError) {
       const failure = NewspaperStageStore.collectionFailed(call.toolCtx.sessionKey, err.failure);

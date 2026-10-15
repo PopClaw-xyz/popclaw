@@ -271,7 +271,7 @@ async function delayedRegistry({environment = {}, readyAt = 7, mismatch = false}
  const bin = join(fixture.directory, 'bin');
  writeFileSync(join(bin, 'npm'), `#!${process.execPath}
 const fs = require('node:fs');
-if (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(['view', process.env.POPCLAW_TEST_PACKAGE, 'dist', '--json'])) process.exit(2);
+if (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(['view', process.env.POPCLAW_TEST_PACKAGE, 'dist', '--json', '--registry=https://registry.npmjs.org', '--prefer-online', '--fetch-retries=0', '--fetch-timeout=15000'])) process.exit(2);
 const file = process.env.POPCLAW_TEST_COUNTER;
 const count = (fs.existsSync(file) ? Number(fs.readFileSync(file, 'utf8')) : 0) + 1;
 fs.writeFileSync(file, String(count));
@@ -301,12 +301,12 @@ require('node:fs').appendFileSync(process.env.POPCLAW_TEST_SLEEPS, JSON.stringif
  } finally {rmSync(fixture.directory, {recursive: true, force: true});}
 }
 
-test('the unchanged shared verifier default stops before a seventh readable response', async () => {
+test('the shared verifier default reaches a seventh readable response', async () => {
  const result = await delayedRegistry();
- assert.equal(result.status, 1);
- assert.equal(result.attempts, 6);
- assert.equal(result.sleeps.length, 5);
- assert.match(result.stdout, /is not readable from the registry/);
+ assert.equal(result.status, 0, result.stderr);
+ assert.equal(result.attempts, 7);
+ assert.equal(result.sleeps.length, 6);
+ assert.match(result.stdout, /attestation present, registry bytes match/);
 });
 
 test('native workflow polling reaches a seventh response and verifies the real retained digest', async () => {
@@ -330,7 +330,7 @@ test('native workflow polling remains bounded when the registry never becomes re
  assert.equal(result.status, 1);
  assert.equal(result.attempts, Number(environment.REGISTRY_POLL_ATTEMPTS));
  assert.equal(result.sleeps.length, result.attempts - 1);
- assert.match(result.stdout, /is not readable from the registry/);
+ assert.match(result.stdout + result.stderr, /is not readable from the registry/);
 });
 
 test('native publication job allows all five scan windows and preparation overhead', () => {

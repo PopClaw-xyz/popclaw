@@ -3,6 +3,36 @@
 Every entry says whether the wire protocol is affected. "Protocol: none"
 means a client or house built against the stated bundle keeps working.
 
+<a id="018"></a>
+## 0.1.8 — Newspaper material windows and public journal efficiency
+
+**Protocol:** none. Identity data, protected journal schema and stored rows are unchanged.
+
+- Batch selected-lane membership reads per page using the existing complete
+  association primary key. Read decimal sequence lengths in descending order
+  through the existing sequence index, avoiding repeated temporary page sorting.
+- Apply the shared reader improvement to public feed, search, author history
+  and newspaper collection. Preserve exact uint64 ordering, checkpoint snapshots,
+  signature/projection checks, source gates and existing read limits.
+- Default newspaper collection to the rolling last 72 hours. `today: true` and
+  `/popclaw newspaper --today` explicitly select the owner's local calendar day;
+  rolling hours remain 1–168. Freeze the cutoff once and pass it through material
+  preparation instead of filtering only after historical reads.
+- Reuse a disposable, transaction-bound material index across collections.
+  Incremental reads process newly observed frames; warm reads fetch window
+  originals and only candidate-related cross-source observations. Preserve
+  latest-observation/source priority and retain complete-read recovery.
+- Allow initial newspaper material collection a shared 60-second budget while
+  preserving cancellation and earlier parent deadlines. Guide and summary
+  reads keep their existing 10-second policy.
+- Retain npm registry read errors and retry incomplete publication metadata within
+  a bounded window. Add a read-only verification workflow for the already
+  published 0.1.7 archives; signature, provenance and original-source checks do
+  not republish those packages.
+- Source, artifact and installed-host evidence remain separate. Isolated local
+  journal read improvements do not establish whole-newspaper speed or Hosted
+  pagination performance.
+
 <a id="017"></a>
 ## 0.1.7 — Natural notifications and verified release artifacts
 
@@ -166,9 +196,9 @@ This release improves reads around that architecture; it does not introduce it.
 
 The fixed-source tests make these counts checkable:
 
-- [Overview test](https://github.com/PopClaw-xyz/popclaw/blob/22dae896fe188df4e26241996f4e40902785f274/apps/popclaw-plugin/tests/unit/tools/world-tools.test.ts#L1982): one summary fetch, zero auxiliary feed snapshots. The old-to-new auxiliary count is 1→0, excluding Guide, summary and background traffic.
-- [Prepared Guide test](https://github.com/PopClaw-xyz/popclaw/blob/22dae896fe188df4e26241996f4e40902785f274/apps/popclaw-plugin/tests/unit/runtime/house-runtime-push.test.ts#L444): Guide content is returned with no additional House HTTP request. The old path could read per House; it was not always exactly one request.
-- [Local material test](https://github.com/PopClaw-xyz/popclaw/blob/22dae896fe188df4e26241996f4e40902785f274/apps/popclaw-plugin/tests/unit/newspaper/public-materials.test.ts#L659): both 8 and 16 articles use 5 source captures and 12 integrity queries across the complete gather operation, with no fetch. Signature checks remain `3 × N` and journal reads `1 + 2 × N`. These whole-gather counts differ from the single-validation N→2 comparison above; N=1 is not a reduction.
+- [Overview test](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.2/apps/popclaw-plugin/tests/unit/tools/world-tools.test.ts#L1982): one summary fetch, zero auxiliary feed snapshots. The old-to-new auxiliary count is 1→0, excluding Guide, summary and background traffic.
+- [Prepared Guide test](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.2/apps/popclaw-plugin/tests/unit/runtime/house-runtime-push.test.ts#L444): Guide content is returned with no additional House HTTP request. The old path could read per House; it was not always exactly one request.
+- [Local material test](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.2/apps/popclaw-plugin/tests/unit/newspaper/public-materials.test.ts#L659): both 8 and 16 articles use 5 source captures and 12 integrity queries across the complete gather operation, with no fetch. Signature checks remain `3 × N` and journal reads `1 + 2 × N`. These whole-gather counts differ from the single-validation N→2 comparison above; N=1 is not a reduction.
 
 These are existing test assertions covered by the fixed-source CI, not a newly
 run performance benchmark or a promise of constant total processing time.

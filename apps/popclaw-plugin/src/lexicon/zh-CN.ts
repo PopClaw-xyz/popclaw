@@ -736,7 +736,15 @@ export const ZH_CN: Lexicon = {
     // (earlier telemetry: 14.5k of 15.7k output tokens were reasoning). Partial edit submission and remaining-item
     // receipts already existed; the instructions now explicitly require the child to submit in batches.
     'newspaper.dispatch.childDirective':
-      '出一期今天的报纸。流程：先调 popclaw_newspaper（不带参数）拿候选页；挑好属于主人的条目后，' +
+      '出一期近 72 小时的报纸。流程：先调 popclaw_newspaper（不带参数）拿候选页；挑好属于主人的条目后，' +
+      '带上 picks 再调一次拿素材页。交稿必须分批：第一批 ≤12 条，且必须带上 masthead、edition、weather、' +
+      'leads、teaser 等结构字段；每批都用 popclaw_publish_newspaper 提交，回执说还有未写条目就继续下一批' +
+      '（每批同样 ≤12 条），直到回执确认整期完成。一次只写一批是硬要求——单次大输出会在轻量模型上中途失败。' +
+      '每次交的 edit 还必须把素材页上印的 `basis` 行原样抄进 edit 对象——publish 靠它把你的条目编号绑到你' +
+      '真正看过的那页素材上。' +
+      '发布回执（导读和链接）就是你的最终答复，原样交回来即可；除它之外，什么都不要另行投递。',
+    'newspaper.dispatch.childDirectiveToday':
+      '出一期今天的报纸。流程：先调 popclaw_newspaper（带上参数 today=true）拿候选页；挑好属于主人的条目后，' +
       '带上 picks 再调一次拿素材页。交稿必须分批：第一批 ≤12 条，且必须带上 masthead、edition、weather、' +
       'leads、teaser 等结构字段；每批都用 popclaw_publish_newspaper 提交，回执说还有未写条目就继续下一批' +
       '（每批同样 ≤12 条），直到回执确认整期完成。一次只写一批是硬要求——单次大输出会在轻量模型上中途失败。' +
@@ -1005,9 +1013,9 @@ export const ZH_CN: Lexicon = {
     'newspaper.candidates.taste.none': '(还没有记录 —— 那就按交情簿和热闹程度挑)',
     'newspaper.candidates.bonds.head': '【主人的交情簿 —— 共 {count} 人】',
     'newspaper.candidates.bonds.none': '(还是空的 —— 一个人都还没有)',
-    'newspaper.candidates.list.head': '【今天的候选 —— 共 {total} 条,按谁写的归摞】',
-    'newspaper.candidates.author': '== {who} · 今天 {count} 条 ==',
-    'newspaper.candidates.authorBonded': '== {who} · {bond} · 今天 {count} 条 ==',
+    'newspaper.candidates.list.head': '【本期的候选 —— 共 {total} 条,按谁写的归摞】',
+    'newspaper.candidates.author': '== {who} · 本期 {count} 条 ==',
+    'newspaper.candidates.authorBonded': '== {who} · {bond} · 本期 {count} 条 ==',
     'newspaper.candidates.loose': '== 零散来稿 · {count} 条,来自只写了一两条的人 ==',
     'newspaper.candidates.mark.media': '[图]',
     'newspaper.candidates.mark.replies': '[{count} 回应]',
@@ -1063,18 +1071,18 @@ export const ZH_CN: Lexicon = {
     'newspaper.source.refused': '公共素材来源已变化或无法核验（{reason}）。请重新获取候选页后继续。',
     'newspaper.source.savedRefused': '报纸已保存在本地：{path}。公共素材来源已变化或无法核验（{reason}），交付已停止。请勿自动重发。',
     'newspaper.source.unsupportedDraft': '此工具制作完整的个性化报纸，并按现有配置交付阅读链接。不支持只存草稿、仅预览或仅公共内容的限制；本次未开始制报。',
-    'newspaper.page.quietHouse': '本灯坊今日无新事。',
+    'newspaper.page.quietHouse': '本期无此灯坊来稿。',
     'newspaper.page.ear.awaiting': '待 回',
     'newspaper.page.ear.newFaces': '生 面 孔',
     'newspaper.page.ear.ledger': '本 期 账',
     'newspaper.page.noPings': '今日无人来信，待回 0 封。',
     'newspaper.page.deckTally': '{house} {count} 条',
-    'newspaper.page.ledgerTotals': '出场 {people} 人 · 上版 {laidOut} 条（今日共收编 {gathered} 条）· 头版 {front} 条',
+    'newspaper.page.ledgerTotals': '出场 {people} 人 · 上版 {laidOut} 条（本期共收编 {gathered} 条）· 头版 {front} 条',
     'newspaper.page.ledgerEchoes': '全报 {replies} 回 · {marks} 收',
     'newspaper.page.ledgerPings': '待回 {pings} 封 · 世界来信 {letters} 封',
     'newspaper.page.ledgerBasis': '计数体例：回 = 回复，收 = 收藏；量词全报统一用「条」。',
     'newspaper.page.byline': '本报 AI 主笔 Pop 编次',
-    'newspaper.page.weather': '今日收编 {total} 条 · 待回 {pings} 封 · 世界来信 {letters} 封 · 风向：{drifts}',
+    'newspaper.page.weather': '本期收编 {total} 条 · 待回 {pings} 封 · 世界来信 {letters} 封 · 风向：{drifts}',
     'newspaper.page.roster': '今 日 名 录',
     'newspaper.page.newbies': '今 日 新 人',
     'newspaper.page.oneDeck': '江湖',
@@ -1791,8 +1799,8 @@ export const ZH_CN: Lexicon = {
     'help.canvas.examples': '/popclaw canvas report.html --title 周报',
     'help.brief.summary': '(已并入报纸)转发 /popclaw newspaper;--feedback 仍记排版意见',
     'help.brief.usage': '/popclaw brief [--feedback "排版意见"]',
-    'help.newspaper.summary': '主人的每日江湖报纸:导读 + 一页图文报纸画布链接(也可即时拉一期)',
-    'help.newspaper.usage': '/popclaw newspaper [hours] [--feedback "排版意见"]',
+    'help.newspaper.summary': '主人的江湖报纸（默认近72小时；--today取本地当天）：导读 + 一页图文报纸画布链接',
+    'help.newspaper.usage': '/popclaw newspaper [hours | --today] [--feedback "排版意见"]',
     'help.notify-here.summary': '把通知频道钉在本频道（以后主动提醒都发到这儿）',
     'help.notify-off.summary': '关掉通知频道（提醒改为攒在 inbox，你下次来时一并带出）',
     'help.help.summary': '显示这份帮助；/popclaw help <子命令> 查看单条子命令的用法',
