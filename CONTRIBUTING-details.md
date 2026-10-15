@@ -9,6 +9,7 @@ that directory (`cd apps/popclaw-plugin`).
 
 | Responsibility | Owner | Focused checks |
 | --- | --- | --- |
+| Dependency security regressions | Root `package.json` overrides, `pnpm-lock.yaml`, `scripts/tests/dependency-security.fixture.mjs` | `pnpm run test:dependency-security` (also included in `pnpm test`) |
 | Material collection rules | `src/newspaper/collect-materials.ts` | `pnpm exec vitest run --no-cache tests/unit/newspaper/collect-materials.test.ts tests/unit/newspaper/gather-collection-baseline.test.ts` |
 | Candidate ordering, trimming and numbering | `src/newspaper/gather-materials.ts`, `src/newspaper/pick-issue.ts` | `pnpm exec vitest run --no-cache tests/unit/newspaper/gather-materials.test.ts tests/unit/newspaper/pick-floor.test.ts tests/unit/newspaper/pick-topup-floor.test.ts tests/unit/newspaper/numbering-stability.test.ts tests/unit/newspaper/candidate-id-continuity.test.ts` |
 | Person item display | `src/newspaper/person-item-renderer.ts`, `src/newspaper/newspaper-style.ts` | `pnpm exec vitest run --no-cache tests/unit/newspaper/person-item-renderer.test.ts tests/unit/newspaper/render-newspaper-baseline.test.ts` |
@@ -31,6 +32,25 @@ that directory (`cd apps/popclaw-plugin`).
 | Declared primary-House summary read | `src/world/declared-summary-read.ts` ([ownership](apps/popclaw-plugin/docs/declared-summary-read.md)); snapshot, display and onboarding cache policy remain at the entries | `pnpm exec vitest run --no-cache tests/unit/world/declared-summary-read.test.ts tests/unit/tools/world-summary-capability-firstuse.test.ts tests/unit/tools/world-tools.test.ts tests/unit/onboarding/discovery.test.ts tests/unit/onboarding/discovery-characterization.test.ts tests/unit/onboarding/orchestrator.test.ts` |
 | House HTTP policies | `src/runtime/house-lifecycle/house-http-transport.ts`; runtime retains authority, declaration selection stays with callers, and `actionFetch` retains deferred decoder checks ([ownership](apps/popclaw-plugin/docs/runtime-architecture.md#house-http-transport)) | `pnpm exec vitest run --no-cache tests/unit/runtime/house-http-transport.test.ts tests/unit/runtime/house-http-characterization.test.ts tests/unit/runtime/house-runtime-push.test.ts tests/unit/runtime/pc008-legacy-read-recovery.test.ts tests/unit/world/house-handshake-guide-origin.test.ts` |
 | House Guide lifecycle | `src/world/house-guide-context.ts`; join keeps its synchronous caller-owned transaction, runtime keeps the captured read gate and delegates HTTP policy ([ownership](apps/popclaw-plugin/docs/runtime-architecture.md)) | `pnpm exec vitest run --no-cache tests/unit/world/house-guide-context.test.ts tests/unit/runtime/participation-entry.test.ts tests/unit/runtime/sessionless-retry.test.ts` |
+
+### Dependency security pins
+
+The root pnpm overrides pin the MCP SDK to 1.31.0 and fast-uri to 3.1.8
+throughout the active workspace, including the development host's transitive
+SDK references. These are the fixes for
+[GHSA-6qxp-vccf-f47h](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6qxp-vccf-f47h)
+and [GHSA-hrr3-gc8f-f4qj](https://github.com/fastify/fast-uri/security/advisories/GHSA-hrr3-gc8f-f4qj).
+Ajv remains enabled. Full and client bundles use this same dependency lock.
+The immutable protocol snapshot keeps its separate lockfile.
+
+The regression fixture checks real SDK credential issuer binding and the URI
+resolver used by Ajv. Its OAuth requests stay inside a fake fetch function;
+it does not describe an active PopClaw OAuth login flow. PopClaw's MCP entry
+uses the SDK server and stdio transport. When changing these pins, rerun the
+fixture, schema validation and MCP compatibility checks, then inspect both
+bundles' dependency license inventories. A future HTTP OAuth client would also
+need the advisory's provider configuration and legacy credential migration;
+a version update alone does not cover those cases.
 
 ### Three common changes
 

@@ -1,3 +1,4 @@
+import { isQueuedInboxNotification } from './inbox-notification-state.js';
 import { decodeEnvelope } from '../protocol/public-envelope.js';
 /**
  * DM inbox backed by the precious social DB (my-social-assets.db).
@@ -175,6 +176,10 @@ export class InboxStore {
       }
       return { wasNew, item: fromRow(row) };
     });
+  }
+
+  isQueuedNotification(id: number, sender: unknown): boolean {
+    return isQueuedInboxNotification(this.db, id, sender);
   }
 
   get(id: number): StoredInboxItem | null {

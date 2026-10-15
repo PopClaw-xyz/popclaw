@@ -347,6 +347,28 @@ def verify_derived(directory, full_path, context):
     return actual, archive_rows
 
 
+def attestation_subjects(directory, full_path, context, output):
+    """Bind the main archive and its source evidence after exact-byte verification.
+
+    The caller resolves the GitHub source run and verifies the full archive first.
+    No rebuilding, signing or network access occurs here.
+    """
+    retained_context = directory / 'release-context.json'
+    require(retained_context.is_file() and not retained_context.is_symlink(),
+            'attestation requires the retained release context')
+    _, rows = verify_derived(directory, full_path, context)
+    subjects = [rows['popclaw-clawhub']['filename'], 'receipt.json', 'release-context.json']
+    for name in subjects:
+        path = directory / name
+        require(path.is_file() and not path.is_symlink(), 'non-regular attestation subject: ' + name)
+    output = Path(output)
+    require(output.resolve() not in {(directory / name).resolve() for name in subjects},
+            'attestation output would overwrite a subject')
+    output.write_text(''.join(digest((directory / name).read_bytes()) + '  ' + name + '\n'
+                              for name in subjects))
+    return subjects
+
+
 def smoke(actual, nodes):
     require(nodes, 'at least one Node executable is required for real SQLite smoke')
     results = []
@@ -392,12 +414,18 @@ def cli():
     for name in ('directory', 'full-tarball', 'context', 'output'):
         verify.add_argument('--' + name, type=Path, required=True)
     verify.add_argument('--node', action='append', required=True)
+    attestation = commands.add_parser('attestation')
+    for name in ('directory', 'full-tarball', 'context', 'output'):
+        attestation.add_argument('--' + name, type=Path, required=True)
     args = parser.parse_args()
     if args.command == 'resolve':
         resolve_context(args)
     elif args.command == 'full':
         path = verify_full(args.directory, read_json(args.context))
         github_output(args.github_output, full_tarball=path.resolve())
+    elif args.command == 'attestation':
+        subjects = attestation_subjects(args.directory, args.full_tarball, read_json(args.context), args.output)
+        print('Verified attestation subjects: ' + ', '.join(subjects))
     else:
         context = read_json(args.context)
         actual, rows = verify_derived(args.directory, args.full_tarball, context)

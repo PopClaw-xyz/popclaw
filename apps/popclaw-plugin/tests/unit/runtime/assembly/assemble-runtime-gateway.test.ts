@@ -314,7 +314,7 @@ describe('the gateway ports themselves', () => {
     expect(ports.drift).toBe(GATEWAY_DRIFT_PINS);
     expect(ports.drift).toEqual({
       followerDisplayNameAbsent: false, followerBondContextAbsent: false, followerStoreOwnInstance: false,
-      replyPingBondContextAbsent: false, inviteNotifierUnattributed: false, rangerInviteNotifyAbsent: false,
+      replyPingBondContextAbsent: false, rangerInviteNotifyAbsent: false,
       refreshMs: 6 * 60 * 60 * 1000, recoveryIgnoresClosing: true, ownerLangSignalsLate: false, shutdown: 'guarded',
       ownerCadenceBeforeSocialGraph: true, scoreCacheLoadedBeforeReception: true, followBackfillLate: true,
       followerPollHousesFromCatalog: true, receptionHouseLookupFromCatalog: true,

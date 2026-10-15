@@ -14,7 +14,7 @@ describe('notification tool host parity', () => {
     const mcp = makeNotificationsTool(async () => { throw new Error('description only'); });
     expect(native.description).toBe(mcp.description);
     expect(native.description).toContain('Results can include private message bodies.');
-    expect(native.description).toContain('Only call for an owner request or notification delivery already authorized for this conversation.');
+    expect(native.description).toContain('Use at session start or on a genuine notification from this enabled personal integration; no per-chat or per-letter permission is needed.');
     expect(native.description).toContain('no separate approval is needed');
   });
 });

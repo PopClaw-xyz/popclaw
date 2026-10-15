@@ -39,7 +39,7 @@ export function inviteWiring(boot: Boot, ports: AnyRuntimePorts, pendingInvites:
   return {
     ownerPopclawId: boot.popclawId,
     pending: pendingInvites,
-    notifier: ports.drift.inviteNotifierUnattributed ? notifier : notifierForOrigin(notifier, boot.loreHouseUrl),
+    notifier: notifierForOrigin(notifier, boot.loreHouseUrl),
     notifyOwner: pushToOwner ?? (() => {}),
     profileUrl: () => profileUrl(boot.nickname, deriveSigil(boot.popclawId), boot.webBaseUrl),
   };

@@ -2,6 +2,27 @@
 
 ## Current verification scope
 
+### 0.1.7 candidate verification
+
+Source checks cover patched dependency behavior, automatic notification delivery,
+House/identity/storage boundaries, receipt handling and release-attestation guards.
+An isolated real Codex CLI 0.157.1 session with a trusted project and reviewed
+fixture hook ran SessionStart, fetched a synthetic encrypted letter and PNG,
+and acknowledged after relay. It asked no extra read permission, kept the full
+letter and image Markdown in the final reply, and did not execute the letter's
+injected send/resolve request. This establishes that tested CLI flow, not desktop
+pixel rendering or behavior of every host/model. The experiment explicitly set
+`features.hooks=true`, persisted trust for its isolated project, pre-created the
+notification consumer and used `--dangerously-bypass-hook-trust` only for its
+independently reviewed fixture hook. It did not exercise the ordinary setup/trust
+flow and does not recommend bypassing trust for daily use. Earlier variants
+without effective project-hook loading did not retrieve notifications from MCP
+initialization alone. Normal host hook trust remains required; see the
+[Codex hook contract](https://learn.chatgpt.com/docs/hooks).
+
+The release candidate still needs formal archive, registry, native-host and
+ClawHub audit verification. Historical 0.1.6 results below are not 0.1.7 acceptance.
+
 <a id="016-release-verification"></a>
 ### 0.1.6 release verification
 

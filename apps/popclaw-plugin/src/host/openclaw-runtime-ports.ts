@@ -63,7 +63,6 @@ export const GATEWAY_DRIFT_PINS: DriftPins = Object.freeze({
   followerBondContextAbsent: false,
   followerStoreOwnInstance: false,
   replyPingBondContextAbsent: false,
-  inviteNotifierUnattributed: false,
   rangerInviteNotifyAbsent: false,
   // 6 h.
   refreshMs: 21_600_000,
