@@ -2,6 +2,76 @@
 
 ## Current verification scope
 
+<a id="018-release-verification"></a>
+### 0.1.8 verification — standard npm packages and original artifacts verified
+
+The [v0.1.8 tag](https://github.com/PopClaw-xyz/popclaw/tree/v0.1.8) fixes
+`c47d0c379ab5e5f2c5fd1e0fc9164970ce6f3e2f`. Its tree
+`d44c710075f64d22a77806566acedf816b1231af` is identical to the reviewed
+`2caff80604ad11aa8e40bad1499c6883c54226a6` candidate. The annotated tag object is
+`f52045bb57e033f62962626e48af38184ba2798a`.
+
+[Post-merge source CI](https://github.com/PopClaw-xyz/popclaw/actions/runs/38762743821)
+passed all five jobs. The release integration handoff records 635 test files,
+10,432 passed tests and five skipped tests in each Node 24/26 lane. The skips
+are existing private-monorepo resource checks: two Guide checks, two export/deploy
+checks and one private SDK helper. The formal Darwin run recorded 10,423 passed tests and 14 skipped tests:
+the same five private-resource checks and nine Linux `/proc/locks` checks.
+
+The [formal release run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38762924436)
+built and retained the original archives below, with build stamp
+`2026-10-16 00:02+08 c47d0c3`. Local SHA-256 calculations match the handed-off
+checksums. The run retains its **failure** conclusion: after the main package
+upload was accepted, 24 npm reads returned E404. Later reads and cryptographic
+verification passed for the exact main archive; they do not change that failure.
+The MCP shell was published from its original archive by the successful
+[shell-only recovery run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38767691252).
+Its provenance binds to that `workflow_dispatch` run, while the main package's
+provenance binds to the original `push` run. Both bind to the frozen source above.
+
+| Archive | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `popclaw-plugin-0.1.8+2026-10-16-0002-c47d0c3.tgz` | 15475748 | `ab5beeee3046131ab9543fa3e2d961f21f686290934c30e90bdc0780762802bb` |
+| `popclaw-mcp-0.1.8.tgz` | 6798 | `5a547347d2bca2e4536ae077cfad07206767962b2ed90b2efc527c91bfeede2d` |
+
+The CI artifact smoke receipt passed five required checks on Darwin arm64,
+Node 24.16.0: CLI help, packaged in-memory SQLite create/write/read, main MCP,
+shell MCP and main MCP restart.
+Both MCP entries exposed 55 tools and retained the same identity across restart.
+Its optional native SDK check was not run. Separate checks of the same original
+archives passed six steps on each of Node 24.16.0 and 26.8.2, including actual
+registration with OpenClaw SDK 2026.9.8. SDK registration is not Gateway admission.
+Input hashes remained unchanged. These checks do not establish registry
+installation, real Gateway behavior, daily-use hosts, models or social delivery.
+
+Both archive manifests declare `>=24.16.0 <25 || >=26.1.0`; the MCP shell depends
+exactly on `popclaw@0.1.8`. Node 26-only support is not part of this release.
+The pending Hosted pagination work is not included. Local journal improvements
+do not establish whole-newspaper speed, delivery time or token savings.
+
+**Standard npm packages verified:** actual downloads of `popclaw@0.1.8` and
+`popclaw-mcp@0.1.8` match the original archives byte-for-byte. Registry signatures,
+npm publish attestations and source/run-bound provenance passed real cryptographic
+verification and independent review. Three altered-signature controls per package
+were rejected for cryptographic reasons. The original archives also passed
+independent content and smoke-evidence review.
+
+ClawHub native publication, attestation and upload remain a separate channel in
+progress; this release does not claim their completion. Daily-use hosts were not
+upgraded, and no new Gateway, model or social-delivery acceptance is claimed.
+
+The [read-only 0.1.7 verification run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38762787087)
+succeeded. Its receipt matches both original 0.1.7 archive hashes and verifies
+registry signatures and provenance against source
+`801f5d76162de7f0a1ff66cdb89780a650586768` and the original publication runs.
+It performed no build, publication, tag or dist-tag mutation. The earlier failed
+publication runs keep their failure results. This is separate 0.1.7 evidence.
+
+The [GitHub Release](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.8)
+is an ordinary release marked Latest and retains Developer Preview status.
+Latest does not automatically upgrade existing hosts. This verification record
+is maintained after the frozen tag; it does not change the tagged source.
+
 <a id="017-release-verification"></a>
 ### 0.1.7 release verification
 
