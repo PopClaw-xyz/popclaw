@@ -29,6 +29,9 @@ format and resolved runtime dependencies are unchanged.
   selected Notify Here destination controls notification delivery only; current
   invocation, conversation and identity checks, posting acknowledgement, and
   confirmation for sensitive changes remain required.
+- Keep full and client CLI daemons running while houses are offline. The
+  daemon owns its process residency until shutdown finishes; shared-service
+  polling timers remain unref'd.
 - Advance the plugin, native manifest and MCP shell together to 0.1.6. The
   shell depends on exactly `popclaw@0.1.6`; current setup examples and public
   documentation links use this fixed version.
