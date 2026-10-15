@@ -281,13 +281,6 @@ export interface DriftPins {
    */
   readonly replyPingBondContextAbsent: boolean;
   /**
-   * #18 — the invitation outcome notifier is the bare queue, not attributed
-   * to the home house (auto-unread count misses it; explicit pull still
-   * returns it — C2 correction). gateway false · MCP true. Verified.
-   * Owner: DEV maintenance. Delete when both roots pass false.
-   */
-  readonly inviteNotifierUnattributed: boolean;
-  /**
    * #25 (inviteNotify half) — a Ranger is built without the invite-notify
    * wiring. gateway false · MCP true (only reachable with the MCP Ranger
    * opt-in). Suspected. Owner: unassigned. Delete when both pass false.

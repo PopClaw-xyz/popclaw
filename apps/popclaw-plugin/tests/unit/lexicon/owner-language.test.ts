@@ -19,6 +19,7 @@ import {
   useOwnerLangSignals,
 } from '../../../src/lexicon/owner-language.js';
 import { renderCopy } from '../../../src/lexicon/index.js';
+import { todayDateLabel } from '../../../src/newspaper/issue.js';
 
 afterEach(() => setOwnerLang(undefined));
 
@@ -292,6 +293,18 @@ describe('normalizeLocale', () => {
     expect(normalizeLocale(' ja-JP ')).toBe('ja-JP');
   });
 
+  it('rejects structurally invalid tags accepted by the old loose pattern', () => {
+    for (const raw of ['en-12', 'en-US-US', 'de-1901-1901']) {
+      expect(normalizeLocale(raw), raw).toBeUndefined();
+    }
+  });
+
+  it('preserves supported valid regional, script and variant tags verbatim', () => {
+    for (const tag of ['en-001', 'zh-Hant-TW', 'de-CH-1901', 'sl-rozaj-biske', 'en-canary01', 'ZH-cn']) {
+      expect(normalizeLocale(tag), tag).toBe(tag);
+    }
+  });
+
   it('rejects the "no locale" values and junk', () => {
     for (const raw of ['C', 'POSIX', '', undefined, 'C.UTF-8', 'not a locale']) {
       expect(normalizeLocale(raw)).toBeUndefined();
@@ -327,6 +340,24 @@ describe('POPCLAW_LANG — the S12 escape hatch', () => {
     setOwnerLang('zh-CN', 'config');
     process.env.POPCLAW_LANG = 'not a locale';
     expect(ownerLangTag()).toBe('zh-CN');
+  });
+});
+
+describe('invalid locale fallback in newspaper date rendering', () => {
+  afterEach(() => { delete process.env.POPCLAW_LANG; });
+
+  it('keeps the configured language when the live override is structurally invalid', () => {
+    setOwnerLang('zh-CN', 'config');
+    process.env.POPCLAW_LANG = 'en-12';
+    expect(() => todayDateLabel(1_792_022_400_000)).not.toThrow();
+    expect(ownerLangTag()).toBe('zh-CN');
+  });
+
+  it.each(['OPENCLAW_LOCALE', 'LANG'])('ignores an invalid %s before formatting the date', (key) => {
+    const { file } = langFile();
+    useOwnerLangSignals({ file, env: { [key]: 'en-12' } });
+    expect(() => todayDateLabel(1_792_022_400_000)).not.toThrow();
+    expect(ownerLangTag()).toBe(DEFAULT_OWNER_LANGUAGE);
   });
 });
 

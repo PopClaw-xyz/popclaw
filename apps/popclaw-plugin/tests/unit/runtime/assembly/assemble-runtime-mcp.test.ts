@@ -406,11 +406,11 @@ describe('drift rows pinned as the MCP root runs them today', () => {
     expect(payloads(rt).find(p => p['probe'] === 'reply')).toEqual({ probe: 'reply', houseOrigin: HOUSE });
   });
 
-  it('#18: the invitation outcome notifier is the bare queue — a notice enqueued through it carries no houseOrigin', async () => {
+  it('attributes invitation outcome notices to the home House for automatic delivery', async () => {
     const rt = await boot();
-    expect(rt.inviteWatch.notifier).toBe(rt.notifier);
+    expect(rt.inviteWatch.notifier).not.toBe(rt.notifier);
     rt.inviteWatch.notifier.enqueue({ level: 'L1', kind: 'ranger_verify_done', payload: { probe: 'invite' } });
-    expect(payloads(rt).find(p => p['probe'] === 'invite')).toEqual({ probe: 'invite' });
+    expect(payloads(rt).find(p => p['probe'] === 'invite')).toEqual({ probe: 'invite', houseOrigin: HOUSE });
   });
 
   it('#24: configureResources gets no refreshMs (the resource-set default applies)', async () => {
@@ -573,7 +573,7 @@ describe('the production MCP ports themselves', () => {
     expect(ports.lifecycle).toEqual({ loops: 'inline' });
     expect(ports.drift).toEqual({
       followerDisplayNameAbsent: true, followerBondContextAbsent: true, followerStoreOwnInstance: true,
-      replyPingBondContextAbsent: true, inviteNotifierUnattributed: true, rangerInviteNotifyAbsent: true,
+      replyPingBondContextAbsent: true, rangerInviteNotifyAbsent: true,
       refreshMs: undefined, recoveryIgnoresClosing: false, ownerLangSignalsLate: true, shutdown: 'first-error-aborts',
     });
     expect(ports.platform.defaultStateDir()).toBe('./.data');

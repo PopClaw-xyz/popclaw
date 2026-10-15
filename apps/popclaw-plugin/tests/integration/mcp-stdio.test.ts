@@ -18,6 +18,7 @@ import { join, resolve, dirname } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
+import { InboxStore } from '../../src/messaging/inbox-store.js';
 import { LocalHostDb } from '../../src/host/local-host-db.js';
 import { seedTrustedHouse } from '../helpers/seed-trusted-house.js';
 import { initializeTestRoot } from '../helpers/initialize-test-root.js';
@@ -369,16 +370,24 @@ describe('MCP unread piggyback + notifications tool', () => {
     expect(hasPiggyback(await callStatus())).toBe(false);
   }, 30_000);
 
-  it('retains unattributed history without an automatic unread reminder', async () => {
+  it('keeps unattributed history in the inbox without offering it as automatic delivery', async () => {
     const db = new LocalHostDb(socialDb());
+    const message = new InboxStore(db).recordReceived({ fromPopclawId: 'old-history', toPopclawId: 'owner',
+      body: 'unattributed history', ts: 1, receivedAtMs: 1 }).item;
     db.execute('INSERT INTO notification_queue (level, kind, payload_json, enqueued_at) VALUES (?,?,?,?)',
-      ['L1', 'dm', JSON.stringify({fromPopclawId:'old-history', body:'unattributed history'}), Math.floor(Date.now()/1000)]);
+      ['L1', 'dm', JSON.stringify({fromPopclawId:'old-history', messageId: message.id, body:message.body}), Math.floor(Date.now()/1000)]);
+    const id = db.queryOne<{ id: number }>('SELECT MAX(id) AS id FROM notification_queue')!.id;
     db.close();
     expect(hasPiggyback(await callStatus())).toBe(false);
     const res = await mcp.request('tools/call', {name:'popclaw_notifications', arguments:{}});
     const content = res.result?.['content'] as Block[];
-    expect(content[0]?.text).toContain('unattributed history');
+    expect(content[0]?.text).not.toContain('unattributed history');
+    expect(JSON.parse(content[0]!.text).notifications).toEqual([]);
     expect(hasPiggyback(content)).toBe(false);
+    const ack = await mcp.request('tools/call', {name:'popclaw_acknowledge_notifications', arguments:{notification_ids:[id]}});
+    expect(JSON.parse((ack.result?.['content'] as Block[])[0]!.text).acknowledged).toEqual([]);
+    const history = await mcp.request('tools/call', {name:'popclaw_show_inbox', arguments:{message_id:message.id}});
+    expect((history.result?.['content'] as Block[])[0]?.text).toContain('unattributed history');
   }, 30_000);
 
   it('keeps stdout pure JSON-RPC across all of the above', () => {

@@ -44,9 +44,9 @@ try {
     const hook = JSON.parse(execFileSync(packagedNode, [join(packageRoot, 'dist/bundled/mcp-hook.js'), event], { env, cwd: tmp }).toString());
     assert.equal(hook.hookSpecificOutput.hookEventName, event);
     assert.match(hook.hookSpecificOutput.additionalContext, /1 pending notifications/);
-    assert.match(hook.hookSpecificOutput.additionalContext, /notification delivery already authorized for this conversation/);
-    assert.match(hook.hookSpecificOutput.additionalContext, /Without that scope, mention only the pending count/);
-    assert.doesNotMatch(hook.hookSpecificOutput.additionalContext, /Call popclaw_notifications, then read|PACKAGE-CHECK/);
+    assert.match(hook.hookSpecificOutput.additionalContext, /Call popclaw_notifications to retrieve the pending content and present it in this chat/);
+    assert.match(hook.hookSpecificOutput.additionalContext, /No per-chat or per-letter permission is needed/);
+    assert.doesNotMatch(hook.hookSpecificOutput.additionalContext, /Without that scope|PACKAGE-CHECK/);
   }
   console.log(JSON.stringify({ package: packageRoot, node: packagedNodeVersion, nodeExecutable: packagedNode, harnessNode: process.version, tools: tools.tools.length, runtime_boot: true, decrypted_image: true, packed_hook: true }));
 } finally {

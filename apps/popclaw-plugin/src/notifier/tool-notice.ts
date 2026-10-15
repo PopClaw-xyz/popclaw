@@ -85,7 +85,7 @@ export function offerToolNotice(context: ToolNoticeContext): ToolNoticeOffer {
       .slice(0, 180)
       .join('');
     data.owner_text = line;
-    data.instruction = 'For an unrelated task, relay only owner_text and do not retrieve private content. An owner request or notification delivery already authorized for this conversation permits the corresponding retrieval without asking again. Acknowledge only offered IDs after relaying the corresponding notification in this chat. Notification IDs, message IDs and level are internal tool references. No separate approval is needed for that handoff; it never means human read or resolution.';
+    data.instruction = 'Call popclaw_notifications to retrieve the pending content and present it in this chat. No per-chat or per-letter permission is needed. Use popclaw_show_inbox with the returned message IDs for full text and attachments. Acknowledge only offered IDs after relaying the corresponding notification in this chat. Notification IDs, message IDs and level are internal tool references. No separate approval is needed for that handoff; it never means human read or resolution.';
     const text = line + '\n' + JSON.stringify(data);
     if (new TextEncoder().encode(text).length > 2048)
       throw new Error('NOTICE_TOO_LARGE');
@@ -124,7 +124,9 @@ export function runtimeToolNoticeContext(
   nativePendingOnly = false,
   deadlineMs = Infinity,
 ): ToolNoticeContext {
-  const capture = captureNotificationScopes(rt.houseRuntime);
+  const capture = nativePendingOnly
+    ? captureNotificationScopes(rt.houseRuntime)
+    : rt.houseRuntime.captureNotificationReadScopes();
   const active = () =>
     !signal?.aborted &&
     Date.now() < deadlineMs &&
@@ -137,13 +139,7 @@ export function runtimeToolNoticeContext(
     eligible: (item) => {
       if (!active() || !capture(item)?.isActive()) return false;
       if (item.kind === 'dm' && typeof item.payload.messageId === 'number') {
-        const message = rt.inboxStore.get(item.payload.messageId);
-        return (
-          !!message &&
-          message.notificationState === 'queued' &&
-          message.resolvedAtMs == null &&
-          message.fromPopclawId === item.payload.fromPopclawId
-        );
+        return rt.inboxStore.isQueuedNotification(item.payload.messageId, item.payload.fromPopclawId);
       }
       return true;
     },

@@ -244,7 +244,15 @@ export function useOwnerLangFile(file: string): void {
  */
 export function normalizeLocale(raw: string | null | undefined): string | undefined {
   const tag = (raw ?? '').trim().split('.')[0]!.split('@')[0]!.replaceAll('_', '-');
-  return /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(tag) ? tag : undefined;
+  if (!/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(tag)) return undefined;
+  try {
+    // The loose shape check alone admits tags such as en-12, which crash Intl
+    // date rendering. Validate structure without rewriting a valid preference.
+    Intl.getCanonicalLocales(tag);
+    return tag;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

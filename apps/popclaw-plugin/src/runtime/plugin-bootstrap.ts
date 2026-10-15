@@ -148,7 +148,9 @@ export async function bootstrapPlugin(
  */
 function noticeSecondRoot(host: HostAdapter, stateDir: string | undefined, popclawId: string): void {
   if (!stateDir) return;
-  const other = PopclawPaths.shadowedRootWithIdentity(process.env, stateDir);
+  const other = PopclawPaths.shadowedRootWithIdentity(
+    { POPCLAW_DATA_ROOT: process.env.POPCLAW_DATA_ROOT }, stateDir,
+  );
   if (!other) return;
   host.logger.info(
     { in_use: process.env.POPCLAW_DATA_ROOT, other, popclaw_id: popclawId },

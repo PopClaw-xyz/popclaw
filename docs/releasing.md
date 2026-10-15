@@ -140,9 +140,10 @@ the job from Ubuntu to hosted macOS does not change those fields. Checksums use
 
 ## Separate ClawHub native publication
 
-Use `.github/workflows/release-clawhub-native.yml` only for the five native
-packages. It never publishes `popclaw`, `popclaw-mcp` or the ClawHub main
-archive, and does not alter the standard release workflow.
+Use `.github/workflows/release-clawhub-native.yml` to publish the five native
+packages and attest the retained ClawHub main archive. It never publishes
+`popclaw`, `popclaw-mcp` or the ClawHub main archive, and does not alter the
+standard release workflow.
 
 Dispatch a dry run first with these fixed inputs:
 
@@ -260,13 +261,93 @@ release, then complete its first publish within two days. Do not report a
 saved configuration as permanently verified. See
 [npm's configuration expiry rules](https://docs.npmjs.com/trusted-publishers/#trusted-publisher-configuration-expiry).
 
-Only after all five native versions are verified may the retained main archive
-be uploaded to ClawHub. Record the hosted download digest and perform the
-clean `clawhub:` installation described above. Optional-dependency failures can
+Only after all five native versions and the main archive's GitHub attestation
+are verified may the retained main archive be uploaded to ClawHub. Record the
+hosted download digest and perform the clean `clawhub:` installation described
+above. Optional-dependency failures can
 leave an OpenClaw archive installation in `installed-start-deferred`; a later
 `POPCLAW_PLATFORM_DEPENDENCY_MISSING` error means runtime acceptance failed.
 Restore the verified complete distribution through the normal maintenance
 procedure and verify the same identity and database records after restart.
+
+### Verify the ClawHub archive attestation
+
+A real `release-clawhub-native.yml` run signs the retained main archive only
+after `prepare` and `publish-native` succeed. The separate `attest-main` job
+resolves the original full-source run again, downloads exact artifact IDs,
+verifies the full archive and every derived byte, and signs three subjects:
+`popclaw-clawhub-<version>.tgz`, `receipt.json` and `release-context.json`.
+It does not rebuild packages. Only this job has `attestations: write`; its
+OIDC signing identity does not require an npm or ClawHub token.
+
+`dry_run: true` creates no attestation. A resumed real run verifies the same
+retained bytes and signs them in the resumed run. The SLSA provenance identifies
+the workflow revision and run that verified and signed the archive. The signed
+release context and derivation receipt identify the original source commit,
+full-source run and archive digest. These identities may differ when release
+tooling has advanced. Do not describe a resumed signature as a signature made
+by the original build run.
+
+Download `clawhub-attestation-<tag>-<run-attempt>` from the successful native
+workflow, retain it alongside the main archive, and attach those evidence files
+to the public release. It contains the Sigstore bundle, the two signed JSON
+subjects and `attestation-subjects.sha256`; Actions retains it for 90 days.
+From the directory containing those files and the main archive, verify each
+subject against the reviewed **attesting workflow commit**, not an assumed
+release-tag commit:
+
+```sh
+version=VERSION
+attesting_commit=FULL_REVIEWED_WORKFLOW_COMMIT
+for subject in "popclaw-clawhub-${version}.tgz" receipt.json release-context.json; do
+  gh attestation verify "$subject" \
+    --repo PopClaw-xyz/popclaw \
+    --signer-workflow PopClaw-xyz/popclaw/.github/workflows/release-clawhub-native.yml \
+    --source-digest "$attesting_commit" \
+    --bundle bundle.json
+done
+shasum -a 256 -c attestation-subjects.sha256
+```
+
+Set `version` and `attesting_commit` before running these commands. Inspect
+the verified statement's run identity, compare `release-context.json` with the
+approved source tuple, and confirm the main archive's digest matches its row
+in `receipt.json`. After upload, repeat archive verification on the bytes
+actually downloaded from ClawHub. A workflow file, dry run or successful
+upload alone does not prove a valid signature. If signing or verification
+fails, retain the existing artifacts and resume; do not rebuild or replace the
+same version to obtain an attestation. See the official
+[GitHub attestation action](https://github.com/actions/attest) and
+[verification command](https://cli.github.com/manual/gh_attestation_verify).
+
+GitHub artifact attestation, ClawHub source metadata and OpenClaw runtime trust
+are separate checks. At the 2026-10-15 investigation, ClawHub CLI 0.23.3 exposes
+source attribution and OIDC publishing authentication but no build-attestation
+upload option. The public ClawHub source at
+[`6a58bbf`](https://github.com/openclaw/clawhub/blob/6a58bbfafae4a0d59e34ec4d14dcf5c26a4519b9/convex/lib/packageRegistry.ts#L534)
+sets source-linked verification to `hasProvenance: false`; its public publish
+schema has no attestation input. The deployed revision has not been established,
+so check the actual release response rather than assuming how the service is
+implemented. An independent GitHub signature does not change that ClawHub field.
+
+OpenClaw 2026.10.3 grants restricted runtime trust to bundled plugins and
+matching entries in its official plugin catalog. A community PopClaw install
+can therefore report `provenance-invalid` even when downloaded bytes and GitHub
+signatures verify. Neither source metadata, `plugins.allow`, a publisher OIDC
+binding nor this attestation adds PopClaw to that catalog. Do not claim that
+these steps enable trusted-only capabilities or remove the warning. See
+[OpenClaw runtime trust](https://docs.openclaw.ai/tools/plugin#plugin-runtime-trust-refused).
+
+The same investigation reproduced a `manifest-unknown-contracts` warning with
+Plugin Inspector 0.3.27 and the OpenClaw 2026.10.3 package: the inspector reads
+object-literal declaration fields, while that host declares its contracts as
+`Partial<Record<...>>`. It consequently finds no contract keys, although the
+host's actual manifest loader accepts `contracts.tools`. This local reproduction
+does not establish the deployed inspector version. Keep the required tool
+ownership list, record the exact release's inspection result, and recheck after
+an upstream inspector fix. Do not delete valid tool declarations to suppress
+this warning. The [host contract documentation](https://docs.openclaw.ai/plugins/manifest/capabilities#contracts-reference)
+explains their role in discovery.
 
 ## Order on the day
 
