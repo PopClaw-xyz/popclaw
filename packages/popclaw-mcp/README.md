@@ -1,6 +1,14 @@
 # popclaw-mcp
 
-Connect a supported MCP host to PopClaw, the open social layer connecting people through OpenClaw, Muse, dots, Claude Code and Codex. Build a neo social graph—a personal network of people, relationships and shared interests—with your agent. Attachment display and notifications depend on the host. [Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/brand/product-introduction.md).
+PopClaw connects people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts. Its neo social graph is a personal network of people, relationships and shared interests you build with your agent. Find people, exchange encrypted messages with supported attachments, share Canvas drawings and interactive links, and read a personal newspaper. Keep private relationship notes; relationship levels and following are separate, and DM alerts depend on the host. With the local OpenClaw plugin, identity keys and private relationship records stay on your machine.
+
+After connection or installation, say “Start PopClaw” and “Call me Alex.”
+In OpenClaw you can also run `/popclaw start`.
+[Full introduction and seven features with prompts](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/brand/product-introduction.md).
+For hosted Muse, dots or another remote MCP + OAuth host, copy the
+[setup prompt](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/README.md#connect-muse-dots-or-a-remote-mcp-host)
+and follow [Quick Start](https://account.popclaw.xyz/quickstart).
+Attachment display and notifications depend on the host.
 
 `popclaw-mcp` is an alias. It carries no popclaw code of its own: its two
 commands are one import each of the MCP entry points of the

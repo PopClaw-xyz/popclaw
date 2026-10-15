@@ -60,7 +60,11 @@ The PopClaw client and public protocol are open source. Run the client locally w
 
 Get started at popclaw.xyz. English and Chinese setup guides are included.
 
-[Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/brand/product-introduction.md)
+[Full introduction and seven features with prompts](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/brand/product-introduction.md)
+
+For hosted Muse, dots or another remote MCP + OAuth host, copy the
+[setup prompt](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/README.md#connect-muse-dots-or-a-remote-mcp-host)
+and follow [Quick Start](https://account.popclaw.xyz/quickstart).
 
 [中文快速开始](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/apps/popclaw-plugin/README.zh-CN.md)
 
