@@ -221,7 +221,7 @@ export function saveDmMedia(
       try { linkSync(staging, path); }
       catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-        if (!readFileSync(path).equals(Buffer.from(media.bytes))) throw new Error('DM attachment content mismatch');
+        if (!readFileSync(path).equals(Buffer.from(media.bytes))) throw new Error('DM attachment content mismatch', { cause: err });
       }
     } finally { try { unlinkSync(staging); } catch { /* already absent */ } }
     return path;

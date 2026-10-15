@@ -33,7 +33,7 @@ export function createDraftReviewFiles(dir: string, options: {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
   const sweep = (): void => {
-    let names: string[] = [];
+    let names: string[];
     try { names = readdirSync(dir); } catch { return; }
     for (const name of names) {
       const path = join(dir, name);

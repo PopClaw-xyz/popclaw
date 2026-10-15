@@ -44,7 +44,10 @@ describe('loadLLMConfig', () => {
 
   it('throws on malformed JSON', () => {
     writeFileSync(llmPath, '{not json', 'utf-8');
-    expect(() => loadLLMConfig(llmPath)).toThrow(/llm\.json/);
+    expect(() => loadLLMConfig(llmPath)).toThrow(expect.objectContaining({
+      message: expect.stringMatching(/llm\.json/),
+      cause: expect.any(SyntaxError),
+    }));
   });
 
   it('throws on wrong schemaVersion', () => {

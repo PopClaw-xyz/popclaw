@@ -517,6 +517,7 @@ describe('failed boot (row 29)', () => {
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).message).toBe('STORAGE_BOOT_CLEANUP_FAILED');
     expect((failure as AggregateError).errors.map(e => (e as Error).message)).toEqual(['C2_FORCED_BOOT_FAILURE', 'C0_houses.stop_FAILED']);
+    expect((failure as AggregateError).cause).toBe((failure as AggregateError).errors[1]);
     expect(probe.events.slice(probe.events.indexOf('boot.fail') + 1)).toEqual(['ownerAuthorization.stop', 'worlds.stop', 'houses.stop']);
     // Cleanup stopped at houses.stop, so the host DB and a partition stay open. Test-only rescue:
     const handles = [...probe.hostDbs, ...partitionDbs()];

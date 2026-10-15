@@ -60,5 +60,6 @@ try {
       `  mv node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/build /tmp/stale-build`,
       `  pnpm rebuild -r better-sqlite3`,
     ].join('\n'),
+    { cause: err },
   );
 }

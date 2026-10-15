@@ -78,7 +78,7 @@ export class ScrapeContentHandler {
       return;
     }
 
-    let posts: ScrapedPost[] = [];
+    let posts: ScrapedPost[];
     try {
       assertActionActive(this.deps.gate);
       posts = await scraper.scrapeTimeline(handle, new Date(sinceTs * 1000), maxItems);

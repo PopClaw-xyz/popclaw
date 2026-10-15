@@ -77,12 +77,14 @@ describe('HybridScraper', () => {
 
   it('throws combined error when both fail', async () => {
     const primary = makeStub(new Error('playwright crashed'));
-    const fallback = makeStub(new Error('no bearer token'));
+    const failure = new Error('no bearer token');
+    const fallback = makeStub(failure);
     const hybrid = new HybridScraper({ primary, fallback });
 
-    await expect(hybrid.fetchVerificationTargets('blackfeather_ai')).rejects.toThrow(
-      /primary failed.*fallback failed/s,
-    );
+    await expect(hybrid.fetchVerificationTargets('blackfeather_ai')).rejects.toMatchObject({
+      message: expect.stringMatching(/primary failed.*fallback failed/s),
+      cause: failure,
+    });
   });
 
   it('throws primary error when fallback is absent and primary threw', async () => {

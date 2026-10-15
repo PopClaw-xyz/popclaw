@@ -88,6 +88,7 @@ export class HybridScraper implements PlatformScraper {
       throw new Error(
         `hybrid-scraper: primary failed (${primaryMsg}); ` +
           `fallback failed (${fallbackErr.message})`,
+        { cause: err },
       );
     }
   }

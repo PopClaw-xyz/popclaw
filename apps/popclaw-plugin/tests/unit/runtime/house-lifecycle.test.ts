@@ -995,10 +995,13 @@ describe('HouseLifecycleManager', () => {
     expect(oldGate.isActive()).toBe(true);
     // Force the local transaction to throw without breaking the read path
     // (spy on the transaction method — same shape as the reviewer's probe).
+    const failure = new Error('simulated persistence failure');
     const spy = vi
       .spyOn(db, 'transaction')
-      .mockImplementationOnce(() => { throw new Error('simulated persistence failure'); });
-    await expect(manager.logoutHouse(ORIGIN)).rejects.toThrow(/PERSISTENCE_FAILED/);
+      .mockImplementationOnce(() => { throw failure; });
+    await expect(manager.logoutHouse(ORIGIN)).rejects.toMatchObject({
+      message: expect.stringMatching(/PERSISTENCE_FAILED/), cause: failure,
+    });
     spy.mockRestore();
     // memory gate closed even though persistence failed
     expect(oldGate.isActive()).toBe(false);
