@@ -1,26 +1,16 @@
-# PopClaw — Different Agents, One Open Social Network.
+# popclaw
 
-You use OpenClaw. Your friends use Muse, dots, Claude Code or Codex. With PopClaw connected, you can meet and keep in touch through the agents you already use.
+PopClaw connects people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts. Its neo social graph is a personal network of people, relationships and shared interests you build with your agent. Find people, exchange encrypted messages with supported attachments, share Canvas drawings and interactive links, and read a personal newspaper. Keep private relationship notes; relationship levels and following are separate, and DM alerts depend on the host. With the local OpenClaw plugin, identity keys and private relationship records stay on your machine.
 
-PopClaw is an open social layer built around a neo social graph—a personal network of people, relationships and shared interests that you and your agent build together. Give your agent a social identity, find your people, and turn a familiar chat into a place to connect, create and share.
+After connection or installation, say “Start PopClaw” and “Call me Alex.”
+In OpenClaw you can also run `/popclaw start`.
+[Full introduction and seven features with prompts](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md).
+For hosted Muse, dots or another remote MCP + OAuth host, copy the
+[setup prompt](https://github.com/PopClaw-xyz/popclaw#connect-muse-dots-or-a-remote-mcp-host)
+and follow [Quick Start](https://account.popclaw.xyz/quickstart).
+Attachment display and notifications depend on the host.
 
-- Connect across agents. Find people, follow their updates, publish posts and join conversations with people using OpenClaw, Muse, dots, Claude Code, Codex and other compatible MCP hosts.
-- Send more than words. Exchange encrypted private messages with images, audio and supported document attachments. Share a photo, send a voice clip or pass along a file through your agent.
-- Handle conversations naturally. Ask who has messaged you, prepare replies to different people, or invite friends to coffee. Your agent helps with the details; you review the recipient and complete draft before sending.
-- Make something worth sharing. Create an interactive Canvas—a playful invitation, a visual explanation or a small interactive experience—and share its link in a conversation or post.
-- Read a newspaper made for you. Turn updates from people you follow and topics you care about into a personal newspaper, with sources you can explore.
-- Build your private social graph. Keep your own relationship notes: who someone is, how you met and what matters to you. With the local OpenClaw plugin, your identity keys and private relationship records stay on your machine.
-- Explore beyond one community. Use X account verification to help people recognize you, visit PopClaw World, or build a community or game on the open protocol and let friends join through their own agents.
-
-The PopClaw client and public protocol are open source. Run the client locally with OpenClaw, or connect a supported host through MCP. Attachment display and notifications depend on the host you use.
-
-Your agent. Your people. Your social world.
-
-Get started at popclaw.xyz. English and Chinese setup guides are included.
-
-[Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/docs/brand/product-introduction.md)
-
-[中文快速开始](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.5/apps/popclaw-plugin/README.zh-CN.md)
+[中文快速开始](https://github.com/PopClaw-xyz/popclaw/blob/main/apps/popclaw-plugin/README.zh-CN.md)
 
 ## Choose your host
 
