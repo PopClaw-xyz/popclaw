@@ -227,7 +227,8 @@ export class SqliteNotifier implements Notifier {
     });
   }
 
-  peekFor(consumerId: string, level?: NotificationLevel, limit = 50): NotificationItem[] {
+  peekFor(consumerId: string, level?: NotificationLevel, limit = 50, context?: ToolNoticeContext): NotificationItem[] {
+    if (context && !context.active()) return [];
     this.bindConsumer(consumerId);
     return this.db.transaction((tx) => {
       const rows = tx.queryAll<QueueRow>(
@@ -236,27 +237,53 @@ export class SqliteNotifier implements Notifier {
          ON r.notification_id = q.id AND r.consumer_id = ?
          WHERE r.acknowledged_at IS NULL AND q.level IN ('L1','L2')
          AND (r.notification_id IS NOT NULL OR q.id > (SELECT start_after_id FROM notification_consumers WHERE consumer_id = ?))` +
-         (level ? ' AND q.level = ?' : '') + ' ORDER BY q.enqueued_at, q.id LIMIT ?',
-        level ? [consumerId, consumerId, level, limit] : [consumerId, consumerId, limit],
+         (level ? ' AND q.level = ?' : '') +
+         (context?.nativePendingOnly ? ' AND q.delivered_at IS NULL AND (q.delivery_lease_until IS NULL OR q.delivery_lease_until <= ?)' : '') +
+         ' ORDER BY q.enqueued_at, q.id' + (context ? '' : ' LIMIT ?'),
+        [consumerId, consumerId, ...(level ? [level] : []), ...(context?.nativePendingOnly ? [this.nowSeconds()] : []), ...(context ? [] : [limit])],
       );
-      for (const row of rows) tx.execute(
+      // Filter before limiting and recording an offer: an ineligible prefix must
+      // neither starve live notices nor become acknowledgeable as delivered.
+      const offered = context ? rows.filter(row => context.eligible(this.toItem(row))).slice(0, limit) : rows;
+      for (const row of offered) tx.execute(
         `INSERT INTO notification_receipts (consumer_id, notification_id, offered_at) VALUES (?, ?, ?)
          ON CONFLICT(consumer_id, notification_id) DO UPDATE SET offered_at = CASE WHEN offered_at = 0 THEN excluded.offered_at ELSE offered_at END`,
         [consumerId, row.id, this.nowSeconds()],
       );
-      return rows.map(this.toItem);
+      return offered.map(this.toItem);
     });
   }
 
-  countFor(consumerId: string, level?: NotificationLevel, eligible?: (item: NotificationItem) => boolean): number {
+  private pendingConsumerQuery(consumerId: string, level?: NotificationLevel) {
     const from = `FROM notification_queue q LEFT JOIN notification_receipts r
        ON r.notification_id = q.id AND r.consumer_id = ? WHERE q.level IN ('L1','L2') AND r.acknowledged_at IS NULL
        AND (r.notification_id IS NOT NULL OR q.id > (SELECT start_after_id FROM notification_consumers WHERE consumer_id = ?))` + (level ? ' AND q.level = ?' : '');
-    const params = level ? [consumerId, consumerId, level] : [consumerId, consumerId];
+    return { from, params: level ? [consumerId, consumerId, level] : [consumerId, consumerId] };
+  }
+
+  countFor(consumerId: string, level?: NotificationLevel, eligible?: (item: NotificationItem) => boolean): number {
+    const { from, params } = this.pendingConsumerQuery(consumerId, level);
     if (eligible) return this.db.queryAll<QueueRow>(
       'SELECT q.id, q.level, q.kind, q.payload_json, q.enqueued_at ' + from, params,
     ).filter(row => eligible(this.toItem(row))).length;
     return this.db.queryOne<{ n: number }>('SELECT COUNT(*) AS n ' + from, params)?.n ?? 0;
+  }
+
+  /** Lifecycle reminders inspect routing/state metadata only, never letter bodies
+   * or attachment paths. JSON arrows preserve field absence, null and value types. */
+  countMetadataFor(consumerId: string, eligible: (item: NotificationItem) => boolean): number {
+    const { from, params } = this.pendingConsumerQuery(consumerId);
+    const rows = this.db.queryAll<{ id: number; level: NotificationLevel; kind: NotificationKind; enqueued_at: number;
+      houseOrigin: string | null; houseSlug: string | null; messageId: string | null; fromPopclawId: string | null }>(
+      `SELECT q.id, q.level, q.kind, q.enqueued_at, q.payload_json -> '$.houseOrigin' AS houseOrigin,
+       q.payload_json -> '$.houseSlug' AS houseSlug, q.payload_json -> '$.messageId' AS messageId,
+       q.payload_json -> '$.fromPopclawId' AS fromPopclawId ` + from + ' AND json_valid(q.payload_json)', params);
+    return rows.filter(row => {
+      const payload: Record<string, unknown> = {};
+      for (const key of ['houseOrigin', 'houseSlug', 'messageId', 'fromPopclawId'] as const)
+        if (row[key] !== null) payload[key] = JSON.parse(row[key]);
+      return eligible({ id: row.id, level: row.level, kind: row.kind, enqueuedAt: row.enqueued_at, payload });
+    }).length;
   }
 
   acknowledgeFor(consumerId: string, ids: readonly number[]): number[] {

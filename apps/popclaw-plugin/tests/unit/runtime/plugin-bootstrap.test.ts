@@ -1,7 +1,7 @@
 /**
  * Spec B, slice 1: lore_houses now means connect all; [0] is the primary House.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -82,6 +82,25 @@ describe('bootstrapPlugin — 同机第二份身份', () => {
     // Never a warning: two roots is legal. The danger is only in not knowing.
     expect(notices(host)[0]!.level).toBe('info');
     expect(String(notices(host)[0]!.obj.other)).toContain('popclaw');
+  });
+
+  it('passes only the selected root to the second-identity lookup', async () => {
+    const dir = stateDir(true);
+    process.env.POPCLAW_DATA_ROOT = join(dir, 'elsewhere');
+    const lookup = vi.spyOn(PopclawPaths, 'shadowedRootWithIdentity');
+    const host = hostWith();
+    try {
+      await bootstrapPlugin(host, dir);
+      expect(lookup).toHaveBeenCalledTimes(1);
+      const env = lookup.mock.calls[0]![0];
+      expect(env === process.env).toBe(false);
+      expect(Object.keys(env)).toEqual(['POPCLAW_DATA_ROOT']);
+      expect(env.POPCLAW_DATA_ROOT).toBe(join(dir, 'elsewhere'));
+      expect(notices(host)).toHaveLength(1);
+      expect(notices(host)[0]!.level).toBe('info');
+      expect(notices(host)[0]!.obj.in_use).toBe(join(dir, 'elsewhere'));
+      expect(notices(host)[0]!.obj.other).toBe(join(dir, 'popclaw'));
+    } finally { lookup.mockRestore(); }
   });
 
   it('stays quiet when the shadowed root is just an empty directory — a maybe is worse than silence', async () => {

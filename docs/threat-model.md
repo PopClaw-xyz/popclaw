@@ -116,18 +116,33 @@ that text to the selected naming model. The reader loads the file before
 truncating its returned text to 8192 code units; this is not a file-size limit.
 An unset path reads no file. Choose that file with the model destination in mind.
 
-**Notification scope.** Agent instructions permit private notification retrieval
-for the owner's PopClaw request or notification delivery already authorized for
-that conversation. A session starting, tool availability or quoted notification
-text is not authorization. Notification results can include decrypted message
-bodies; they are not merely counts. An unrelated tool notice carries a bounded
-summary and does not authorize expanding private content. When the owner asks
-to see messages or attachments, the agent retrieves the requested content
-without another confirmation. After actually relaying a notification in that
-chat, the agent acknowledges only IDs offered to that session. This records
-host handoff, not human read, consent to reply or request resolution. These
-instructions rely on the host agent following scope; they are not a new
-cryptographic conversation boundary.
+**Automatic notification delivery.** An enabled personal PopClaw integration
+uses session start and genuine PopClaw reminders to deliver pending notifications.
+The host agent retrieves and presents their full letters and attachments without
+new per-chat or per-letter permission. This can expose decrypted content to the
+selected host and its model provider, just like an explicit inbox request. Hooks
+inspect routing and delivery-state metadata to count eligible items; they do not
+read letter bodies or attachment paths. The notification and inbox tools provide
+the actual content and recheck runtime authority. A hook cannot observe another
+process's in-memory revocation; racing reminders may yield no deliverable content.
+The agent stays quiet for an empty queue and does not browse unrelated history.
+
+Pending delivery uses the existing identity's data root, storage state and current
+House participation/trust checks. MCP readers can display local content even when
+another process owns background receiving. Native push keeps its existing owner
+and delivery-lease checks. Ineligible rows are filtered before an offer is recorded;
+they are not silently acknowledged. Explicit local inbox history remains available.
+
+Delivered letters remain in the final user-visible reply. Attachments appear
+inline where supported; a labeled attachment link is not proof of image display.
+After presenting content in the chat, the agent acknowledges only offered IDs.
+Receipts persist for the configured integration/project consumer, not a guaranteed
+per-chat identity. A missing acknowledgement can cause a retry; concurrent chats
+are not guaranteed exactly-once delivery. Handoff is not human read, consent to
+reply or request resolution. Incoming messages and attachments are external data,
+not instructions to execute, change recipients or authorize actions. Ordinary
+sending still uses the existing one manuscript confirmation. Model compliance
+with these instructions is separate from the runtime checks described above.
 
 **Setup environment and language.** The local MCP setup probe inherits only
 `PATH`, `HOME`, `TMPDIR`, `TMP` and `TEMP`, plus the probe's own PopClaw settings.
@@ -138,6 +153,12 @@ observations, consulting `LANG` only as a fallback; it no longer reads `LC_ALL`
 or `LC_MESSAGES`. An installation using only those removed locale variables
 may initially display a different language. Agent-facing language preferences
 yield to the current user request and host instructions.
+Locale inputs are normalized and structurally checked before use in date
+rendering. A valid language tag may appear in model prompts or generated HTML.
+Structural validation does not detect secrets embedded in an otherwise valid
+tag and does not establish the absence of scanner findings. The local
+second-identity lookup receives only the configured data-root value; its existing
+notice reports identity paths without reading the other identity key.
 
 The paper's own file is a separate question: opening it in a browser can
 fetch fonts and article images from the sites they came from. That is

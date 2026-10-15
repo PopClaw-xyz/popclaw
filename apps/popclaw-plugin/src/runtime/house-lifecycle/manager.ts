@@ -390,6 +390,16 @@ export class HouseLifecycleManager {
    * another same-root process logs out and re-logs-in, this process's old
    * handle has an unchanged in-memory generation but the persistent
    * generation has moved on, so isActive must be false. */
+  /** A local read must respect logout even if its durable transaction failed.
+   * Reuse the existing revocation epoch; receiving ownership is not involved. */
+  captureLocalReadFence(input: string): () => boolean {
+    const origin = normalizeHouseOrigin(input);
+    const epoch = this.localLogoutEpochs.get(origin) ?? 0;
+    const allowed = !this.stopped && !this.localLogoutFences.has(origin);
+    return () => allowed && !this.stopped && !this.localLogoutFences.has(origin)
+      && (this.localLogoutEpochs.get(origin) ?? 0) === epoch;
+  }
+
   gateFor(originInput: string): HouseGate {
     const origin = normalizeHouseOrigin(originInput);
     const state = this.gates.get(origin);
