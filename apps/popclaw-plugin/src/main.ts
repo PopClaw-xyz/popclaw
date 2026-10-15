@@ -309,6 +309,10 @@ async function runDaemonMode(
       })
     : undefined;
 
+  // Shared services unref their polling timers so host and one-shot commands
+  // can exit. The daemon owns its residency even while every house is offline
+  // or Ranger execution is absent; signal listeners alone do not keep Node alive.
+  const keepAlive = setInterval(() => {}, 2_147_483_647);
   const shutdown = async (sig: string) => {
     logger.info({ signal: sig }, 'popclaw-plugin shutting down');
     housePinning?.stop();
@@ -319,6 +323,7 @@ async function runDaemonMode(
     for (const house of houseStores) house.db.close();
     boot.executionStores.close(); boot.releaseStorage();
     host.db.close();
+    clearInterval(keepAlive);
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

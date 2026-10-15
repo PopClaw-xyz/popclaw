@@ -94,33 +94,50 @@ describe('client distribution capability boundary', () => {
     expect(client.logs.join('\n')).not.toMatch(/scraper registry|missing scraper creds|POPCLAW_(?:APIFY|TWITTERAPI_IO|YOUTUBE)/);
   }, 90_000);
 
-  it('keeps the isolated CLI daemon resident and stops it cleanly without Ranger execution', async () => {
+  it.each(['bundled', 'client-bundled'] as const)('keeps the isolated %s CLI daemon resident while offline and stops it cleanly', async (profile) => {
     const root = state();
-    cpSync(graph('client-bundled'), join(root, 'dist/bundled'), { recursive: true });
+    cpSync(graph(profile), join(root, 'dist/bundled'), { recursive: true });
     symlinkSync(join(ROOT, 'dist/native-deps'), join(root, 'dist/native-deps'));
     cpSync(join(ROOT, 'migrations'), join(root, 'migrations'), { recursive: true });
     writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
     const preload = join(root, 'offline.mjs');
-    writeFileSync(preload, "globalThis.fetch = async () => { throw new Error('offline package fixture'); };\n");
+    writeFileSync(preload, `import { writeSync } from 'node:fs';
+      globalThis.fetch = async () => { throw new Error('offline package fixture'); };
+      // This observer must not create any handle that could keep the daemon alive.
+      process.once('beforeExit', () => writeSync(2, 'FIXTURE_DAEMON_BEFORE_EXIT\\n'));
+    `);
     const child = spawn(process.execPath, ['--import', preload, join(root, 'dist/bundled/cli.js'), 'daemon'], {
       cwd: root, env: environment(root), stdio: ['ignore', 'pipe', 'pipe'],
     });
-    let output = '', ready = false;
+    let output = '', ready = false, signalSent = false;
+    let stopTimer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const result = await new Promise<number | null>((resolveExit, reject) => {
+      const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit, reject) => {
         const timeout = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('daemon did not stop: ' + output)); }, 20_000);
         const capture = (chunk: Buffer) => {
           output += chunk.toString();
-          if (!ready && output.includes('house lifecycle runtime started')) { ready = true; child.kill('SIGTERM'); }
+          if (!ready && output.includes('house lifecycle runtime started')) {
+            ready = true;
+            // This is a residency assertion, not startup grace: the offline
+            // child must stay alive without a parent pipe or Ranger timer.
+            stopTimer = setTimeout(() => { signalSent = child.kill('SIGTERM'); }, 250);
+          }
         };
         child.stdout.on('data', capture); child.stderr.on('data', capture);
-        child.once('error', error => { clearTimeout(timeout); reject(error); });
-        child.once('exit', code => { clearTimeout(timeout); resolveExit(code); });
+        child.once('error', error => { clearTimeout(timeout); clearTimeout(stopTimer); reject(error); });
+        // close follows exit and drains both log pipes before their assertions.
+        child.once('close', (code, signal) => { clearTimeout(timeout); clearTimeout(stopTimer); resolveExit({ code, signal }); });
       });
-      expect(ready, output).toBe(true);
-      expect(result, output).toBe(0);
+      const diagnostic = JSON.stringify({ ready, signalSent, ...result }) + '\n' + output;
+      expect(ready, diagnostic).toBe(true);
+      expect(signalSent, diagnostic).toBe(true);
+      expect(output, diagnostic).not.toContain('FIXTURE_DAEMON_BEFORE_EXIT');
+      expect(result, diagnostic).toEqual({ code: 0, signal: null });
       expect(output).toContain('popclaw-plugin shutting down');
-      expect(output).not.toMatch(/missing scraper creds|Ranger task execution is unavailable/);
-    } finally { if (child.exitCode === null) child.kill('SIGKILL'); }
+      if (profile === 'client-bundled') expect(output).not.toMatch(/missing scraper creds|Ranger task execution is unavailable/);
+    } finally {
+      clearTimeout(stopTimer);
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    }
   }, 30_000);
 });
