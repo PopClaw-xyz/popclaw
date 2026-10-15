@@ -56,9 +56,34 @@ verification and independent review. Three altered-signature controls per packag
 were rejected for cryptographic reasons. The original archives also passed
 independent content and smoke-evidence review.
 
-ClawHub native publication, attestation and upload remain a separate channel in
-progress; this release does not claim their completion. Daily-use hosts were not
-upgraded, and no new Gateway, model or social-delivery acceptance is claimed.
+The [ClawHub package](https://clawhub.ai/heiyuneo/plugins/popclaw-clawhub)
+**0.1.8 is published**, release `rd7fbhn20a2jeztbfe54frxbdd8gb0ch`.
+Its public download is byte-identical to the signed original: 3,895,359 bytes,
+213 files, SHA-256
+`e23ebba80ee84c3a45f3a80a960d69ccba8e6ed284a3813fae283b688fa5fb87`.
+The original archive's signature evidence and the public download's two identity
+checks passed independent post-publication review. Native publication completed
+in [run 38767255499](https://github.com/PopClaw-xyz/popclaw/actions/runs/38767255499).
+
+The actual 0.1.8 [platform audit](https://clawhub.ai/heiyuneo/plugins/popclaw-clawhub/security-audit)
+snapshot, fetched October 15, 2026 at 16:49 UTC, retains these limits:
+
+| Check | Recorded result |
+| --- | --- |
+| Static scan v2.4.26 | Suspicious; **3 Critical** findings: two dynamic-code findings and one environment-credential-access finding. |
+| LLM analysis | **Suspicious, high confidence**; this is the 0.1.8 result, not the earlier version's verdict. |
+| VirusTotal | 0 malicious, 0 suspicious, 61 undetected. This does not clear the other scanners. |
+| SkillSpector | `null`; no verdict available. |
+| Platform source/trust metadata | `community`, `source-linked`, `artifact-only`, `hasProvenance=false`, `isOfficial=false`. |
+
+The inspector also reports P2 `sdk-deprecated-api` for synchronous
+`resolveCronStorePath`. Its December 31, 2026 date is an inspector-reported date,
+not an independently confirmed removal deadline. The release review's
+[official policy cross-check](https://docs.openclaw.ai/plugins/sdk-migration/compatibility-policy#cron-store-path-resolution)
+found a later stable release, without a fixed date in that section.
+Valid signatures do not imply all platform scans passed or official-plugin trust.
+Daily-use hosts were not upgraded, and no new Gateway, model or social-delivery
+acceptance is claimed.
 
 The [read-only 0.1.7 verification run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38762787087)
 succeeded. Its receipt matches both original 0.1.7 archive hashes and verifies
