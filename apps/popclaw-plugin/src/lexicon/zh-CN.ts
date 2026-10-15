@@ -1695,6 +1695,7 @@ export const ZH_CN: Lexicon = {
     'invite.usage': 'usage: /popclaw invite <platform> <handle> [--nickname=X] [--replace] [--proof <帖子链接>] [--sync]',
     'invite.badProofUrl': '⚠️ --proof 链接无效：需要形如 https://x.com/<用户名>/status/<数字> 的帖子链接（收到：{got}）',
     'invite.cli.badProofFlag': '--proof 链接无效：需要 --proof=https://x.com/<用户名>/status/<数字> 形式（收到：{got}）',
+    'invite.tool.contextUnavailable': '客户端没有提供有效的聊天上下文。请检查客户端连接；改用另一种语言或重复特定口令不能解决这个问题。通知设置不限制你从哪个入口认证账号。',
     'invite.tool.usage': '先提供 X 平台和账号，准备邀请。发好后说“发好了”，Native 用 posted:true 核验本聊天最新准备的账号。同步、换号和昵称变更仍需预览确认。',
     'invite.tool.preview':
       '📝 认证申请——还没提交：\n'
@@ -1802,8 +1803,8 @@ export const ZH_CN: Lexicon = {
     // source and the owner reads their own language via briefingCard, delivered directly without the agent.
     // Values match pre-migration production text exactly, including full-width punctuation and spaces.
     // -------------------------------------------------------------------
-    'onboarding.personaHint':
-      '想让我参考你的自述材料想名号？把 POPCLAW_OWNER_PERSONA_PATH 指向任意自述文件，再跟我说一次「重新取名」。',
+    'onboarding.namingHint':
+      '选一个候选名号，或者直接告诉我你想用的名字。',
     'onboarding.naming.retry.empty': '还没有名号——报个编号选一个，或者直接把你想要的名字告诉我（中英文都行）。',
     'onboarding.naming.retry.placeholder':
       '「ranger-xxxxxx」是机器占位名，不能拿它当名号——报个编号，或者自己取一个。',

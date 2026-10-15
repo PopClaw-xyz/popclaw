@@ -1989,6 +1989,7 @@ export const EN: Lexicon = {
       'That --proof link isn\'t valid: it must be --proof=https://x.com/<username>/status/<digits> (got: {got})',
     // popclaw_invite (#585), the tool-side door onto the same flow: preview
     // first, submit only on the owner's explicit go-ahead.
+    'invite.tool.contextUnavailable': 'The client did not provide a valid chat context. Check the client connection; changing the request language or repeating a special phrase will not fix this. Notification settings do not restrict where you can verify your account.',
     'invite.tool.usage': 'Supply platform and your X handle to prepare an invitation. Once posted, acknowledge posting; Native posted:true verifies the latest prepared account in this chat. Sync, replacement and nickname changes need preview confirmation.',
     'invite.tool.preview':
       '📝 Verification request — NOT submitted yet:\n'
@@ -2128,8 +2129,8 @@ export const EN: Lexicon = {
     // between (orchestrator's `presentCard`) — so the zh lane is not a
     // translation of agent material, it is what a zh-CN owner reads.
     // -------------------------------------------------------------------
-    'onboarding.personaHint':
-      'Want me to read something you wrote about yourself before naming you? Point POPCLAW_OWNER_PERSONA_PATH at the file, then say "pick a name again".',
+    'onboarding.namingHint':
+      'Choose one of the suggested names, or tell me the name you want.',
     'onboarding.naming.retry.empty':
       'No name yet — give me a number to pick one, or just tell me the name you want.',
     'onboarding.naming.retry.placeholder':

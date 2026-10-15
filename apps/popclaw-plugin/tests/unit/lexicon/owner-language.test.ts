@@ -357,46 +357,61 @@ describe('useOwnerLangSignals — the host already knows some of this', () => {
     expect(ownerLangTag()).toBe('en-US');
   });
 
-  it('prefers LC_ALL, then LC_MESSAGES, then LANG (the host order)', () => {
+  it('reads LANG as the sole ambient locale fallback', () => {
+    const { file } = langFile();
+    const reads: string[] = [];
+    const env = new Proxy({ LANG: 'zh_CN.UTF-8' } as NodeJS.ProcessEnv, {
+      get(target, key: string) {
+        reads.push(key);
+        if (key === 'LC_ALL' || key === 'LC_MESSAGES') throw new Error('Unexpected ambient locale read');
+        return target[key];
+      },
+    });
+    useOwnerLangSignals({ file, env });
+    expect(ownerLangTag()).toBe('zh-CN');
+    expect(ownerLangSource()).toBe('env');
+    expect(reads).toEqual(['OPENCLAW_LOCALE', 'LANG']);
+  });
+
+  it('ignores LC_ALL and LC_MESSAGES even when they disagree with LANG', () => {
     const { file } = langFile();
     useOwnerLangSignals({ file, env: { LC_ALL: 'ja_JP.UTF-8', LC_MESSAGES: 'ko_KR', LANG: 'zh_CN' } });
-    expect(ownerLangTag()).toBe('ja-JP');
-    setOwnerLang(undefined);
-    useOwnerLangSignals({ file, env: { LC_MESSAGES: 'ko_KR.UTF-8', LANG: 'zh_CN' } });
-    expect(ownerLangTag()).toBe('ko-KR');
+    expect(ownerLangTag()).toBe('zh-CN');
+    expect(ownerLangSource()).toBe('env');
   });
 
-  it('treats a blank LC_ALL/LC_MESSAGES as absent for locale fallback', () => {
-    // An MCP host can pass empty variables to its child. Our fallback treats
-    // empty and whitespace-only values as blank without changing the environment.
+  it('uses the default when LANG is blank or not a language tag', () => {
     const { file } = langFile();
-    for (const blank of ['', '   ']) {
+    for (const lang of [undefined, '', '   ', 'C', 'POSIX', 'C.UTF-8', 'not a locale']) {
       setOwnerLang(undefined);
-      useOwnerLangSignals({ file, env: { LC_ALL: blank, LANG: 'zh_CN.UTF-8' } });
-      expect(ownerLangTag(), `LC_ALL=${JSON.stringify(blank)}`).toBe('zh-CN');
-      expect(ownerLangSource()).toBe('env');
-
-      setOwnerLang(undefined);
-      useOwnerLangSignals({ file, env: { LC_MESSAGES: blank, LANG: 'zh_CN.UTF-8' } });
-      expect(ownerLangTag(), `LC_MESSAGES=${JSON.stringify(blank)}`).toBe('zh-CN');
-      expect(ownerLangSource()).toBe('env');
-    }
-  });
-
-  it('a nonblank C/POSIX/junk override still means "explicitly no locale" — it does not fall through to LANG', () => {
-    // POSIX gives LC_ALL=C the power to override LANG; honoring that is a
-    // feature, not the blank-value bug above. The chain stops there.
-    const { file } = langFile();
-    for (const explicit of ['C', 'POSIX', 'C.UTF-8', 'not a locale']) {
-      setOwnerLang(undefined);
-      useOwnerLangSignals({ file, env: { LC_ALL: explicit, LANG: 'zh_CN.UTF-8' } });
-      expect(ownerLangSource(), `LC_ALL=${explicit}`).toBeUndefined();
+      useOwnerLangSignals({ file, env: { LANG: lang, LC_ALL: 'zh_CN', LC_MESSAGES: 'zh_CN' } });
       expect(ownerLangTag()).toBe(DEFAULT_OWNER_LANGUAGE);
-
-      setOwnerLang(undefined);
-      useOwnerLangSignals({ file, env: { LC_MESSAGES: explicit, LANG: 'zh_CN.UTF-8' } });
-      expect(ownerLangSource(), `LC_MESSAGES=${explicit}`).toBeUndefined();
+      expect(ownerLangSource()).toBeUndefined();
     }
+  });
+
+  it('does not read environment fallback when explicit speech or cadence is available', () => {
+    const { file } = langFile();
+    const env = new Proxy({} as NodeJS.ProcessEnv, {
+      get() { throw new Error('No environment fallback is needed'); },
+    });
+    useOwnerLangSignals({ speechLocale: 'zh-CN', file, env });
+    expect(ownerLangTag()).toBe('zh-CN');
+    setOwnerLang(undefined);
+    setOwnerLang('de-DE', 'config');
+    useOwnerLangSignals({ file, env });
+    expect(ownerLangTag()).toBe('de-DE');
+  });
+
+  it('does not read LANG after a remembered preference has been restored', () => {
+    const { file } = langFile();
+    useOwnerLangFile(file);
+    reportOwnerLang('zh-CN', 'guess');
+    setOwnerLang(undefined);
+    useOwnerLangSignals({ file, env: {
+      get LANG(): string { throw new Error('Stored preference already supplies the fallback'); },
+    } });
+    expect(ownerLangTag()).toBe('zh-CN');
   });
 
   it('orders the whole chain: cadence > speechLocale > remembered > LANG', () => {

@@ -81,6 +81,40 @@ describe('native invitation preparation and owner posting acknowledgement', () =
     expect(fx.captureRoute).not.toHaveBeenCalled(); expect(fx.setRoute).not.toHaveBeenCalled();
     expect(fx.runtime).not.toHaveBeenCalled(); expect(fx.runCommand).not.toHaveBeenCalled(); expect(fx.notice).not.toHaveBeenCalled(); expect(fx.initiate).not.toHaveBeenCalled();
   });
+  it.each([
+    ['openclaw-weixin', false], ['openclaw-weixin', undefined],
+    ['webchat', false], ['webchat', undefined],
+    ['telegram', false], ['telegram', undefined],
+    ['discord', false], ['imessage', false], ['custom-chat-provider', false],
+  ] as const)('verifies from an admitted %s chat with owner marker %s without capturing a notification route', async (channel, ownerMarker) => {
+    const fx = fixture();
+    const ctx = {...fx.context('channel-chat'), senderIsOwner: ownerMarker as boolean,
+      messageChannel: channel, deliveryContext: {channel, to: 'current-chat'}};
+    const prepared = await prepare(fx.tool(ctx), 'heiyuneo');
+    expect(prepared.isError).not.toBe(true);
+    expect(JSON.parse(prepared.text)).toMatchObject({status: 'prepared', platform: 'x', handle: 'heiyuneo'});
+    expect(fx.runtime).not.toHaveBeenCalled();
+    const result = await fx.tool(ctx).execute('posted', {posted: true});
+    expect(result.isError).not.toBe(true);
+    expect(result.text).not.toContain('confirm_token');
+    expect(fx.initiate).toHaveBeenCalledOnce();
+    expect(fx.initiate).toHaveBeenCalledWith(expect.objectContaining({platform: 'x', handle: 'heiyuneo'}));
+    // Opening another channel does not opt it into background notifications.
+    expect(fx.captureRoute).not.toHaveBeenCalled();
+    expect(fx.setRoute).not.toHaveBeenCalled();
+    await fx.tool(ctx).execute('repeat', {posted: true});
+    expect(fx.initiate).toHaveBeenCalledOnce();
+  });
+  it.each(['en', 'zh-CN'] as const)('reports missing host context without asking the user to restate their request (%s)', async lang => {
+    setOwnerLang(lang, 'config');
+    const fx = fixture(); const ctx = fx.context('missing-context');
+    ctx.assertInvocationCurrent = undefined as unknown as typeof ctx.assertInvocationCurrent;
+    const result = await prepare(fx.tool(ctx), 'heiyuneo');
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain(lang === 'en' ? 'chat context' : '聊天上下文');
+    expect(result.text).not.toContain('INVITE_OWNER_INVOCATION_REQUIRED');
+    expect(fx.initiate).not.toHaveBeenCalled();
+  });
   it('submits ordinary posted once using the newest successful target in this chat, without another preview', async () => {
     const fx = fixture(); const ctx = fx.context('one');
     await prepare(fx.tool(ctx), 'first'); await prepare(fx.tool(ctx), 'second');
@@ -112,10 +146,10 @@ describe('native invitation preparation and owner posting acknowledgement', () =
     expect(fx.runtime).not.toHaveBeenCalled(); expect(fx.notice).not.toHaveBeenCalled();
     await t.execute('confirm', {confirm_token: preview.text.match(/invite-\d+/)![0]}); expect(fx.initiate).toHaveBeenCalledOnce();
   });
-  it.each(['missing', 'third-party', 'revoked'])('refuses %s native authority despite forged owner arguments', async kind => {
+  it.each(['missing', 'missing-session', 'revoked'])('refuses %s native authority despite forged owner arguments', async kind => {
     const fx = fixture(); const ctx = fx.context('one'); const t = fx.tool(ctx); await prepare(t);
     if (kind === 'missing') ctx.assertInvocationCurrent = undefined as unknown as typeof ctx.assertInvocationCurrent;
-    if (kind === 'third-party') ctx.senderIsOwner = false;
+    if (kind === 'missing-session') ctx.sessionId = '';
     if (kind === 'revoked') ctx.assertInvocationCurrent.mockImplementation(() => {throw new Error('REVOKED');});
     const failed = await t.execute('posted', {posted:true});
     expect(failed.isError).toBe(true); expect(fx.initiate).not.toHaveBeenCalled();

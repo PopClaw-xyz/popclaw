@@ -34,7 +34,8 @@ const PINNED_TERMS = [
 ] as const;
 
 /**
- * `Speak to the owner in <tag>` + the term glossary for that language.
+ * A default language preference + the term glossary for that language.
+ * The current owner request and host instructions always take precedence.
  * Defaults to whatever the process register holds (`owner-language.ts`);
  * callers that already have a cadence value in hand pass it explicitly.
  *
@@ -58,11 +59,12 @@ export function languageDirective(
   const local = lexiconFor(lang).terms;
   const glossary = PINNED_TERMS.map((k) => (en[k] === local[k] ? en[k] : `${en[k]}=${local[k]}`)).join(', ');
   return [
+    "The owner's current request and host instructions take precedence over these language preferences.",
     tag === undefined
-      ? 'Speak to the owner in whatever language they are writing to you in — match them turn by turn, whatever language this material is written in.'
-      : `Speak to the owner in ${tag} — everything you say to them, whatever language this material is written in.`,
-    `Use these house terms exactly, never re-translate them: ${glossary}.`,
-    `Quoted content (posts, replies, people's names) stays in its original language — never translate what someone else wrote.`,
+      ? 'Speak to the owner in whatever language they are writing to you in by default, regardless of the language of this PopClaw material.'
+      : `Speak to the owner in ${tag} by default when presenting this PopClaw material.`,
+    `Prefer these house terms when replying in the corresponding language: ${glossary}.`,
+    `Keep quoted content (posts, replies, people's names) in its original language unless the owner asks for a translation.`,
   ].join('\n');
 }
 

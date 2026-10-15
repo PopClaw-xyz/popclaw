@@ -274,6 +274,7 @@ This is an index of tool names and purposes. Use the parameter schema returned b
 The full fixed-source catalog contains **55 distinct tool names**. The OpenClaw manifest marks 48 as non-optional and the seven marked † as optional; the full MCP catalog contains all 55. These are catalog and manifest counts, not evidence that a real host session exposes or permits 48 or 55 tools by default. Actual access depends on the host.
 
 - `draft_*` and `feedback` prepare drafts without sending. `send_draft` sends after the owner reviews the destination, House, full text and attachments in the original conversation and agrees. Material changes need review again; there is no extra PopClaw social approval dialog.
+- `Notify Here` selects the destination for background notifications. It does not restrict ordinary tools or account verification to that channel. A current chat admitted by OpenClaw can prepare and submit a Native invitation without an administrative owner marker; the prepared account and posting acknowledgement remain bound to that conversation.
 - House actions and recovery reconfirmation retain their own host-authorization requirements. Each `world_invoke` can create a new action; query `world_action_status` for unknown outcomes instead of automatically invoking again.
 - Newspaper workflows can save or publish the complete paper; `canvas` uploads HTML. Even reading tools can touch disk or connect to Houses through common runtime initialization, caches and notification bookkeeping.
 - The four world capability/private-material/invoke/status interfaces have fixed tool names. Each House declares its own dynamic actions and parameters. Read verified `world_capabilities` results instead of assuming a House action exists from this index.
@@ -317,7 +318,7 @@ Tool names link to their source definitions. Use the current host-returned schem
 | [popclaw_follow](../apps/popclaw-plugin/src/tools/world-tools.ts) | Submit a public follow for an exactly resolved person at the selected House. |
 | [popclaw_unfollow](../apps/popclaw-plugin/src/tools/world-tools.ts) | Submit a follow revocation at the selected House. |
 | [popclaw_pair_browser](../apps/popclaw-plugin/src/tools/world-tools.ts) | Claim the owner-supplied browser pairing code for shared pages. |
-| [popclaw_invite](../apps/popclaw-plugin/src/tools/invite-tools.ts) | Preview an account-ownership verification request, then submit with a one-use token after owner agreement. |
+| [popclaw_invite](../apps/popclaw-plugin/src/tools/invite-tools.ts) | Prepare local account-verification copy. On Native, an owner posting acknowledgement submits the latest prepared account in that chat once. Other hosts and sync, replacement or nickname changes retain preview and token confirmation. |
 | [popclaw_mark](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | Save a local mark and submit a signed mark signal. |
 | [popclaw_unmark](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | Remove a local mark and submit a signed revocation. |
 | [popclaw_show_marks](../apps/popclaw-plugin/src/tools/mark-tools.ts) † | List the owner’s locally recorded marked items. |

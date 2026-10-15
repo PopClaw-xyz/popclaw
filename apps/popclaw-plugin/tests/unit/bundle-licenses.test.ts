@@ -18,6 +18,12 @@ vi.mock('esbuild', () => ({
   })),
 }));
 vi.mock('node:child_process', () => ({ execSync: vi.fn(() => Buffer.from('test')) }));
+// Profile byte inventories are exercised by actual builds and archive fixtures.
+// This test supplies synthetic esbuild metadata only for license provenance.
+vi.mock('../../scripts/bundle-profiles.mjs', async (original) => ({
+  ...await original<typeof import('../../scripts/bundle-profiles.mjs')>(),
+  writeBundleProfile: vi.fn(() => ({ files: [] })),
+}));
 // Writes aimed at this package's real dist/ are recorded, never performed;
 // everything else (the temp fixtures below) hits the real filesystem.
 vi.mock('node:fs', async (original) => {
@@ -32,6 +38,8 @@ vi.mock('node:fs', async (original) => {
     rmSync: guard('rmSync', fs.rmSync),
     mkdirSync: guard('mkdirSync', fs.mkdirSync),
     copyFileSync: guard('copyFileSync', fs.copyFileSync),
+    cpSync: guard('cpSync', fs.cpSync),
+    writeFileSync: guard('writeFileSync', fs.writeFileSync),
   };
 });
 
@@ -79,9 +87,11 @@ describe('third-party license collection for the distributed bundles', () => {
   it.each(sources)('collects a dependency that only %s inlines', (source) => {
     const dep = onlyDeps.get(source)!;
     const name = `only-${source.replace(/\W+/g, '-')}`;
-    expect(mocks.distWrites).toContainEqual([
-      'copyFileSync', dep.license, join(root, `dist/bundled/licenses/${name}@1.0.0/LICENSE`),
-    ]);
+    for (const profile of ['bundled', 'client-bundled']) {
+      expect(mocks.distWrites).toContainEqual([
+        'copyFileSync', dep.license, join(root, `dist/${profile}/licenses/${name}@1.0.0/LICENSE`),
+      ]);
+    }
   });
 
   it('fails when an inlined dependency has no license, even with a stale copy in the output', async () => {

@@ -81,6 +81,7 @@ export function bundleInputPaths(pkgRoot: string): string[] {
     join(pkgRoot, 'src'),
     join(pkgRoot, 'scripts/bundle.mjs'),
     join(pkgRoot, 'scripts/bundle-minification.mjs'),
+    join(pkgRoot, 'scripts/bundle-profiles.mjs'),
     join(pkgRoot, 'scripts/build-schema-worker.mjs'),
     join(pkgRoot, 'scripts/build-integrity-worker.mjs'),
     join(pkgRoot, 'scripts/prepare-native-deps.mjs'),

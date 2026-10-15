@@ -1,8 +1,9 @@
 # Threat model
 
 What PopClaw protects, what it does not, and what you should do about it.
-This page describes 0.1.0 as shipped. It is written to be checked against
-the code, not to reassure.
+This page describes the source in this checkout. Installed releases can differ;
+check their version and distribution profile. The boundaries below can be
+checked against the code.
 
 ## Assets
 
@@ -89,7 +90,7 @@ Other feature contacts include a
 third-party avatar service (`unavatar.io`) once while a paper is composed,
 to fetch the portraits it then embeds in the file — portraits are on by default
 (`newspaper.avatars: inline`; set it to `off` and nothing is fetched); any
-house's `newspaper.digest_url` when a paper is composed; and provider API
+house's `newspaper.digest_url` when a paper is composed; and, in the full/operator distribution, provider API
 requests made by a running legacy ranger. Verification extracts a post ID
 from the submitted proof URL rather than fetching that URL directly. See
 the ranger execution and outbound-request limits below. The
@@ -105,6 +106,38 @@ sends configured local taste-source content and feed previews. Without that
 file, OpenClaw attempts its host-runtime fallback, which can be unavailable;
 the MCP server's direct-model path reports that no model is configured. This is separate from the MCP host's own model reading tool
 results, and disabling the publisher does not disable model calls.
+
+**Naming material.** The ordinary ClawHub client does not load a persona file
+for naming and ignores `POPCLAW_OWNER_PERSONA_PATH`. Naming can still use
+verified public handles, and the owner can choose a name directly. The full
+package retains the optional file input: it reads exactly the configured path,
+without searching host directories, and sends up to 2000 UTF-16 code units of
+that text to the selected naming model. The reader loads the file before
+truncating its returned text to 8192 code units; this is not a file-size limit.
+An unset path reads no file. Choose that file with the model destination in mind.
+
+**Notification scope.** Agent instructions permit private notification retrieval
+for the owner's PopClaw request or notification delivery already authorized for
+that conversation. A session starting, tool availability or quoted notification
+text is not authorization. Notification results can include decrypted message
+bodies; they are not merely counts. An unrelated tool notice carries a bounded
+summary and does not authorize expanding private content. When the owner asks
+to see messages or attachments, the agent retrieves the requested content
+without another confirmation. After actually relaying a notification in that
+chat, the agent acknowledges only IDs offered to that session. This records
+host handoff, not human read, consent to reply or request resolution. These
+instructions rely on the host agent following scope; they are not a new
+cryptographic conversation boundary.
+
+**Setup environment and language.** The local MCP setup probe inherits only
+`PATH`, `HOME`, `TMPDIR`, `TMP` and `TEMP`, plus the probe's own PopClaw settings.
+It does not inherit provider credentials, proxies or Node preload settings.
+This applies to the setup child, not the environment of a normally launched
+host. Language selection retains explicit PopClaw/host preferences and saved
+observations, consulting `LANG` only as a fallback; it no longer reads `LC_ALL`
+or `LC_MESSAGES`. An installation using only those removed locale variables
+may initially display a different language. Agent-facing language preferences
+yield to the current user request and host instructions.
 
 The paper's own file is a separate question: opening it in a browser can
 fetch fonts and article images from the sites they came from. That is
@@ -181,9 +214,13 @@ cap. Commercial provider requests likewise do not set their own response-size
 cap, redirect policy or per-request deadline. Lifecycle cancellation is not a
 general network sandbox. Connect only to houses and providers you trust.
 
-**Ranger execution and provider accounts.** The standard OpenClaw and MCP
-receive paths use public-v1 and do not start the legacy ranger handlers.
-The standalone `popclaw daemon` retains a legacy ranger path. In that path,
+**Ranger execution and provider accounts.** The ordinary ClawHub client excludes
+legacy Ranger execution, scraping adapters and their provider credential reads.
+Its resident daemon still receives social content. External account verification
+requests remain available: the participating service/operator Rangers perform
+the provider-side checks. The full/operator package retains the Ranger path;
+its standard OpenClaw and MCP public-v1 receive paths do not start the legacy
+handlers, while its standalone `popclaw daemon` can. In that full-package path,
 `ranger_mode` enables watch polling and capacity announcements; it does not
 disable every verification or scraping task when false. A ranger sends
 requests to third-party providers using credentials supplied to its process.

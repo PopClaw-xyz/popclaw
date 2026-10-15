@@ -319,7 +319,7 @@ describe('MCP unread piggyback + notifications tool', () => {
     expect(notice.type).toBe('text');
     expect(noticeOf(notice)).toMatchObject({
       version: 1, type: 'popclaw_notification_notice',
-      counts: { L1: 2, L2: 1 }, more: 0, suggested_next: 'ask_owner',
+      counts: { L1: 2, L2: 1 }, more: 0, suggested_next: 'relay_notice',
       items: [
         { notification_id: 1, level: 'L1', kind: 'dm' },
         { notification_id: 2, level: 'L1', kind: 'ranger_verify_done' },

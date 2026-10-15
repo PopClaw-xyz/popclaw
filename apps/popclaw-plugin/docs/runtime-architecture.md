@@ -4,6 +4,35 @@ The composition roots are [`index.ts`](../src/index.ts) for OpenClaw,
 [`mcp.ts`](../src/mcp.ts) for stdio MCP, and [`main.ts`](../src/main.ts) for the
 source CLI. `mcp-hook.ts` is a process entry, not a runtime assembly root.
 
+## Distribution capabilities
+
+The full `popclaw` bundle retains the operator Ranger implementation. A separate
+client graph is built from the same entries for the ClawHub distribution.
+`scripts/bundle-profiles.mjs` selects `runtime/ranger-client.ts` in place of
+`runtime/ranger.ts`, and `onboarding/owner-persona-client.ts` in place of the
+optional persona-file reader. These are build-time substitutions. Environment
+variables cannot enable the omitted implementations after installation.
+
+The client keeps OpenClaw, MCP, CLI, house streams, local identity and storage,
+and the tools that request verification from a house. It cannot execute Ranger
+verification, scraping or watch tasks, discover provider credentials, or read a
+local persona file for naming. The CLI daemon still starts its ordinary social
+consumers. `RANGER_AVAILABLE` controls only Ranger resource creation; client
+startup has no missing-provider-credential report. The full graph retains the
+provider selection, verification behavior and operator diagnostics.
+
+Normal OpenClaw and MCP receive paths continue to use public-v1, which already
+avoids the legacy Ranger handlers. The full standalone daemon retains its legacy
+Ranger route. Removing that implementation from the client package is an artifact
+capability limit, separate from the receive-mode decision.
+
+Each graph records its source inputs and exact file bytes/modes in
+`POPCLAW-BUNDLE-PROFILE.json`. The full archive includes both graphs, plus the
+complete native matrix. ClawHub derivation promotes the prebuilt client graph
+from `dist/client-bundled/` to `dist/bundled/`, removes the full graph, and records
+each source-to-output mapping. It does not recompile or rewrite JavaScript.
+See [release packaging](../../../docs/releasing.md) for commands and checks.
+
 ## Shared resources
 
 `assembleRuntime` in `runtime/assembly/index.ts` visibly sequences the private

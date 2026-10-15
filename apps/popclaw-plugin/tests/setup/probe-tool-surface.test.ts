@@ -14,7 +14,7 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -93,10 +93,10 @@ test('every probe-required tool is declared: static manifest, or MCP-only by des
  * lists exactly `tools` — the fixture-server pattern from setup.test.ts,
  * self-contained.
  */
-function fakePackage(base: string, tools: string[]): string {
+function fakePackage(base: string, tools: string[], captureEnv?: string): string {
   const pkg = join(base, 'package');
   mkdirSync(join(pkg, 'dist/bundled'), { recursive: true });
-  writeFileSync(join(pkg, 'dist/bundled/mcp.js'), `import readline from 'node:readline'; for await (const line of readline.createInterface({input:process.stdin})) {const q=JSON.parse(line); if(q.id) console.log(JSON.stringify({jsonrpc:'2.0',id:q.id,result:q.id===1?{serverInfo:{name:'fixture'},capabilities:{tools:{}}}:{tools:${JSON.stringify(tools)}.map(name=>({name}))}}));}`);
+  writeFileSync(join(pkg, 'dist/bundled/mcp.js'), `${captureEnv ? `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(captureEnv)}, JSON.stringify(process.env));` : ''}import readline from 'node:readline'; for await (const line of readline.createInterface({input:process.stdin})) {const q=JSON.parse(line); if(q.id) console.log(JSON.stringify({jsonrpc:'2.0',id:q.id,result:q.id===1?{serverInfo:{name:'fixture'},capabilities:{tools:{}}}:{tools:${JSON.stringify(tools)}.map(name=>({name}))}}));}`);
   return pkg;
 }
 
@@ -134,4 +134,50 @@ test('the probe requires exactly the tools the installed hooks name', () => {
   // An empty list would make every probe pass vacuously.
   assert.ok(MCP_REQUIRED_TOOLS.length > 0, 'MCP_REQUIRED_TOOLS is empty');
   assert.deepEqual([...MCP_REQUIRED_TOOLS], ['popclaw_notifications', 'popclaw_show_inbox', 'popclaw_acknowledge_notifications']);
+});
+
+
+describe('setup probe environment', () => {
+  test('inherits only local process essentials and forces the selected isolated root', async () => {
+    const base = mkdtempSync(join(realpathSync(tmpdir()), 'popclaw-probe-env-'));
+    try {
+      const capture = join(base, 'child-env.json');
+      const essentials = { ...isolatedEnv(base), TMP: base, TEMP: base };
+      const denied = {
+        OPENAI_API_KEY: 'fixture-only-secret', AWS_ACCESS_KEY_ID: 'fixture-only-id',
+        POPCLAW_APIFY_TOKEN: 'fixture-only-token', POPCLAW_LANG: 'zh-CN',
+        HTTP_PROXY: 'http://fixture.invalid', HTTPS_PROXY: 'http://fixture.invalid',
+        NODE_OPTIONS: '--no-warnings', NODE_PATH: join(base, 'injected-modules'),
+        Node_Options: '--no-warnings', Node_Path: join(base, 'case-injected-modules'),
+        OPENCLAW_STATE_DIR: join(base, 'unselected-state'), CODEX_HOME: join(base, 'host-config'),
+        UNRELATED_ENVIRONMENT: 'fixture-only-value',
+      };
+      const env = Object.freeze({ ...essentials, ...denied, POPCLAW_DATA_ROOT: join(base, 'wrong-root'),
+        POPCLAW_NOTIFICATION_CONSUMER: 'wrong-consumer', POPCLAW_SETUP_RECEIPT: 'wrong-receipt',
+        POPCLAW_RECEIVE_ON_START: '1', POPCLAW_MCP_ENABLE_RANGER: '1' });
+      const root = join(base, 'selected-root');
+      await probeMcp(fakePackage(base, [...MCP_REQUIRED_TOOLS], capture), root, process.execPath, env, 10_000);
+      const childEnv = JSON.parse(readFileSync(capture, 'utf8'));
+      for (const [key, value] of Object.entries(essentials)) assert.equal(childEnv[key], value, key);
+      for (const key of Object.keys(denied)) assert.equal(childEnv[key], undefined, key);
+      assert.equal(childEnv.POPCLAW_DATA_ROOT, root);
+      assert.equal(childEnv.POPCLAW_NOTIFICATION_CONSUMER, 'setup-probe');
+      assert.equal(childEnv.POPCLAW_SETUP_RECEIPT, '');
+      assert.equal(childEnv.POPCLAW_RECEIVE_ON_START, '0');
+      assert.equal(childEnv.POPCLAW_MCP_ENABLE_RANGER, '0');
+      assert.equal(env.POPCLAW_DATA_ROOT, join(base, 'wrong-root'));
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
+
+  test('does not execute an inherited Node preload during the handshake', async () => {
+    const base = mkdtempSync(join(realpathSync(tmpdir()), 'popclaw-probe-preload-'));
+    try {
+      const marker = join(base, 'preload-executed');
+      const preload = join(base, 'preload.cjs');
+      writeFileSync(preload, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'fixture-only');`);
+      await probeMcp(fakePackage(base, [...MCP_REQUIRED_TOOLS]), join(base, 'root'), process.execPath,
+        { ...isolatedEnv(base), NODE_OPTIONS: `--require=${preload}` }, 10_000);
+      assert.equal(existsSync(marker), false, 'the setup child executed NODE_OPTIONS');
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  });
 });
