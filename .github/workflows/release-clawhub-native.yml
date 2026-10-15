@@ -252,3 +252,87 @@ jobs:
         run: |
           node scripts/publish-clawhub-native.mjs --directory "$RUNNER_TEMP/clawhub" \
             --output "$RUNNER_TEMP/publish-result.json" --publish --auth-mode "$AUTH_MODE"
+
+  attest-main:
+    name: attest verified ClawHub archive and source evidence
+    needs: [prepare, publish-native]
+    if: ${{ !inputs.dry_run }}
+    runs-on: macos-15
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: Resolve fixed source identity before attestation
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/verify-retained-clawhub.py resolve \
+            --tag "$TAG" --source-run-id "$SOURCE_RUN" --commit "$SOURCE_COMMIT" \
+            --full-sha256 "$FULL_SHA256" --resume-from-run-id "$RESUME_RUN" \
+            --output "$RUNNER_TEMP/context.json" --github-output "$GITHUB_OUTPUT"
+      - name: Download fixed full source for attestation
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.resolve.outputs.source_artifact_id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.source_run_id }}
+          path: ${{ runner.temp }}/full
+          merge-multiple: true
+      - name: Verify full source before attestation
+        id: full
+        run: |
+          python3 scripts/verify-retained-clawhub.py full \
+            --directory "$RUNNER_TEMP/full" --context "$RUNNER_TEMP/context.json" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Download the exact tested ClawHub artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact_id }}
+          path: ${{ runner.temp }}/clawhub
+          merge-multiple: true
+      - name: Verify source preservation and prepare exact attestation subjects
+        env:
+          FULL_TARBALL: ${{ steps.full.outputs.full_tarball }}
+        run: |
+          python3 scripts/verify-retained-clawhub.py attestation \
+            --directory "$RUNNER_TEMP/clawhub" --full-tarball "$FULL_TARBALL" \
+            --context "$RUNNER_TEMP/context.json" --output "$RUNNER_TEMP/attestation-subjects.sha256"
+      # This signs the verified archive and evidence in THIS workflow run.
+      # The signed release context identifies the original full-source build.
+      # Resumed bytes are verified and signed again, never rebuilt here.
+      - name: Attest verified main archive and source evidence
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ runner.temp }}/attestation-subjects.sha256
+          create-storage-record: false
+      - name: Retain the signed bundle and source evidence
+        env:
+          ATTESTATION_BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          mkdir "$RUNNER_TEMP/clawhub-attestation"
+          cp "$ATTESTATION_BUNDLE" "$RUNNER_TEMP/clawhub-attestation/bundle.json"
+          cp "$RUNNER_TEMP/attestation-subjects.sha256" \
+            "$RUNNER_TEMP/clawhub/receipt.json" "$RUNNER_TEMP/clawhub/release-context.json" \
+            "$RUNNER_TEMP/clawhub-attestation/"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: clawhub-attestation-${{ inputs.tag }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/clawhub-attestation/
+          if-no-files-found: error
+          retention-days: 90
