@@ -101,12 +101,31 @@ export async function verifyPackage(pkg, metadata, bytes, keys, attestations, si
     const bundle = matches[0].bundle;
     const statement = JSON.parse(Buffer.from(bundle.dsseEnvelope.payload, 'base64').toString('utf8'));
     verifyStatement(statement, pkg, hash(bytes, 'sha512'), type);
-    const options = type === PROVENANCE ? {
-      certificateIdentityURI: `https://github.com/${RELEASE.repository}/.github/workflows/release.yml@refs/tags/${RELEASE.tag}`,
-      certificateIssuer: 'https://token.actions.githubusercontent.com',
-    } : {
-      keySelector: id => registryKey(keys, id).export({ type: 'spki', format: 'pem' }),
-    };
+    const material = bundle.verificationMaterial;
+    let options;
+    if (type === PUBLISH) {
+      // A keySelector is only consulted for public-key bundles. A certificate
+      // must never bypass the requirement that npm signed the publish proof.
+      const hint = material?.publicKey?.hint;
+      assert.ok(typeof hint === 'string' && hint, 'publish attestation requires a registry key hint');
+      assert.equal(material.certificate, undefined, 'publish attestation cannot use certificate material');
+      assert.equal(material.x509CertificateChain, undefined, 'publish attestation cannot use certificate material');
+      const key = registryKey(keys, hint);
+      assert.equal(bundle.dsseEnvelope.signatures?.length, 1, 'expected one registry DSSE signature');
+      assert.equal(bundle.dsseEnvelope.signatures[0].keyid, hint, 'registry DSSE signature key hint mismatch');
+      options = { keySelector: id => {
+        assert.equal(id, hint, 'registry verification requested a different key');
+        return key.export({ type: 'spki', format: 'pem' });
+      } };
+    } else {
+      assert.equal(material?.publicKey, undefined, 'provenance requires certificate material');
+      assert.ok(material?.certificate?.rawBytes || material?.x509CertificateChain?.certificates?.[0]?.rawBytes,
+        'provenance requires certificate material');
+      options = {
+        certificateIdentityURI: `https://github.com/${RELEASE.repository}/.github/workflows/release.yml@refs/tags/${RELEASE.tag}`,
+        certificateIssuer: 'https://token.actions.githubusercontent.com',
+      };
+    }
     await sigstore.verify(bundle, { ...options, ...(tufCachePath ? { tufCachePath } : {}) });
   }
   return { name: pkg.name, version: RELEASE.version, sha256: pkg.sha256, publishRun: pkg.run, signatures: 'VERIFIED', provenance: 'VERIFIED' };

@@ -162,6 +162,10 @@ archives must match the recorded 0.1.7 bytes. It reuses
 each fixed npm version and verifies its bytes, registry signatures, npm publish
 attestation and Sigstore provenance. Provenance must identify the original
 source, tag, workflow and respective publication run, not this verification run.
+The npm publish proof must use registry public-key material with matching DSSE
+key identifiers. Certificate material is only accepted for provenance, with the
+GitHub workflow identity and issuer policy applied. A key lookup callback alone
+is not a restriction on the kind of signing material.
 The verifier uses Sigstore 4.1.1 from npm 11.19.1. Its token only needs
 `contents: read` and `actions: read`; it does not enter `npm-release` or request
 an OIDC signing token.

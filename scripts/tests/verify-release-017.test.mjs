@@ -61,7 +61,7 @@ function fixture() {
   const metadata = { name: 'popclaw', version: '0.1.7', dist: { integrity,
     signatures: [{ keyid: 'fixture', sig: sign('sha256', Buffer.from('popclaw@0.1.7:' + integrity), privateKey).toString('base64') }] } };
   const keys = [{ keyid: 'fixture', key: publicKey.export({ type: 'spki', format: 'der' }).toString('base64'), expires: null }];
-  const attestations = { attestations: [PUBLISH, PROVENANCE].map(type => ({ predicateType: type, bundle: { dsseEnvelope: { payload: Buffer.from(JSON.stringify(statement(type))).toString('base64') } } })) };
+  const attestations = { attestations: [PUBLISH, PROVENANCE].map(type => ({ predicateType: type, bundle: { verificationMaterial: type === PUBLISH ? { publicKey: { hint: 'fixture' } } : { certificate: { rawBytes: 'fixture' } }, dsseEnvelope: { signatures: [{ keyid: type === PUBLISH ? 'fixture' : '', sig: 'fixture' }], payload: Buffer.from(JSON.stringify(statement(type))).toString('base64') } } })) };
   const calls = [];
   // Tests routing/policy only. A separate real Sigstore run verifies real bundles.
   const sigstore = { verify: async (bundle, options) => { calls.push(options); if (options.keySelector) assert.match(options.keySelector('fixture'), /PUBLIC KEY/); } };
@@ -87,6 +87,19 @@ for (const [label, mutate] of [
 ]) test(label + ' cannot pass verification', async () => {
   const f = fixture(); mutate(f);
   await assert.rejects(() => verifyPackage(pkg, f.metadata, f.bytes ?? bytes, f.keys, f.attestations, f.sigstore));
+});
+
+for (const [label, mutate] of [
+  ['certificate publication material', f => f.attestations.attestations[0].bundle.verificationMaterial = { certificate: { rawBytes: 'fixture' } }],
+  ['mixed publication material', f => f.attestations.attestations[0].bundle.verificationMaterial.certificate = { rawBytes: 'fixture' }],
+  ['missing registry key hint', f => delete f.attestations.attestations[0].bundle.verificationMaterial.publicKey.hint],
+  ['unknown registry key hint', f => f.attestations.attestations[0].bundle.verificationMaterial.publicKey.hint = 'other'],
+  ['DSSE key hint mismatch', f => f.attestations.attestations[0].bundle.dsseEnvelope.signatures[0].keyid = 'other'],
+  ['public-key provenance material', f => f.attestations.attestations[1].bundle.verificationMaterial = { publicKey: { hint: 'fixture' } }],
+]) test(label + ' is refused before cryptographic policy can be bypassed', async () => {
+  const f = fixture(); mutate(f);
+  await assert.rejects(() => verifyPackage(pkg, f.metadata, bytes, f.keys, f.attestations, f.sigstore));
+  assert.equal(f.calls.length, label === 'public-key provenance material' ? 1 : 0);
 });
 
 test('verification workflow has no publishing authority or mutable release selector', () => {
