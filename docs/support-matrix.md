@@ -2,6 +2,145 @@
 
 ## Current verification scope
 
+<a id="016-release-verification"></a>
+### 0.1.6 release verification
+
+The [v0.1.6 source tag](https://github.com/PopClaw-xyz/popclaw/tree/v0.1.6)
+fixes source `05bb0a6b41f884edafb7bfd91a080af5352ac4dc`. The npm packages and
+ClawHub 0.1.6 are published, and their downloaded bytes have been verified.
+Fresh OpenClaw installation acceptance passed within the scope below.
+These results were recorded on October 15, 2026.
+
+[Source CI](https://github.com/PopClaw-xyz/popclaw/actions/runs/38661906528)
+passed on Node 24.16.0 and 26.1.0 against the identical pre-merge source tree:
+631 test files, 10,354 passed tests and five skipped checks per line, with build
+and lint passing. The skipped checks require private monorepo resources.
+[CodeQL](https://github.com/PopClaw-xyz/popclaw/actions/runs/38661906589) and
+[publication checks](https://github.com/PopClaw-xyz/popclaw/actions/runs/38661906529)
+also passed.
+
+The [formal release run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38663324629)
+built and packed the exact main and MCP-shell archives below. Build and lint
+passed. Its macOS arm64 test run passed 631 files and 10,345 tests, with 14
+skipped checks: the five private-resource checks and nine platform-specific
+live-database-lock checks. Required archive smoke checks passed on Node 24.16.0:
+CLI help, packaged SQLite, both MCP entries with 55 tools, and stable identity
+after an MCP restart. This archive smoke did not run OpenClaw SDK registration,
+a registry installation, a Gateway, model conversations or real social delivery.
+
+The formal run published the main package, then failed after six short
+registry-readiness checks expired. The [MCP-shell recovery](https://github.com/PopClaw-xyz/popclaw/actions/runs/38664832673)
+published the retained shell archive without rebuilding and also failed its
+registry-readiness check. Later downloads of
+[popclaw@0.1.6](https://www.npmjs.com/package/popclaw/v/0.1.6) and
+[popclaw-mcp@0.1.6](https://www.npmjs.com/package/popclaw-mcp/v/0.1.6) matched
+the retained archives. These later checks do not change the two failed workflow
+results. The [GitHub prerelease](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.6)
+provides the main and MCP archives plus `SHA256SUMS.txt`. All three assets were
+downloaded without authentication and matched the retained originals.
+
+The [native distribution dry run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38664641700)
+derived the ClawHub main archive and five native archives from the fixed full
+archive. It verified all ten packaged native bindings and passed actual SQLite
+open/write/close/reopen checks on macOS arm64 with Node 24.16.0 and 26.1.0.
+The dry run did not execute the other native targets. A separate
+[native publication run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38665149581)
+succeeded and published the five retained native archives without rebuilding.
+All seven npm downloads matched the original archives. npm signatures and
+GitHub provenance were cryptographically verified for all seven, including
+rejection of modified payloads.
+
+The [ClawHub package](https://clawhub.ai/heiyuneo/plugins/popclaw-clawhub)
+serves version 0.1.6. Its downloaded archive is byte-identical to the retained
+ClawHub archive below. The rendered listing was checked for the complete English
+introduction, Canvas examples and the Chinese guide link pinned to v0.1.6.
+ClawHub reports `tier=source-linked`,
+`scope=artifact-only` and `hasProvenance=false`: the source tag and commit are
+linked metadata, without a ClawHub provenance attestation. This is separate
+from npm provenance verification for seven packages.
+
+These archive hashes identify the published bytes. Host and platform acceptance
+remain limited to the checks recorded on this page.
+
+| Archive | SHA-256 |
+| --- | --- |
+| popclaw-plugin-0.1.6+2026-10-15-0912-05bb0a6.tgz | `772ff05bbc898015062f4f35f6b2023f92d2b4e8cac58628d2c2ebec3f6de45a` |
+| popclaw-mcp-0.1.6.tgz | `de2c93fd94c10cd12890262e98a0f05f58d71eb18d57764aee9081d509b2365e` |
+| popclaw-clawhub-0.1.6.tgz | `e87b4ba1e46c38a313056a4770b72736bb28d354c05416197bd22f9bc00d4a0f` |
+| popclaw-native-sqlite-darwin-arm64-0.1.6.tgz | `1de8cf3d68b1bc58eea6288724a1baf07f0c686895fe3ebfbf4c88294a6e203c` |
+| popclaw-native-sqlite-darwin-x64-0.1.6.tgz | `670de5f01bb39afbe736580a9318cfc594879aabe483c233240fbba5c28adee2` |
+| popclaw-native-sqlite-linux-arm64-0.1.6.tgz | `5a93b72b59e0d55dc5dcdf63c54dda53bee377b65f751c8c3d246fa77ea548c7` |
+| popclaw-native-sqlite-linux-x64-0.1.6.tgz | `044868a47653ec0b4a25d0c0aa5eb2b60f3a9b77958ae1e3a5f1fd424232d809` |
+| popclaw-native-sqlite-win32-x64-0.1.6.tgz | `d8a6f557c9453a3051f17a9faf1d231c8e85d125868438302e3ef8c8d0c2df0b` |
+
+The full archive is 15,462,394 compressed bytes. The derived ClawHub main
+archive is 3,887,606 compressed bytes, 15,011,827 expanded bytes and 213 files.
+Fresh installations from `clawhub:popclaw-clawhub@0.1.6` passed on macOS arm64
+with OpenClaw 2026.10.3 and Node 24.16.0 and 26.8.2. On each line, all 213 main
+and ten native-package files matched the fixed archives. The actual Gateway
+reported the plugin active, and MCP exposed the expected 55 tools with the
+same identity and release build stamp. All 68 client-profile files matched;
+ten operator-code markers were absent from the client and present in the full
+archive. Three SQLite databases passed `quick_check` on cold copies, and all
+46 migration filenames matched the packaged migrations. Checks preserved the
+database source bytes. Temporary state and all owned processes were removed.
+
+Initial checks on both Node lines failed because the harness rejected two
+expected offline JSON log messages. A regression test reproduced that harness
+error. After its correction, both complete fresh-install reruns passed with
+unchanged release archives.
+
+Installation downloaded the official package and native dependency. Runtime
+Gateway, RPC and MCP processes were restricted to loopback. No daily-host,
+real House/social or model-provider acceptance was performed. Reload, upgrade,
+rollback and uninstall remain unverified for this release. Other operating
+systems and CPU architectures were not exercised by this fresh-host check.
+
+OpenClaw reported `provenance-invalid` and treated the active plugin as
+untrusted; features restricted to trusted plugins remain unverified. The
+installer displayed **Audit Outcome: Safe**. That installer observation is
+separate from the security page's **Review** outcome and scanner findings below.
+
+The [ClawHub security audit](https://clawhub.ai/heiyuneo/plugins/popclaw-clawhub/security-audit)
+showed **Review**. The observed 0.1.6 engine results were:
+
+| Engine | Observed result | Scope |
+| --- | --- | --- |
+| Static scanner v2.4.26 | Suspicious; five **Critical** findings | Two `suspicious.dynamic_code_execution` findings and three `suspicious.env_credential_access` findings; checked October 15 at 01:30 UTC. |
+| LLM analysis | Benign, high confidence | Checked October 15 at 01:50 UTC; this verdict does not clear the static findings. |
+| SkillSpector 2.11.2 | Suspicious; score 7, overall severity Low, recommendation **CAUTION** | One Medium `EA2` finding (Autonomous Decision Making / Excessive Agency), 75% confidence; checked October 15 at 01:50 UTC. |
+| VirusTotal | Clean; 0 malicious, 0 suspicious, 61 undetected | Checked October 15 at 01:48 UTC; undetected results do not establish absence of risk. |
+
+The earlier 0.1.5 snapshot had six Critical static findings: two dynamic-code
+and four environment-access findings. Its SkillSpector score was 54, with five
+issues, overall severity High and a **DO_NOT_INSTALL** recommendation. The
+latest 0.1.6 result is score 7 with one issue and **CAUTION**; this is an
+improvement in the recorded scan results, not an all-engine pass. The aggregate
+`scanStatus=clean` field does not establish that every engine passed.
+
+The remaining `EA2` finding cites "without asking" in the notification section
+at line 161 of the bundled social skill. That paragraph scopes retrieval to an
+owner request or notification delivery already authorized for the conversation,
+and excludes unrelated private retrieval. The latest LLM analysis classifies
+this use as expected and notes that sending still requires confirmation. This
+explanation does not remove SkillSpector's Medium finding or its CAUTION result.
+
+Independent tracing mapped the two dynamic-code findings to Ajv 8.20.0 schema
+compilation, once in the host and once inside the embedded schema worker. The
+three environment-access findings map to the setup connector, output-language
+helpers and Undici 6.28.1 session-cache flags. These source attributions do not
+clear the scanner findings or prove that every package data flow is safe. The
+worker has resource limits; it is not an operating-system security sandbox.
+
+The publish inspector also reported `manifest-unknown-contracts` as a warning,
+severity P1 and issue class `upstream-metadata`, for OpenClaw 2026.10.3. The
+hosted manifest's only contract key is `tools`. An independent check with
+OpenClaw 2026.10.3 `loadPluginManifest` accepted the unchanged manifest,
+reported `unsupportedContractKeys=[]` and retained all 55 tools. This mismatch
+between publisher inspection and host metadata parsing remains recorded.
+
+## Earlier release verification
+
 <a id="013-release-verification"></a>
 ### 0.1.3 release verification
 
