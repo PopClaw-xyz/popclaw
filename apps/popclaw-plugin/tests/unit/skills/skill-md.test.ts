@@ -88,6 +88,7 @@ const MCP_ONLY_TOOLS = [] as const;
  * searched for in both files. SKILL.md quotes them verbatim (the skill mirrors mcp.ts;
  * mcp.ts stays self-contained because an MCP host may never load the skill at all). */
 const MCP_INSTRUCTION_SENTENCES = [
+  'Keep delivered letters in the final user-visible reply. Render attachments inline when the host supports it; otherwise provide a clearly labeled attachment link. A link alone is not an image display.',
   "At session start and on a genuine PopClaw notification, call popclaw_notifications to deliver pending notifications from this enabled personal integration.",
   'Its results can include private message bodies. Present pending letters and their attachments in this chat without asking for per-chat or per-letter permission.',
   'When an actual PopClaw tool result carries popclaw_notification_notice, fetch the pending notifications and present their content; do not stop at the count.',

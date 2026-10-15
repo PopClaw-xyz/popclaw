@@ -139,13 +139,7 @@ export function runtimeToolNoticeContext(
     eligible: (item) => {
       if (!active() || !capture(item)?.isActive()) return false;
       if (item.kind === 'dm' && typeof item.payload.messageId === 'number') {
-        const message = rt.inboxStore.get(item.payload.messageId);
-        return (
-          !!message &&
-          message.notificationState === 'queued' &&
-          message.resolvedAtMs == null &&
-          message.fromPopclawId === item.payload.fromPopclawId
-        );
+        return rt.inboxStore.isQueuedNotification(item.payload.messageId, item.payload.fromPopclawId);
       }
       return true;
     },

@@ -121,7 +121,10 @@ uses session start and genuine PopClaw reminders to deliver pending notification
 The host agent retrieves and presents their full letters and attachments without
 new per-chat or per-letter permission. This can expose decrypted content to the
 selected host and its model provider, just like an explicit inbox request. Hooks
-only read counts; the notification and inbox tools provide the actual content.
+inspect routing and delivery-state metadata to count eligible items; they do not
+read letter bodies or attachment paths. The notification and inbox tools provide
+the actual content and recheck runtime authority. A hook cannot observe another
+process's in-memory revocation; racing reminders may yield no deliverable content.
 The agent stays quiet for an empty queue and does not browse unrelated history.
 
 Pending delivery uses the existing identity's data root, storage state and current
@@ -130,6 +133,8 @@ another process owns background receiving. Native push keeps its existing owner
 and delivery-lease checks. Ineligible rows are filtered before an offer is recorded;
 they are not silently acknowledged. Explicit local inbox history remains available.
 
+Delivered letters remain in the final user-visible reply. Attachments appear
+inline where supported; a labeled attachment link is not proof of image display.
 After presenting content in the chat, the agent acknowledges only offered IDs.
 Receipts persist for the configured integration/project consumer, not a guaranteed
 per-chat identity. A missing acknowledgement can cause a retry; concurrent chats

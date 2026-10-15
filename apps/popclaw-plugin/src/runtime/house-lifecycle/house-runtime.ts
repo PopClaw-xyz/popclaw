@@ -779,9 +779,10 @@ export class HouseRuntime {
    * displaying already stored content. Capture participation and storage before
    * any await, so logout, trust changes and restores still invalidate the read. */
   captureNotificationReadScopes(): CaptureNotificationDeliveryScope {
-    const gates = new Map(this.commands.knownHouseOrigins().map(origin => [origin, {
-      gate: this.publicReadGate(origin), localReadActive: this.manager.captureLocalReadFence(origin),
-    }]));
+    const gates = new Map(this.commands.knownHouseOrigins().map(origin => {
+      const gate = this.publicReadGate(origin), localReadActive = this.manager.captureLocalReadFence(origin);
+      return [origin, { gate, localReadActive, initialAllowed: gate.isActive() && localReadActive() }] as const;
+    }));
     const storageAllowed = this.storageAllows('notifications');
     const generation = storageDatabaseGeneration(this.opts.db);
     const active = () => !this.stopped && !this.terminal.signal.aborted && storageAllowed
@@ -790,7 +791,7 @@ export class HouseRuntime {
       if (isLocalNotification(item)) return { key: 'local-installation', isActive: active };
       const origin = notificationOrigin(item, this);
       const gate = origin ? gates.get(origin) : undefined;
-      return gate ? { key: origin!, isActive: () => active() && gate.localReadActive() && gate.gate.isActive() } : null;
+      return gate ? { key: origin!, isActive: () => active() && gate.initialAllowed && gate.localReadActive() && gate.gate.isActive() } : null;
     };
   }
 

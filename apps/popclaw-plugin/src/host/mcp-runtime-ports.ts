@@ -61,7 +61,7 @@ function buildMcpLLM(paths: PopclawPaths): (prompt: string) => Promise<string> {
 /**
  * The MCP root's current values for every drift pin (see `DriftPins` for the
  * table row, owner and deletion condition of each). They reproduce this
- * root's behaviour at 2f857931 exactly; flipping one is a maintenance change,
+ * root's remaining drift from 2f857931; flipping one is a maintenance change,
  * not a refactor.
  */
 export const MCP_DRIFT_PINS: DriftPins = Object.freeze({
@@ -69,7 +69,6 @@ export const MCP_DRIFT_PINS: DriftPins = Object.freeze({
   followerBondContextAbsent: true,
   followerStoreOwnInstance: true,
   replyPingBondContextAbsent: true,
-  inviteNotifierUnattributed: true,
   rangerInviteNotifyAbsent: true,
   refreshMs: undefined,
   recoveryIgnoresClosing: false,

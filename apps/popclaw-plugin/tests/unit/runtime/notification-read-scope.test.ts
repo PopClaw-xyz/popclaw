@@ -12,6 +12,9 @@ import { runtimeToolNoticeContext } from '../../../src/notifier/tool-notice.js';
 import { makeNotificationsTool } from '../../../src/notifier/mcp-notice.js';
 import { PopclawPaths } from '../../../src/host/popclaw-paths.js';
 import { publishStorageJson, registerStorageRuntime } from '../../../src/host/storage-maintenance.js';
+import { PendingInvitesStore, checkInviteOnce } from '../../../src/invite/pending-invites.js';
+import { inviteWiring } from '../../../src/runtime/assembly/notifications.js';
+import { MCP_DRIFT_PINS } from '../../../src/host/mcp-runtime-ports.js';
 import type { Signer } from '../../../src/identity/signer.js';
 import { refusingReadAuthorityFor } from '../../helpers/read-authority.js';
 
@@ -39,7 +42,7 @@ function fixture() {
   const context = () => runtimeToolNoticeContext(rt, 'mcp:reader');
   const tool = () => makeNotificationsTool(async () => notifier, undefined, undefined, { id: 'mcp:reader', store: async () => notifier, context: async () => context() });
   const read = async () => JSON.parse((await tool().execute('test', {}) as { text: string }).text);
-  return { db, paths, houses, notifier, enqueue, context, read, advance: () => { now += 100_000; }, changePin: () => { pin = 'cd'.repeat(32); } };
+  return { db, paths, houses, notifier, enqueue, context, read, advance: () => { now += 100_000; }, changePin: () => { pin = 'cd'.repeat(32); }, restorePin: () => { pin = 'ab'.repeat(32); }, renew: () => { db.execute('UPDATE house_participation SET lease_expires_at=? WHERE house_origin=?', [now / 1000 + 90, origin]); } };
 }
 
 it('delivers pending local and House content from a reader without acquiring the stream lease', async () => {
@@ -106,4 +109,40 @@ it('reports unavailable delivery when the storage notification path is held', as
   const f = fixture(); f.enqueue();
   publishStorageJson(f.paths.storageControlFile(), { version: 1, epoch: 'held', mode: 'recovery', reason: 'fixture', held: ['notifications'], releases: {} });
   await expect(f.read()).rejects.toThrow('NOTIFICATIONS_INACTIVE');
+});
+
+
+it.each(['expiry', 'pin'] as const)('never revives a read captured during %s failure', change => {
+  const f = fixture(); f.enqueue();
+  if (change === 'expiry') f.advance(); else f.changePin();
+  const context = f.context();
+  expect(f.notifier.peekFor(context.consumerId, undefined, 50, context)).toEqual([]);
+  if (change === 'expiry') f.renew(); else f.restorePin();
+  expect(f.notifier.peekFor(context.consumerId, undefined, 50, context)).toEqual([]);
+  expect(f.notifier.acknowledgeFor(context.consumerId, [1])).toEqual([]);
+  expect(f.notifier.peekFor(context.consumerId, undefined, 50, f.context())).toHaveLength(1);
+});
+
+it('does not offer content when an expired capture is renewed during an asynchronous lookup', async () => {
+  const f = fixture(); f.enqueue(); f.advance();
+  const tool = makeNotificationsTool(async () => f.notifier, async () => {
+    f.renew(); return undefined;
+  }, undefined, { id: 'mcp:reader', store: async () => f.notifier, context: async () => f.context() });
+  const result = JSON.parse((await tool.execute('test', {}) as { text: string }).text);
+  expect(result.notifications).toEqual([]);
+  expect(f.notifier.acknowledgeFor('mcp:reader', [1])).toEqual([]);
+  expect((await f.read()).notifications).toHaveLength(1);
+});
+
+
+it.each(['APPROVED', 'REJECTED'] as const)('delivers the actual MCP invite %s result with its House attribution', async state => {
+  const f = fixture();
+  const wiring = inviteWiring({ popclawId: '11111111111111111111111111111111', nickname: 'Owner', loreHouseUrl: origin, webBaseUrl: 'https://example.com' } as Parameters<typeof inviteWiring>[0],
+    { drift: MCP_DRIFT_PINS } as Parameters<typeof inviteWiring>[1], new PendingInvitesStore(f.db), f.notifier, undefined);
+  await checkInviteOnce({ ...wiring, loreHouseUrl: origin, fetch: async () => new Response(JSON.stringify({ state, platform: 'x', handle: 'owner', follower_count: 42 }), { status: 200 }) }, 'invite-fixture');
+  const result = await f.read();
+  expect(result.notifications).toHaveLength(1);
+  const pending = f.notifier.peekFor('explicit-history');
+  expect(pending[0]?.kind).toBe(state === 'APPROVED' ? 'ranger_verify_done' : 'ranger_verify_fail');
+  expect(pending[0]?.payload.houseOrigin).toBe(origin);
 });

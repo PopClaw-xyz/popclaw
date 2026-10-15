@@ -122,7 +122,9 @@ proactive notification delivery.
 See the [feature comparison](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.6/docs/hosts-details.md#what-differs-between-hosts).
 
 The selected host and its model provider receive the notification content needed
-for display. An empty queue stays quiet. After display, the existing integration
+for display. Delivered letters remain in the final reply; image-capable hosts
+render attachments inline, and other hosts provide a labeled attachment link.
+An empty queue stays quiet. After display, the existing integration
 records handoff so a restart does not repeat acknowledged items. Missing
 acknowledgements can repeat; this is not a human-read receipt or a guarantee of
 exactly-once delivery across simultaneous chats. Reading a letter does not

@@ -254,15 +254,36 @@ export class SqliteNotifier implements Notifier {
     });
   }
 
-  countFor(consumerId: string, level?: NotificationLevel, eligible?: (item: NotificationItem) => boolean): number {
+  private pendingConsumerQuery(consumerId: string, level?: NotificationLevel) {
     const from = `FROM notification_queue q LEFT JOIN notification_receipts r
        ON r.notification_id = q.id AND r.consumer_id = ? WHERE q.level IN ('L1','L2') AND r.acknowledged_at IS NULL
        AND (r.notification_id IS NOT NULL OR q.id > (SELECT start_after_id FROM notification_consumers WHERE consumer_id = ?))` + (level ? ' AND q.level = ?' : '');
-    const params = level ? [consumerId, consumerId, level] : [consumerId, consumerId];
+    return { from, params: level ? [consumerId, consumerId, level] : [consumerId, consumerId] };
+  }
+
+  countFor(consumerId: string, level?: NotificationLevel, eligible?: (item: NotificationItem) => boolean): number {
+    const { from, params } = this.pendingConsumerQuery(consumerId, level);
     if (eligible) return this.db.queryAll<QueueRow>(
       'SELECT q.id, q.level, q.kind, q.payload_json, q.enqueued_at ' + from, params,
     ).filter(row => eligible(this.toItem(row))).length;
     return this.db.queryOne<{ n: number }>('SELECT COUNT(*) AS n ' + from, params)?.n ?? 0;
+  }
+
+  /** Lifecycle reminders inspect routing/state metadata only, never letter bodies
+   * or attachment paths. JSON arrows preserve field absence, null and value types. */
+  countMetadataFor(consumerId: string, eligible: (item: NotificationItem) => boolean): number {
+    const { from, params } = this.pendingConsumerQuery(consumerId);
+    const rows = this.db.queryAll<{ id: number; level: NotificationLevel; kind: NotificationKind; enqueued_at: number;
+      houseOrigin: string | null; houseSlug: string | null; messageId: string | null; fromPopclawId: string | null }>(
+      `SELECT q.id, q.level, q.kind, q.enqueued_at, q.payload_json -> '$.houseOrigin' AS houseOrigin,
+       q.payload_json -> '$.houseSlug' AS houseSlug, q.payload_json -> '$.messageId' AS messageId,
+       q.payload_json -> '$.fromPopclawId' AS fromPopclawId ` + from + ' AND json_valid(q.payload_json)', params);
+    return rows.filter(row => {
+      const payload: Record<string, unknown> = {};
+      for (const key of ['houseOrigin', 'houseSlug', 'messageId', 'fromPopclawId'] as const)
+        if (row[key] !== null) payload[key] = JSON.parse(row[key]);
+      return eligible({ id: row.id, level: row.level, kind: row.kind, enqueuedAt: row.enqueued_at, payload });
+    }).length;
   }
 
   acknowledgeFor(consumerId: string, ids: readonly number[]): number[] {
