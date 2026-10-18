@@ -47,6 +47,8 @@ Do not copy one identity to another machine and run both.
 ## Other MCP hosts
 
 Use the [manual registration and timeout settings](../hosts-details.md#other-mcp-hosts).
+Use a tool timeout of at least 660 s. For manual Codex registration, set
+`tool_timeout_sec = 660` or keep an existing larger value.
 Generic registration does not make an untested host supported or prove that its
 notifications arrive automatically.
 
