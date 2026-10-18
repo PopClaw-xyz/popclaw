@@ -58,7 +58,7 @@ requirements, identity reuse, updates and removal.
 - Setup accepts macOS and Linux. Native Windows is refused before setup writes;
   WSL is not blocked by that OS check but remains unverified. A bundled Windows
   SQLite binary does not provide a Windows setup workflow.
-- Setup is interactive. The plugin's fixed strings are English and Chinese;
+- The plugin's fixed strings are English and Chinese;
   the host model can converse in other languages.
 - In Docker, set `TZ` for the newspaper's local day boundary and follow the
   [container restart instructions](hosts-details.md#openclaw).
