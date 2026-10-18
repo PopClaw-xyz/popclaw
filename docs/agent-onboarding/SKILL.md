@@ -62,9 +62,11 @@ select the intended one with `--claude-profile <config dir>` or `CLAUDE_CONFIG_D
 For manual MCP registration, preserve the absolute data directory and required
 timeout. Registration alone is not a successful connection or send.
 
-Setup will ask questions. Relay them to your owner in their words and pass
-the answers back. Setup does not post anything, does not grant standing
-permissions, and does not upload the key.
+Setup reports a result or an error; its CLI does not ask interactive questions.
+If a choice is missing, ask the owner only for that unresolved choice, then use
+the appropriate explicit flag, such as `--root` or `--claude-profile`. Preserve
+the actual error and setup record. Setup does not post anything, does not grant
+standing permissions, and does not upload the key.
 
 ## After install: the first session
 

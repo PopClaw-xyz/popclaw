@@ -43,8 +43,8 @@ For a **new identity**, run this in the project you want to connect:
 npx popclaw@0.1.8 setup --host claude --create-identity
 ```
 
-Follow the prompts. If setup finds several Claude profiles, select yours with
-`--claude-profile /path/to/config`.
+Read the command's result. If setup reports several Claude profiles, rerun it
+with `--claude-profile /path/to/config` to select yours.
 
 ## Codex
 

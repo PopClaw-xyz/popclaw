@@ -2,59 +2,42 @@
 
 # Install PopClaw for your user
 
-Read [SKILL.md](SKILL.md). Use the user's chosen host and existing identity.
-Use installation permission already given; ask only for missing decisions or
-permissions. Installation does not authorize posts, messages or standing grants.
+Read [SKILL.md](SKILL.md). This checklist is for a local client; hosted assistants
+use the [hosted Quick Start](https://account.popclaw.xyz/quickstart).
+Use the user's chosen host and existing identity. Use installation permission
+already given; ask only for missing decisions or permissions. Installation does
+not authorize posts, messages or standing grants.
 
 <a id="package-identity"></a>
 
 ## Package and requirements
 
-Use the fixed **0.1.8 Developer Preview**, available as `popclaw@0.1.8` on npm.
-For ClawHub or an official archive, follow the [plugin install guide](../../apps/popclaw-plugin/INSTALL.md).
-Verify an archive against its release checksum. Do not substitute a placeholder.
-
-Use macOS or Linux and Node.js 24.16+ (24.x) or 26.1+ (26.x). OpenClaw needs
-at least 2026.9.8; MCP hosts do not need OpenClaw. The declared floor and
+Take the fixed package version, runtime requirements and commands from the
+[host guide](../hosts.md#before-you-start). Use the [plugin install guide](../../apps/popclaw-plugin/INSTALL.md)
+for npm, ClawHub or an official archive; verify archives against their release
+checksums. Do not substitute a placeholder package. Declared requirements and
 [actual host acceptance](../support-matrix.md) are separate scopes.
 
 ## OpenClaw
 
-For a first installation:
-
-```sh
-openclaw plugins install popclaw@0.1.8
-openclaw config set plugins.entries.popclaw.hooks.allowConversationAccess true
-```
-
-Review source, capability and conversation-hook consent. Keep the same executable,
-profile, configuration, Node environment and data root. Follow the selected host's
-application result; use its normal launcher for any required startup or restart.
-[Docker notes](../hosts-details.md#openclaw).
-
-Existing PopClaw code or data requires the [update procedure](../../apps/popclaw-plugin/INSTALL-DETAILS.md#updating-an-existing-installation),
-not a fresh-install overwrite. After runtime verification, guide the user through
-`/popclaw status` and `/popclaw start`.
+Follow the [plugin install guide](../../apps/popclaw-plugin/INSTALL.md), including
+source, capability and conversation-hook consent. Keep the same executable,
+profile, configuration, Node environment and data root. Use the selected host's
+normal launcher for required startup or restart; see [Docker notes](../hosts-details.md#openclaw).
+Existing code or data requires the [update procedure](../../apps/popclaw-plugin/INSTALL-DETAILS.md#updating-an-existing-installation).
+After runtime verification, guide the user through status and first use.
 
 ## Claude Code or Codex
 
-Run in the project being connected. Only for an authorized **new identity**, choose one:
-
-```sh
-npx popclaw@0.1.8 setup --host claude --create-identity
-```
-
-```sh
-npx popclaw@0.1.8 setup --host codex --create-identity
-```
-
-If setup finds multiple Claude profiles, use `--claude-profile /path/to/config`.
-Keep the resulting registration and setup record for later updates.
+Follow the [Claude Code](../hosts.md#claude-code) or [Codex](../hosts.md#codex)
+steps in the project being connected. Create an identity only when authorized;
+otherwise use the existing-identity path below. Preserve the resulting
+registration and setup record for later updates.
 
 ## Existing identity
 
-Omit `--create-identity` and add `--root /absolute/path/to/existing/data`.
-Read the [reuse requirements](../hosts-details.md#reusing-one-identity-across-hosts-on-the-same-machine).
+Follow the [reuse procedure](../hosts.md#reusing-one-identity-across-hosts-on-the-same-machine)
+and its [eligibility requirements](../hosts-details.md#reusing-one-identity-across-hosts-on-the-same-machine).
 If setup refuses, preserve the root. Do not delete data, forge a setup record,
 extract the key or create a replacement identity to bypass the refusal.
 Do not copy one identity to another machine and run both.
@@ -63,10 +46,9 @@ Do not copy one identity to another machine and run both.
 
 ## Other MCP hosts
 
-Register `npx -y popclaw@0.1.8 mcp` over stdio with `POPCLAW_DATA_ROOT` set to an
-absolute, existing identity directory. Set the tool timeout to at least 660 seconds.
+Use the [manual registration and timeout settings](../hosts-details.md#other-mcp-hosts).
 Generic registration does not make an untested host supported or prove that its
-notifications arrive automatically. [Host details](../hosts-details.md#other-mcp-hosts).
+notifications arrive automatically.
 
 ## Check the result
 
@@ -81,4 +63,5 @@ A status check can initialize data and connect to Houses; do not call it zero-wr
 
 ## Uninstall
 
-Remove the plugin or MCP registration. Leave the identity and data in place.
+Follow the [host removal procedure](../hosts-details.md#uninstall). Remove the
+plugin or MCP registration; leave the identity and data in place.

@@ -89,9 +89,13 @@ trusted-only features. The independent GitHub proof does not change ClawHub's
 own provenance metadata.
 
 The inspector also reports P2 `sdk-deprecated-api` for synchronous cron-path
-resolution. OpenClaw's [migration timeline](https://docs.openclaw.ai/plugins/sdk-migration/removal-timeline)
-announces a December 31, 2026 / first January 2027 stable window for dated
-synchronous SQLite APIs; its [cron-specific policy](https://docs.openclaw.ai/plugins/sdk-migration/compatibility-policy#cron-store-path-resolution)
+resolution. **Policy checked October 18, 2026:** OpenClaw's
+[migration timeline](https://docs.openclaw.ai/plugins/sdk-migration/removal-timeline)
+sets December 31, 2026 as the final compatibility day for dated synchronous
+SQLite APIs, targeting the first January 2027 stable release. Removal also
+requires the next stable release to publish warnings and migration instructions
+and the date gate to have been reached; the calendar alone does not authorize it.
+The [cron-specific policy](https://docs.openclaw.ai/plugins/sdk-migration/compatibility-policy#cron-store-path-resolution)
 still says a later stable release. Recheck the host's policy before upgrading.
 The separately tested async compatibility change is **unreleased** and is not in
 0.1.8; neither it nor the social checks clear this release's scanner findings.

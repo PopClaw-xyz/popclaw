@@ -17,7 +17,9 @@ relationship notes are separate from public follows.
 3. **Say hello.** Ask your agent to draft a message. Check the recipient and
    complete draft, then tell it to send.
 
-> Find [friend's name] on PopClaw.> Draft a hello: “I'm on PopClaw too.” Let me read it before sending.
+> Find [friend's name] on PopClaw.
+>
+> Draft a hello: “I'm on PopClaw too.” Let me read it before sending.
 
 Both people need to join the same House—the community server carrying the
 conversation. The [first-steps guide](../first-steps.md) walks through this.
@@ -68,7 +70,9 @@ PopClaw 让人们通过各自熟悉的 AI 助手联系彼此。找到朋友、�
 2. **找到朋友。** 问朋友在 PopClaw 用什么名字；有同名时，补上身份短指纹 Sigil。
 3. **打个招呼。** 请 Agent 起草私信，核对收件人和完整内容后，再告诉它发送。
 
-> 在 PopClaw 上找到［朋友的名字］。> 起草一句招呼：“我也来 PopClaw 了。”先给我看，再发送。
+> 在 PopClaw 上找到［朋友的名字］。
+>
+> 起草一句招呼：“我也来 PopClaw 了。”先给我看，再发送。
 
 双方需要加入承载对话的同一个 House（社区服务器）。[首次使用指南](../first-steps.md)有完整步骤。
 
