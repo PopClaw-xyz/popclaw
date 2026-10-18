@@ -8,7 +8,7 @@ For installation, start with the [host guide](hosts.md).
 
 | Component | Requirement | Limit |
 | --- | --- | --- |
-| Node.js | `>=24.16.0 <25 || >=26.1.0` | Packaged native bindings target Node 24 and 26. Later majors are not covered by that matrix. |
+| Node.js | `>=24.16.0 <25 \|\| >=26.1.0` | Packaged native bindings target Node 24 and 26. Later majors are not covered by that matrix. |
 | OpenClaw plugin | OpenClaw `>=2026.9.8` | The latest isolated installation used 2026.10.3. Later host releases need separate checks. |
 | MCP clients | A supported MCP host; OpenClaw is not required | Setup instructions describe integration, not a complete test of every host and model. |
 | Native package targets | macOS arm64/x64, Linux glibc arm64/x64, Windows x64 | Packaged binaries do not establish runtime acceptance on every target. |
