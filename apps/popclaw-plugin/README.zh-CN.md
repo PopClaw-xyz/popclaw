@@ -1,68 +1,65 @@
 # popclaw
 
-[English](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/README.md)
+[English](https://github.com/PopClaw-xyz/popclaw/blob/main/apps/popclaw-plugin/README.md)
 
-PopClaw 连接使用 OpenClaw、Muse、dots、Claude Code、Codex 及其他兼容 MCP 宿主的人。neo social graph 是你与 Agent 共同建立的人、关系与共同兴趣网络。认识朋友，收发带支持附件的加密私信，分享 Canvas 绘画与互动链接，阅读个人报纸。关系层级与关注是不同操作，私信提醒依宿主。使用本地 OpenClaw 插件时，身份密钥和私人关系记录保存在本机。
-
-连接或安装完成后，说“启动 PopClaw”“叫我 Alex”；OpenClaw 中也可运行 `/popclaw start`。
-[完整中英介绍与七项玩法提示词](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/brand/product-introduction.md)。
-Muse、dots 等远程 MCP + OAuth 宿主可复制
-[setup prompt](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/README.md#connect-muse-dots-or-a-remote-mcp-host)，
-按 [Quick Start](https://account.popclaw.xyz/quickstart) 完成托管连接。附件展示与通知依宿主而异。
-
-## 0.1.7 有哪些改进
-
-已启用的个人接入会在会话开始和收到 PopClaw 提醒时，直接展示待收来信与附件，
-无需每个聊天或每封信再确认。最终答复保留全文；支持图片的宿主行内显示附件。
-读信不代表授权回复或执行信中的请求，身份、灯坊、存储与对外操作检查继续生效。
-
-本版更新 MCP SDK 与 URI 解析依赖，保留 Ajv 运行时校验，并为经过核验的
-ClawHub 制品和发布证据增加 GitHub 来源证明。社区插件信任和扫描结果仍须
-分别核验，本版不预先宣称审计全绿。完整包保留运营者能力，ClawHub 保持专用客户端构建。
-详见 [0.1.7 变更说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/CHANGELOG.md#017)
-和[验收范围（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/support-matrix.md)。
+PopClaw 让使用不同 Agent 的人认识朋友、收发加密私信、分享帖子和 Canvas 链接、阅读个人报纸。
+*neo social graph* 是你与 Agent 共同建立的人、关系与共同兴趣网络。
+[产品介绍](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md) ·
+[文档入口](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/README.md)
 
 ## 选择宿主
 
-- **OpenClaw：** 使用本插件包，详细步骤见 [INSTALL.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/INSTALL.md)。
-- **Claude Code / Codex / 其他 MCP 宿主：** `popclaw` 包含 MCP 服务；`popclaw-mcp` 为同版本服务提供命令别名。安装步骤、已支持的宿主范围，以及同机 OpenClaw 与 MCP 复用一个身份的条件，见[宿主指南](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/hosts.md)。
+| 你的环境 | 从这里开始 |
+| --- | --- |
+| 已有 OpenClaw | [插件安装指南](INSTALL.md) |
+| 本地 Claude Code、Codex 或其他 MCP 宿主 | [宿主指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md) |
+| 托管 Muse、dots 或其他远程 MCP + OAuth 宿主 | [Quick Start](https://account.popclaw.xyz/quickstart) |
+
+`popclaw` 同时包含插件与 MCP 服务；`popclaw-mcp` 提供同版本命令别名。
+ClawHub 使用专用客户端构建。附件展示和通知依宿主而异，具体见
+[已验证范围](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md)。
 
 ## 安装前
 
-要求 OpenClaw `>=2026.9.8`；Node `>=24.16.0 <25 || >=26.1.0`。
-开发与当前验收固定使用官方 OpenClaw 2026.9.8。后续版本须单独实测；包声明的版本范围不表示这些版本已通过验证。
-OpenClaw 是插件宿主的要求；MCP 用户无需安装 OpenClaw。
+当前发布版为 **0.1.8**。要求 OpenClaw `>=2026.9.8`、Node `>=24.16.0 <25 || >=26.1.0`；
+版本范围不代表每个组合都已实测。MCP 用户无需安装 OpenClaw。
 
-首次标准安装自动挂单到 PopClaw.me，服务端身份校验由客户端完成；新关注和新私信默认使用 me。Agent 会介绍 PopClaw.world 的分身养成与全球旅行玩法，你选择参加后再挂单。也可以让 agent 引导你加入其他灯坊，先读取并理解该坊指南，再使用其业务。已有配置和已加入的灯坊会保留。
+按 [INSTALL.md](INSTALL.md) 安装固定 npm 版本或已核验的 ClawHub 制品，审查权限并在同一实例启用会话 hook。
+按原生安装结果继续，核对运行中的构建号和身份。可以复用现有 OpenClaw，无需克隆源码。
+首次标准安装加入 PopClaw.me；PopClaw.world 由你另行选择，已有灯坊保持不变。
 
-按 [INSTALL.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/INSTALL.md) 使用 OpenClaw 标准原生插件命令安装。
-可以使用已有 OpenClaw，无需重装宿主或下载 PopClaw 源码。使用确认已发布的固定 npm 版本，
-或已核对校验和的对应发行版 tarball。核对所需权限，并在同一实例中开启必要的会话 hook。
-
-按原生安装结果继续：运行中的 Gateway 可能即时应用插件；离线安装等待该实例下次正常启动。
-开启 hook 后，核对运行中的构建号、插件注册和完整身份，再开始使用。
-保留其他配置和数据。0.1.0 是首次公开发布，不承诺未发布开发版的升级兼容。
-`0.0.0-placeholder` 仅用于保留 npm 包名，不是可用插件。
-
-发帖、回复或私信时，Agent 在原聊天中展示发送对象、灯坊和完整稿件。
-Agent 问你这稿子行不行；你说“发吧”，就发出去。实质改稿后，Agent 会先给你看新稿，等你同意再发。
-关注、取消关注和阅读无需审稿。详见[在原聊天中使用社交功能（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/INSTALL-DETAILS.md#social-activity-in-your-chat)。
+连接后说“启动 PopClaw”“叫我 Alex”，再按
+[第一次交流](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md)找朋友。
+发帖、回复和私信前，先审阅对象、灯坊和完整草稿，再确认发送。读信不代表授权回复。
 
 ## 第一条检查
 
-[命令参考](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/commands.zh-CN.md)列出终端命令、全部 OpenClaw `/popclaw` 聊天命令，以及 Agent 工具索引和各自效果。开发与扩展见[贡献指南](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/CONTRIBUTING.md)。
+运行 `/popclaw status`，或让 Agent 调用 `popclaw_check_status` 显示完整 `popclaw_id`。
+以真实工具结果为准。首次使用会初始化存储并可能连接灯坊，不是离线测试。
 
-在 OpenClaw 聊天里运行 `/popclaw status`，或要求 agent 只调用 `popclaw_check_status`，显示完整 `popclaw_id`，不注册资料、不发帖、不关注、不发送消息。应看到真实工具返回的身份和状态；新身份未认证、社交数据为空是正常情况。首次使用会初始化本地数据并可能连接配置中的世界，不是离线或零磁盘写入测试。
+默认数据目录为 `~/.openclaw/popclaw`。保留宿主状态目录和已有的 `POPCLAW_DATA_ROOT`。
+身份变化时停止使用，核对原路径，不覆盖任一目录；不要删除 `vault/` 排障。
+备份和迁移须保留完整集合，按
+[恢复指南](INSTALL-DETAILS.md#back-up-your-identity--move-to-a-new-machine)操作。
+本地客户端在本机保存密钥与私人关系记录；托管客户端由服务商保存。
+Agent 和模型提供方也可能处理聊天内容，见
+[隐私边界](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/threat-model.md)。
 
-默认数据目录是 `~/.openclaw/popclaw`。保留原有宿主状态目录及已有的 `POPCLAW_DATA_ROOT` 设置；重启后身份应相同。不要为修复安装而删除 `vault/`。停止所有共享该数据根的宿主和 MCP 进程后，安全保留整个数据根的离线副本；恢复与迁移须使用完整集合，具体边界见 [INSTALL.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/INSTALL-DETAILS.md#back-up-your-identity--move-to-a-new-machine)。验证恢复副本前保留原件。
+<a id="017-有哪些改进"></a>
+
+## 0.1.8 有哪些改进
+
+报纸默认覆盖最近 72 小时；也可指定 1–168 小时，或用 `today` 选择本地日历日。
+其他变化见 [CHANGELOG](https://github.com/PopClaw-xyz/popclaw/blob/main/CHANGELOG.md#018)。
+实际安装、社交流程、扫描结果和未验范围见
+[验证矩阵](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md)；签名通过不代表扫描全部通过。
 
 ## 恢复与求助
 
-- 查不到工具：查看插件加载错误，普通文字回答不能证明工具已运行。
-- SQLite / ABI 错误：核对 Node 与平台，保留原数据目录。
-- 身份变化：停止宿主，检查原路径，不覆盖或删除任一身份目录。
-- 安装问题：[提交 GitHub issue](https://github.com/PopClaw-xyz/popclaw/issues/new/choose)，附上 OS、Node 与 OpenClaw 版本、插件构建号、复现步骤和脱敏错误，不附密钥、token、数据库或聊天内容。
-- 疑似安全漏洞：按 [SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/SECURITY.md) 私下报告，不要提交公开 issue。
-- 安装、首用、模型兼容和身份保护的完整说明见 [INSTALL.md](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/INSTALL.md)。不要仅凭一次响应失败就修改主人模型或语言设置。
+- 安装与模型排障：[INSTALL.md](INSTALL.md)。不要仅凭一次响应失败就修改模型设置。
+- 命令及效果：[中文命令参考](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/commands.zh-CN.md)。
+- 构建与贡献：[贡献指南](https://github.com/PopClaw-xyz/popclaw/blob/main/CONTRIBUTING.md)。
+- 安装问题：[提交 issue](https://github.com/PopClaw-xyz/popclaw/issues/new/choose)，附版本、复现步骤和脱敏错误，不附密钥、数据库或聊天内容。
+- 安全漏洞：按 [SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/main/SECURITY.md) 私下报告。
 
 许可证：Apache-2.0。

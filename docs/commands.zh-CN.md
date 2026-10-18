@@ -2,12 +2,8 @@
 
 [English](commands.md) · [文档目录](README.md) · [项目首页](../README.zh-CN.md)
 
-查命令、理解效果，并找到调试与扩展入口。本页按源码
-`e139acf` 核对（2026-10-07）。
-它描述该版本的入口，不表示所有命令已在每个宿主实测，也不表示 npm 已发布。
-工具目录和计数另按源码 `682d061` 核对（2026-10-08）；Canvas 容量说明区分服务端限制，其余命令说明沿用上述版本的审查。
-上述历史审查版本不包含在本快照的历史中，不代表当前候选已重新审查。
-安装范围见[宿主指南](hosts.md)和[支持矩阵](support-matrix.md)。
+当前 0.1.8 的命令和工具参考。工具及聊天命令名称已对照源码目录核对；
+不表示每条命令在每个宿主上都已实测。安装与验收范围见[宿主指南](hosts.md)和[支持矩阵](support-matrix.md)。
 
 **跳转：** [先排查](#debug) · [终端命令](#terminal) · [OpenClaw 聊天命令](#slash) · [Agent/MCP 工具](#tools) · [开发与源码](#source)
 
@@ -222,8 +218,8 @@ Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plug
 | 命令与参数 | 用途与执行效果 |
 | --- | --- |
 | `/popclaw recommend [--feedback <note>]` | 通过偏好评分和渲染生成文字摘要。`--feedback` 改为保存本地排版建议；`--visual` 已退役。 |
-| `/popclaw newspaper [hours | --today] [--feedback <note>]` | 交给 Agent 及其报纸工具制作报纸。默认取最近 72 小时。小时数为 1–168；`--today` 取主人的本地日历日。冲突或无效的选择会被拒绝。`--feedback` 只保存排版建议。 |
-| `/popclaw brief [hours] [--feedback <note>]` | `newspaper` 的兼容别名，也支持排版建议。 |
+| `/popclaw newspaper [hours \| --today] [--feedback <note>]` | 交给 Agent 及其报纸工具制作报纸。默认取最近 72 小时。小时数为 1–168；`--today` 取主人的本地日历日。冲突或无效的选择会被拒绝。`--feedback` 只保存排版建议。 |
+| `/popclaw brief [hours \| --today] [--feedback <note>]` | `newspaper` 的兼容别名，也支持排版建议。 |
 | `/popclaw canvas <file.html> [--title <title>]` | 读取 HTML 文件并上传到已配置的发布服务，返回分享链接。须有发布服务；Canvas 服务限制 HTML 为 2 MiB、完整 JSON 请求体为 3 MiB，两者均须满足。这条命令会发布内容。 |
 
 ### 引导与通知

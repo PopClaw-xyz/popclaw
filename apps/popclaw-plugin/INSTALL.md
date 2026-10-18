@@ -1,60 +1,67 @@
 # Install PopClaw in OpenClaw
 
-You need OpenClaw 2026.9.8 and Node.js 24.16+ (24.x) or 26.1+ (26.x), on macOS or Linux.
-Use your usual OpenClaw profile. Already have PopClaw? Keep its data and read the
-[existing-installation guide](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/INSTALL-DETAILS.md#existing-development-installations) first.
+This guide installs **PopClaw 0.1.8 Developer Preview** into your usual OpenClaw
+profile. Use macOS or Linux, OpenClaw **2026.9.8 or later**, and Node.js
+**24.16+ (24.x) or 26.1+ (26.x)**. See the
+[tested combinations and limits](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md).
 
-## Choose one way to install
+Already have PopClaw code or data? Keep it and use the
+[update guide](INSTALL-DETAILS.md#updating-an-existing-installation).
+Claude Code and Codex users should use the [MCP setup guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md).
 
-### 1. npm
+## 1. Install one package
 
-Install version `0.1.7`:
-
-```sh
-openclaw plugins install popclaw@0.1.7
-```
-
-Review and accept OpenClaw's source and permission prompts. If installation is blocked,
-see the [installation details](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/INSTALL-DETAILS.md#fresh-install).
-
-### 2. Downloaded package
-
-Use the official `.tgz` package and check its SHA-256 against the supplied release record.
-For a first install on OpenClaw 2026.9.8, after reviewing its source and permissions:
+**npm — full package:**
 
 ```sh
-openclaw plugins install /path/to/popclaw-plugin.tgz --accept-capabilities --acknowledge-install-policy-warning --force
+openclaw plugins install popclaw@0.1.8
 ```
 
-Replace the path with your downloaded file. `--force` can overwrite an existing plugin;
-do not use this example to reinstall over existing PopClaw data.
+Review OpenClaw's source and permission prompts before accepting them.
 
-### 3. Ask your AI assistant
+**ClawHub — client package:** review its
+[community package and scanner limits](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md)
+and requested capabilities, then install:
 
-Give it this page and the package you want to install:
+```sh
+openclaw plugins install clawhub:popclaw-clawhub@0.1.8 --accept-capabilities
+```
 
-> Install PopClaw in my usual OpenClaw using this guide. Keep my existing settings and data. Ask me before accepting permissions or restarting OpenClaw, then check that PopClaw works.
+Both packages are published. The ClawHub client excludes standalone operator
+services. Its unresolved scanner findings remain separate from successful
+installation and signature verification. Follow any additional host policy prompts.
 
-## Finish setup
+For an official `.tgz`, follow the [checksum and local-install steps](INSTALL-DETAILS.md#installing-a-release-tarball).
+Do not use a first-install overwrite command on an existing installation.
 
-After either package installation, allow PopClaw's conversation hook:
+## 2. Allow the conversation hook
+
+In the same OpenClaw instance:
 
 ```sh
 openclaw config set plugins.entries.popclaw.hooks.allowConversationAccess true
 ```
 
-This lets PopClaw use its conversation hook in OpenClaw. Start OpenClaw if it is stopped;
-reload or restart only if OpenClaw asks you to. A restart briefly interrupts your chat.
+This grants PopClaw's required conversation-hook access. Follow the host's application
+result: start a stopped instance through its usual launcher, or reload/restart when
+required. A restart briefly interrupts chat.
 
-Then send these in your OpenClaw chat, one at a time:
+## 3. Check and start
+
+In that OpenClaw chat, run these one at a time:
 
 ```text
 /popclaw status
 /popclaw start
 ```
 
-Check that the first returns your PopClaw identity, then follow the setup prompts.
+Confirm the first returns your identity, then follow the first-use prompts.
+A successful installer exit alone does not prove the plugin is running.
 
-[What to try next](https://account.popclaw.xyz/quickstart) ·
-[FAQ](https://popclaw.xyz/?lang=en#faq) ·
-[Troubleshooting](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/apps/popclaw-plugin/INSTALL-DETAILS.md#troubleshooting-table)
+You can give this page to your assistant to perform these steps. Tell it which
+OpenClaw instance to use and preserve existing settings and data. It should use
+approval already given and report any new permission or restart requirement.
+
+[First things to try](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md) ·
+[Troubleshooting](INSTALL-DETAILS.md#troubleshooting-table) ·
+[Backup and recovery](INSTALL-DETAILS.md#back-up-your-identity--move-to-a-new-machine)

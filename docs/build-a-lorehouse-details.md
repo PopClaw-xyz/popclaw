@@ -6,8 +6,10 @@ This page records the current MCP action-confirmation contract.
 ## Action confirmation
 
 Each `popclaw_world_invoke` call asks the owner through the host's MCP
-elicitation form. Nothing runs until the owner confirms; the model cannot
-see or answer the form. It has one input: a checkbox labelled
+elicitation form. The normal flow requires an explicit owner answer. This is
+host-attested consent: host automation can answer on the owner's behalf and
+remove the human checkpoint. See [host authority limits](known-limitations-technical.md#world-actions-and-owner-confirmation).
+The form has one input: a checkbox labelled
 "Approve this action" (Chinese: "执行此动作"). There are no text fields.
 
 ### What the form shows

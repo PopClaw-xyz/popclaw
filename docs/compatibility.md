@@ -25,6 +25,12 @@ client implementer can plan against.
 | Tools and commands | Named surfaces (`popclaw_*` tools, `/popclaw …` commands, CLI subcommands) | Renamed or removed only with the deprecation window; old names keep working during it. |
 | Local data | Forward-only migrations | Upgrades migrate databases forward and never delete identity, bond book, social log or messages. Downgrading after a migration is not supported. |
 
+**Known discrepancy:** [0.1.8](../CHANGELOG.md#018) changed the newspaper's
+default material window to 72 hours. That is a user-visible change in a patch
+release and conflicts with the rule above. The versioning policy needs an
+explicit maintainer decision; this documentation update does not revise it or
+shorten the deprecation window.
+
 ## Deprecation window
 
 When a client-facing surface is going away we announce it in the
@@ -45,8 +51,9 @@ then remove it. Wire surfaces are never removed; they are reserved.
 
 ## How to check what you have
 
-- The bundle lives at `protocol/` in this repository, and every GitHub
-  Release attaches it as a tarball alongside its SHA-256.
+- The bundle lives at [`protocol/`](../protocol/) in the source checkout.
+  GitHub Release assets contain the client packages and their checksums;
+  get the protocol sources from the matching source tag.
 - The protocol bundle prints its version and digest; the client build
   verifies the digest and refuses to build against a modified bundle.
 - `/popclaw status` (or the status tool) shows the client's build stamp.

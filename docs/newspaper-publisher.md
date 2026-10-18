@@ -1,8 +1,9 @@
 # Newspaper publisher contract
 
 **Status: draft v0, not stable.** This describes the publisher interface
-used by the 0.1.0 client and the source-audited publisher implementation.
-It is not an audit of the currently deployed service or its retention policy.
+used by the 0.1.8 client. Browser routes and retention notes describe the
+[previously audited publisher implementation](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/newspaper-publisher.md#browser-endpoints),
+not a fresh audit of the deployed service or its settings.
 This client-to-service interface is separate from the event protocol;
 it does not change the EventEnvelope wire format.
 
@@ -15,17 +16,10 @@ service does not eliminate its signing and metadata limitations.
 
 ## What a publisher does
 
-1. Receives a rendered newspaper or onboarding page and returns a share URL.
-   The upload signature covers the title and HTML, not all upload metadata.
-2. Serves an unexpired page to anyone holding its short link. Link expiry
-   is an access rule, not a promise that every stored copy has been deleted.
-3. Records follow taps from paired readers so their own PopClaw can collect
-   the intents and ask before following. An unpaired tap is answered
-   `pair-first` without writing that follow-intent record.
-4. Pairs a reader's browser with their own identity through a code claimed
-   by their PopClaw.
-5. Requests the reader's local follow state for authors on a viewed page
-   and receives a signed page-state reply from that reader's client.
+A publisher accepts rendered newspaper/onboarding HTML, returns capability
+share links, pairs reader browsers, records their follow intents and exchanges
+page-author follow state with their clients. The signature, identity and
+retention boundaries for each operation are below.
 
 ## Client setting
 
@@ -64,117 +58,95 @@ a browser may fetch when opening a paper. See the
 
 ## Workshop observation and final delivery
 
-A rejected OpenClaw `waitForRun` observation does not establish that its child
-run failed or stopped. The dispatcher preserves the exact child's hand-off and
-original deadline. A later completed publication wakes that wait once; an
-unfinished or refused writing batch cannot settle it. A host-returned terminal
-status still follows the existing success/failure receipt path.
+An OpenClaw `waitForRun` rejection means observation was lost, not that the
+child stopped. The dispatcher keeps that child's original deadline and waits
+for its completed publication. Unfinished/refused batches do not settle the
+wait; a host-observed terminal status follows the normal receipt path.
 
-This fallback is process-local. It neither restarts the workshop nor retries
-an expired request-scoped SDK call. If the observer was lost, local hand-off and
-duplicate-prevention state is cleared at settlement, but the host session is
-retained: publication or deadline expiry cannot authorize deleting a possibly
-active run. Host termination and physical session cleanup remain unknown.
+The fallback is process-local. It does not restart the workshop, retry an
+expired SDK call or persist a recovery task. After observation loss, settlement
+clears local hand-off/duplicate-prevention state but retains the possibly active
+host session. Publication or expiry does not authorize deleting it.
 
-A publication receipt and a successful notification are separate facts. Final
-channel delivery still requires the existing authorized owner route and a
-successful notifier send. No routable target, caller-authority loss or process
-restart is repaired by the outcome fallback, and none should be described as a
-delivered newspaper. This mechanism does not persist a recovery task or change
-identity, channel permission or the 40-second inline/12-minute workshop budgets.
+**Publication and chat delivery are separate.** Delivery still needs an
+authorized owner route and a successful notifier send. This fallback cannot
+repair a missing route, lost caller authority or a process restart. The
+40-second inline and 12-minute workshop budgets remain unchanged. See the
+[dispatcher](../apps/popclaw-plugin/src/newspaper/dedicated-session.ts).
 
 ## Collection window
 
-An initial newspaper request defaults to the rolling last 72 hours. Use
-`hours` (an integer from 1 to 168) for another rolling window, or `today: true`
-for the owner's local calendar day. Supplying both is refused. The initial
-collection resolves one inclusive epoch-second cutoff, passes it into public
-material preparation and reuses it for all local material filtering. It adds
-no upper time bound. Workshop dispatch forwards the selection; its actual
-initial gather freezes the cutoff. Cursor reads and picks continue the existing
-issue instead of resolving another window. The slash command follows the same
-selection: `/popclaw newspaper` defaults to 72 hours, `/popclaw newspaper N`
-sets the rolling hours, and `/popclaw newspaper --today` selects the local day.
+The initial request uses the last **72 hours** by default. Choose integer
+`hours` from 1–168, or `today: true` for the owner's local calendar day; both
+together are refused. The slash equivalents are `/popclaw newspaper N` and
+`/popclaw newspaper --today`.
 
-For public journals, a connection-local, disposable SQLite TEMP index derives
-material time from verified frame projections, with the existing signed-event
-fallback. It preserves the latest canonical observation and checkpoint before
-filtering. The first collection verifies existing history; later collections
-process new frames and fetch only eligible originals, plus candidate-related
-observations needed to preserve source priority. Selected originals are still
-verified. Index metadata, change queues and capacity counters share transaction
-rollback. External writes, changed source policy and discontinuities rebuild it;
-restarting the connection also requires a rebuild. This changes neither identity
-assets nor the protected journal's persistent schema. TEMP storage may use
-automatically removed temporary files, rather than only RAM.
+Initial gather freezes one inclusive epoch-second lower bound, with no upper
+time bound, for public preparation and local filtering. Workshop dispatch
+forwards the selection; its actual gather freezes the cutoff. Cursor pages and
+picks continue that issue without recomputing the window. See
+[window selection](../apps/popclaw-plugin/src/newspaper/window.ts).
 
-The disposable index has a connection-wide 100,000-frame accounting ceiling.
-Crossing it stops incremental caching; a subsequent read rebuilds within that
-ceiling or falls back to complete verification. This cache ceiling never truncates
-materials. Query-only connections also retain complete reads. Normal reads use an
-indexed time lookup once, followed by bounded original-frame point reads. Ordinary
-remote snapshots retain their existing bounded, explicitly partial coverage.
+The [public-material index](../apps/popclaw-plugin/src/ingress/public-material-index.ts)
+accelerates collection without replacing verification:
 
-Windowed newspaper equivalence covers candidates, original bodies, primary
-sources and order. A source observation outside the window may be retained only
-to preserve primary-source deduplication; this internal path does not enumerate
-every out-of-window secondary `alsoInHouses` attribution. Normal feed, search and
-author reads without a material window retain their existing behavior.
+- A connection-local SQLite TEMP index preserves canonical observations and
+  checkpoints before filtering. Initial collection verifies history; later
+  collections process new frames and verify eligible original bytes.
+- Index metadata, change queues and accounting roll back together. External
+  writes, source-policy changes, discontinuities or a new connection rebuild
+  it. Persistent protected-journal schemas and identity assets are unchanged;
+  TEMP may use automatically removed files rather than only RAM.
+- The connection-wide 100,000-frame ceiling stops incremental caching, not
+  material collection. A later read rebuilds within the ceiling or falls back
+  to full verification; query-only connections retain complete reads. Normal
+  indexed reads use bounded original-frame lookups. Remote snapshots retain
+  their existing explicitly partial coverage.
+- Windowed results preserve candidates, original bodies, primary sources and
+  order. An older source observation may be retained for primary-source
+  deduplication without enumerating every older `alsoInHouses` attribution.
+  Ordinary feed, search and author reads keep their existing behavior.
 
 ## Reading failures before publication
 
-Initial material collection has a separate one-minute safety ceiling. Declared
-House digests, the optional summary reference (at most 1.5 seconds), and signed
-material acquisition start independently. Normal synchronous local verification
-can finish after ten seconds. Individual network requests retain their transport
-timeouts; the reading scope preserves action cancellation, earlier explicit
-trusted parent deadlines and abandonment checks. It grants no House authority.
-Summary and Guide keep their independent policies. Writing and publisher upload keep their existing
-policies; host setup and tool wrappers can add to visible call time.
+Initial collection has a [one-minute safety ceiling](../apps/popclaw-plugin/src/newspaper/read-policy.ts).
+Declared digests, signed material acquisition and the optional summary reference
+(up to 1.5 seconds) start independently. Local verification may take more than
+ten seconds. Transport timeouts, earlier trusted parent deadlines, cancellation
+and source-authority checks still apply. This scope grants no House authority;
+Guide, Summary, writing and upload retain their own policies. Host setup and
+tool wrappers can add to visible duration.
 
-Cancellation and source-authority checks still apply before a candidate basis is
-saved. A late response cannot authorize a new basis. A summary or digest is
-editorial context, not a substitute for verified article material.
+A summary or digest is editorial context, not verified article material.
+Before saving a candidate basis, the client rechecks cancellation and authority;
+a late response cannot authorize a new basis. Each synchronous validation call
+captures each source once, checks every referenced frame/signature/body, then
+rechecks source partition integrity, schema, DB and trust binding. Page,
+selection and publication calls validate afresh; initial gather retains checks
+both before persistence and on the saved document.
 
-Public-journal validation captures each used source once per synchronous
-validation call. Every reference still checks its frame, signature, material,
-body and current authority. After all references, each source is captured again
-for full partition integrity and schema validation, with the selected DB and
-trust binding compared to the initial capture. This reuse never spans page,
-selection or publication calls; those calls validate afresh. The initial gather
-retains both its pre-persistence validation and its saved-document validation.
-This reduces repeated full partition checks, not the number of signed references.
+Ingress verification does not justify trusting later disk reads. Reusing a
+cryptographic result would require identical canonical bytes, signature and key,
+plus separate stored-byte/source/authority checks. A different verifier would
+need acceptance/rejection compatibility tests. Those optimizations are not part
+of the current read-budget change, which also gives no inode-level guarantee
+against same-path physical file replacement.
 
-Ingress signature verification does not authorize blindly trusting later disk
-reads. A future optimization may reuse a mathematical verification result only
-for identical canonical bytes, signature and public key; stored-byte consistency,
-current source and authority still need separate checks. A different verifier
-backend requires acceptance/rejection compatibility tests for signatures and
-keys. Neither optimization is implemented by the aggregate-deadline correction.
+Use the recorded stages to locate a failure:
 
-A candidate manifest or `candidatePage=true` records local progress, not proof
-that candidate text reached the writer. Cancellation or a changed source can
-still prevent return after that stage; preserve this distinction from a run
-that never built a candidate. In older builds the aggregate ten-second deadline
-could also reject otherwise valid local verification at this point. The current
-scope removes that failure without skipping signatures or source checks. These
-checks do not provide an inode-level guarantee for same-path physical file
-replacement.
+| Evidence | What it establishes |
+| --- | --- |
+| Candidate manifest / `candidatePage=true` | Local progress; not proof the candidate reached the writer. Cancellation or a source change can still prevent return. |
+| `materialPage`, `publishCalled`, `publishAccepted` | Distinct material, call and acceptance stages; a missing final receipt does not prove upload was attempted. |
+| `stage.collectionFailure` | Safe failure code and available diagnostic fields, excluding origin URLs, headers, private content and raw errors. Missing fields mean unknown. |
+| `budget=read-call` | The aggregate deadline; `HOUSE_REMOTE_TIMEOUT` alone does not identify a House or network phase. |
+| Final publication receipt | Completed publication; tool-wrapper success alone is insufficient, and notification delivery needs separate evidence. |
 
-When collection raises a structured House read failure, the writer and the
-OpenClaw parent receive its safe code and available diagnostic fields. The
-workshop dispatch record retains those fields under `stage.collectionFailure`,
-without origin URLs, headers, private content or raw error text. `budget=read-call`
-identifies the aggregate deadline; `HOUSE_REMOTE_TIMEOUT` alone does not identify
-an individual House or network phase. Missing fields mean unknown.
-
-A workshop finishing without a publication receipt does not prove that upload
-was attempted. Check `candidatePage`, `materialPage`, `publishCalled` and
-`publishAccepted` separately. A tool wrapper reporting success also does not
-establish that a newspaper was published: require the actual final receipt.
-These source guarantees do not establish deployment or successful operation on
-a particular host. Preserve the failed step and diagnostic fields when reporting
-a failure; do not repeatedly request new editions to investigate it.
+Preserve the failed stage and safe diagnostics. Do not create repeated editions
+to investigate an unfinished one. These are source guarantees, not proof of
+successful operation on a particular deployment. The
+[earlier investigation detail](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/newspaper-publisher.md#reading-failures-before-publication)
+records the superseded ten-second aggregate deadline.
 
 ## Client endpoints and signature coverage
 
@@ -221,8 +193,8 @@ of that page, not the entire follow list. The client caps a request at 200
 authors but does not independently fetch the page to verify its author
 list, so the publisher remains a trust dependency.
 
-The wire format permits `follows`, `none` and `unknown`. The 0.1.0 resident
-roots currently produce only `follows` or `none` from their local relation
+The wire format permits `follows`, `none` and `unknown`. The 0.1.8 resident
+roots produce only `follows` or `none` from their local relation
 projection; they do not yet produce `unknown` for missing history. These
 answers are not proof of complete or up-to-date state at every house.
 An attempted answer suppresses another answer for the same page digest
@@ -251,38 +223,26 @@ a promise that every page author can see every reader's follow state.
 
 ## Known limitations of v0
 
-- **Incomplete signature coverage.** Upload `nickname` and `ttl_hours`
-  are not authenticated by the upload signature. Transport protection and
-  publisher validation are separate controls; a valid signature over the
-  title and HTML is not proof of these metadata values.
-- **Incomplete origin binding.** The first four client calls above omit
-  the publisher origin from their signed bytes. A signed sync reply
-  includes it. Using one trusted publisher does not turn the other
-  signatures into origin-bound credentials.
-- **No uniform replay window.** Upload signatures have no timestamp or
-  nonce. Timestamp checks on pulls and pairing are not a one-use guarantee.
-  The sync reply is bound to a challenge, page, viewer, validity window
-  and origin; do not extrapolate that boundary to the other requests.
-- **Share links are capability URLs.** Anyone holding an unexpired link
-  can read the page. Referrer controls reduce some onward leaks, but do
-  not prevent a reader from copying, forwarding or logging the link.
-- **Expiry is not complete deletion.** The audited implementation defaults
-  to a 24-hour page lifetime, configurable by the service, and caps a
-  positive per-upload request at 72 hours. Expired reads are refused;
-  database cleanup and a periodic sweep are separate. This does not prove
-  deployed settings, exact-time physical deletion or deletion from backups
-  and database logs. See [hosted-service disclosures](hosted-houses.md).
-- **Pulling an intent does not delete it.** The intent store records the
-  reader, followee, label, time and count; the pull reads changed records.
-  It does not store a paper ID in that record. Page-state requests and
-  replies separately associate a viewer with a page and its digest.
-- **Unpaired does not mean unrecorded everywhere.** An unpaired tap does
-  not create a follow-intent record. That says nothing about HTTP logs,
-  pairing sessions or other service records.
-- **The owner signs selected third-party content.** A newspaper can quote
-  other people's posts. The upload's domain tag separates that signature
-  from other purposes; it does not make those quotes the owner's original
-  words or eliminate the need to review what is published.
+- **Signatures cover only the bytes listed above.** Upload metadata is not
+  authenticated; four client request types omit publisher origin. Transport
+  protection and publisher validation do not expand signed scope.
+- **No uniform replay boundary.** Upload has no timestamp/nonce. Timestamp
+  checks on pulls and pairing do not ensure one use. Only the sync reply binds
+  challenge, page, viewer, validity window and origin together.
+- **Share links can spread.** Anyone holding a valid link can read the page.
+  Referrer controls do not prevent copying, forwarding or logging it.
+- **Expiry is not deletion.** The recorded implementation defaults to 24 hours,
+  configurable by the service, and caps a positive per-upload lifetime at
+  72 hours. Expired reads are refused; cleanup and periodic sweeps are separate.
+  This establishes neither deployed settings nor physical deletion from
+  databases, logs or backups. See [service disclosures](hosted-houses.md).
+- **Intent collection does not delete records.** They retain reader, followee,
+  label, time and count, without a paper ID. Separate page-state records bind
+  reader, page and digest. An unpaired tap creates no intent, but HTTP logs,
+  pairing sessions or other service records may remain.
+- **Signed quotations remain third-party content.** The upload domain separates
+  signing purposes; it does not make quoted posts the owner's original words
+  or remove the need to review the paper.
 
 ## Roadmap
 

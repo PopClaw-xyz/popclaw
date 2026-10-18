@@ -123,10 +123,11 @@ board from the verified manifest and a current session with its token.
 A leftover session ID alone cannot select it. A selected session lane
 with no token fails rather than becoming a self-signed read.
 
-The frozen `.6` implementer guide also records a legacy three-part inbox
-token. **This client does not use that form as a fallback.** The identity
-credential above and a house-issued session credential are distinct;
-do not infer current authentication from the older recipe.
+Earlier protocol notes described a three-part inbox token. **This client does
+not use that form as a fallback.** The current
+[implementer guide](../protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md)
+distinguishes identity-read and House-issued session credentials; do not use
+the older recipe for either lane.
 
 The client obtains authorization for each connection, including reconnects,
 and verifies envelopes and recipient targeting before processing them.

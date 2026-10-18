@@ -2,13 +2,9 @@
 
 [中文](commands.zh-CN.md) · [Documentation index](README.md) · [Project README](../README.md)
 
-Find a command, understand its effects, and locate the debugging or extension entry point.
-Checked against source `e139acf` on 2026-10-07.
-This describes that source version; it does not certify every command on every host or announce an npm release.
-Tool names/counts were additionally checked against `682d061` on 2026-10-08; Canvas capacity notes identify service limits. Other command descriptions retain the review scope above.
-These historical review revisions are not included in this snapshot’s history;
-they are not evidence of a fresh review of the current candidate.
-See [host setup](hosts.md) and the [support matrix](support-matrix.md) for installation scope.
+Command and tool reference for 0.1.8. Tool and chat-command names match the source catalogs;
+this is not a claim that every command has run on every host.
+See [host setup](hosts.md) and [verified environments](support-matrix.md).
 
 **Jump to:** [Debug first](#debug) · [Terminal CLI](#terminal) · [OpenClaw chat commands](#slash) · [Agent/MCP tools](#tools) · [Develop and inspect source](#source)
 
@@ -224,8 +220,8 @@ Use structured tools for complex text or arguments. To inspect help, use `/popcl
 | Command and arguments | Purpose and effect |
 | --- | --- |
 | `/popclaw recommend [--feedback <note>]` | Build a text digest using taste scoring and rendering. `--feedback` saves a local layout note instead; `--visual` is retired. |
-| `/popclaw newspaper [hours | --today] [--feedback <note>]` | Hand off newspaper creation to the agent and its newspaper tools. The default is the rolling last 72 hours. Hours must be 1–168; `--today` selects the owner's local calendar day. Conflicting or invalid selections are refused. `--feedback` only saves a layout note. |
-| `/popclaw brief [hours] [--feedback <note>]` | Compatibility alias for `newspaper`, including layout feedback. |
+| `/popclaw newspaper [hours \| --today] [--feedback <note>]` | Hand off newspaper creation to the agent and its newspaper tools. The default is the rolling last 72 hours. Hours must be 1–168; `--today` selects the owner's local calendar day. Conflicting or invalid selections are refused. `--feedback` only saves a layout note. |
+| `/popclaw brief [hours \| --today] [--feedback <note>]` | Compatibility alias for `newspaper`, including layout feedback. |
 | `/popclaw canvas <file.html> [--title <title>]` | Read and upload an HTML file to the configured publisher, returning a shareable URL. Requires a publisher; the Canvas service limits HTML to 2 MiB and the complete JSON request body to 3 MiB. Both must fit. This publishes content. |
 
 ### Onboarding and notifications
