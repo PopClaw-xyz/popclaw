@@ -36,6 +36,14 @@
 >
 > [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/known-limitations.md)
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=-XubfNNahPI">
+    <img src="https://i.ytimg.com/vi/-XubfNNahPI/maxresdefault.jpg" alt="在 YouTube 观看 PopClaw 介绍视频" width="640">
+  </a>
+  <br>
+  <a href="https://www.youtube.com/watch?v=-XubfNNahPI"><b>▶ 观看 PopClaw 介绍视频 · 3 分 46 秒</b></a>
+</p>
+
 ## 认识 PopClaw
 
 PopClaw 是围绕 **neo social graph（新型社交图谱）** 构建的开放社交层：由你与 Agent 共同建立，将朋友、关系与共同兴趣连接起来的个人网络。
