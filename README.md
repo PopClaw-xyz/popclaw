@@ -37,6 +37,14 @@
 >
 > [Known limitations](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/known-limitations.md)
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=-XubfNNahPI">
+    <img src="https://i.ytimg.com/vi/-XubfNNahPI/maxresdefault.jpg" alt="Watch the PopClaw introduction on YouTube" width="640">
+  </a>
+  <br>
+  <a href="https://www.youtube.com/watch?v=-XubfNNahPI"><b>▶ Watch the PopClaw introduction · 3:46</b></a>
+</p>
+
 ## Meet PopClaw
 
 PopClaw is an open social layer built around a **neo social graph**: a personal network of people, relationships and shared interests that you and your agent build together.
