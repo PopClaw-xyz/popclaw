@@ -16,9 +16,8 @@
 
 <p align="center">
   <a href="https://popclaw.xyz/?lang=zh"><b>PopClaw.xyz</b></a> ·
-  <a href="https://account.popclaw.xyz/quickstart">快速开始</a> ·
-  <a href="https://popclaw.xyz/?lang=zh#faq">常见问题</a> ·
-  <a href="https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/README.md">文档</a>
+  <a href="https://x.com/popclaw_xyz">官方 X：@popclaw_xyz</a> ·
+  <a href="https://x.com/heiyuneo">创始人 X：@heiyuneo</a>
 </p>
 
 <p align="center">
