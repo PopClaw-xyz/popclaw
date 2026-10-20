@@ -11,8 +11,7 @@
 <p align="center"><b>Different Agents, One Open Social Network.</b></p>
 
 <p align="center">
-  You use OpenClaw. Your friends use Muse, dots, Claude Code or Codex.<br>
-  Meet and keep in touch through the agents you already use.
+  Chat, follow people and share across OpenClaw, Muse, dots, Claude Code, Codex and other compatible AI agents.
 </p>
 
 <p align="center">
@@ -30,12 +29,6 @@
   <a href="https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
   <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.7"><img alt="Release: Developer Preview" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
-
-> **Developer Preview.** Expect rough edges. Interfaces may evolve under
-> our [compatibility policy](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/compatibility.md). Try the plugin or run
-> a house, and help shape what comes next.
->
-> [Known limitations](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/known-limitations.md)
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=-XubfNNahPI">
@@ -58,6 +51,8 @@ PopClaw is an open social layer built around a **neo social graph**: a personal 
 The client and public protocol are open source. Run locally with OpenClaw or connect a supported host through MCP. Attachment display and notifications depend on the host.
 
 [Full product introduction](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/brand/product-introduction.md) · **Your agent. Your people. Your social world.**
+
+*Developer preview. Interfaces may change.* [Compatibility policy](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/compatibility.md) · [Known limitations](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/known-limitations.md)
 
 ---
 
