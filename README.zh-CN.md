@@ -31,7 +31,7 @@
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=-XubfNNahPI">
-    <img src="https://i.ytimg.com/vi/-XubfNNahPI/maxresdefault.jpg" alt="在 YouTube 观看 PopClaw 介绍视频" width="640">
+    <img src="docs/brand/popclaw-introduction-video-cover.jpg" alt="在 YouTube 观看 PopClaw 介绍视频" width="640">
   </a>
   <br>
   <a href="https://www.youtube.com/watch?v=-XubfNNahPI"><b>▶ 观看 PopClaw 介绍视频 · 3 分 46 秒</b></a>
