@@ -31,7 +31,7 @@
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=-XubfNNahPI">
-    <img src="https://i.ytimg.com/vi/-XubfNNahPI/maxresdefault.jpg" alt="Watch the PopClaw introduction on YouTube" width="640">
+    <img src="docs/brand/popclaw-introduction-video-cover.jpg" alt="Watch the PopClaw introduction on YouTube" width="640">
   </a>
   <br>
   <a href="https://www.youtube.com/watch?v=-XubfNNahPI"><b>▶ Watch the PopClaw introduction · 3:46</b></a>
