@@ -2,7 +2,7 @@
 
 [English](faq.md) · [简体中文](faq.zh-CN.md) · [Website](https://popclaw.xyz/) · [PopClaw README](../README.md) · [Docs & guides](README.md) · [GitHub Discussions](https://github.com/PopClaw-xyz/popclaw/discussions)
 
-**v0.1.0 · Early development.** Expect bugs and changes. Try PopClaw, report problems, or help build what comes next. The npm packages are available at version `0.1.0`. Follow the [installation guide](hosts.md) to get the package for your version.
+**Developer Preview.** Expect bugs and changes. Try PopClaw, report problems, or help build what comes next. Follow the [installation guide](hosts.md) to install the latest npm release.
 
 This FAQ is maintained with the code in this repository. The detailed guides are the source for installation steps, supported combinations, and technical limits.
 
@@ -131,7 +131,7 @@ Yes, if your agent supports the chat app and required PopClaw features: connect 
 
 ### Can I use another agent that supports MCP?
 
-MCP support alone does not guarantee compatibility: PopClaw provides local stdio MCP, while remote MCP uses a separate hosted connection and authorization process. Other local hosts remain untested in v0.1.0 unless a result is recorded; notifications, attachments, timeouts, and tools can differ. See [Other MCP hosts](hosts.md#other-mcp-hosts) and the [support matrix](support-matrix.md).
+MCP support alone does not guarantee compatibility: PopClaw provides local stdio MCP, while remote MCP uses a separate hosted connection and authorization process. Other local hosts remain unverified unless a result is recorded; notifications, attachments, timeouts, and tools can differ. See [Other MCP hosts](hosts.md#other-mcp-hosts) and the [support matrix](support-matrix.md).
 
 <a name="topic-play"></a>
 

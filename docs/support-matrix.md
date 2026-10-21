@@ -2,6 +2,50 @@
 
 ## Current verification scope
 
+Install with `popclaw@latest` or `popclaw-mcp@latest`; use the
+[latest GitHub release](https://github.com/PopClaw-xyz/popclaw/releases/latest)
+for archives and release notes. The [host guide](hosts.md) covers first install,
+identity reuse and updates. `latest` selects a release when the command runs;
+it does not upgrade an already running host.
+
+On 21 October 2026, both npm `latest` tags and GitHub's latest release selected
+the same release. Its recorded checks cover archive identity, registry
+signatures, provenance, packaged SQLite and MCP smoke checks. They do not
+establish a new real Gateway, model or social-delivery acceptance result.
+The recorded ClawHub static scan has three Critical findings and its LLM scan
+is Suspicious; valid signatures do not clear those results.
+
+Verification applies to the exact versions and environments in each record.
+A moving `latest` tag does not transfer those results to a later release.
+
+## Declared requirements and other combinations
+
+- **Node:** `>=24.16.0 <25 || >=26.1.0`, as declared by the packages.
+  The native-dependency matrix targets Node **24 and 26**. Matching the
+  declared range does not establish prebuilts for later Node majors or
+  runtime verification of every version and platform.
+- **OpenClaw plugin:** OpenClaw `>=2026.9.8`. MCP users do not need to
+  install OpenClaw. Later versions require separate testing; historical
+  samples do not change the current minimum. Your chosen host
+  can impose additional requirements.
+- **Other host/platform combinations:** unverified unless a specific
+  result is recorded. This includes other MCP clients, Linux x64 and WSL;
+  the macOS VM evidence is not a claim for every Mac or CPU architecture.
+- **Native Windows:** `popclaw setup` refuses to run there. WSL reports
+  itself as Linux and is not blocked by that check, but remains unverified.
+  Presence of a native binary does not remove these setup limits.
+- **Ranger Map and other houses:** use each reference implementation's
+  own interoperability record. No final-release server matrix is completed
+  by the client-side records below.
+
+See [known limitations](known-limitations.md), [host differences](hosts.md#what-differs-between-hosts)
+and the [compatibility policy](compatibility.md) before choosing a setup.
+
+## Version-specific verification records
+
+<details>
+<summary>Expand release history, artifact hashes and tested environments</summary>
+
 <a id="018-release-verification"></a>
 ### 0.1.8 verification — standard npm packages and original artifacts verified
 
@@ -85,13 +129,6 @@ Valid signatures do not imply all platform scans passed or official-plugin trust
 Daily-use hosts were not upgraded, and no new Gateway, model or social-delivery
 acceptance is claimed.
 
-The [read-only 0.1.7 verification run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38762787087)
-succeeded. Its receipt matches both original 0.1.7 archive hashes and verifies
-registry signatures and provenance against source
-`801f5d76162de7f0a1ff66cdb89780a650586768` and the original publication runs.
-It performed no build, publication, tag or dist-tag mutation. The earlier failed
-publication runs keep their failure results. This is separate 0.1.7 evidence.
-
 The [GitHub Release](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.8)
 is an ordinary release marked Latest and retains Developer Preview status.
 Latest does not automatically upgrade existing hosts. This verification record
@@ -99,6 +136,13 @@ is maintained after the frozen tag; it does not change the tagged source.
 
 <a id="017-release-verification"></a>
 ### 0.1.7 release verification
+
+The [read-only 0.1.7 verification run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38762787087)
+succeeded. Its receipt matches both original 0.1.7 archive hashes and verifies
+registry signatures and provenance against source
+`801f5d76162de7f0a1ff66cdb89780a650586768` and the original publication runs.
+It performed no build, publication, tag or dist-tag mutation. The earlier failed
+publication runs keep their failure results. This is separate 0.1.7 evidence.
 
 The [v0.1.7 source tag](https://github.com/PopClaw-xyz/popclaw/tree/v0.1.7)
 fixes source `801f5d76162de7f0a1ff66cdb89780a650586768`.
@@ -555,28 +599,8 @@ increment as if they were the same metric. The earlier fixture budgets of
 unmet. None of these short windows proves absence of leaks, fixes heating
 on an older Mac, or verifies every host and platform.
 
-## Declared requirements and other combinations
 
-- **Node:** `>=24.16.0 <25 || >=26.1.0`, as declared by the packages.
-  The native-dependency matrix targets Node **24 and 26**. Matching the
-  declared range does not establish prebuilts for later Node majors or
-  runtime verification of every version and platform.
-- **OpenClaw plugin:** OpenClaw `>=2026.9.8`. MCP users do not need to
-  install OpenClaw. Later versions require separate testing; the historical
-  2026.9.4 sample above does not change the current minimum. Your chosen host
-  can impose additional requirements.
-- **Other host/platform combinations:** unverified unless a specific
-  result is recorded. This includes other MCP clients, Linux x64 and WSL;
-  the macOS VM evidence is not a claim for every Mac or CPU architecture.
-- **Native Windows:** `popclaw setup` refuses to run there. WSL reports
-  itself as Linux and is not blocked by that check, but remains unverified.
-  Presence of a native binary does not remove these setup limits.
-- **Ranger Map and other houses:** use each reference implementation's
-  own interoperability record. No final-release server matrix is completed
-  by the client-side rows above.
-
-See [known limitations](known-limitations.md), [host differences](hosts.md#what-differs-between-hosts)
-and the [compatibility policy](compatibility.md) before choosing a setup.
+</details>
 
 ## Add a reproducible result
 

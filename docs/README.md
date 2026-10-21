@@ -6,7 +6,9 @@
 
 [Product introduction — English and Chinese](brand/product-introduction.md).
 
-Choose what you want to do.
+Choose what you want to do. Installation guides use npm’s `latest` release;
+[latest downloads and release notes](https://github.com/PopClaw-xyz/popclaw/releases/latest)
+and the [changelog](../CHANGELOG.md) track releases.
 
 ## Start using PopClaw
 

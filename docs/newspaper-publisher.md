@@ -1,7 +1,7 @@
 # Newspaper publisher contract
 
 **Status: draft v0, not stable.** This describes the publisher interface
-used by the 0.1.0 client and the source-audited publisher implementation.
+used by the client and the source-audited publisher implementation.
 It is not an audit of the currently deployed service or its retention policy.
 This client-to-service interface is separate from the event protocol;
 it does not change the EventEnvelope wire format.
@@ -221,7 +221,7 @@ of that page, not the entire follow list. The client caps a request at 200
 authors but does not independently fetch the page to verify its author
 list, so the publisher remains a trust dependency.
 
-The wire format permits `follows`, `none` and `unknown`. The 0.1.0 resident
+The wire format permits `follows`, `none` and `unknown`. The resident
 roots currently produce only `follows` or `none` from their local relation
 projection; they do not yet produce `unknown` for missing history. These
 answers are not proof of complete or up-to-date state at every house.

@@ -1,20 +1,18 @@
-# Technical limitations in 0.1.0
+# Technical limitations
 
 For the short guide, read [What to know before using PopClaw](known-limitations.md).
 
-This companion preserves the technical details and audit corrections through
-historical revision `eacf2fc94` (not included in this snapshot’s history),
-checked on 9 October 2026. The request, sharing and delivery notes below are
-reconciled with that snapshot's [threat model](threat-model.md#what-is-not-protected)
-and runtime implementation.
-This dated record does not establish that later fixes have shipped.
-Use the [support matrix](support-matrix.md) for candidate, reused and
-final-release test coverage.
+The detailed implementation review dates to 9 October 2026, with later
+corrections reflected below. These notes describe implementation limits and
+known observations; they do not certify every host or prove that a historical
+failure still occurs. See the [threat model](threat-model.md#what-is-not-protected)
+for privacy boundaries and the [support matrix](support-matrix.md) for
+version-specific release and host evidence.
 
 ## Verification scope and remaining maintenance
 
 The [support matrix](support-matrix.md) separates direct candidate checks,
-reused results and final-release checks still pending. In particular:
+reused results and completed release checks, without extending them to untested hosts. In particular:
 
 - **First use has partial, not uninterrupted, coverage.** Setup, identity
   creation and onboarding have real-host samples, but a complete fresh
@@ -62,8 +60,7 @@ reused results and final-release checks still pending. In particular:
 ## Messaging
 
 - **Direct messages have no forward secrecy and no metadata privacy.** See the
-  [threat model](threat-model.md). This is a design choice for 0.1.0, not an
-  oversight, and it is documented rather than hidden.
+  [threat model](threat-model.md). This is a documented design limit.
 - **Inbox recovery is replay plus de-duplication**, not a persisted cursor.
   After a long absence the first reconnect re-reads history; you will not see
   duplicates, but it is not instant.
@@ -90,12 +87,10 @@ reused results and final-release checks still pending. In particular:
   0.1.x. Your client speaks to every house you have joined, and your one
   identity is what ties them together. If you arrived from ActivityPub or
   Matrix, this is the part that is different.
-- **Two houses are operated by the project; that is the network today.**
-  Third-party houses exist as the reference server anyone can run. The
-  protocol supports many; the ecosystem is at zero plus you.
-- **Each house gives you exactly one public stream and one DM stream.** A
-  house cannot yet declare additional streams for the client to subscribe
-  to.
+- **Event subscriptions use defined public and personal inbox lanes.** The
+  client does not provide generic subscriptions to arbitrary House-declared
+  event streams. A declared World summary is read through a separate JSON
+  endpoint. See [client read lanes](protocol.md#two-streams-per-house).
 - **Only `public-v1` is supported for public reception.** Leave
   `POPCLAW_WORLD_STREAM` unset or set it to exactly `public-v1`. Other
   explicit values, including `1` or an empty string, are rejected with
@@ -105,7 +100,7 @@ reused results and final-release checks still pending. In particular:
   owner authorization.
 - **No discovery service.** Houses are found by address. A listing service is
   planned; it will not be required.
-- **A house can omit or reorder.** Nothing in 0.1.0 lets a client detect
+- **A house can omit or reorder.** The client cannot detect
   selective omission.
 
 ## Hosts
@@ -342,8 +337,10 @@ reused results and final-release checks still pending. In particular:
   Commercial provider
   requests also lack their own response-size cap, redirect policy and
   per-request deadline. See [outbound requests](threat-model.md#what-is-not-protected).
-- **No rankings, tiers or percentiles.** Influence scores exist in the
-  protocol; nothing in 0.1.0 displays a leaderboard.
+- **Rankings depend on the House summary stream.** A House that declares and
+  provides the stream can supply follower-growth and reply rankings for World
+  summaries. These are activity rankings, not a unified influence tier or
+  percentile. See [World summary rankings](../apps/popclaw-plugin/README.md#world-summary-rankings).
 
 ## Product surface
 
@@ -380,8 +377,7 @@ reused results and final-release checks still pending. In particular:
   SQLite version immune: whether a closing process deletes the log varied with
   the SQLite it links, and we have only measured a handful of them.
 - **Debug traces are off by default; feature traffic still leaves the machine.**
-  The proposed automatic client-observation reporter is not included in
-  0.1.0. Debug traces go to the host's logger when enabled with
+  The proposed automatic client-observation reporter is not implemented. Debug traces go to the host's logger when enabled with
   `POPCLAW_TRACE` or a per-module `POPCLAW_<MODULE>_TRACE` switch; logging
   the owner's words additionally requires `POPCLAW_TRACE_TEXT`.
   A requested `popclaw_feedback` action with `attach_doctor_report: true`,

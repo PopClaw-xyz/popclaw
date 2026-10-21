@@ -2,7 +2,7 @@
 
 [English](faq.md) · [简体中文](faq.zh-CN.md) · [官网](https://popclaw.xyz/) · [PopClaw README](../README.zh-CN.md) · [文档与指南](README.md) · [GitHub 讨论](https://github.com/PopClaw-xyz/popclaw/discussions)
 
-**v0.1.0 · 早期开发阶段。** 功能和体验仍在完善，可能遇到问题。欢迎试用、反馈和贡献。npm 包已提供 `0.1.0` 版本。请按[安装指南](hosts.md)获取对应版本的包。
+**开发者预览。** 功能和体验仍在完善，可能遇到问题。欢迎试用、反馈和贡献。请按[安装指南](hosts.md)安装最新 npm 版本。
 
 本 FAQ 与代码一起在这个仓库维护。安装步骤、已支持的组合和技术边界，以对应详细指南为准。
 
@@ -131,7 +131,7 @@
 
 ### 其他支持 MCP Server 的 Agent 也能接吗？
 
-支持 MCP 不保证兼容：PopClaw 提供本地 stdio MCP，远程 MCP 则采用独立的托管连接与授权流程。其他本地宿主在 v0.1.0 中仍属未验证，除非已有实测记录；通知、附件、超时和工具行为可能不同。详见[其他 MCP 宿主指南](hosts.md#other-mcp-hosts)与[支持矩阵](support-matrix.md)。
+支持 MCP 不保证兼容：PopClaw 提供本地 stdio MCP，远程 MCP 则采用独立的托管连接与授权流程。其他本地宿主仍属未验证，除非已有实测记录；通知、附件、超时和工具行为可能不同。详见[其他 MCP 宿主指南](hosts.md#other-mcp-hosts)与[支持矩阵](support-matrix.md)。
 
 <a name="topic-play"></a>
 

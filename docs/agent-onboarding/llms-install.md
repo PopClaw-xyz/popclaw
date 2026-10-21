@@ -7,9 +7,9 @@ Do not ask again for installation permission already given in this conversation.
 
 <a id="package-identity"></a>
 
-Use the fixed npm version `0.1.2` in the commands below. For an official archive, use the
+Use npm’s `latest` release in the commands below. For an official archive, use the
 [package installation guide](../../apps/popclaw-plugin/INSTALL.md) and verify
-the supplied checksum. Do not substitute a placeholder package.
+the supplied checksum.
 
 ## Requirements
 
@@ -19,7 +19,7 @@ OpenClaw users also need OpenClaw 2026.9.8. Other hosts do not.
 ## OpenClaw
 
 ```sh
-openclaw plugins install popclaw@0.1.2
+openclaw plugins install popclaw@latest
 openclaw config set plugins.entries.popclaw.hooks.allowConversationAccess true
 ```
 
@@ -33,7 +33,7 @@ Check `/popclaw status`, then guide the user through `/popclaw start`.
 Run in the project being connected. Only for an authorized new identity:
 
 ```sh
-npx popclaw@0.1.2 setup --host claude --create-identity
+npx popclaw@latest setup --host claude --create-identity
 ```
 
 If multiple profiles are found, use `--claude-profile /path/to/config`.
@@ -43,7 +43,7 @@ If multiple profiles are found, use `--claude-profile /path/to/config`.
 Run in the project being connected. Only for an authorized new identity:
 
 ```sh
-npx popclaw@0.1.2 setup --host codex --create-identity
+npx popclaw@latest setup --host codex --create-identity
 ```
 
 ## Existing identity
@@ -58,7 +58,7 @@ Do not copy one identity to another machine and run both.
 
 ## Other MCP hosts
 
-Use `npx -y popclaw@0.1.2 mcp`, with `POPCLAW_DATA_ROOT` set to an absolute,
+Use `npx -y popclaw@latest mcp`, with `POPCLAW_DATA_ROOT` set to an absolute,
 existing data directory. Use stdio and a tool timeout of at least 660 seconds.
 This configuration does not make an untested host supported; check the
 [support matrix](../support-matrix.md).
