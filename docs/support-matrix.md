@@ -18,6 +18,30 @@ is Suspicious; valid signatures do not clear those results.
 Verification applies to the exact versions and environments in each record.
 A moving `latest` tag does not transfer those results to a later release.
 
+## DSH connection verification
+
+Checked on **21 October 2026**, on macOS arm64 with Node **26.8.2**:
+npm `@deepseek-ai/dsh@latest` resolved to **0.2.1-rc.2**, including its exact
+`@deepseek-ai/dsh-mcp-client` dependency at the same version; `popclaw@latest`
+resolved to **0.1.8**. These are the fixed artifacts tested, not installation
+pins. Follow the [DSH guide](hosts-details.md#deepseek-harness-dsh) using `latest`.
+
+| Check | Result and boundary |
+| --- | --- |
+| Isolated npm installation and CLI | PASS with lifecycle scripts disabled; version/help and Web profile configuration dumps exited successfully. No daily DSH profile was changed. |
+| Guide YAML | PASS: the profile patch composes the stdio command, arguments, absolute data root and `toolCallTimeoutMs: 660000`. A dump does not boot the Web app. |
+| Published DSH MCP client → published PopClaw server | PASS under OS-level network denial: real Cordis loader, DSH tools and MCP client completed initialization and registered 55 tools. The test used the verified local PopClaw archive instead of downloading through `npx` inside the network block. |
+| PopClaw identity and local tool smoke | PASS in a separate controlled package test: a fresh synthetic root initialized; `popclaw_onboarding_status` succeeded across two MCP starts with the same identity. No real identity or House was used. |
+| Confirmation forms | The captured DSH initialization advertises `capabilities: {}`. Released-source review confirms that World actions and House restore confirmation require an unavailable approval surface. Ordinary login, name changes and conversational post/DM confirmation have different paths; this is not an all-write prohibition. |
+
+The DSH transport check made no business tool calls and did not create its
+configured data root. It loaded the actual published components without booting
+the full DSH app. **Not verified:** Web UI, real model turns, House login, post/DM
+delivery, confirmation interaction, automatic notifications, attachments, hot
+reload, or waiting through the complete timeout. No host was declared fully
+accepted from this connection test. Unpublished recovery candidates are not
+included in these published packages.
+
 ## Declared requirements and other combinations
 
 - **Node:** `>=24.16.0 <25 || >=26.1.0`, as declared by the packages.

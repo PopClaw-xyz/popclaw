@@ -31,6 +31,10 @@ setup writes the host configuration. A missing identity requires explicit
 `--create-identity`. Select an existing identity with `--root` and follow the
 host guide's reuse conditions; setup is not a migration or restore command.
 
+For DeepSeek Harness, use the [DSH YAML guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#deepseek-harness-dsh)
+([中文步骤](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#dsh-中文步骤)).
+It covers the current confirmation limits; `--host dsh` is not supported.
+
 The [command reference](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/commands.md)
 lists all CLI options, the two MCP entry points and the complete tool index.
 
