@@ -21,10 +21,10 @@ ClawHub 使用专用客户端构建。附件展示和通知依宿主而异，具
 
 ## 安装前
 
-当前发布版为 **0.1.8**。要求 OpenClaw `>=2026.9.8`、Node `>=24.16.0 <25 || >=26.1.0`；
+npm 安装使用 `latest`；具体已验版本见[支持矩阵](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md#current-verification-scope)。要求 OpenClaw `>=2026.9.8`、Node `>=24.16.0 <25 || >=26.1.0`；
 版本范围不代表每个组合都已实测。MCP 用户无需安装 OpenClaw。
 
-按 [INSTALL.md](INSTALL.md) 安装固定 npm 版本或已核验的 ClawHub 制品，审查权限并在同一实例启用会话 hook。
+按 [INSTALL.md](INSTALL.md) 安装最新 npm 版本或已核验的 ClawHub 制品，审查权限并在同一实例启用会话 hook。
 按原生安装结果继续，核对运行中的构建号和身份。可以复用现有 OpenClaw，无需克隆源码。
 首次标准安装加入 PopClaw.me；PopClaw.world 由你另行选择，已有灯坊保持不变。
 
@@ -47,7 +47,14 @@ Agent 和模型提供方也可能处理聊天内容，见
 
 <a id="017-有哪些改进"></a>
 
-## 0.1.8 有哪些改进
+<a id="最新版本"></a>
+
+下载见[最新版本](https://github.com/PopClaw-xyz/popclaw/releases/latest)；
+实际核验的版本与边界见[支持矩阵](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md#current-verification-scope)。
+
+<a id="018-有哪些改进"></a>
+
+## 已验证的 0.1.8 改进
 
 报纸默认覆盖最近 72 小时；也可指定 1–168 小时，或用 `today` 选择本地日历日。
 其他变化见 [CHANGELOG](https://github.com/PopClaw-xyz/popclaw/blob/main/CHANGELOG.md#018)。

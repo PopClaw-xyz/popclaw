@@ -12,7 +12,7 @@ not authorize posts, messages or standing grants.
 
 ## Package and requirements
 
-Take the fixed package version, runtime requirements and commands from the
+Use npm’s `latest` release and take runtime requirements and commands from the
 [host guide](../hosts.md#before-you-start). Use the [plugin install guide](../../apps/popclaw-plugin/INSTALL.md)
 for npm, ClawHub or an official archive; verify archives against their release
 checksums. Do not substitute a placeholder package. Declared requirements and
@@ -41,6 +41,15 @@ and its [eligibility requirements](../hosts-details.md#reusing-one-identity-acro
 If setup refuses, preserve the root. Do not delete data, forge a setup record,
 extract the key or create a replacement identity to bypass the refusal.
 Do not copy one identity to another machine and run both.
+
+## DeepSeek Harness (DSH)
+
+Use the [DSH profile YAML guide](../hosts-details.md#deepseek-harness-dsh).
+Keep the selected identity root and existing DSH profile. There is no
+`--host dsh`; manual configuration does not automatically join a House or
+install a notification hook. The current DSH client lacks confirmation forms
+needed for World actions and House restore confirmation. Report that limitation
+without bypassing it. Check the [verified scope](../support-matrix.md#dsh-connection-verification).
 
 <a id="generic-mcp-host"></a>
 

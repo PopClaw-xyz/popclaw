@@ -1,7 +1,7 @@
 # Installation details and troubleshooting
 
 For a new installation, start with [Install PopClaw](INSTALL.md). This reference
-covers fixed **0.1.8 Developer Preview** packages, existing installations and recovery.
+covers npm’s `latest` release, verified archive examples, existing installations and recovery.
 
 [Verify installation](#did-it-install-verification-methods-ranked-by-confidence) ·
 [Update](#updating-an-existing-installation) ·
@@ -15,7 +15,7 @@ covers fixed **0.1.8 Developer Preview** packages, existing installations and re
   that runs OpenClaw, not only in a new terminal. The declared engine range is
   `>=24.16.0 <25 || >=26.1.0`. Prebuilt SQLite targets Node 24 and 26 on macOS
   and Linux, arm64 and x64. This does not verify every matching runtime/platform.
-- **An exact package.** Use published `popclaw@0.1.8`,
+- **Package selection.** Use `popclaw@latest`, the separately verified
   `clawhub:popclaw-clawhub@0.1.8`, or the matching official tarball. Retain its
   version/build record and checksum. A reservation placeholder is not PopClaw.
 
@@ -127,15 +127,14 @@ Preserve the original identity, full root, configuration, source selection and
 launcher. For an npm-tracked installation, preview the exact update:
 
 ```sh
-openclaw plugins update popclaw@0.1.8 --dry-run
+openclaw plugins update popclaw@latest --dry-run
 ```
 
-Review the plan and permissions, then run without `--dry-run`. OpenClaw 2026.10.3
-can refresh a running Gateway after the update or save it for the next start when
-offline. Follow the selected host's actual result and
-[update rules](https://docs.openclaw.ai/cli/plugins/uninstall-and-update).
-If a stop/restart is required, use the original manager outside active chats.
-Check the loaded version and unchanged identity afterwards.
+Review the plan and permissions. Schedule the update outside active chats, stop
+the Gateway through its existing launcher or service manager, then run the command
+without `--dry-run`. Restart through that same manager and check the loaded version
+and original identity. Follow the current [host update rules](https://docs.openclaw.ai/cli/plugins/uninstall-and-update);
+do not treat the historical fresh-install refresh result as update acceptance.
 
 ClawHub pins, tarball installs and linked sources need their source-specific
 procedure. Do not switch source or overwrite them using the fresh-install example.

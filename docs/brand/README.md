@@ -16,3 +16,13 @@ the SVGs. Current product positioning: **Different Agents, One Open Social Netwo
 The [canonical product introduction](product-introduction.md) maintains the full
 English text and synchronized Chinese translation; README and short descriptions
 derive from it. The approved logo artwork remains unchanged.
+
+## Introduction video cover
+
+[`popclaw-introduction-video-cover.jpg`](popclaw-introduction-video-cover.jpg)
+is the shared English and Chinese README cover for the
+[PopClaw introduction video](https://www.youtube.com/watch?v=-XubfNNahPI).
+Its central translucent glass play button makes the image's click action clear.
+Keep the original composition and use the same YouTube target for the cover and
+the adjacent text link. The button is part of the image; the README opens YouTube
+when clicked.

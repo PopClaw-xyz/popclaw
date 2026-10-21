@@ -2,8 +2,9 @@
 
 [English](commands.md) · [文档目录](README.md) · [项目首页](../README.zh-CN.md)
 
-当前 0.1.8 的命令和工具参考。工具及聊天命令名称已对照源码目录核对；
-不表示每条命令在每个宿主上都已实测。安装与验收范围见[宿主指南](hosts.md)和[支持矩阵](support-matrix.md)。
+查命令、理解效果，并找到调试与扩展入口。本页随当前源码维护。
+命令、工具目录和终端入口已于 2026 年 10 月 21 日按下方链接的源码核对。
+这不表示所有命令都已在每个宿主实测；安装与实测范围见[宿主指南](hosts.md)和[支持矩阵](support-matrix.md)。
 
 **跳转：** [先排查](#debug) · [终端命令](#terminal) · [OpenClaw 聊天命令](#slash) · [Agent/MCP 工具](#tools) · [开发与源码](#source)
 
@@ -22,7 +23,7 @@
 <a id="debug"></a>
 ## 先排查：从这几条开始
 
-在已安装的终端环境查看帮助和身份：
+排查已有安装时，使用所检查构建的 CLI 查看帮助和身份：
 
 ```sh
 popclaw --help
@@ -49,7 +50,8 @@ MCP 宿主中，可要求 Agent 只调用 `popclaw_check_status` 并展示真实
 <a id="terminal"></a>
 ## 终端命令
 
-下表面向已安装的固定构建，安装与源码构建步骤见[宿主指南](hosts.md)和[贡献指南](../CONTRIBUTING.md)。
+下表用 `popclaw` 简写 CLI 命令。运行最新 npm 版本时使用 `npx popclaw@latest`；
+检查已安装的构建时使用该构建的 `popclaw`。安装与源码构建步骤见[宿主指南](hosts.md)和[贡献指南](../CONTRIBUTING.md)。
 
 ### 数据根与参数解析
 

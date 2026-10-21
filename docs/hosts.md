@@ -9,8 +9,8 @@ start with the [hosted Quick Start](https://account.popclaw.xyz/quickstart).
 ## Before you start
 
 - Use macOS or Linux and Node.js 24.16+ (24.x) or 26.1+ (26.x).
-- These commands install the fixed **0.1.8 Developer Preview**. Check the
-  [support matrix](support-matrix.md) for tested combinations and limits.
+- These npm commands use `latest`. Check the [support matrix](support-matrix.md#current-verification-scope)
+  for the exact verified version, tested combinations and limits.
 - Already have PopClaw? [Reuse your identity](#reusing-one-identity-across-hosts-on-the-same-machine)
   or [update your installation](#updating-an-existing-installation).
 
@@ -19,7 +19,7 @@ start with the [hosted Quick Start](https://account.popclaw.xyz/quickstart).
 OpenClaw must be at least 2026.9.8. Use your usual profile and install:
 
 ```sh
-openclaw plugins install popclaw@0.1.8
+openclaw plugins install popclaw@latest
 ```
 
 Review the source and permission prompts. Then allow PopClaw's conversation hook:
@@ -40,7 +40,7 @@ then run `/popclaw start`.
 For a **new identity**, run this in the project you want to connect:
 
 ```sh
-npx popclaw@0.1.8 setup --host claude --create-identity
+npx popclaw@latest setup --host claude --create-identity
 ```
 
 Read the command's result. If setup reports several Claude profiles, rerun it
@@ -51,16 +51,28 @@ with `--claude-profile /path/to/config` to select yours.
 For a **new identity**, run this in the project you want to connect:
 
 ```sh
-npx popclaw@0.1.8 setup --host codex --create-identity
+npx popclaw@latest setup --host codex --create-identity
 ```
 
 In either assistant, ask **“Check my PopClaw status.”** After it returns your
 identity, ask **“Help me get started on PopClaw.”**
 
+## DeepSeek Harness (DSH)
+
+DSH uses its `cordis.patch.yml` configuration to run PopClaw as a local stdio
+MCP server. Follow the [DSH steps and YAML example](hosts-details.md#deepseek-harness-dsh)
+or [中文步骤](hosts-details.md#dsh-中文步骤). Keep your existing DSH installation
+and reuse your PopClaw data root if you already have an identity.
+
+Manual configuration does not automatically join a House or install a
+notification hook. The current DSH MCP client lacks confirmation forms needed
+for World actions and House restore confirmation. See the
+[verified scope](support-matrix.md#dsh-connection-verification) before first use.
+
 ## Other MCP hosts
 
 Register a local stdio server with command `npx`, arguments
-`-y popclaw@0.1.8 mcp`, and `POPCLAW_DATA_ROOT` set to an absolute, existing
+`-y popclaw@latest mcp`, and `POPCLAW_DATA_ROOT` set to an absolute, existing
 identity directory. Set the tool timeout to at least 660 seconds.
 This is a configuration recipe, not a claim that every MCP host is tested.
 [Manual setup and notification limits](hosts-details.md#other-mcp-hosts).
@@ -70,7 +82,7 @@ This is a configuration recipe, not a claim that every MCP host is tested.
 Use the existing data directory and **omit `--create-identity`**:
 
 ```sh
-npx popclaw@0.1.8 setup --host claude --root /absolute/path/to/existing/data
+npx popclaw@latest setup --host claude --root /absolute/path/to/existing/data
 ```
 
 For Codex, replace `claude` with `codex`. Confirm that both hosts return the same
@@ -81,25 +93,40 @@ identity. Do not copy the directory to another computer and run both.
 
 ## Updating an existing installation
 
-Keep your original profile, configuration and data root. For an npm-tracked
-OpenClaw installation, preview the fixed update:
+Keep the same OpenClaw profile, configuration and PopClaw data directory.
+For an npm-tracked installation, preview the exact update:
 
 ```sh
-openclaw plugins update popclaw@0.1.8 --dry-run
+openclaw plugins update popclaw@latest --dry-run
 ```
 
-Review the result and permissions, then run the same command without `--dry-run`.
-Follow your selected host's application result. If it needs a stop or restart,
-use its existing launcher outside active chats. Confirm the loaded version and
-original identity with `/popclaw status`. ClawHub, tarball and linked-source
-installs retain their own source-specific update procedure; do not overwrite
-them with a first-install command. [Details](../apps/popclaw-plugin/INSTALL-DETAILS.md#updating-an-existing-installation).
+Review the result and the host's permission prompts. Schedule the update outside
+active chats, stop the Gateway through its existing launcher or service manager,
+then run `openclaw plugins update popclaw@latest`. Start it through that same
+manager and check `/popclaw status` for the original identity. Current OpenClaw
+requires the Gateway to be stopped for plugin updates; follow the
+[host update rules](https://docs.openclaw.ai/cli/plugins/uninstall-and-update).
+Local tarball or linked-source installs need their existing maintenance procedure;
+do not replace them using a first-install overwrite command.
 
-For an MCP registration that launches `npx`, change its existing selector to
-`popclaw@0.1.8` (or `popclaw-mcp@0.1.8` for the alias). Keep `POPCLAW_DATA_ROOT`
-and other settings, reconnect, and check the original identity. Setup-managed
-registrations can use local package paths; use their recorded setup/update plan
-rather than replacing them with an unrelated manual registration.
+**MCP installed with setup:** in the original project, rerun setup for your host:
+
+```sh
+npx popclaw@latest setup --host claude
+```
+
+Use `codex` or `both` for your configured hosts. Keep the original data root;
+if you selected it with `--root`, pass that same absolute path again. Keep any
+explicit `--claude-profile` selection. Omit `--create-identity`. Setup updates
+the managed runtime and host registration together. If it reports a configuration
+conflict, resolve that conflict before reconnecting.
+
+**Manually configured MCP:** use `popclaw@latest` (or `popclaw-mcp@latest` for the
+alias) in the existing `npx` configuration. Keep `POPCLAW_DATA_ROOT` and the other
+settings unchanged. A running server keeps its loaded version until restarted.
+
+Reconnect the MCP process and check that PopClaw reports the original identity.
+Do not create a new identity to update.
 
 ## What differs between hosts
 

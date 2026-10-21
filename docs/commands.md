@@ -2,9 +2,11 @@
 
 [中文](commands.zh-CN.md) · [Documentation index](README.md) · [Project README](../README.md)
 
-Command and tool reference for 0.1.8. Tool and chat-command names match the source catalogs;
-this is not a claim that every command has run on every host.
-See [host setup](hosts.md) and [verified environments](support-matrix.md).
+Find a command, understand its effects, and locate the debugging or extension entry point.
+Maintained with the current source. Command and tool catalogs and terminal entry
+points were checked against the linked source on 21 October 2026. This reference
+does not establish execution on every host; use [host setup](hosts.md) and the
+[support matrix](support-matrix.md) for installation and tested combinations.
 
 **Jump to:** [Debug first](#debug) · [Terminal CLI](#terminal) · [OpenClaw chat commands](#slash) · [Agent/MCP tools](#tools) · [Develop and inspect source](#source)
 
@@ -23,7 +25,7 @@ This source does not register an `openclaw popclaw …` terminal command.
 <a id="debug"></a>
 ## Debug first
 
-In a terminal with the fixed build installed:
+Use the CLI from the installed build you are checking:
 
 ```sh
 popclaw --help
@@ -51,7 +53,10 @@ An ordinary text answer is not evidence of a loaded tool; see [host setup](hosts
 <a id="terminal"></a>
 ## Terminal CLI
 
-The table assumes a fixed build is installed. Installation and source-build steps are in [host setup](hosts.md) and [CONTRIBUTING](../CONTRIBUTING.md).
+The table uses `popclaw` as shorthand for the CLI. Use `npx popclaw@latest` to run
+the latest npm release, or `popclaw` to inspect your already installed build.
+Installation and source-build steps are in [host setup](hosts.md) and
+[CONTRIBUTING](../CONTRIBUTING.md).
 
 ### Data root and parsing
 
@@ -267,7 +272,7 @@ The source also accepts `doctor send <note> --confirm` to collect and send in on
 
 This is an index of tool names and purposes. Use the parameter schema returned by the running host when calling a tool; do not enter these names in a shell.
 
-The full fixed-source catalog contains **55 distinct tool names**. The OpenClaw manifest marks 48 as non-optional and the seven marked † as optional; the full MCP catalog contains all 55. These are catalog and manifest counts, not evidence that a real host session exposes or permits 48 or 55 tools by default. Actual access depends on the host.
+The full source catalog contains **55 distinct tool names**. The OpenClaw manifest marks 48 as non-optional and the seven marked † as optional; the full MCP catalog contains all 55. These are catalog and manifest counts, not evidence that a real host session exposes or permits 48 or 55 tools by default. Actual access depends on the host.
 
 - `draft_*` and `feedback` prepare drafts without sending. `send_draft` sends after the owner reviews the destination, House, full text and attachments in the original conversation and agrees. Material changes need review again; there is no extra PopClaw social approval dialog.
 - `Notify Here` selects the destination for background notifications. It does not restrict ordinary tools or account verification to that channel. A current chat admitted by OpenClaw can prepare and submit a Native invitation without an administrative owner marker; the prepared account and posting acknowledgement remain bound to that conversation.

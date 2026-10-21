@@ -1,15 +1,57 @@
 # Support matrix
 
-**Current release: [0.1.8 Developer Preview](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.8).**
+**Latest release:** [downloads and notes](https://github.com/PopClaw-xyz/popclaw/releases/latest).
 This page separates requirements, tested combinations and remaining limits.
 For installation, start with the [host guide](hosts.md).
+
+## Current verification scope
+
+Checked on **22 October 2026**: both npm `latest` dist-tags resolve to **0.1.8**,
+and GitHub's latest release is **v0.1.8**. The MCP shell depends on exactly
+`popclaw@0.1.8`. Installation examples use `latest`; the version and host evidence
+below stays bound to its recorded artifacts. A moving tag does not transfer
+acceptance to a later release. This metadata check did not repeat installation
+or live social acceptance.
+
+**npm README acceptance remains pending publication.** The registry currently
+serves README text with old `v0.1.7` navigation for both packages and `0.1.7`
+installation examples for the MCP shell. Updating GitHub files does not update
+those published README surfaces. Check them separately after an authorized
+package release; this document change does not publish one.
+
+## DSH connection verification
+
+Checked on **21 October 2026**, on macOS arm64 with Node **26.8.2**:
+npm `@deepseek-ai/dsh@latest` resolved to **0.2.1-rc.2**, including its exact
+`@deepseek-ai/dsh-mcp-client` dependency at the same version; `popclaw@latest`
+resolved to **0.1.8**. These are the fixed artifacts tested, not installation
+pins. Follow the [DSH guide](hosts-details.md#deepseek-harness-dsh) using `latest`.
+
+| Check | Result and boundary |
+| --- | --- |
+| Isolated npm installation and CLI | PASS with lifecycle scripts disabled; version/help and Web profile configuration dumps exited successfully. No daily DSH profile was changed. |
+| Guide YAML | PASS: the profile patch composes the stdio command, arguments, absolute data root and `toolCallTimeoutMs: 660000`. A dump does not boot the Web app. |
+| Published DSH MCP client → published PopClaw server | PASS under OS-level network denial: real Cordis loader, DSH tools and MCP client completed initialization and registered 55 tools. The test used the verified local PopClaw archive instead of downloading through `npx` inside the network block. |
+| PopClaw identity and local tool smoke | PASS in a separate controlled package test: a fresh synthetic root initialized; `popclaw_onboarding_status` succeeded across two MCP starts with the same identity. No real identity or House was used. |
+| Confirmation forms | The captured DSH initialization advertises `capabilities: {}`. Released-source review confirms that World actions and House restore confirmation require an unavailable approval surface. Ordinary login, name changes and conversational post/DM confirmation have different paths; this is not an all-write prohibition. |
+
+The DSH transport check made no business tool calls and did not create its
+configured data root. It loaded the actual published components without booting
+the full DSH app. **Not verified:** Web UI, real model turns, House login, post/DM
+delivery, confirmation interaction, automatic notifications, attachments, hot
+reload, or waiting through the complete timeout. No host was declared fully
+accepted from this connection test. Unpublished recovery candidates are not
+included in these published packages.
+
+
+<a id="declared-requirements-and-other-combinations"></a>
 
 ## Requirements
 
 | Component | Requirement | Limit |
 | --- | --- | --- |
 | Node.js | `>=24.16.0 <25 \|\| >=26.1.0` | Packaged native bindings target Node 24 and 26. Later majors are not covered by that matrix. |
-| OpenClaw plugin | OpenClaw `>=2026.9.8` | The latest isolated installation used 2026.10.3. Later host releases need separate checks. |
+| OpenClaw plugin | OpenClaw `>=2026.9.8` | The recorded isolated 0.1.8 installation used 2026.10.3. Later host releases need separate checks. |
 | MCP clients | A supported MCP host; OpenClaw is not required | Setup instructions describe integration, not a complete test of every host and model. |
 | Native package targets | macOS arm64/x64, Linux glibc arm64/x64, Windows x64 | Packaged binaries do not establish runtime acceptance on every target. |
 | Setup on Windows | `popclaw setup` refuses native Windows | WSL is not blocked by that check, but remains unverified. |
@@ -18,6 +60,7 @@ Use the [compatibility policy](compatibility.md), [host differences](hosts.md#wh
 and [known limitations](known-limitations.md) when choosing a setup. House and
 Ranger implementations need their own interoperability evidence.
 
+<a id="version-specific-verification-records"></a>
 <a id="018-release-verification"></a>
 ## 0.1.8: what has been verified
 
@@ -100,6 +143,8 @@ still says a later stable release. Recheck the host's policy before upgrading.
 The separately tested async compatibility change is **unreleased** and is not in
 0.1.8; neither it nor the social checks clear this release's scanner findings.
 
+<a id="earlier-release-verification"></a>
+
 ## Earlier evidence
 
 Historical results stay attached to their tested versions. The fixed records
@@ -118,6 +163,8 @@ new claims for 0.1.8:
 
 - [0.1.3 and earlier releases](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/support-matrix.md#013-release-verification)
 - [Historical host and performance samples](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/support-matrix.md#historical-candidate-evidence)
+
+<a id="add-a-reproducible-result"></a>
 
 ## Report a reproducible result
 

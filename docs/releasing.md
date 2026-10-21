@@ -3,6 +3,20 @@
 Maintainer procedure for publishing fixed PopClaw artifacts. For the current
 version's availability and tested scope, read the [support matrix](support-matrix.md#018-release-verification).
 
+## Keep installation guides current
+
+Public installation and update examples use `popclaw@latest` and
+`popclaw-mcp@latest`. Link current GitHub files through `main`, and downloads
+through `/releases/latest`; there is no automatic `blob/latest` branch.
+Verify both npm dist-tags and GitHub's latest release before updating guidance.
+Keep exact versions, source SHAs, artifact hashes and failed results in release
+and verification records. A moving tag does not extend old host acceptance.
+
+For setup-managed MCP, upgrading means rerunning `npx popclaw@latest setup`
+with the original host, project and identity root. Setup keeps server and hook
+on one installed runtime. Do not tell these users to replace an `npx` selector
+in a registration that actually contains absolute runtime paths.
+
 ## Release order
 
 1. Review the fixed source, attribution and required checks.
@@ -16,6 +30,16 @@ version's availability and tested scope, read the [support matrix](support-matri
 GitHub Release and ClawHub are separate channels; an approved Release need not
 wait for ClawHub. Keep unfinished channels explicit. Publishing does not authorize
 a daily-host upgrade, deployment or announcement.
+
+## npm README acceptance after publication
+
+- Treat the GitHub source README, published archive README and npm registry/page
+  README as separate surfaces. A documentation PR updates only repository files.
+- **Pending:** after a separately authorized release, verify both `popclaw` and
+  `popclaw-mcp` README surfaces use current entry links and the approved installation
+  strategy. Match the package versions, exact dependency and dist-tags to the release.
+- Keep the old registry README observation in the [support record](support-matrix.md#current-verification-scope)
+  until those checks pass. Do not republish or replace frozen `0.1.8` archives.
 
 ## Before a release
 
@@ -65,8 +89,8 @@ source-build fallback. ClawHub requires optional dependencies and fails closed
 on missing/incompatible/modified bindings, without silently downloading or rebuilding.
 
 `@popclaw/mcp` is an unrelated placeholder: do not publish, deprecate or delete it.
-The shipped shell uses `popclaw-mcp`. Spell hook invocations explicitly:
-`npx -y --package=popclaw-mcp@VERSION popclaw-mcp-hook UserPromptSubmit`.
+The shipped shell uses `popclaw-mcp`. Keep its server and hooks on the same
+installed runtime; see the [MCP hook guide](../packages/popclaw-mcp/README.md#the-session-hook).
 
 ## Standard npm workflow
 

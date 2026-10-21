@@ -1,6 +1,6 @@
 # Install PopClaw in OpenClaw
 
-This guide installs **PopClaw 0.1.8 Developer Preview** into your usual OpenClaw
+This guide installs the latest npm **PopClaw Developer Preview** into your usual OpenClaw
 profile. Use macOS or Linux, OpenClaw **2026.9.8 or later**, and Node.js
 **24.16+ (24.x) or 26.1+ (26.x)**. See the
 [tested combinations and limits](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md).
@@ -14,12 +14,12 @@ Claude Code and Codex users should use the [MCP setup guide](https://github.com/
 **npm — full package:**
 
 ```sh
-openclaw plugins install popclaw@0.1.8
+openclaw plugins install popclaw@latest
 ```
 
 Review OpenClaw's source and permission prompts before accepting them.
 
-**ClawHub — client package:** review its
+**ClawHub — verified 0.1.8 client example:** review its
 [community package and scanner limits](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md)
 and requested capabilities, then install:
 

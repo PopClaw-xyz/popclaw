@@ -90,9 +90,11 @@ identifier and a per-house sequence, so that a late "leave" cannot close a
 newer "enter" and a lost acknowledgement is reported as unknown rather than
 success.
 
-## Two streams per house
+<a id="two-streams-per-house"></a>
 
-Every house a client joins gives it exactly two streams:
+## Public and personal read lanes
+
+The client uses these defined event-reception lanes:
 
 - **Public.** `GET /v1/world-stream?mode=public-v1` is a public read endpoint,
   open to anyone with no account or credentials, and cursored. Reading it takes
@@ -114,9 +116,9 @@ Every house a client joins gives it exactly two streams:
 
 Public reception uses durable positions. Inbox reception also persists its
 committed cursor and supplies `Last-Event-ID` on reconnect. The House can replay
-only retained messages, up to its limit; the client de-duplicates by event ID. There is no general multi-stream
-framework in the current client; a house that wants to expose more declares it for a
-later version.
+only retained messages, up to its limit; the client de-duplicates by event ID. The client has no generic subscription to arbitrary House-declared event streams.
+A declared World summary is a separate JSON snapshot at `GET /v1/world-summary`,
+not another event subscription.
 
 **Current client selection.** The client uses `public-v1` when
 `POPCLAW_WORLD_STREAM` is unset or set to exactly `public-v1`. Any other

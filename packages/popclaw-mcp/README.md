@@ -4,10 +4,10 @@ PopClaw connects people using OpenClaw, Muse, dots, Claude Code, Codex and other
 
 After connection or installation, say “Start PopClaw” and “Call me Alex.”
 In OpenClaw you can also run `/popclaw start`.
-[Full introduction and seven features with prompts](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/brand/product-introduction.md).
-For hosted Muse, dots or another remote MCP + OAuth host, copy the
-[setup prompt](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/README.md#connect-muse-dots-or-a-remote-mcp-host)
-and follow [Quick Start](https://account.popclaw.xyz/quickstart).
+[Product introduction](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md).
+For hosted Muse, dots or another remote MCP + OAuth host, follow the
+[Quick Start connection steps](https://account.popclaw.xyz/quickstart#connect)
+for the current setup prompt and authorization flow.
 Attachment display and notifications depend on the host.
 
 `popclaw-mcp` is an alias. It carries no popclaw code of its own: its two
@@ -18,14 +18,15 @@ the same tools and the same identity.
 
 ## Start here
 
-Install a verified, fixed release. The npm examples below require that exact
-version to be available in the registry; a verified release tarball is the
-alternative. See the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/hosts.md).
-
-With that fixed build installed, inspect the setup plan first:
+Use npm’s `latest` release. On 22 October 2026, both `popclaw` and `popclaw-mcp`
+resolved to **0.1.8**. That is the verified release record, not a promise that a
+later `latest` version has the same acceptance. See the
+[support matrix](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md#current-verification-scope)
+for exact checks and limits, and the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md)
+for installation, identity reuse and upgrades. Inspect the setup plan first:
 
 ```sh
-popclaw setup --host claude --plan
+npx popclaw@latest setup --host claude --plan
 ```
 
 `setup` accepts `--host claude`, `--host codex` or `--host both`.
@@ -34,7 +35,11 @@ setup writes the host configuration. A missing identity requires explicit
 `--create-identity`. Select an existing identity with `--root` and follow the
 host guide's reuse conditions; setup is not a migration or restore command.
 
-The [command reference](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/commands.md)
+For DeepSeek Harness, use the [DSH YAML guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#deepseek-harness-dsh)
+([中文步骤](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#dsh-中文步骤)).
+It covers the current confirmation limits; `--host dsh` is not supported.
+
+The [command reference](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/commands.md)
 lists all CLI options, the two MCP entry points and the complete tool index.
 
 ## The two equivalent commands
@@ -42,8 +47,8 @@ lists all CLI options, the two MCP entry points and the complete tool index.
 For a hand-written MCP host configuration, these launch the same stdio server:
 
 ```sh
-npx -y popclaw@0.1.7 mcp
-npx -y popclaw-mcp@0.1.7
+npx -y popclaw@latest mcp
+npx -y popclaw-mcp@latest
 ```
 
 Both require `POPCLAW_DATA_ROOT` to be set to an **absolute** path. That
@@ -51,12 +56,12 @@ directory is the identity: point several hosts at the same root and they share
 one passport, one inbox and one set of policies. A different root is a
 different identity.
 
-Reuse must satisfy the [host guide's identity conditions](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/docs/hosts.md#before-you-start).
+Reuse must satisfy the [host guide's identity conditions](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md#before-you-start).
 Setup can adopt a key-only root or reconnect a valid setup-managed root;
 it refuses unmanaged historical data instead of silently migrating it.
 
 ```sh
-POPCLAW_DATA_ROOT=/Users/you/.popclaw npx -y popclaw-mcp@0.1.7
+POPCLAW_DATA_ROOT=/Users/you/.popclaw npx -y popclaw-mcp@latest
 ```
 
 ## The session hook
@@ -72,49 +77,16 @@ MCP server it defaults to `mcp:<resolved working directory>`, but the hook has
 no such default and does nothing without it. Set it explicitly and reuse the
 exact same value for the server and every hook entry.
 
-The hook never reads the host's stdin payload — it takes the event name only
-from its one argument (`SessionStart`, `UserPromptSubmit` or `PostToolUse`),
-so each hook entry below needs its own argument naming its own event:
+For Claude Code, use `npx popclaw@latest setup --host claude` to install the
+matching server and hooks together. It records a stable local runtime and
+consistent consumer ID. For an existing installation, follow the
+[update guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md#updating-an-existing-installation)
+and preserve the identity root.
 
-```sh
-POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project \
-  npx -y --package=popclaw-mcp@0.1.7 popclaw-mcp-hook UserPromptSubmit
-```
-
-`--package` is required: the command name and the package name differ, so
-without it npm looks for a package called `popclaw-mcp-hook`.
-
-A minimal Claude Code `settings.json`, wiring all three events (the same
-`POPCLAW_NOTIFICATION_CONSUMER` also belongs in the MCP server's own `env`):
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.7 popclaw-mcp-hook SessionStart",
-        "timeout": 5
-      }]
-    }],
-    "UserPromptSubmit": [{
-      "hooks": [{
-        "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.7 popclaw-mcp-hook UserPromptSubmit",
-        "timeout": 5
-      }]
-    }],
-    "PostToolUse": [{
-      "matcher": "Bash|Edit|Write",
-      "hooks": [{
-        "type": "command",
-        "command": "POPCLAW_DATA_ROOT=/Users/you/.popclaw POPCLAW_NOTIFICATION_CONSUMER=claude:my-project npx -y --package=popclaw-mcp@0.1.7 popclaw-mcp-hook PostToolUse",
-        "timeout": 5
-      }]
-    }]
-  }
-}
-```
+The hook takes its event name as one argument (`SessionStart`,
+`UserPromptSubmit` or `PostToolUse`); it does not read the host's stdin payload.
+Manual integrations must use the same installed runtime for the server and
+hooks, rather than resolving `latest` separately during each hook invocation.
 
 With anything missing, unknown, or nothing pending, the hook prints `{}` and
 exits 0 — a broken config and "nothing pending" look identical from the
@@ -124,4 +96,4 @@ context showed.
 
 ## License
 
-Apache-2.0. See [LICENSE](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/packages/popclaw-mcp/LICENSE) and [NOTICE](https://github.com/PopClaw-xyz/popclaw/blob/v0.1.7/packages/popclaw-mcp/NOTICE).
+Apache-2.0. See [LICENSE](https://github.com/PopClaw-xyz/popclaw/blob/main/packages/popclaw-mcp/LICENSE) and [NOTICE](https://github.com/PopClaw-xyz/popclaw/blob/main/packages/popclaw-mcp/NOTICE).

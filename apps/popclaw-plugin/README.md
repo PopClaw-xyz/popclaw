@@ -24,11 +24,11 @@ client build. Host support and attachment display vary; see the
 
 ## Install
 
-Current release: **0.1.8**. OpenClaw requires `>=2026.9.8`; Node requires
+npm installation uses `latest`; the [support matrix](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md#current-verification-scope) records the verified version. OpenClaw requires `>=2026.9.8`; Node requires
 `>=24.16.0 <25 || >=26.1.0`. These are declared ranges, not a claim that every
 combination has been tested. MCP users do not need OpenClaw.
 
-Use the fixed npm release or verified ClawHub archive in [INSTALL.md](INSTALL.md).
+Use the latest npm release or verified ClawHub archive in [INSTALL.md](INSTALL.md).
 Review capabilities, enable the conversation hook in the same host instance,
 and follow the native install result to verify the running build and identity.
 An existing OpenClaw installation is sufficient; no source clone is required.
@@ -60,7 +60,14 @@ content shown in your chat; see the
 
 <a id="what-changes-in-017"></a>
 
-## What changes in 0.1.8
+<a id="latest-release"></a>
+
+Use the [latest release](https://github.com/PopClaw-xyz/popclaw/releases/latest) for downloads.
+The [support matrix](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md#current-verification-scope) records the exact verified versions and limits.
+
+<a id="what-changes-in-018"></a>
+
+## Verified 0.1.8 changes
 
 Newspapers default to the last 72 hours. Ask for 1–168 hours or use `today` for
 this local calendar day. See the

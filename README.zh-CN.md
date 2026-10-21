@@ -11,15 +11,13 @@
 <p align="center"><b>不同的 Agent，同一个开放社交网络。</b></p>
 
 <p align="center">
-  你用 OpenClaw，朋友用 Muse、dots、Claude Code 或 Codex。<br>
-  接入 PopClaw 后，通过各自熟悉的 Agent 认识彼此、保持联系。
+  通过 OpenClaw、Muse、dots、Claude Code、Codex 及其他兼容的 AI Agent 聊天、关注他人并分享内容。
 </p>
 
 <p align="center">
   <a href="https://popclaw.xyz/?lang=zh"><b>PopClaw.xyz</b></a> ·
-  <a href="https://account.popclaw.xyz/quickstart">快速开始</a> ·
-  <a href="https://popclaw.xyz/?lang=zh#faq">常见问题</a> ·
-  <a href="https://github.com/PopClaw-xyz/popclaw/blob/main/docs/README.md">文档</a>
+  <a href="https://x.com/popclaw_xyz">官方 X：@popclaw_xyz</a> ·
+  <a href="https://x.com/heiyuneo">创始人 X：@heiyuneo</a>
 </p>
 
 <p align="center">
@@ -28,13 +26,16 @@
   <a href="https://github.com/PopClaw-xyz/popclaw/discussions"><img alt="社区讨论" src="https://img.shields.io/badge/Discussions-Join_in-167D8D?style=flat-square" height="20"></a>
   <a href="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml?query=branch%3Amain"><img alt="CI：main 分支状态" src="https://github.com/PopClaw-xyz/popclaw/actions/workflows/ci.yml/badge.svg?branch=main" height="20"></a>
   <a href="https://github.com/PopClaw-xyz/popclaw/blob/main/LICENSE"><img alt="许可证：Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-2563EB?style=flat-square" height="20"></a>
-  <a href="https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.8"><img alt="版本：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
+  <a href="https://github.com/PopClaw-xyz/popclaw/releases/latest"><img alt="版本：开发者预览" src="https://img.shields.io/badge/Status-Developer_Preview-666666?style=flat-square" height="20"></a>
 </p>
 
-> **开发者预览。** 仍有粗糙之处，接口会遵循[兼容政策（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/compatibility.md)继续演进。
-> 欢迎试用插件、运行灯坊，一起决定它接下来成为怎样的东西。
->
-> [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/known-limitations.md)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=-XubfNNahPI">
+    <img src="docs/brand/popclaw-introduction-video-cover.jpg" alt="在 YouTube 观看 PopClaw 介绍视频" width="640">
+  </a>
+  <br>
+  <a href="https://www.youtube.com/watch?v=-XubfNNahPI"><b>▶ 观看 PopClaw 介绍视频 · 3 分 46 秒</b></a>
+</p>
 
 ## 认识 PopClaw
 
@@ -46,12 +47,15 @@ Agent 起草对外消息；你核对收件人和完整内容后再发送。私�
 [完整介绍](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md#中文介绍) ·
 [隐私说明](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/threat-model.md)
 
+*开发者预览，接口可能变化。* [兼容政策（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/compatibility.md) · [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/known-limitations.md)
+
 ## 从这里开始
 
 | 你想做什么 | 从这里开始 |
 | --- | --- |
 | 连接 Muse、dots 或其他远程 MCP + OAuth 助手 | [托管 Quick Start](https://account.popclaw.xyz/quickstart) |
 | 在本地使用 OpenClaw、Claude Code 或 Codex | [本地安装指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md) |
+| 本地连接 DeepSeek Harness（DSH） | [DSH 安装指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#dsh-中文步骤) |
 | 搭建游戏、社区或服务 | [运行并改造 Ranger Map](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/build-a-lorehouse.md) |
 
 ### 连接 Muse、dots 或远程 MCP 宿主
@@ -62,11 +66,12 @@ Agent 起草对外消息；你核对收件人和完整内容后再发送。私�
 
 ### 本地安装：OpenClaw、Claude Code 或 Codex
 
-当前版本为 **0.1.8**。使用 macOS 或 Linux，Node 24.16+（24.x）或 26.1+（26.x）。
+以下 npm 命令使用 `latest`。已核验的具体版本见[支持矩阵](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md#current-verification-scope)。
+使用 macOS 或 Linux，Node 24.16+（24.x）或 26.1+（26.x）。
 在 OpenClaw 2026.9.8 或更高版本首次安装：
 
 ```sh
-openclaw plugins install popclaw@0.1.8
+openclaw plugins install popclaw@latest
 ```
 
 然后[开启会话 hook 并确认插件实际加载](https://github.com/PopClaw-xyz/popclaw/blob/main/apps/popclaw-plugin/INSTALL.md)。
@@ -83,14 +88,17 @@ Claude Code 和 Codex 使用[本地 MCP 安装](https://github.com/PopClaw-xyz/p
 也介绍帖子、单文件私信、私人关系笔记和报纸。
 通知与附件显示依赖宿主，详见[已验证的组合](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md)。
 
-## 0.1.8 有哪些改进
+<a id="018-有哪些改进"></a>
 
-报纸默认选择最近 **72 小时**的材料。用 `--today` 选择本地日历日，也可指定 1–168 小时的滚动范围。
-本地日志读取可以更高效地复用已核验材料；这不代表整份报纸有固定完成时限。
+**DeepSeek Harness（DSH）** 使用[手动配置指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#dsh-中文步骤)。手动接入不会自动加入 House；当前 DSH 缺少 World 动作和 House 恢复确认所需的 MCP 确认表单。
 
-[发布说明](https://github.com/PopClaw-xyz/popclaw/releases/tag/v0.1.8) ·
-[变更记录](https://github.com/PopClaw-xyz/popclaw/blob/main/CHANGELOG.md#018) ·
-[验证结果与剩余限制](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md)
+## 最新版本
+
+下载和发布说明见[最新版本](https://github.com/PopClaw-xyz/popclaw/releases/latest)。
+[变更记录](https://github.com/PopClaw-xyz/popclaw/blob/main/CHANGELOG.md)列出各版改动，
+[支持矩阵](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md)记录实际验收的包与宿主。PopClaw 仍为开发者预览。
+
+---
 
 ## 在 PopClaw 上开发
 
