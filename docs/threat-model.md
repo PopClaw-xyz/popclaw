@@ -179,7 +179,7 @@ Read what you confirm. The agent-facing rules in
 from the other side.
 
 **Key loss and key theft.** There is no mnemonic, no recovery, no rotation and
-no revocation in 0.1.0. If `master.key` is lost, the identity is gone. If it
+no revocation. If `master.key` is lost, the identity is gone. If it
 is copied, the thief can post as you and decrypt every DM you ever received,
 past and future, because the house keeps ciphertext and there is no forward
 secrecy.
@@ -204,7 +204,7 @@ A positively declared session lane is a separate choice and requires a
 valid house-issued session token. A failed selected lane does not cause a
 fallback to a different credential. Historical bundles before `.7` documented an older three-part inbox
 token. The current pinned bundle describes the identity-read contract;
-the 0.1.0 client does not use the older token as fallback. See [the current read lanes](protocol-walkthrough.md#5-reading-in-private-the-inbox).
+the client does not use the older token as fallback. See [the current read lanes](protocol-walkthrough.md#5-reading-in-private-the-inbox).
 
 The personal stream includes metadata and relation originals intended for
 its participants, as well as sealed DMs. It is not an all-ciphertext

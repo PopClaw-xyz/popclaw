@@ -3,8 +3,22 @@
 How a release reaches npm, and what only a maintainer with registry access can
 do. The machinery is `.github/workflows/release.yml`.
 
-See the [current release verification scope](support-matrix.md#018-release-verification)
+See the [current release verification scope](support-matrix.md#current-verification-scope)
 for recorded checks, channel status and remaining acceptance limits.
+
+## Keep installation guides current
+
+Public installation and update examples use `popclaw@latest` and
+`popclaw-mcp@latest`. Link current GitHub files through `main`, and downloads
+through `/releases/latest`; there is no automatic `blob/latest` branch.
+Verify both npm dist-tags and GitHub's latest release before updating guidance.
+Keep exact versions, source SHAs, artifact hashes and failed results in release
+and verification records. A moving tag does not extend old host acceptance.
+
+For setup-managed MCP, upgrading means rerunning `npx popclaw@latest setup`
+with the original host, project and identity root. Setup keeps server and hook
+on one installed runtime. Do not tell these users to replace an `npx` selector
+in a registration that actually contains absolute runtime paths.
 
 The standard npm release is **two packages**, published in one workflow run, in one order:
 
@@ -206,7 +220,7 @@ Dispatch a dry run first with these fixed inputs:
 
 | input | required value |
 |---|---|
-| `tag` | The complete release tag, such as `v0.1.4` |
+| `tag` | The approved complete release tag, `v<VERSION>` |
 | `source_run_id` | The `release.yml` run that retained and successfully smoke-tested the complete archive |
 | `expected_source_commit` | Its full 40-character commit, also the tag target |
 | `expected_full_sha256` | The retained complete archive's lowercase SHA-256 |
@@ -412,15 +426,16 @@ Least reversible last, with a check between each step.
 
 1. The repository is public. Walk the README paths logged out; confirm CI is
    green on public runners.
-2. Tag: `git tag v0.1.0 && git push origin v0.1.0`. The push triggers
+2. Create and push the approved `v<VERSION>` tag from the reviewed commit. The push triggers
    `release.yml`, which runs `just install/build/test/lint` once, verifies the
    pinned protocol bundle, packs **both** tarballs, checks both packed
-   manifests, uploads both plus `SHA256SUMS.txt` as the `release-artefacts-v0.1.0`
+   manifests, uploads both plus `SHA256SUMS.txt` as the `release-artefacts-v<VERSION>`
    artefact, then:
    `publish popclaw` → verify on the registry → `publish popclaw-mcp` → verify.
 3. Verify by hand: both npm pages show a provenance attestation linking back to
-   the tagged commit; on a clean machine `npm install popclaw` gets to a first
-   post and `npx -y popclaw-mcp@0.1.0` starts an MCP server. **If this fails,
+   the tagged commit. On a clean test machine, verify first use and MCP startup
+   using the exact released package versions and an isolated test identity.
+   Confirm both npm `latest` tags resolve to that approved version. **If this fails,
    stop here** — a public repository with nothing announced is a fine place to
    sit for a day.
 4. GitHub Release, using the tarball names and sha256 sums from the workflow's
@@ -471,7 +486,7 @@ Resume with `workflow_dispatch`:
 
 | input | value |
 |---|---|
-| `tag` | the same tag, e.g. `v0.1.0` |
+| `tag` | the same approved release tag, `v<VERSION>` |
 | `dry_run` | `false` |
 | `only` | `shell` |
 | `resume_from_run_id` | the failed run's ID (printed in its job summary) |
@@ -579,9 +594,8 @@ workflow (docs.npmjs.com/trusted-publishers).
 
 The scoped name `@popclaw/mcp` is an unrelated placeholder. Leave it alone: do
 not publish to it, do not deprecate it, do not delete it. The shipped alias is
-the unscoped `popclaw-mcp`. Documentation that shows the hook command spells the
-package out — `npx -y --package=popclaw-mcp@0.1.0 popclaw-mcp-hook UserPromptSubmit` —
-so npm never goes looking for a third package.
+the unscoped `popclaw-mcp`. Use setup to keep the server and hook on the same installed runtime; see
+[the MCP hook guide](../packages/popclaw-mcp/README.md#the-session-hook).
 
 ## Rehearsing
 
@@ -611,8 +625,8 @@ registry result. A manual upload must not be described as workflow-attested.
 
 ## What cannot be undone
 
-- **A version number is burned on first publish.** `0.1.0` published badly can
-  never be republished; the next attempt is `0.1.1`, for both packages.
+- **A version number is burned on first publish.** A published version cannot
+  be overwritten. A corrected release needs a new version for both packages.
 - **Unpublishing has a 72-hour window**, and only while nothing depends on it.
   `popclaw-mcp` depends on `popclaw`, so once the shell is out the main package
   is not unpublishable at all. After the window the tool is `npm deprecate`,

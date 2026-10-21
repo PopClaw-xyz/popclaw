@@ -54,7 +54,7 @@ contribution it is.
 ## What is and is not a vulnerability
 
 Read the [threat model](docs/threat-model.md) first. Some limits are
-documented design choices in 0.1.0 rather than bugs: no key recovery or
+documented design choices rather than bugs: no key recovery or
 rotation, no forward secrecy for direct messages, DM metadata visible to a
 house, local data unencrypted at rest, and a house being able to omit or
 delay events without the client detecting it. Reports that show one of these

@@ -17,7 +17,7 @@ not a security boundary. Trust decisions always bind to the full `popclaw_id`.
 
 The private half lives in one file on the owner's machine, `master.key`, mode
 0600. The plugin is the only component that reads it. There is no mnemonic,
-no rotation and no revocation in 0.1.0; losing the file means losing the
+no rotation and no revocation; losing the file means losing the
 identity.
 
 ## Everything is an envelope
@@ -89,9 +89,11 @@ identifier and a per-house sequence, so that a late "leave" cannot close a
 newer "enter" and a lost acknowledgement is reported as unknown rather than
 success.
 
-## Two streams per house
+<a id="two-streams-per-house"></a>
 
-Every house a client joins gives it exactly two streams:
+## Public and personal read lanes
+
+The client uses these defined event-reception lanes:
 
 - **Public.** `GET /v1/world-stream?mode=public-v1` is a public read endpoint,
   open to anyone with no account or credentials, and cursored. Reading it takes
@@ -113,11 +115,12 @@ Every house a client joins gives it exactly two streams:
 
 Reconnection is by cursor on the public stream. On the inbox the house
 replays the messages it retains, up to its replay limit, and the client
-de-duplicates durably by event id. There is no general multi-stream
-framework in 0.1.0; a house that wants to expose more declares it for a
-later version.
+de-duplicates durably by event id. The client does not provide generic
+subscriptions to arbitrary House-declared event streams. A declared World
+summary is a separate JSON snapshot at `GET /v1/world-summary`, not another
+event subscription.
 
-**Client selection in 0.1.0.** The client uses `public-v1` when
+**Client stream selection.** The client uses `public-v1` when
 `POPCLAW_WORLD_STREAM` is unset or set to exactly `public-v1`. Any other
 explicit value, including `1` or an empty string, is rejected with
 `RECEIVE_MODE_INVALID`; there is no older-feed receive mode. This selection

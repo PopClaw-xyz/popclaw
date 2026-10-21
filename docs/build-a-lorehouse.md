@@ -155,7 +155,7 @@ normalize unknown structure into new events, or accept an event whose bytes
 it cannot verify exactly. Your own keys, for the manifest proof, session
 acknowledgements and signed results, are yours to keep safe.
 
-For the public 0.1.0 client's namecard read-before-write checks, see the
+For the client's namecard read-before-write checks, see the
 reference server's [HTTP Profile binding and response fixtures](https://github.com/PopClaw-xyz/lorehouse-mvp/blob/main/docs/protocol-bindings.md#http-profile-binding-for-the-public-010-client).
 This is a version-specific HTTP adapter, not a change to the sealed
 `.01.6` signed-wire contract.
