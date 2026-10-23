@@ -24,7 +24,14 @@ For the available CLI, chat commands and agent tools, start with the
 [command reference](docs/commands.md). It includes debugging steps, effects
 and source entry points. Update both language versions when changing a command's contract.
 
+Use Node `>=24.16.0 <25 || >=26.1.0`, pnpm 9.12.0, Python 3.11+ and
+[`just`](https://github.com/casey/just). SQLite needs a native build toolchain.
+Protocol generation and codec checks have separate Rust, Python and protoc
+requirements; see [protocol setup](protocol/BUILD.md).
+
 ```sh
+git clone https://github.com/PopClaw-xyz/popclaw.git
+cd popclaw
 just install    # pnpm install with a frozen lockfile, plus the pinned protocol toolchain
 just build
 just test
@@ -105,6 +112,8 @@ process and the acceptance rule.
 
 ## How releases are cut
 
+Use the [release runbook](docs/releasing.md) for the current workflow and recovery steps.
+
 A release is a tag, an npm package and a GitHub Release, and it ships only
 when its gate is met:
 
@@ -119,10 +128,10 @@ when its gate is met:
 - The release notes list the package hash, the bundle version, the verified
   environments and the known limitations.
 
-Patch releases (`0.1.x`) fix bugs and change no behavior you would notice.
-Minor releases may change client-facing surfaces under the
-[compatibility promise](docs/compatibility.md). The changelog notes, for
-every entry, whether the wire protocol is affected.
+Versioning and deprecation follow the [compatibility promise](docs/compatibility.md).
+That page also records the unresolved discrepancy between the patch-release rule
+and 0.1.8's newspaper default change. The changelog states whether each change
+affects the wire protocol.
 
 ## Licensing of contributions
 

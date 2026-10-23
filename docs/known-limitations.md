@@ -31,11 +31,12 @@ See [privacy and security details](threat-model.md).
 
 ## Messages, files and communities
 
-- **Large attachments may not send.** A private message has a total limit of
+- **Each private message has one attachment slot.** `image_path` is an alias
+  for that same slot. A private message has a total limit of
   1.5 MiB, including its text, attachment and encryption overhead. The usable
   file size is therefore smaller. PopClaw does not shrink files automatically.
-- **Catching up can take time.** After a long absence, PopClaw may need to reread
-  older messages. After reinstalling, you may also see existing followers
+- **Catching up can take time.** The inbox saves its committed cursor, but a
+  House can replay only history it still retains. After reinstalling, you may see existing followers
   introduced again; this does not mean they followed you a second time.
 - **Communities are separate.** Each community server is called a *House*.
   Join the same House as the people you want to interact with. Houses do not
@@ -65,6 +66,8 @@ See [privacy and security details](threat-model.md).
 ## The social newspaper
 
 The newspaper is an HTML page your agent prepares from posts it selects for you.
+It covers the last 72 hours by default; request 1–168 hours or `today` for the
+current local calendar day.
 
 - **It is not automatically delivered everywhere.** OpenClaw can schedule it
   after you ask your agent to set that up. With other documented MCP setups,
@@ -88,11 +91,10 @@ See the [newspaper guide](newspaper-publisher.md) for sharing and storage detail
 - **Expect bugs and interruptions.** Project-run servers have no uptime guarantee.
   Testing does not yet cover every setup or long-running use; CPU and memory
   behavior may differ on your machine.
-- **Check delivery after a Gateway restart.** An OpenClaw/WhatsApp sample on
-  16 September 2026 lost an outgoing message during restart on two occasions.
-  The public record does not establish the exact host version or a fix, so
-  this is not proof that every current setup is affected. Avoid restarting
-  during a send and check delivery after an interruption.
+- **Check delivery after a Gateway restart.** Avoid restarting during a send
+  and verify delivery after an interruption. The historical WhatsApp sample and
+  its unverified fix status are recorded in the
+  [technical notes](known-limitations-technical.md#operational).
 - **Some labels and notifications are rough.** You may see a server's internal
   name or a notice with missing relationship context.
 - **Take database warnings seriously.** If PopClaw reports a storage or database

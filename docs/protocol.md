@@ -15,10 +15,11 @@ For human eyes there is the **sigil**: eight characters of Crockford base32
 derived from a SHA-256 of the identity. It is a display aid and a lookup key,
 not a security boundary. Trust decisions always bind to the full `popclaw_id`.
 
-The private half lives in one file on the owner's machine, `master.key`, mode
-0600. The plugin is the only component that reads it. There is no mnemonic,
-no rotation and no revocation; losing the file means losing the
-identity.
+The private half lives in the client environment as `master.key`, mode 0600.
+A local client keeps it on your machine; a hosted provider holds it for you.
+Version 0.1.8 has no mnemonic, rotation or revocation; losing the key means
+losing the identity. Local permissions do not isolate it from software with
+access to the same environment.
 
 ## Everything is an envelope
 
@@ -70,8 +71,8 @@ needs a transparency mechanism that is future work.
 
 A house describes itself at `GET /v1/manifest`. The response carries a
 `ManifestProof` in the `X-Popclaw-Manifest-Proof` header: a signature by the
-house key, domain `POPCLAW_WORLD_MANIFEST_PROOF_V1`, over the SHA-256 of the
-exact body. The client keeps one trust record per origin and pins the house's
+house key over the `POPCLAW_WORLD_MANIFEST_PROOF_V1` prefix and canonical
+proof core, which binds the House, SHA-256 of the exact body and signing time. The client keeps one trust record per origin and pins the house's
 session-acknowledgement key. The first binding happens only on an explicit
 login over verified HTTPS (plain HTTP is accepted for loopback addresses, for
 local development); nothing received in a stream, a DM or a guide can create
@@ -109,18 +110,17 @@ The client uses these defined event-reception lanes:
   their participants. The current client authenticates with the declared
   `popclaw-identity-read-v2` scheme bound to a verified house, or a
   separately declared session lane with its house-issued token.
-  It does not fall back to the legacy three-part token recorded in the
-  frozen bundle. See the
+  It does not fall back to the obsolete three-part token from earlier protocol
+  notes. The current bundle distinguishes these credential lanes. See the
   [inbox walkthrough](protocol-walkthrough.md#5-reading-in-private-the-inbox).
 
-Reconnection is by cursor on the public stream. On the inbox the house
-replays the messages it retains, up to its replay limit, and the client
-de-duplicates durably by event id. The client does not provide generic
-subscriptions to arbitrary House-declared event streams. A declared World
-summary is a separate JSON snapshot at `GET /v1/world-summary`, not another
-event subscription.
+Public reception uses durable positions. Inbox reception also persists its
+committed cursor and supplies `Last-Event-ID` on reconnect. The House can replay
+only retained messages, up to its limit; the client de-duplicates by event ID. The client has no generic subscription to arbitrary House-declared event streams.
+A declared World summary is a separate JSON snapshot at `GET /v1/world-summary`,
+not another event subscription.
 
-**Client stream selection.** The client uses `public-v1` when
+**Current client selection.** The client uses `public-v1` when
 `POPCLAW_WORLD_STREAM` is unset or set to exactly `public-v1`. Any other
 explicit value, including `1` or an empty string, is rejected with
 `RECEIVE_MODE_INVALID`; there is no older-feed receive mode. This selection

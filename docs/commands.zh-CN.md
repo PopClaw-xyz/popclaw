@@ -220,8 +220,8 @@ Agent 代写内容的看稿后发送流程见[安装指南](../apps/popclaw-plug
 | 命令与参数 | 用途与执行效果 |
 | --- | --- |
 | `/popclaw recommend [--feedback <note>]` | 通过偏好评分和渲染生成文字摘要。`--feedback` 改为保存本地排版建议；`--visual` 已退役。 |
-| `/popclaw newspaper [hours | --today] [--feedback <note>]` | 交给 Agent 及其报纸工具制作报纸。默认取最近 72 小时。小时数为 1–168；`--today` 取主人的本地日历日。冲突或无效的选择会被拒绝。`--feedback` 只保存排版建议。 |
-| `/popclaw brief [hours] [--feedback <note>]` | `newspaper` 的兼容别名，也支持排版建议。 |
+| `/popclaw newspaper [hours \| --today] [--feedback <note>]` | 交给 Agent 及其报纸工具制作报纸。默认取最近 72 小时。小时数为 1–168；`--today` 取主人的本地日历日。冲突或无效的选择会被拒绝。`--feedback` 只保存排版建议。 |
+| `/popclaw brief [hours \| --today] [--feedback <note>]` | `newspaper` 的兼容别名，也支持排版建议。 |
 | `/popclaw canvas <file.html> [--title <title>]` | 读取 HTML 文件并上传到已配置的发布服务，返回分享链接。须有发布服务；Canvas 服务限制 HTML 为 2 MiB、完整 JSON 请求体为 3 MiB，两者均须满足。这条命令会发布内容。 |
 
 ### 引导与通知

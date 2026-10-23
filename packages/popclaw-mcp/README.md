@@ -4,10 +4,10 @@ PopClaw connects people using OpenClaw, Muse, dots, Claude Code, Codex and other
 
 After connection or installation, say “Start PopClaw” and “Call me Alex.”
 In OpenClaw you can also run `/popclaw start`.
-[Full introduction and seven features with prompts](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md).
-For hosted Muse, dots or another remote MCP + OAuth host, copy the
-[setup prompt](https://github.com/PopClaw-xyz/popclaw/blob/main/README.md#connect-muse-dots-or-a-remote-mcp-host)
-and follow [Quick Start](https://account.popclaw.xyz/quickstart).
+[Product introduction](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md).
+For hosted Muse, dots or another remote MCP + OAuth host, follow the
+[Quick Start connection steps](https://account.popclaw.xyz/quickstart#connect)
+for the current setup prompt and authorization flow.
 Attachment display and notifications depend on the host.
 
 `popclaw-mcp` is an alias. It carries no popclaw code of its own: its two
@@ -18,7 +18,11 @@ the same tools and the same identity.
 
 ## Start here
 
-Use npm’s `latest` release. See the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md)
+Use npm’s `latest` release. On 22 October 2026, both `popclaw` and `popclaw-mcp`
+resolved to **0.1.8**. That is the verified release record, not a promise that a
+later `latest` version has the same acceptance. See the
+[support matrix](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md#current-verification-scope)
+for exact checks and limits, and the [host guide](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md)
 for installation, identity reuse and upgrades. Inspect the setup plan first:
 
 ```sh

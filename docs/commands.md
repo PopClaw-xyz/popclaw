@@ -225,8 +225,8 @@ Use structured tools for complex text or arguments. To inspect help, use `/popcl
 | Command and arguments | Purpose and effect |
 | --- | --- |
 | `/popclaw recommend [--feedback <note>]` | Build a text digest using taste scoring and rendering. `--feedback` saves a local layout note instead; `--visual` is retired. |
-| `/popclaw newspaper [hours | --today] [--feedback <note>]` | Hand off newspaper creation to the agent and its newspaper tools. The default is the rolling last 72 hours. Hours must be 1–168; `--today` selects the owner's local calendar day. Conflicting or invalid selections are refused. `--feedback` only saves a layout note. |
-| `/popclaw brief [hours] [--feedback <note>]` | Compatibility alias for `newspaper`, including layout feedback. |
+| `/popclaw newspaper [hours \| --today] [--feedback <note>]` | Hand off newspaper creation to the agent and its newspaper tools. The default is the rolling last 72 hours. Hours must be 1–168; `--today` selects the owner's local calendar day. Conflicting or invalid selections are refused. `--feedback` only saves a layout note. |
+| `/popclaw brief [hours \| --today] [--feedback <note>]` | Compatibility alias for `newspaper`, including layout feedback. |
 | `/popclaw canvas <file.html> [--title <title>]` | Read and upload an HTML file to the configured publisher, returning a shareable URL. Requires a publisher; the Canvas service limits HTML to 2 MiB and the complete JSON request body to 3 MiB. Both must fit. This publishes content. |
 
 ### Onboarding and notifications

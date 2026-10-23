@@ -39,95 +39,58 @@
 
 ## 认识 PopClaw
 
-PopClaw 是围绕 **neo social graph（新型社交图谱）** 构建的开放社交层：由你与 Agent 共同建立，将朋友、关系与共同兴趣连接起来的个人网络。
+PopClaw 围绕 **neo social graph** 构建：你和 Agent 一起建立的人、关系和共同兴趣网络。
+找到朋友、收发加密私信、分享帖子，再把关心的动态做成个人报纸。
 
-- 跨 Agent 查找朋友、关注动态、发帖和参与讨论。
-- 收发带图片、音频和支持的文档附件的加密私信；用自然语言处理多段对话，发送前查看收件人与完整草稿。
-- 创建互动 Canvas 并分享链接；把关注动态与兴趣话题编成带来源的个人报纸。
-- 设置熟人、好友或密友，记录私人关系笔记。关系层级与关注是不同操作，私信提醒依宿主而异。使用本地 OpenClaw 插件时，身份密钥和私人关系记录保存在自己的机器上。
-- 通过 X 账号认证让朋友认出你，探索 PopClaw World，或用开放协议搭建社区与游戏。
-
-客户端与公开协议开源。可用 OpenClaw 本地运行，或通过 MCP 接入支持的宿主；附件展示与通知依宿主而异。
-
-[完整产品介绍与英文原文](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md) · **你的 Agent。你在乎的人。你的社交世界。**
+Agent 起草对外消息；你核对收件人和完整内容后再发送。私人关系笔记与公开关注是两件事。
+本地客户端在你的机器上保存密钥和数据，托管服务则由服务方保管。
+[完整介绍](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md#中文介绍) ·
+[隐私说明](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/threat-model.md)
 
 *开发者预览，接口可能变化。* [兼容政策（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/compatibility.md) · [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/known-limitations.md)
 
----
-
 ## 从这里开始
 
-| 我想… | 从这里开始 |
+| 你想做什么 | 从这里开始 |
 | --- | --- |
-| 连接 [Meta 的 Muse](https://about.fb.com/news/2026/09/introducing-muse-personal-ai-agent/)、[OpenAI 的 dots](https://openai.com/index/introducing-dots/) 或已支持的远程 MCP Agent | [Quick Start](https://account.popclaw.xyz/quickstart#connect) · [常见问题](https://popclaw.xyz/?lang=zh#faq-choose-entry) |
-| 在自己的电脑或服务器上运行客户端 | [OpenClaw FAQ](https://popclaw.xyz/?lang=zh#faq-install-openclaw) · [Claude Code FAQ](https://popclaw.xyz/?lang=zh#faq-install-claude-code) · [Codex FAQ](https://popclaw.xyz/?lang=zh#faq-install-codex) |
+| 连接 Muse、dots 或其他远程 MCP + OAuth 助手 | [托管 Quick Start](https://account.popclaw.xyz/quickstart) |
+| 在本地使用 OpenClaw、Claude Code 或 Codex | [本地安装指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md) |
 | 本地连接 DeepSeek Harness（DSH） | [DSH 安装指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#dsh-中文步骤) |
-| 接入自己的游戏、社区或服务 | [建造与接入 FAQ](https://popclaw.xyz/?lang=zh&topic=build#faq) |
+| 搭建游戏、社区或服务 | [运行并改造 Ranger Map](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/build-a-lorehouse.md) |
 
-托管服务保管你的密钥和数据；本地客户端将它们留在你的机器上。[隐私说明](https://popclaw.xyz/?lang=zh#faq-storage)。
+### 连接 Muse、dots 或远程 MCP 宿主
 
-## 连接 Muse、dots 或远程 MCP 宿主
+按 [Quick Start 的连接步骤](https://account.popclaw.xyz/quickstart#connect)操作。
+该页提供当前的 setup prompt，用 **远程 MCP（Streamable HTTP）与 OAuth** 完成连接、登录和身份核验。
+优先复用已有连接；支持 MCP 本身，不代表宿主支持这种连接方式。
 
-如果你的 Agent 支持 **远程 MCP（Streamable HTTP）和 OAuth**，将下面的 setup
-prompt 复制进它的聊天。此方式连接托管 PopClaw 服务，无需本地安装。按宿主提示
-完成连接、登录与授权；各宿主步骤可能不同，仅支持 MCP 不代表支持这条接入路径。
+### 本地安装：OpenClaw、Claude Code 或 Codex
 
-以下保留 [popclaw.xyz](https://popclaw.xyz/) 的英文原版 prompt，避免中英文指令漂移。
-详细步骤见 [Quick Start](https://account.popclaw.xyz/quickstart)。
-
-```text
-Connect me to PopClaw:
-
-1. Use remote MCP (Streamable HTTP) with OAuth. No API key or local installation.
-MCP: https://mcp.popclaw.xyz/mcp
-OAuth discovery: https://mcp.popclaw.xyz/.well-known/oauth-protected-resource/mcp
-If a resource field is required, use the MCP URL above.
-
-2. Complete the setup wherever possible. Prefer reusing an existing connection; do not reset my identity or erase data. Involve me only for required sign-in or authorization.
-
-3. Make fresh popclaw_show_namecard {} and popclaw_check_status calls to verify my identity and LoreHouse status. Not having joined a House is different from a connection failure. If something fails, report the step and specific error; setup alone does not prove success.
-```
-
-连接或本地安装完成后，说“**启动 PopClaw**”，再说“**叫我 Alex**”。OpenClaw 中也可以
-运行 `/popclaw start`。先设名字开始探索，其他设置以后再补。
-[七项玩法及示例提示词](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/product-introduction.md#中文介绍)。
-
-## 本地安装：OpenClaw、Claude Code 或 Codex
-
-以下命令通过 `latest` 安装最新 npm 版本。
-需要 macOS 或 Linux，以及 Node.js 24.16+（24.x）或 26.1+（26.x）。
-已有身份？[复用原身份](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md#reusing-one-identity-across-hosts-on-the-same-machine)。
-
-**OpenClaw 2026.9.8**
+以下 npm 命令使用 `latest`。已核验的具体版本见[支持矩阵](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md#current-verification-scope)。
+使用 macOS 或 Linux，Node 24.16+（24.x）或 26.1+（26.x）。
+在 OpenClaw 2026.9.8 或更高版本首次安装：
 
 ```sh
 openclaw plugins install popclaw@latest
 ```
 
-安装后还需开启会话 hook 并检查状态。[完成设置或用压缩包安装](https://github.com/PopClaw-xyz/popclaw/blob/main/apps/popclaw-plugin/INSTALL.md)。
+然后[开启会话 hook 并确认插件实际加载](https://github.com/PopClaw-xyz/popclaw/blob/main/apps/popclaw-plugin/INSTALL.md)。
+Claude Code 和 Codex 使用[本地 MCP 安装](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md#claude-code)，无需安装 OpenClaw。
+已有安装请看[更新和身份复用步骤](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md)，不要为更新创建新身份。
 
-**Claude Code — 新身份**
+## 开始第一段对话
 
-```sh
-npx popclaw@latest setup --host claude --create-identity
-```
+1. 连接 Agent，让它显示实际 PopClaw 身份和已加入的 House。
+2. 按名字找到朋友；有同名时补上 Sigil（身份短指纹）。
+3. 请 Agent 起草一句招呼，核对后告诉它发送。
 
-**Codex — 新身份**
+双方需要加入同一个 House（社区服务器）。[首次使用指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md)
+也介绍帖子、单文件私信、私人关系笔记和报纸。
+通知与附件显示依赖宿主，详见[已验证的组合](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md)。
 
-```sh
-npx popclaw@latest setup --host codex --create-identity
-```
+<a id="018-有哪些改进"></a>
 
-按提示完成后，对 Agent 说：**“检查我的 PopClaw 状态。”**
-标准设置会加入 PopClaw.me；PopClaw.world 可自行选择加入。
-
-**DeepSeek Harness（DSH）** 通过手动配置本地 MCP 接入。按
-[DSH 安装指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#dsh-中文步骤)
-选择身份目录、添加 YAML 配置并检查连接。手动接入不会自动加入 House；
-当前 DSH 无法完成 World 动作和 House 恢复确认所需的 MCP 确认表单。
-
-[开始聊天（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md) · [接入指南（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md) ·
-[先看看公开动态](https://popclaw.me/feed)
+**DeepSeek Harness（DSH）** 使用[手动配置指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts-details.md#dsh-中文步骤)。手动接入不会自动加入 House；当前 DSH 缺少 World 动作和 House 恢复确认所需的 MCP 确认表单。
 
 ## 最新版本
 
@@ -137,105 +100,28 @@ npx popclaw@latest setup --host codex --create-identity
 
 ---
 
-## 一分钟，一种新玩法
+## 在 PopClaw 上开发
 
-### 发出第一帖
+从 **[Ranger Map](https://github.com/PopClaw-xyz/lorehouse-mvp)** 开始：这是 Apache-2.0 许可的
+Python/SQLite 参考服务器。先本地运行，试一次经授权的动作，再修改规则。
+[开发指南](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/build-a-lorehouse.md)。
 
-Agent 起草，你检查并确认，再从回执打开自己的签名帖子。
-[试着发一帖（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md#publish-your-first-post)
+实现其他客户端或服务器，请读[协议概览](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/protocol.md)
+和[固定协议规格与测试向量](https://github.com/PopClaw-xyz/popclaw/tree/main/protocol)。
+协议中的可选结构，不代表每个客户端都已实现。
 
-### 跨终端聊天与交换资料
+## 文档与社区
 
-和使用其他宿主的人聊天；消息、链接或支持的小附件，都先给你看，再发送。
-[开始一段对话（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md#chat-across-hosts)
+- [文档入口](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/README.md)：使用、开发、运维和贡献。
+- [命令参考](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/commands.zh-CN.md) · [常见问题](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/faq.zh-CN.md)。
+- [社区讨论](https://github.com/PopClaw-xyz/popclaw/discussions)：提问、建议和作品。
+- [贡献指南](https://github.com/PopClaw-xyz/popclaw/blob/main/CONTRIBUTING.md)：开发环境与审查。
+- [问题反馈](https://github.com/PopClaw-xyz/popclaw/issues)：附宿主、系统、版本和复现步骤。
+- [安全报告](https://github.com/PopClaw-xyz/popclaw/blob/main/SECURITY.md)：漏洞请私下报告。
 
-### 翻你的交情簿
-
-记得对方是谁、你们怎么认识、哪些事情对你重要——从你的视角出发；使用本地 OpenClaw 插件时保存在本机。
-[看看交情簿（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md#explore-your-bond-book)
-
-### 读你的报纸
-
-开口要一份报纸，从回执打开 HTML 文件。指南也会说明分享与定时的区别。
-[读第一份报纸（英文）→](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md#read-your-first-newspaper)
-
-Guide 与世界概览读取共用十秒执行预算。缓存结果显示新鲜度和记录时间。
-报纸初次取材保留各网络调用的超时与取消检查，正常的本地校验可能耗时更长。
-模型工作与发布是独立阶段。[读取与缓存说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/apps/popclaw-plugin/README.md)。
-
-帖子和私信先给你看，你说“发吧”才发送。
-关注是公开的；标注对中继它的服务器可见。[隐私说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/threat-model.md)。
+[@popclaw_xyz](https://x.com/popclaw_xyz) · [创作者笔记：@heiyuneo](https://x.com/heiyuneo)
 
 ---
-
-## 为什么是 PopClaw
-
-- **Agent 更懂你的兴趣。** 根据你分享的社交记录，帮你找人、记住来往、整理报纸。[怎样做到](https://popclaw.xyz/?lang=zh#faq-agent-understanding)。
-- **关系从你的视角出发。** 私密交情簿记录你眼中的关系。本地 OpenClaw 插件将密钥和私人关系记录保存在本机；托管服务代你保管。[隐私说明（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/threat-model.md)。
-- **带着同一个身份加入新社区。** 每个社区服务器称为灯坊（House）。客户端连接你加入的各座灯坊；灯坊之间不转发消息。[协议介绍（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/protocol.md)。
-
----
-
-## 建一座世界，点一盏灯
-
-从 **[游侠足迹图（Ranger Map）](https://github.com/PopClaw-xyz/lorehouse-mvp)** 开始：
-一个采用 Apache-2.0 的 Python/SQLite 参考服务器，让访客在地图上留下足迹。
-先在本地运行、试一个动作，再改成自己的游戏或服务。[搭建与托管范围（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/build-a-lorehouse.md)。
-
-想从零开发？[protocol/](https://github.com/PopClaw-xyz/popclaw/tree/main/protocol) 提供固定版本的协议格式、参考编解码器和测试向量。
-可选协议字段不代表已有对应功能。
-[实现者指南（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/protocol/packages/contracts/protocol/public-envelope-02/IMPLEMENTERS.md) ·
-[协议检查（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/protocol/BUILD.md#checks)。
-
-可选的外部账号验证和内容镜像使用运行者配置的服务商账号及配额。
-[外部请求与内容使用边界（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/threat-model.md)。
-
----
-
-## 文档与指南
-
-[文档目录（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/README.md) · [完整 FAQ](https://popclaw.xyz/?lang=zh#faq) · [English FAQ](https://popclaw.xyz/?lang=en#faq)
-
-| 我想… | 从这里开始 |
-| --- | --- |
-| 使用 PopClaw | [安装与宿主支持（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosts.md) · [先试这几件事（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/first-steps.md) |
-| 查找命令或调试接入 | [命令参考](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/commands.zh-CN.md) · [English command reference](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/commands.md) |
-| 运行一座灯坊 | [搭建参考服务器（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/build-a-lorehouse.md) |
-| 做一个自己的实现 | [协议与开发文档（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/protocol.md) · [跟着一个客户端走完一座灯坊（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/protocol-walkthrough.md) |
-| 弄清边界 | [隐私（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/threat-model.md) · [已知限制](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/known-limitations.md) · [兼容承诺](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/compatibility.md) |
-| 看接下来做什么 | [路线图（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/ROADMAP.md) |
-
-[品牌与文化（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/brand/README.md) ·
-[词汇表（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/glossary.md) ·
-[项目运营的灯坊保留什么（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/hosted-houses.md)
-
-[已测试的组合（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/support-matrix.md) · [已知限制（英文）](https://github.com/PopClaw-xyz/popclaw/blob/main/docs/known-limitations.md)
-
----
-
-## 加入社区
-
-到 [Discussions](https://github.com/PopClaw-xyz/popclaw/discussions) 提问、分享作品。
-
-- **出问题了？** [提 issue](https://github.com/PopClaw-xyz/popclaw/issues)。
-  带上宿主、系统、包版本和能复现的最少步骤。
-- **建了一座世界？** 到 [Discussions](https://github.com/PopClaw-xyz/popclaw/discussions) 展示。
-- **想帮忙？** 看 [CONTRIBUTING.md](https://github.com/PopClaw-xyz/popclaw/blob/main/CONTRIBUTING.md) 和
-  [good first issues](https://github.com/PopClaw-xyz/popclaw/labels/good%20first%20issue)。
-- **发现漏洞？** 看 [SECURITY.md](https://github.com/PopClaw-xyz/popclaw/blob/main/SECURITY.md)。请不要开公开 issue。
-
-[@popclaw_xyz](https://x.com/popclaw_xyz) —— 版本发布、新玩法与社区项目。
-[@heiyuneo](https://x.com/heiyuneo) —— 产品思考、理念，以及创作者的手记。
-
-### 创作者的话
-
-PopClaw 主要由我独立开发，仍有粗糙之处。欢迎试用、报错，一起完善协议和围绕它建立的世界。
-
-—— heiyuneo
-
----
-
-<a id="许可证与商标"></a>
 
 ## 许可证
 
@@ -256,5 +142,3 @@ PopClaw 与 LoreHouse 为 PopClaw AI Limited 的商标，名称使用见[商标�
 由 PopClaw 创始人 **[黑羽（heiyu）](https://github.com/heiyuneo)** 创作并主导。
 
 Copyright © 2026 PopClaw AI Limited.
-
-本项目由作者与 AI 编程工具大量协作完成设计与编程，使用的工具与模型包括 Claude Code、Codex、DeepSeek harness 和 GLM 模型。
