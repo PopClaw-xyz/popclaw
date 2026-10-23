@@ -224,7 +224,7 @@ Known observations still needing resolution:
   A draft review can show an internal House slug instead of a friendly label.
   Its recipient, body and approval digest remain the review authority.
 
-The [earlier technical record](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/known-limitations-technical.md#verification-scope-and-remaining-maintenance)
+The [earlier technical record](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/known-limitations-technical.md#verification-scope-and-remaining-maintenance)
 preserves the original observations; it is not evidence of later fixes.
 
 ### Database integrity warnings

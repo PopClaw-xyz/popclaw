@@ -2,7 +2,7 @@
 
 **Status: draft v0, not stable.** This describes the publisher interface
 used by the 0.1.8 client. Browser routes and retention notes describe the
-[previously audited publisher implementation](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/newspaper-publisher.md#browser-endpoints),
+[previously audited publisher implementation](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/newspaper-publisher.md#browser-endpoints),
 not a fresh audit of the deployed service or its settings.
 This client-to-service interface is separate from the event protocol;
 it does not change the EventEnvelope wire format.
@@ -145,7 +145,7 @@ Use the recorded stages to locate a failure:
 Preserve the failed stage and safe diagnostics. Do not create repeated editions
 to investigate an unfinished one. These are source guarantees, not proof of
 successful operation on a particular deployment. The
-[earlier investigation detail](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/newspaper-publisher.md#reading-failures-before-publication)
+[earlier investigation detail](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/newspaper-publisher.md#reading-failures-before-publication)
 records the superseded ten-second aggregate deadline.
 
 ## Client endpoints and signature coverage

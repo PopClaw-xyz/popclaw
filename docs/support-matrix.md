@@ -89,7 +89,7 @@ The MCP shell used its original archive in a successful
 [recovery run](https://github.com/PopClaw-xyz/popclaw/actions/runs/38767691252);
 its provenance identifies that recovery run, not the original push run.
 Hashes, source CI, skip counts and the full publication record remain in the
-[fixed 0.1.8 verification record](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/support-matrix.md#018-release-verification).
+[fixed 0.1.8 verification record](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/support-matrix.md#018-release-verification).
 That earlier record predates the separate social acceptance summarized here.
 
 ### What remains unverified or failed
@@ -153,16 +153,16 @@ new claims for 0.1.8:
 
 <a id="017-release-verification"></a>
 
-- [0.1.7 release verification](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/support-matrix.md#017-release-verification)
+- [0.1.7 release verification](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/support-matrix.md#017-release-verification)
 
 <a id="016-release-verification"></a>
 
-- [0.1.6 release verification](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/support-matrix.md#016-release-verification)
+- [0.1.6 release verification](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/support-matrix.md#016-release-verification)
 
 <a id="013-release-verification"></a>
 
-- [0.1.3 and earlier releases](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/support-matrix.md#013-release-verification)
-- [Historical host and performance samples](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/support-matrix.md#historical-candidate-evidence)
+- [0.1.3 and earlier releases](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/support-matrix.md#013-release-verification)
+- [Historical host and performance samples](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/support-matrix.md#historical-candidate-evidence)
 
 <a id="add-a-reproducible-result"></a>
 

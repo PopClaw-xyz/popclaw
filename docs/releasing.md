@@ -209,7 +209,7 @@ then bind each name to `release-clawhub-native.yml` and `npm-release` for later 
 A registry-generated `0.0.0-stage` stub can block recovery. Only after checking
 the real version's bytes/provenance and obtaining explicit cleanup authorization,
 remove that exact stub version; never remove the whole package or use `--force`.
-Recheck the target and `latest`. Keep the [recorded stub incident](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/releasing.md#separate-clawhub-native-publication)
+Recheck the target and `latest`. Keep the [recorded stub incident](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/releasing.md#separate-clawhub-native-publication)
 as history, not a reason to weaken the guard.
 
 ## Verify the ClawHub archive attestation
@@ -275,6 +275,6 @@ can differ. A successful upload or workflow file is not signature evidence.
 
 Use these only for their fixed versions; they do not authorize a new publication:
 
-- [0.1.7 read-only verification](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/releasing.md#verify-the-already-published-017-packages): `gh workflow run verify-release-017.yml --repo PopClaw-xyz/popclaw --ref main`. It publishes nothing and retains its failed-run context.
-- [Fixed first-release recovery](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/releasing.md#fixed-first-release-recovery-both-retained-packages): the sole `only: all` retained-resume exception is `v0.1.0`, `dry_run: false`, `resume_from_run_id: 38074322285`. Its original artifact IDs, hashes and source checks remain mandatory.
-- [Earlier packaging and trust investigation](https://github.com/PopClaw-xyz/popclaw/blob/5da0b2f8d5600637fa1e6fef4ec7b752d9b8fd37/docs/releasing.md#verify-the-clawhub-archive-attestation) preserves the inspector and source-metadata findings; check the current service before reusing them.
+- [0.1.7 read-only verification](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/releasing.md#verify-the-already-published-017-packages): `gh workflow run verify-release-017.yml --repo PopClaw-xyz/popclaw --ref main`. It publishes nothing and retains its failed-run context.
+- [Fixed first-release recovery](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/releasing.md#fixed-first-release-recovery-both-retained-packages): the sole `only: all` retained-resume exception is `v0.1.0`, `dry_run: false`, `resume_from_run_id: 38074322285`. Its original artifact IDs, hashes and source checks remain mandatory.
+- [Earlier packaging and trust investigation](https://github.com/PopClaw-xyz/popclaw/blob/6e6218bfb04c914f6380be8e343fca1f1114b23a/docs/releasing.md#verify-the-clawhub-archive-attestation) preserves the inspector and source-metadata findings; check the current service before reusing them.
